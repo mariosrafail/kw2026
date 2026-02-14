@@ -1,0 +1,22 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Build/output
+/build/
+*.zip
+*.pdb
+*.tmp
+
+# IDE
+.vscode/
+.vs/
+
+# C# build artifacts
+launcher/bin/
+launcher/obj/
+
+# Published update payloads (generated)
+updates_site/kw/*.exe
+updates_site/kw/*.pck
+updates_site/kw/*.zip

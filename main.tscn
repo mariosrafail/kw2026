@@ -1,0 +1,208 @@
+[gd_scene load_steps=6 format=3 uid="uid://bwrcjii7oksrx"]
+
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="1_2h5qo"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
+size = Vector2(1900, 70)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_p1"]
+size = Vector2(340, 26)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_p2"]
+size = Vector2(280, 26)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_p3"]
+size = Vector2(220, 24)
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.529412, 0.807843, 0.921569, 1)
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="MainCamera" type="Camera2D" parent="World"]
+unique_name_in_owner = true
+position = Vector2(640, 360)
+limit_left = -300
+limit_top = -150
+limit_right = 1900
+limit_bottom = 950
+
+[node name="Players" type="Node2D" parent="World"]
+unique_name_in_owner = true
+
+[node name="Projectiles" type="Node2D" parent="World"]
+unique_name_in_owner = true
+
+[node name="Ground" type="StaticBody2D" parent="World"]
+position = Vector2(640, 670)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/Ground"]
+shape = SubResource("RectangleShape2D_ground")
+
+[node name="Visual" type="Polygon2D" parent="World/Ground"]
+color = Color(0, 0.678431, 0.709804, 1)
+polygon = PackedVector2Array(-950, -35, 950, -35, 950, 35, -950, 35)
+
+[node name="PlatformA" type="StaticBody2D" parent="World"]
+position = Vector2(360, 520)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/PlatformA"]
+shape = SubResource("RectangleShape2D_p1")
+
+[node name="Visual" type="Polygon2D" parent="World/PlatformA"]
+color = Color(0, 0.678431, 0.709804, 1)
+polygon = PackedVector2Array(-170, -13, 170, -13, 170, 13, -170, 13)
+
+[node name="PlatformB" type="StaticBody2D" parent="World"]
+position = Vector2(920, 440)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/PlatformB"]
+shape = SubResource("RectangleShape2D_p2")
+
+[node name="Visual" type="Polygon2D" parent="World/PlatformB"]
+color = Color(0, 0.678431, 0.709804, 1)
+polygon = PackedVector2Array(-140, -13, 140, -13, 140, 13, -140, 13)
+
+[node name="PlatformC" type="StaticBody2D" parent="World"]
+position = Vector2(1260, 360)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/PlatformC"]
+shape = SubResource("RectangleShape2D_p3")
+
+[node name="Visual" type="Polygon2D" parent="World/PlatformC"]
+color = Color(0, 0.678431, 0.709804, 1)
+polygon = PackedVector2Array(-110, -12, 110, -12, 110, 12, -110, 12)
+
+[node name="UiPanel" type="PanelContainer" parent="."]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 462.0
+offset_bottom = 322.0
+
+[node name="Margin" type="MarginContainer" parent="UiPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="UiPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Multiplayer Platform Demo"
+
+[node name="ControlsLabel" type="Label" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+text = "Move: A/D or Arrows | Jump: Space | Shoot: Left Click"
+
+[node name="LocalIpLabel" type="Label" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Local IP: ..."
+
+[node name="ServerRow" type="HBoxContainer" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PortText" type="Label" parent="UiPanel/Margin/VBox/ServerRow"]
+layout_mode = 2
+text = "Port"
+
+[node name="PortSpin" type="SpinBox" parent="UiPanel/Margin/VBox/ServerRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+min_value = 1.0
+max_value = 65535.0
+value = 7777.0
+
+[node name="StartServerButton" type="Button" parent="UiPanel/Margin/VBox/ServerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Start"
+
+[node name="StopButton" type="Button" parent="UiPanel/Margin/VBox/ServerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Stop"
+
+[node name="ClientRow" type="HBoxContainer" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HostText" type="Label" parent="UiPanel/Margin/VBox/ClientRow"]
+layout_mode = 2
+text = "Host"
+
+[node name="HostInput" type="LineEdit" parent="UiPanel/Margin/VBox/ClientRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "127.0.0.1"
+placeholder_text = "127.0.0.1"
+
+[node name="ConnectButton" type="Button" parent="UiPanel/Margin/VBox/ClientRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Connect"
+
+[node name="DisconnectButton" type="Button" parent="UiPanel/Margin/VBox/ClientRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Disconnect"
+
+[node name="StatusLabel" type="Label" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Status: Idle"
+
+[node name="PeersLabel" type="Label" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "My peer id: 1 | Net peers: - | Players: -"
+
+[node name="LogLabel" type="RichTextLabel" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+size_flags_vertical = 3
+scroll_following = true
+
+[node name="ClientHud" type="CanvasLayer" parent="."]
+
+[node name="PingLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -170.0
+offset_top = 14.0
+offset_right = -14.0
+offset_bottom = 38.0
+grow_horizontal = 0
+theme_override_fonts/font = ExtResource("1_2h5qo")
+text = "Ping: -"
+horizontal_alignment = 2

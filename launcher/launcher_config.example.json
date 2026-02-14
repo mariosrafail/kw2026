@@ -1,0 +1,5 @@
+{
+  "update_manifest_url": "https://your-domain-or-ip/kw/update_manifest.json",
+  "default_host": "127.0.0.1",
+  "default_port": 8080
+}

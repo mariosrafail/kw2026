@@ -1,0 +1,21 @@
+services:
+  kw_server:
+    image: barichello/godot-ci:4.3
+    container_name: kw_server
+    working_dir: /game
+    command: >
+      bash -lc "if command -v godot4 >/dev/null 2>&1; then godot4 --headless --path /game -- --mode=server --port=8080; else godot --headless --path /game -- --mode=server --port=8080; fi"
+    volumes:
+      - ./:/game
+    ports:
+      - "8080:8080/udp"
+    restart: unless-stopped
+
+  kw_updates_http:
+    image: nginx:alpine
+    container_name: kw_updates_http
+    volumes:
+      - ./updates_site:/usr/share/nginx/html:ro
+    ports:
+      - "8081:80"
+    restart: unless-stopped

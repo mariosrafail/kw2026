@@ -1,0 +1,5 @@
+{
+  "update_manifest_url": "http://85.75.243.92:8081/kw/update_manifest.json",
+  "default_host": "85.75.243.92",
+  "default_port": 8080
+}
