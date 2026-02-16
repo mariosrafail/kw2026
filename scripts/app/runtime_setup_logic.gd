@@ -196,7 +196,8 @@ func _configure_services() -> void:
 		{
 			"weapon_profile_for_id": Callable(self, "_weapon_profile_for_id"),
 			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
-			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx")
+			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
+			"weapon_visual_for_id": Callable(self, "_weapon_visual_for_id")
 		}
 	)
 

@@ -52,6 +52,7 @@ const UZI_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/uzi/uzi_reload.wav
 const SPLASH_HIT_SFX := preload("res://assets/sounds/sfx/splash.MP3")
 const DEATH_HIT_SFX := preload("res://assets/sounds/sfx/general/death.wav")
 const BULLET_TOUCH_SFX := preload("res://assets/sounds/sfx/guns/shared/bullet_touch.wav")
+const GUNS_SPRITESHEET := preload("res://assets/warriors/guns.png")
 
 enum Role { NONE, SERVER, CLIENT }
 
@@ -133,6 +134,8 @@ var lobby_auto_action_inflight := false
 var lobby_entries: Array = []
 var lobby_map_by_id: Dictionary = {}
 var pending_scene_switch := ""
+var escape_return_pending := false
+var escape_return_nonce := 0
 
 var spawn_points: Array = []
 var map_catalog: MapCatalog

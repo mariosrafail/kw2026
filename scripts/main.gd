@@ -1,5 +1,5 @@
 extends "res://scripts/app/main_runtime.gd"
-const CLIENT_VERSION := "alpha-0.1.19"
+const CLIENT_VERSION := "alpha-0.1.20"
 
 @rpc("any_peer", "reliable")
 func _rpc_request_spawn() -> void:

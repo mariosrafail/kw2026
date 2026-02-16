@@ -1,9 +1,9 @@
 ﻿{
-    "published_at_utc":  "2026-02-16T13:03:30.8460654Z",
-    "version":  "alpha-0.1.19",
-    "package_url":  "http://85.75.243.92:8081/kw/kw_update_alpha-0.1.19.zip",
+    "published_at_utc":  "2026-02-16T21:58:28.6415307Z",
+    "version":  "alpha-0.1.20",
+    "package_url":  "http://85.75.243.92:8081/kw/kw_update_alpha-0.1.20.zip",
     "exe_sha256":  "66b26ad96df7458ea917b632a73ac7c88bb058db24dbd11a457fd50435ab7b13",
-    "pck_sha256":  "2e1191268d7eee066d97f90448ee32e26a1feaca532e872ad40ae7df89827cd1",
+    "pck_sha256":  "b8a297bcb84ef76ed2d4ffabcb5c29908da86b8b2237362a6f7a3b0604f82d06",
     "exe_url":  "http://85.75.243.92:8081/kw/kw.exe",
     "pck_url":  "http://85.75.243.92:8081/kw/kw.pck"
 }

@@ -47,33 +47,36 @@ func configure(
 	force_impact_segment_visual = false
 	rotation = velocity.angle()
 
-	var show_head := bool(visual_config.get("show_head", true))
 	var head_scale := maxf(0.2, float(visual_config.get("head_scale", 0.85)))
-	var head_alpha := clampf(float(visual_config.get("head_alpha", 0.9)), 0.0, 1.0)
 	var trail_width := maxf(0.5, float(visual_config.get("trail_width", 3.6)))
 	var trail_alpha := clampf(float(visual_config.get("trail_alpha", 0.52)), 0.0, 1.0)
+	var effective_trail_alpha := trail_alpha * 0.35
 
 	if visual != null:
-		visual.visible = show_head
+		visual.visible = false
 		visual.scale = Vector2.ONE * head_scale
-		visual.modulate = Color(color.r, color.g, color.b, head_alpha)
+		visual.modulate = Color(color.r, color.g, color.b, 0.0)
 	if trail != null:
-		trail.default_color = Color(color.r, color.g, color.b, trail_alpha)
+		trail.default_color = Color(color.r, color.g, color.b, effective_trail_alpha)
 		trail.width = trail_width
 		trail.antialiased = true
 		trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		trail.end_cap_mode = Line2D.LINE_CAP_ROUND
 		trail.joint_mode = Line2D.LINE_JOINT_ROUND
+		var light_r := lerpf(color.r, 1.0, 0.55)
+		var light_g := lerpf(color.g, 1.0, 0.55)
+		var light_b := lerpf(color.b, 1.0, 0.55)
 		var fade_gradient := Gradient.new()
-		# Trail start (near weapon) should be transparent, and get darker/stronger toward the bullet head.
-		fade_gradient.add_point(0.0, Color(color.r, color.g, color.b, 0.0))
-		fade_gradient.add_point(0.18, Color(color.r, color.g, color.b, trail_alpha * 0.22))
-		fade_gradient.add_point(0.62, Color(color.r * 0.8, color.g * 0.8, color.b * 0.8, trail_alpha * 0.7))
-		fade_gradient.add_point(1.0, Color(color.r * 0.62, color.g * 0.62, color.b * 0.62, minf(1.0, trail_alpha * 1.72)))
+		# 0.0 is near the weapon (lighter); 1.0 is toward impact (darker).
+		fade_gradient.add_point(0.0, Color(light_r, light_g, light_b, effective_trail_alpha * 0.10))
+		fade_gradient.add_point(0.48, Color(light_r, light_g, light_b, effective_trail_alpha * 0.06))
+		fade_gradient.add_point(0.82, Color(color.r * 0.72, color.g * 0.72, color.b * 0.72, effective_trail_alpha * 0.30))
+		fade_gradient.add_point(1.0, Color(color.r * 0.45, color.g * 0.45, color.b * 0.45, effective_trail_alpha * 0.75))
 		trail.gradient = fade_gradient
 		var taper := Curve.new()
-		taper.add_point(Vector2(0.0, 0.12))
-		taper.add_point(Vector2(1.0, 0.9))
+		taper.add_point(Vector2(0.0, 0.04))
+		taper.add_point(Vector2(0.65, 0.42))
+		taper.add_point(Vector2(1.0, 0.74))
 		trail.width_curve = taper
 		trail_world_points.clear()
 		trail_world_points.append(global_position)

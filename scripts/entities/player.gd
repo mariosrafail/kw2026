@@ -20,10 +20,20 @@ const GUN_RECOIL_SCALE_Y := 1.08
 const GUN_RECOIL_OUT_TIME := 0.035
 const GUN_RECOIL_BACK_TIME := 0.085
 const MUZZLE_FALLBACK_DISTANCE := 24.0
-const GUN_CENTERING_Y_TWEAK := -3.0
+const GUN_CENTERING_Y_TWEAK := 0.0
+const DEFAULT_GUN_POSITION := Vector2(6.0, 2.0)
+const DEFAULT_MUZZLE_POSITION := Vector2(27.0, -1.0)
+const DEFAULT_SHOT_FRAME_DURATION_SEC := 0.03
+const DEFAULT_RELOAD_FRAME_DURATION_SEC := 0.065
+const MIN_SHOT_FRAME_DURATION_SEC := 0.01
+const MAX_WALKABLE_SLOPE_DEGREES := 45.0
+const FLOOR_SLOPE_TOLERANCE_DEGREES := 0.5
+const FLOOR_SNAP_LENGTH := 14.0
+const PLAYER_SAFE_MARGIN := 0.08
+const PLAYER_MAX_SLIDES := 8
 
-@onready var body: Polygon2D = $Body
-@onready var feet: Polygon2D = $Feet
+@onready var body: Polygon2D = get_node_or_null("Body") as Polygon2D
+@onready var feet: Polygon2D = get_node_or_null("Feet") as Polygon2D
 @onready var player_sprite: Node2D = $Sprite2D
 @onready var gun_pivot: Node2D = $GunPivot
 @onready var gun: Node2D = $GunPivot/Gun
@@ -46,8 +56,21 @@ var is_reloading := false
 var coyote_time_left := 0.0
 var gun_recoil_tween: Tween
 var gun_base_scale_abs := Vector2.ONE
+var configured_gun_position := DEFAULT_GUN_POSITION
+var configured_muzzle_position := DEFAULT_MUZZLE_POSITION
+var gun_idle_region_rect := Rect2()
+var gun_idle_texture: Texture2D
+var gun_shot_region_frames: Array = []
+var gun_shot_frame_duration_sec := DEFAULT_SHOT_FRAME_DURATION_SEC
+var gun_shot_animation_tween: Tween
+var gun_shot_animation_nonce := 0
+var gun_reload_texture_frames: Array = []
+var gun_reload_frame_duration_sec := DEFAULT_RELOAD_FRAME_DURATION_SEC
+var gun_reload_animation_tween: Tween
+var gun_reload_animation_nonce := 0
 
 func _ready() -> void:
+	_configure_floor_movement()
 	target_position = global_position
 	target_velocity = velocity
 	target_aim_angle = 0.0
@@ -59,6 +82,16 @@ func _ready() -> void:
 	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
 	_update_health_label()
 	_update_ammo_label()
+
+func _configure_floor_movement() -> void:
+	# Small tolerance keeps exact 45deg ramps classified as floor.
+	floor_max_angle = deg_to_rad(MAX_WALKABLE_SLOPE_DEGREES + FLOOR_SLOPE_TOLERANCE_DEGREES)
+	floor_snap_length = FLOOR_SNAP_LENGTH
+	floor_constant_speed = true
+	floor_block_on_wall = true
+	safe_margin = PLAYER_SAFE_MARGIN
+	max_slides = PLAYER_MAX_SLIDES
+	motion_mode = CharacterBody2D.MOTION_MODE_GROUNDED
 
 func _normalize_gun_sprite_anchor() -> void:
 	if gun == null or not (gun is Sprite2D):
@@ -106,6 +139,71 @@ func set_reload_audio_stream(stream: AudioStream) -> void:
 		return
 	reload_audio.stream = stream
 
+func set_weapon_visual(visual_config: Dictionary) -> void:
+	if gun == null or not (gun is Sprite2D):
+		return
+	var gun_sprite := gun as Sprite2D
+
+	var texture_value = visual_config.get("texture", null)
+	if texture_value is Texture2D:
+		gun_sprite.texture = texture_value
+	gun_idle_texture = gun_sprite.texture
+
+	var region_enabled := bool(visual_config.get("region_enabled", true))
+	gun_sprite.region_enabled = region_enabled
+	if region_enabled:
+		var region_rect_value = visual_config.get("region_rect", gun_sprite.region_rect)
+		if region_rect_value is Rect2:
+			gun_sprite.region_rect = region_rect_value
+		gun_idle_region_rect = gun_sprite.region_rect
+	else:
+		gun_idle_region_rect = Rect2()
+
+	var target_gun_position := DEFAULT_GUN_POSITION
+	var gun_position_value = visual_config.get("gun_position", target_gun_position)
+	if gun_position_value is Vector2:
+		target_gun_position = gun_position_value
+	configured_gun_position = target_gun_position
+	gun_sprite.centered = true
+
+	if muzzle != null:
+		var target_muzzle_position := DEFAULT_MUZZLE_POSITION
+		var muzzle_position_value = visual_config.get("muzzle_position", target_muzzle_position)
+		if muzzle_position_value is Vector2:
+			target_muzzle_position = muzzle_position_value
+		configured_muzzle_position = target_muzzle_position
+
+	gun_shot_region_frames.clear()
+	var shot_frames_value = visual_config.get("shot_region_frames", [])
+	if shot_frames_value is Array:
+		for frame_value in shot_frames_value:
+			if frame_value is Rect2:
+				var frame_rect: Rect2 = frame_value
+				if frame_rect.size.x > 0.0 and frame_rect.size.y > 0.0:
+					gun_shot_region_frames.append(frame_rect)
+	if gun_shot_region_frames.is_empty() and gun_idle_region_rect.size.x > 0.0 and gun_idle_region_rect.size.y > 0.0:
+		gun_shot_region_frames.append(gun_idle_region_rect)
+
+	var shot_duration_value = visual_config.get("shot_frame_duration_sec", DEFAULT_SHOT_FRAME_DURATION_SEC)
+	gun_shot_frame_duration_sec = maxf(MIN_SHOT_FRAME_DURATION_SEC, float(shot_duration_value))
+	_reset_gun_shot_animation()
+
+	gun_reload_texture_frames.clear()
+	var reload_frames_value = visual_config.get("reload_texture_frames", [])
+	if reload_frames_value is Array:
+		for frame_value in reload_frames_value:
+			if frame_value is Texture2D:
+				gun_reload_texture_frames.append(frame_value)
+	if gun_reload_texture_frames.is_empty() and gun_idle_texture != null:
+		gun_reload_texture_frames.append(gun_idle_texture)
+
+	var reload_duration_value = visual_config.get("reload_frame_duration_sec", DEFAULT_RELOAD_FRAME_DURATION_SEC)
+	gun_reload_frame_duration_sec = maxf(MIN_SHOT_FRAME_DURATION_SEC, float(reload_duration_value))
+	_reset_gun_reload_animation()
+
+	gun_base_scale_abs = Vector2(absf(gun_sprite.scale.x), absf(gun_sprite.scale.y))
+	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
+
 func set_health(value: int) -> void:
 	var previous_health := health
 	health = clampi(value, 0, MAX_HEALTH)
@@ -124,6 +222,7 @@ func set_ammo(value: int, reloading: bool = false) -> void:
 	_update_ammo_label()
 
 func play_reload_audio() -> void:
+	_play_gun_reload_animation()
 	if reload_audio == null or reload_audio.stream == null:
 		return
 	reload_audio.pitch_scale = randf_range(0.98, 1.03)
@@ -160,6 +259,8 @@ func force_respawn(spawn_position: Vector2) -> void:
 	target_velocity = Vector2.ZERO
 	coyote_time_left = 0.0
 	_reset_gun_scale()
+	_reset_gun_shot_animation()
+	_reset_gun_reload_animation()
 
 func set_aim_world(target_world: Vector2) -> void:
 	set_aim_angle((target_world - global_position).angle())
@@ -187,6 +288,19 @@ func _apply_gun_horizontal_flip_from_angle(angle: float) -> void:
 		absf(gun_base_scale_abs.x),
 		-absf(gun_base_scale_abs.y) if looking_left else absf(gun_base_scale_abs.y)
 	)
+	_apply_weapon_mount_offsets_from_angle(angle)
+
+func _apply_weapon_mount_offsets_from_angle(angle: float) -> void:
+	var looking_left := cos(angle) < 0.0
+	var gun_position := configured_gun_position
+	var muzzle_position := configured_muzzle_position
+	if looking_left:
+		gun_position.y = -gun_position.y
+		muzzle_position.y = -muzzle_position.y
+	if gun != null:
+		gun.position = gun_position
+	if muzzle != null:
+		muzzle.position = muzzle_position
 
 func play_shot_recoil() -> void:
 	if gun == null:
@@ -195,6 +309,7 @@ func play_shot_recoil() -> void:
 		shot_audio.pitch_scale = randf_range(0.95, 1.08)
 		shot_audio.stop()
 		shot_audio.play()
+	_play_gun_shot_animation()
 	if gun_recoil_tween != null:
 		gun_recoil_tween.kill()
 
@@ -215,6 +330,107 @@ func _reset_gun_scale() -> void:
 		gun_recoil_tween = null
 	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
 
+func _play_gun_shot_animation() -> void:
+	if gun == null or not (gun is Sprite2D):
+		return
+	var gun_sprite := gun as Sprite2D
+	if not gun_sprite.region_enabled:
+		return
+	if gun_shot_region_frames.is_empty():
+		return
+
+	gun_shot_animation_nonce += 1
+	var nonce := gun_shot_animation_nonce
+	if gun_shot_animation_tween != null:
+		gun_shot_animation_tween.kill()
+
+	gun_shot_animation_tween = create_tween()
+	for frame_value in gun_shot_region_frames:
+		if not (frame_value is Rect2):
+			continue
+		var frame_rect: Rect2 = frame_value
+		gun_shot_animation_tween.tween_callback(Callable(self, "_apply_gun_shot_frame").bind(nonce, frame_rect))
+		gun_shot_animation_tween.tween_interval(gun_shot_frame_duration_sec)
+	gun_shot_animation_tween.tween_callback(Callable(self, "_finish_gun_shot_animation").bind(nonce))
+
+func _reset_gun_shot_animation() -> void:
+	gun_shot_animation_nonce += 1
+	if gun_shot_animation_tween != null:
+		gun_shot_animation_tween.kill()
+		gun_shot_animation_tween = null
+	_apply_gun_idle_frame()
+
+func _apply_gun_idle_frame() -> void:
+	if gun == null or not (gun is Sprite2D):
+		return
+	var gun_sprite := gun as Sprite2D
+	if gun_sprite.region_enabled:
+		if gun_idle_region_rect.size.x <= 0.0 or gun_idle_region_rect.size.y <= 0.0:
+			return
+		gun_sprite.region_rect = gun_idle_region_rect
+		return
+	if gun_idle_texture == null:
+		return
+	gun_sprite.texture = gun_idle_texture
+
+func _apply_gun_shot_frame(nonce: int, frame_rect: Rect2) -> void:
+	if nonce != gun_shot_animation_nonce:
+		return
+	if gun == null or not (gun is Sprite2D):
+		return
+	var gun_sprite := gun as Sprite2D
+	if not gun_sprite.region_enabled:
+		return
+	gun_sprite.region_rect = frame_rect
+
+func _finish_gun_shot_animation(nonce: int) -> void:
+	if nonce != gun_shot_animation_nonce:
+		return
+	_apply_gun_idle_frame()
+	gun_shot_animation_tween = null
+
+func _play_gun_reload_animation() -> void:
+	if gun == null or not (gun is Sprite2D):
+		return
+	if gun_reload_texture_frames.is_empty():
+		return
+
+	gun_reload_animation_nonce += 1
+	var nonce := gun_reload_animation_nonce
+	if gun_reload_animation_tween != null:
+		gun_reload_animation_tween.kill()
+
+	gun_reload_animation_tween = create_tween()
+	for frame_value in gun_reload_texture_frames:
+		if not (frame_value is Texture2D):
+			continue
+		var frame_texture: Texture2D = frame_value
+		gun_reload_animation_tween.tween_callback(Callable(self, "_apply_gun_reload_frame").bind(nonce, frame_texture))
+		gun_reload_animation_tween.tween_interval(gun_reload_frame_duration_sec)
+	gun_reload_animation_tween.tween_callback(Callable(self, "_finish_gun_reload_animation").bind(nonce))
+
+func _reset_gun_reload_animation() -> void:
+	gun_reload_animation_nonce += 1
+	if gun_reload_animation_tween != null:
+		gun_reload_animation_tween.kill()
+		gun_reload_animation_tween = null
+	_apply_gun_idle_frame()
+
+func _apply_gun_reload_frame(nonce: int, frame_texture: Texture2D) -> void:
+	if nonce != gun_reload_animation_nonce:
+		return
+	if gun == null or not (gun is Sprite2D):
+		return
+	var gun_sprite := gun as Sprite2D
+	gun_sprite.region_enabled = false
+	gun_sprite.texture = frame_texture
+
+func _finish_gun_reload_animation(nonce: int) -> void:
+	if nonce != gun_reload_animation_nonce:
+		return
+	_apply_gun_idle_frame()
+	gun_reload_animation_tween = null
+
 func get_aim_angle() -> float:
 	return target_aim_angle
 
@@ -228,22 +444,12 @@ func get_muzzle_world_position() -> Vector2:
 		elif gun_sprite.texture != null:
 			fallback_distance = maxf(fallback_distance, gun_sprite.texture.get_size().x * 0.5 + 2.0)
 
-	var tweak_offset_world := _get_gun_centering_tweak_world_offset()
-	var fallback_position := global_position + Vector2.RIGHT.rotated(aim_angle) * fallback_distance + tweak_offset_world
+	var fallback_position := global_position + Vector2.RIGHT.rotated(aim_angle) * fallback_distance
 	if muzzle == null:
 		return fallback_position
 
-	var marker_position := muzzle.global_position + tweak_offset_world
-	# If marker is still near the player's center, use an auto-calculated barrel tip.
-	if marker_position.distance_squared_to(global_position) <= 36.0:
-		return fallback_position
-	return marker_position
-
-func _get_gun_centering_tweak_world_offset() -> Vector2:
-	if gun_pivot == null or is_zero_approx(GUN_CENTERING_Y_TWEAK):
-		return Vector2.ZERO
-	var local_tweak := Vector2(0.0, GUN_CENTERING_Y_TWEAK)
-	return gun_pivot.to_global(local_tweak) - gun_pivot.global_position
+	# Temporarily disable extra corrective offsets and always trust marker position.
+	return muzzle.global_position
 
 func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_held: bool) -> void:
 	axis = clamp(axis, -1.0, 1.0)

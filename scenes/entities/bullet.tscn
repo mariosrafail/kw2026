@@ -7,6 +7,8 @@
 script = ExtResource("1_h4qcs")
 
 [node name="Visual" type="Sprite2D" parent="."]
+visible = false
+modulate = Color(1, 1, 1, 0)
 texture = ExtResource("2_l8e4f")
 
 [node name="Trail" type="Line2D" parent="."]

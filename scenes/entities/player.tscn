@@ -20,7 +20,6 @@ script = ExtResource("1_blu24")
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
 texture_filter = 1
-position = Vector2(3, 0)
 texture = ExtResource("2_dpso1")
 region_enabled = true
 region_rect = Rect2(114, 15, 20, 32)
@@ -28,22 +27,9 @@ region_rect = Rect2(114, 15, 20, 32)
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CapsuleShape2D_0vb8o")
 
-[node name="Body" type="Polygon2D" parent="."]
-visible = false
-position = Vector2(19, 2)
-color = Color(0.352941, 0.745098, 0.929412, 1)
-polygon = PackedVector2Array(-10, -16, 10, -16, 10, 16, -10, 16)
-
-[node name="Feet" type="Polygon2D" parent="."]
-visible = false
-color = Color(0.207843, 0.447059, 0.572549, 1)
-polygon = PackedVector2Array(-10, 12, 10, 12, 10, 16, -10, 16)
-
 [node name="GunPivot" type="Node2D" parent="."]
-position = Vector2(0, 2)
 
 [node name="Muzzle" type="Marker2D" parent="GunPivot"]
-position = Vector2(27, -1)
 
 [node name="ShotAudio" type="AudioStreamPlayer2D" parent="GunPivot"]
 stream = ExtResource("5_ifk0o")
@@ -58,11 +44,10 @@ max_polyphony = 3
 [node name="Gun" type="Sprite2D" parent="GunPivot"]
 z_index = 1
 texture_filter = 1
-position = Vector2(-19, -1)
 texture = ExtResource("3_tfnx5")
 centered = false
 region_enabled = true
-region_rect = Rect2(31, 12, 50, 12)
+region_rect = Rect2(150, 85, 36, 21)
 
 [node name="DeathAudio" type="AudioStreamPlayer2D" parent="."]
 stream = ExtResource("6_6oc35")

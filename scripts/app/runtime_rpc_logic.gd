@@ -186,6 +186,9 @@ func _rpc_lobby_set_weapon(weapon_id: String) -> void:
 	if lobby_service != null:
 		lobby_service.set_peer_weapon(peer_id, _normalize_weapon_id(weapon_id))
 	if players.has(peer_id):
+		var player := players[peer_id] as NetPlayer
+		if player != null:
+			player.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
 		combat_flow_service.server_sync_player_ammo(peer_id)
 
 func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
@@ -200,11 +203,15 @@ func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	lobby_map_by_id = normalized.get("lobby_map_by_id", {}) as Dictionary
 	client_target_map_id = str(normalized.get("client_target_map_id", selected_map_id))
 	lobby_flow_controller.client_receive_lobby_list(normalized.get("entries", []) as Array, active_lobby_id)
+	if escape_return_pending and active_lobby_id <= 0:
+		_complete_escape_return_to_lobby_menu(escape_return_nonce)
 
 func _rpc_lobby_action_result(success: bool, message: String, active_lobby_id: int, map_id: String, lobby_scene_mode: bool) -> void:
 	if map_id.strip_edges() != "":
 		client_target_map_id = map_flow_service.normalize_map_id(map_catalog, map_id)
 	lobby_flow_controller.client_lobby_action_result(success, message, active_lobby_id, lobby_scene_mode)
+	if escape_return_pending and active_lobby_id <= 0:
+		_complete_escape_return_to_lobby_menu(escape_return_nonce)
 
 func _rpc_scene_switch_to_map(map_id: String) -> void:
 	_switch_to_map_scene(map_id)

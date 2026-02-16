@@ -135,12 +135,14 @@ func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: Wea
 	)
 	if shot_data.is_empty():
 		return
+	var weapon_id := _weapon_id_for_peer(peer_id)
 	var projectile_id := int(shot_data.get("projectile_id", 0))
 	var spawn_position := shot_data.get("spawn_position", player.global_position) as Vector2
+	# Temporarily disabled server-side offset override.
+	# Use weapon-provided spawn data as-is to avoid left/right offset drift.
 	var velocity := shot_data.get("velocity", Vector2.ZERO) as Vector2
 	var lag_comp_ms := int(shot_data.get("lag_comp_ms", 0))
 	var trail_origin := shot_data.get("trail_origin", spawn_position) as Vector2
-	var weapon_id := _weapon_id_for_peer(peer_id)
 	player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
 	player.play_shot_recoil()
 	for member_value in _lobby_members(lobby_id):

@@ -9,8 +9,9 @@ const FIRE_INTERVAL := 0.10
 const MAGAZINE_SIZE := 25
 const RELOAD_DURATION := 1.0
 const MAX_AIM_DISTANCE := 2600.0
-const CLIENT_VISUAL_ADVANCE_MAX_MS := 220
+const CLIENT_VISUAL_ADVANCE_MAX_MS := 160
 const CAMERA_SHAKE_PER_SHOT_VALUE := 20
+const MAX_SPREAD_DEGREES := 1.2
 
 func weapon_name() -> String:
 	return NAME
@@ -71,7 +72,7 @@ func build_server_shot(
 	world_2d: World2D
 ) -> Dictionary:
 	var desired_spawn_position := player.get_muzzle_world_position()
-	var shoot_direction := Vector2.RIGHT.rotated(player.get_aim_angle()).normalized()
+	var shoot_direction := Vector2.RIGHT.rotated(player.get_aim_angle() + _random_spread_radians()).normalized()
 	if shoot_direction.length_squared() <= 0.0001:
 		shoot_direction = Vector2.RIGHT
 
@@ -98,7 +99,9 @@ func _safe_spawn_position(player: NetPlayer, desired_spawn_position: Vector2, wo
 	if toward_muzzle.length_squared() <= 0.0001:
 		return base_position
 
-	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(base_position, desired_spawn_position, 1 | 2)
+	var shoot_direction := toward_muzzle.normalized()
+	var query_from := base_position + shoot_direction * maxf(4.0, player.get_hit_radius() * 0.55)
+	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(query_from, desired_spawn_position, 1 | 2)
 	query.collide_with_bodies = true
 	query.collide_with_areas = false
 	query.exclude = [player.get_rid()]
@@ -106,4 +109,14 @@ func _safe_spawn_position(player: NetPlayer, desired_spawn_position: Vector2, wo
 	if hit.is_empty():
 		return desired_spawn_position
 
-	return base_position
+	var hit_position = hit.get("position", desired_spawn_position)
+	if not (hit_position is Vector2):
+		return desired_spawn_position
+	var clipped_position := hit_position as Vector2
+	# Keep bullets at the muzzle unless an obstacle is clearly in front of it.
+	if clipped_position.distance_squared_to(desired_spawn_position) <= 16.0:
+		return desired_spawn_position
+	return clipped_position - shoot_direction * 2.0
+
+func _random_spread_radians() -> float:
+	return deg_to_rad(randf_range(-MAX_SPREAD_DEGREES, MAX_SPREAD_DEGREES))

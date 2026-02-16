@@ -1,5 +1,23 @@
 ﻿extends "res://scripts/app/runtime_shared.gd"
 
+const GUN_BASE_POSITION := Vector2(6.0, 2.0)
+const AK47_GUN_FALLBACK_REGION := Rect2(31, 12, 50, 12)
+const UZI_GUN_FALLBACK_REGION := Rect2(161, 85, 25, 21)
+const AK47_MUZZLE_POSITION := Vector2(33.0, 2.5)
+const UZI_MUZZLE_POSITION := Vector2(35.0, 2.5)
+const AK47_RELOAD_STRIP := preload("res://assets/textures/guns/akReload.png")
+const UZI_RELOAD_STRIP := preload("res://assets/textures/guns/uziReload.png")
+const AK47_RELOAD_FRAME_SIZE := Vector2i(89, 39)
+const UZI_RELOAD_FRAME_SIZE := Vector2i(64, 64)
+const AK47_RELOAD_FRAME_COUNT := 15
+const UZI_RELOAD_FRAME_COUNT := 13
+const AK47_RELOAD_FRAME_DURATION_SEC := 1.0 / 15.0
+const UZI_RELOAD_FRAME_DURATION_SEC := 1.0 / 13.0
+const ESCAPE_LEAVE_TIMEOUT_SEC := 1.25
+
+var weapon_idle_texture_by_id: Dictionary = {}
+var weapon_reload_frames_by_id: Dictionary = {}
+
 func _request_lobby_list() -> void:
 	if not _is_client_connected():
 		return
@@ -41,6 +59,8 @@ func _get_role() -> int:
 
 func _reset_runtime_state() -> void:
 	snapshot_accumulator = 0.0
+	escape_return_pending = false
+	escape_return_nonce += 1
 	_clear_players()
 	projectile_system.clear()
 	input_states.clear()
@@ -199,6 +219,7 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if players.has(peer_id):
 		var existing := players[peer_id] as NetPlayer
 		if existing != null:
+			existing.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
 			existing.force_respawn(resolved_spawn)
 		return
 
@@ -209,6 +230,7 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	players_root.add_child(player)
 	player.configure(peer_id, _player_color(peer_id))
 	player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
+	player.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
 	player.set_shot_audio_stream(_weapon_shot_sfx(_weapon_id_for_peer(peer_id)))
 	player.set_reload_audio_stream(_weapon_reload_sfx(_weapon_id_for_peer(peer_id)))
 	if ammo_by_peer.has(peer_id):
@@ -267,6 +289,8 @@ func _server_return_to_lobby_scene_if_idle() -> void:
 	_request_lobby_scene_switch()
 
 func _return_to_lobby_scene(disconnect_session: bool = true) -> void:
+	escape_return_pending = false
+	escape_return_nonce += 1
 	if disconnect_session and session_controller != null:
 		match role:
 			Role.SERVER:
@@ -277,6 +301,41 @@ func _return_to_lobby_scene(disconnect_session: bool = true) -> void:
 				session_controller.close_peer()
 				session_controller.set_idle_state()
 	_request_lobby_scene_switch()
+
+func _begin_escape_return_to_lobby_menu() -> void:
+	if _uses_lobby_scene_flow():
+		return
+	if escape_return_pending:
+		return
+
+	escape_return_pending = true
+	escape_return_nonce += 1
+	var nonce := escape_return_nonce
+	_append_log("Escape pressed: leaving match and returning to lobby menu.")
+
+	if role == Role.CLIENT and _is_client_connected() and client_lobby_id > 0:
+		lobby_auto_action_inflight = true
+		_refresh_lobby_buttons()
+		_set_lobby_status("Leaving lobby...")
+		_rpc_lobby_leave.rpc_id(1)
+		var tree := get_tree()
+		if tree != null:
+			var timeout := tree.create_timer(ESCAPE_LEAVE_TIMEOUT_SEC)
+			timeout.timeout.connect(Callable(self, "_on_escape_leave_timeout").bind(nonce))
+			return
+
+	_complete_escape_return_to_lobby_menu(nonce)
+
+func _on_escape_leave_timeout(nonce: int) -> void:
+	if not escape_return_pending or nonce != escape_return_nonce:
+		return
+	_append_log("Escape leave confirmation timed out. Forcing return to lobby menu.")
+	_complete_escape_return_to_lobby_menu(nonce)
+
+func _complete_escape_return_to_lobby_menu(nonce: int) -> void:
+	if not escape_return_pending or nonce != escape_return_nonce:
+		return
+	_return_to_lobby_scene(true)
 
 func _request_lobby_scene_switch() -> void:
 	var lobby_scene_path := _lobby_scene_path()
@@ -490,6 +549,77 @@ func _weapon_profile_for_id(weapon_id: String) -> WeaponProfile:
 	if weapon_profiles.has(normalized):
 		return weapon_profiles[normalized] as WeaponProfile
 	return weapon_profiles[WEAPON_ID_AK47] as WeaponProfile
+
+func _weapon_visual_for_id(weapon_id: String) -> Dictionary:
+	_ensure_weapon_visual_texture_cache()
+	var normalized := _normalize_weapon_id(weapon_id)
+	var idle_texture = weapon_idle_texture_by_id.get(WEAPON_ID_AK47, null)
+	var reload_texture_frames = weapon_reload_frames_by_id.get(WEAPON_ID_AK47, [])
+	var muzzle_position := AK47_MUZZLE_POSITION
+	var reload_frame_duration_sec := AK47_RELOAD_FRAME_DURATION_SEC
+	if normalized == WEAPON_ID_UZI:
+		idle_texture = weapon_idle_texture_by_id.get(WEAPON_ID_UZI, idle_texture)
+		reload_texture_frames = weapon_reload_frames_by_id.get(WEAPON_ID_UZI, reload_texture_frames)
+		muzzle_position = UZI_MUZZLE_POSITION
+		reload_frame_duration_sec = UZI_RELOAD_FRAME_DURATION_SEC
+	return {
+		"texture": idle_texture,
+		"region_enabled": false,
+		"gun_position": GUN_BASE_POSITION,
+		"muzzle_position": muzzle_position,
+		"reload_texture_frames": reload_texture_frames,
+		"reload_frame_duration_sec": reload_frame_duration_sec
+	}
+
+func _ensure_weapon_visual_texture_cache() -> void:
+	if not weapon_idle_texture_by_id.is_empty() and not weapon_reload_frames_by_id.is_empty():
+		return
+	var ak_frames := _slice_strip_frames(AK47_RELOAD_STRIP, AK47_RELOAD_FRAME_SIZE, AK47_RELOAD_FRAME_COUNT)
+	var uzi_frames := _slice_strip_frames(UZI_RELOAD_STRIP, UZI_RELOAD_FRAME_SIZE, UZI_RELOAD_FRAME_COUNT)
+	weapon_reload_frames_by_id[WEAPON_ID_AK47] = ak_frames
+	weapon_reload_frames_by_id[WEAPON_ID_UZI] = uzi_frames
+	weapon_idle_texture_by_id[WEAPON_ID_AK47] = _first_texture_or_fallback(ak_frames, AK47_GUN_FALLBACK_REGION)
+	weapon_idle_texture_by_id[WEAPON_ID_UZI] = _first_texture_or_fallback(uzi_frames, UZI_GUN_FALLBACK_REGION)
+
+func _slice_strip_frames(strip_texture: Texture2D, frame_size: Vector2i, frame_count: int) -> Array:
+	var frames: Array = []
+	if strip_texture == null:
+		return frames
+	if frame_count <= 0 or frame_size.x <= 0 or frame_size.y <= 0:
+		return frames
+	var texture_size := strip_texture.get_size()
+	if texture_size.y < frame_size.y:
+		return frames
+	var max_frames := mini(frame_count, int(texture_size.x / float(frame_size.x)))
+	for frame_index in range(max_frames):
+		var frame := AtlasTexture.new()
+		frame.atlas = strip_texture
+		frame.region = Rect2(
+			float(frame_index * frame_size.x),
+			0.0,
+			float(frame_size.x),
+			float(frame_size.y)
+		)
+		frames.append(frame)
+	return frames
+
+func _first_texture_or_fallback(frames: Array, fallback_region: Rect2) -> Texture2D:
+	if frames.is_empty():
+		return _atlas_texture_from_region(GUNS_SPRITESHEET, fallback_region)
+	var first_frame = frames[0]
+	if first_frame is Texture2D:
+		return first_frame
+	return _atlas_texture_from_region(GUNS_SPRITESHEET, fallback_region)
+
+func _atlas_texture_from_region(atlas_source: Texture2D, region_rect: Rect2) -> Texture2D:
+	if atlas_source == null:
+		return null
+	if region_rect.size.x <= 0.0 or region_rect.size.y <= 0.0:
+		return atlas_source
+	var texture := AtlasTexture.new()
+	texture.atlas = atlas_source
+	texture.region = region_rect
+	return texture
 
 func _weapon_id_for_peer(peer_id: int) -> String:
 	if peer_weapon_ids.has(peer_id):

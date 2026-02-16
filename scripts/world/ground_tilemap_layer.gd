@@ -13,6 +13,8 @@ const DEFAULT_TILE_SOURCE_ID := 0
 @export var debug_log_collision_stats := false
 
 var _last_collision_signature := ""
+var _source_image_cache: Dictionary = {}
+var _tile_polygon_cache: Dictionary = {}
 
 func _ready() -> void:
 	call_deferred("_initialize_ground")
@@ -27,6 +29,7 @@ func _physics_process(_delta: float) -> void:
 
 func _initialize_ground() -> void:
 	_ensure_runtime_tile_source()
+	_clear_collision_caches()
 	if auto_generate_from_map:
 		_generate_tiles_from_map_sprite()
 	_rebuild_collision()
@@ -102,26 +105,112 @@ func _rebuild_collision() -> void:
 	for child in collision_root.get_children():
 		child.queue_free()
 
-	var tile_size := _resolve_tile_size()
-	var shape_size := Vector2(float(tile_size.x), float(tile_size.y))
 	var built_shapes := 0
 	for cell in get_used_cells():
 		if ignore_atlas_zero_tile_for_collision and get_cell_source_id(cell) == DEFAULT_TILE_SOURCE_ID and get_cell_atlas_coords(cell) == Vector2i.ZERO:
 			continue
-		var collision_shape := CollisionShape2D.new()
-		var rect := RectangleShape2D.new()
-		rect.size = shape_size
-		collision_shape.shape = rect
-		collision_shape.position = map_to_local(cell)
-		collision_root.add_child(collision_shape)
+		var source_id := get_cell_source_id(cell)
+		var atlas_coords := get_cell_atlas_coords(cell)
+		var tile_polygon := _tile_collision_polygon(source_id, atlas_coords)
+		if tile_polygon.size() < 3:
+			continue
+
+		var collision_polygon := CollisionPolygon2D.new()
+		collision_polygon.position = map_to_local(cell)
+		collision_polygon.polygon = tile_polygon
+		collision_root.add_child(collision_polygon)
 		built_shapes += 1
 	if debug_log_collision_stats:
 		print("[GroundTiles] rebuilt: used_cells=%d collision_shapes=%d tile_size=%s layer=%d" % [
 			get_used_cells().size(),
 			built_shapes,
-			str(tile_size),
+			str(_resolve_tile_size()),
 			collision_root.collision_layer
 		])
+
+func _tile_collision_polygon(source_id: int, atlas_coords: Vector2i) -> PackedVector2Array:
+	var key := "%d:%d,%d" % [source_id, atlas_coords.x, atlas_coords.y]
+	if _tile_polygon_cache.has(key):
+		return _tile_polygon_cache[key] as PackedVector2Array
+
+	var polygon := _build_tile_collision_polygon(source_id, atlas_coords)
+	_tile_polygon_cache[key] = polygon
+	return polygon
+
+func _build_tile_collision_polygon(source_id: int, atlas_coords: Vector2i) -> PackedVector2Array:
+	if tile_set == null:
+		return PackedVector2Array()
+	if source_id < 0:
+		return PackedVector2Array()
+
+	var source := tile_set.get_source(source_id)
+	if source == null or not (source is TileSetAtlasSource):
+		return PackedVector2Array()
+	var atlas_source := source as TileSetAtlasSource
+	if not atlas_source.has_tile(atlas_coords):
+		return PackedVector2Array()
+
+	var image := _source_image_for_id(source_id, atlas_source)
+	if image == null:
+		return PackedVector2Array()
+
+	var tile_size := _resolve_tile_size()
+	var offset := atlas_coords * tile_size
+	var image_size := image.get_size()
+	var min_x := maxi(offset.x, 0)
+	var min_y := maxi(offset.y, 0)
+	var max_x := mini(offset.x + tile_size.x, image_size.x)
+	var max_y := mini(offset.y + tile_size.y, image_size.y)
+	if max_x <= min_x or max_y <= min_y:
+		return PackedVector2Array()
+
+	var solid_corners := PackedVector2Array()
+	var solid_pixel_count := 0
+	for py in range(min_y, max_y):
+		for px in range(min_x, max_x):
+			if image.get_pixel(px, py).a < alpha_threshold:
+				continue
+			solid_pixel_count += 1
+			var local_x := px - offset.x
+			var local_y := py - offset.y
+			solid_corners.append(Vector2(local_x, local_y))
+			solid_corners.append(Vector2(local_x + 1.0, local_y))
+			solid_corners.append(Vector2(local_x + 1.0, local_y + 1.0))
+			solid_corners.append(Vector2(local_x, local_y + 1.0))
+
+	if solid_pixel_count <= 0 or solid_corners.size() < 3:
+		return PackedVector2Array()
+
+	var solid_ratio := float(solid_pixel_count) / float(tile_size.x * tile_size.y)
+	if solid_ratio < min_solid_ratio:
+		return PackedVector2Array()
+
+	var hull := Geometry2D.convex_hull(solid_corners)
+	if hull.size() < 3:
+		return PackedVector2Array()
+
+	var centered := PackedVector2Array()
+	var half_tile := Vector2(float(tile_size.x), float(tile_size.y)) * 0.5
+	for point in hull:
+		centered.append(point - half_tile)
+	return centered
+
+func _source_image_for_id(source_id: int, atlas_source: TileSetAtlasSource) -> Image:
+	if _source_image_cache.has(source_id):
+		return _source_image_cache[source_id] as Image
+
+	if atlas_source.texture == null:
+		return null
+	var image := atlas_source.texture.get_image()
+	if image == null:
+		return null
+	image.decompress()
+	_source_image_cache[source_id] = image
+	return image
+
+func _clear_collision_caches() -> void:
+	_source_image_cache.clear()
+	_tile_polygon_cache.clear()
 
 func _ensure_collision_root() -> StaticBody2D:
 	var collision_root := get_node_or_null(COLLISION_ROOT_NAME) as StaticBody2D

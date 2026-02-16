@@ -90,8 +90,7 @@ func _handle_escape_pressed() -> void:
 	if _uses_lobby_scene_flow():
 		get_tree().quit()
 		return
-	_append_log("Escape pressed: leaving match and returning to lobby menu.")
-	_return_to_lobby_scene(true)
+	_begin_escape_return_to_lobby_menu()
 
 func _toggle_fullscreen() -> void:
 	var current_mode := DisplayServer.window_get_mode()

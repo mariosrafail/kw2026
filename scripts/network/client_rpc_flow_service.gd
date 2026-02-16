@@ -12,6 +12,7 @@ var reload_remaining_by_peer: Dictionary = {}
 var weapon_profile_for_id_cb: Callable = Callable()
 var weapon_shot_sfx_cb: Callable = Callable()
 var weapon_reload_sfx_cb: Callable = Callable()
+var weapon_visual_for_id_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -25,6 +26,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	weapon_profile_for_id_cb = callbacks.get("weapon_profile_for_id", Callable()) as Callable
 	weapon_shot_sfx_cb = callbacks.get("weapon_shot_sfx", Callable()) as Callable
 	weapon_reload_sfx_cb = callbacks.get("weapon_reload_sfx", Callable()) as Callable
+	weapon_visual_for_id_cb = callbacks.get("weapon_visual_for_id", Callable()) as Callable
 
 func rpc_play_death_sfx(impact_position: Vector2) -> void:
 	if combat_effects == null:
@@ -35,6 +37,7 @@ func rpc_play_reload_sfx(peer_id: int, weapon_id: String) -> void:
 	var player := players.get(peer_id, null) as NetPlayer
 	if player == null:
 		return
+	player.set_weapon_visual(_weapon_visual_for_id(weapon_id))
 	player.set_reload_audio_stream(_weapon_reload_sfx(weapon_id))
 	player.play_reload_audio()
 
@@ -71,6 +74,7 @@ func rpc_spawn_projectile(
 		return
 	var owner_player := players.get(owner_peer_id, null) as NetPlayer
 	if owner_player != null:
+		owner_player.set_weapon_visual(_weapon_visual_for_id(weapon_id))
 		owner_player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
 		owner_player.set_reload_audio_stream(_weapon_reload_sfx(weapon_id))
 		owner_player.play_shot_recoil()
@@ -123,3 +127,8 @@ func _weapon_reload_sfx(weapon_id: String) -> AudioStream:
 	if weapon_reload_sfx_cb.is_valid():
 		return weapon_reload_sfx_cb.call(weapon_id) as AudioStream
 	return null
+
+func _weapon_visual_for_id(weapon_id: String) -> Dictionary:
+	if weapon_visual_for_id_cb.is_valid():
+		return weapon_visual_for_id_cb.call(weapon_id) as Dictionary
+	return {}
