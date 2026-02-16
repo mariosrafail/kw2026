@@ -1,6 +1,9 @@
 ﻿{
-    "package_url":  "http://85.75.243.92:8081/kw/kw_update.zip",
-    "pck_url":  "http://85.75.243.92:8081/kw/kw.pck",
-    "version":  "0.1.0",
-    "exe_url":  "http://85.75.243.92:8081/kw/kw.exe"
+    "published_at_utc":  "2026-02-16T13:03:30.8460654Z",
+    "version":  "alpha-0.1.19",
+    "package_url":  "http://85.75.243.92:8081/kw/kw_update_alpha-0.1.19.zip",
+    "exe_sha256":  "66b26ad96df7458ea917b632a73ac7c88bb058db24dbd11a457fd50435ab7b13",
+    "pck_sha256":  "2e1191268d7eee066d97f90448ee32e26a1feaca532e872ad40ae7df89827cd1",
+    "exe_url":  "http://85.75.243.92:8081/kw/kw.exe",
+    "pck_url":  "http://85.75.243.92:8081/kw/kw.pck"
 }

@@ -1,8 +1,6 @@
 extends Node2D
 class_name NetProjectile
 
-const LIFE_TIME := 2.0
-const HIT_RADIUS := 8.0
 const IMPACT_LINGER_TIME := 0.08
 const TRAIL_MAX_POINTS := 11
 const TRAIL_SAMPLE_INTERVAL := 0.02
@@ -15,37 +13,67 @@ var owner_peer_id := 0
 var lag_comp_ms := 0
 var trail_origin: Vector2 = Vector2.ZERO
 var velocity: Vector2 = Vector2.ZERO
-var life_remaining := LIFE_TIME
+var life_time := 2.0
+var hit_radius := 8.0
+var life_remaining := 2.0
 var impact_time_remaining := 0.0
 var has_impacted := false
 var trail_world_points: Array[Vector2] = []
 var trail_sample_accumulator := 0.0
 var force_impact_segment_visual := false
 
-func configure(color: Color, start_velocity: Vector2, new_projectile_id: int, new_owner_peer_id: int, new_lag_comp_ms: int, new_trail_origin: Vector2) -> void:
+func configure(
+	color: Color,
+	start_velocity: Vector2,
+	new_projectile_id: int,
+	new_owner_peer_id: int,
+	new_lag_comp_ms: int,
+	new_trail_origin: Vector2,
+	visual_config: Dictionary = {},
+	new_hit_radius: float = 8.0,
+	new_life_time: float = 2.0
+) -> void:
 	projectile_id = new_projectile_id
 	owner_peer_id = new_owner_peer_id
 	lag_comp_ms = max(0, new_lag_comp_ms)
 	trail_origin = new_trail_origin
 	velocity = start_velocity
-	life_remaining = LIFE_TIME
+	life_time = maxf(0.15, new_life_time)
+	hit_radius = maxf(1.0, new_hit_radius)
+	life_remaining = life_time
 	impact_time_remaining = 0.0
 	has_impacted = false
 	trail_sample_accumulator = 0.0
 	force_impact_segment_visual = false
 	rotation = velocity.angle()
+
+	var show_head := bool(visual_config.get("show_head", true))
+	var head_scale := maxf(0.2, float(visual_config.get("head_scale", 0.85)))
+	var head_alpha := clampf(float(visual_config.get("head_alpha", 0.9)), 0.0, 1.0)
+	var trail_width := maxf(0.5, float(visual_config.get("trail_width", 3.6)))
+	var trail_alpha := clampf(float(visual_config.get("trail_alpha", 0.52)), 0.0, 1.0)
+
 	if visual != null:
-		visual.visible = false
+		visual.visible = show_head
+		visual.scale = Vector2.ONE * head_scale
+		visual.modulate = Color(color.r, color.g, color.b, head_alpha)
 	if trail != null:
-		trail.default_color = Color(color.r, color.g, color.b, 0.45)
-		trail.width = 5.0
+		trail.default_color = Color(color.r, color.g, color.b, trail_alpha)
+		trail.width = trail_width
 		trail.antialiased = true
 		trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		trail.end_cap_mode = Line2D.LINE_CAP_ROUND
 		trail.joint_mode = Line2D.LINE_JOINT_ROUND
+		var fade_gradient := Gradient.new()
+		# Trail start (near weapon) should be transparent, and get darker/stronger toward the bullet head.
+		fade_gradient.add_point(0.0, Color(color.r, color.g, color.b, 0.0))
+		fade_gradient.add_point(0.18, Color(color.r, color.g, color.b, trail_alpha * 0.22))
+		fade_gradient.add_point(0.62, Color(color.r * 0.8, color.g * 0.8, color.b * 0.8, trail_alpha * 0.7))
+		fade_gradient.add_point(1.0, Color(color.r * 0.62, color.g * 0.62, color.b * 0.62, minf(1.0, trail_alpha * 1.72)))
+		trail.gradient = fade_gradient
 		var taper := Curve.new()
-		taper.add_point(Vector2(0.0, 0.14))
-		taper.add_point(Vector2(1.0, 1.0))
+		taper.add_point(Vector2(0.0, 0.12))
+		taper.add_point(Vector2(1.0, 0.9))
 		trail.width_curve = taper
 		trail_world_points.clear()
 		trail_world_points.append(global_position)
@@ -66,7 +94,7 @@ func is_expired() -> bool:
 	return life_remaining <= 0.0
 
 func get_hit_radius() -> float:
-	return HIT_RADIUS
+	return hit_radius
 
 func can_deal_damage() -> bool:
 	return not has_impacted and life_remaining > 0.0

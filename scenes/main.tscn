@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=4 uid="uid://b7yb7yrpb6dtq"]
+[gd_scene load_steps=13 format=4 uid="uid://b7yb7yrpb6dtq"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_of5si"]
 [ext_resource type="Texture2D" uid="uid://co0lil7k3g7m" path="res://assets/maps/warriorsriftBG1.png" id="2_3qy6u"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/world/ground_tilemap_layer.gd" id="7_t3qyr"]
 [ext_resource type="TileSet" uid="uid://bxeuelht67e75" path="res://assets/tiles/ground_tileset_8x8.tres" id="8_1m6if"]
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="9_mcfv1"]
+[ext_resource type="Script" path="res://scripts/world/classic_map_controller.gd" id="10_6jxsl"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_map_border_h"]
 size = Vector2(1280, 32)
@@ -16,7 +17,7 @@ size = Vector2(1280, 32)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_map_border_v"]
 size = Vector2(32, 720)
 
-[node name="Main" type="Control"]
+[node name="Main3" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -37,6 +38,9 @@ color = Color(0.888409, 0.398757, 1, 1)
 
 [node name="World" type="Node2D" parent="."]
 
+[node name="MapController" type="Node" parent="World"]
+script = ExtResource("10_6jxsl")
+
 [node name="Sky" type="Sprite2D" parent="World"]
 modulate = Color(0.6, 0.953333, 1, 1)
 z_index = -30
@@ -45,12 +49,16 @@ position = Vector2(640, 360)
 texture = ExtResource("2_pqgtn")
 
 [node name="MapBG3" type="Sprite2D" parent="World"]
+visible = false
+modulate = Color(1, 1, 1, 0.517647)
 z_index = -30
 texture_filter = 1
 position = Vector2(640, 360)
 texture = ExtResource("4_5k0pc")
 
 [node name="MapBG2" type="Sprite2D" parent="World"]
+visible = false
+modulate = Color(1, 1, 1, 0.733333)
 z_index = -20
 texture_filter = 1
 position = Vector2(640, 360)
@@ -220,6 +228,34 @@ size_flags_vertical = 3
 scroll_following = true
 
 [node name="ClientHud" type="CanvasLayer" parent="."]
+
+[node name="KdLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 188.0
+offset_bottom = 44.0
+theme_override_fonts/font = ExtResource("9_mcfv1")
+text = "K/D : 0/0"
+vertical_alignment = 1
+
+[node name="ScoreboardLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -170.0
+offset_top = 12.0
+offset_right = 170.0
+offset_bottom = 88.0
+grow_horizontal = 2
+theme_override_fonts/font = ExtResource("9_mcfv1")
+theme_override_font_sizes/font_size = 14
+text = "K/D
+-"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="PingLabel" type="Label" parent="ClientHud"]
 unique_name_in_owner = true

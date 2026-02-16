@@ -10,6 +10,7 @@ const DEFAULT_TILE_SOURCE_ID := 0
 @export_range(0.0, 1.0, 0.01) var alpha_threshold := 0.15
 @export_range(0.0, 1.0, 0.01) var min_solid_ratio := 0.18
 @export var ignore_atlas_zero_tile_for_collision := false
+@export var debug_log_collision_stats := false
 
 var _last_collision_signature := ""
 
@@ -30,6 +31,7 @@ func _initialize_ground() -> void:
 		_generate_tiles_from_map_sprite()
 	_rebuild_collision()
 	_last_collision_signature = _build_collision_signature()
+	_log_collision_stats("init")
 
 func _ensure_runtime_tile_source() -> void:
 	if tile_set == null:
@@ -102,6 +104,7 @@ func _rebuild_collision() -> void:
 
 	var tile_size := _resolve_tile_size()
 	var shape_size := Vector2(float(tile_size.x), float(tile_size.y))
+	var built_shapes := 0
 	for cell in get_used_cells():
 		if ignore_atlas_zero_tile_for_collision and get_cell_source_id(cell) == DEFAULT_TILE_SOURCE_ID and get_cell_atlas_coords(cell) == Vector2i.ZERO:
 			continue
@@ -111,6 +114,14 @@ func _rebuild_collision() -> void:
 		collision_shape.shape = rect
 		collision_shape.position = map_to_local(cell)
 		collision_root.add_child(collision_shape)
+		built_shapes += 1
+	if debug_log_collision_stats:
+		print("[GroundTiles] rebuilt: used_cells=%d collision_shapes=%d tile_size=%s layer=%d" % [
+			get_used_cells().size(),
+			built_shapes,
+			str(tile_size),
+			collision_root.collision_layer
+		])
 
 func _ensure_collision_root() -> StaticBody2D:
 	var collision_root := get_node_or_null(COLLISION_ROOT_NAME) as StaticBody2D
@@ -139,3 +150,15 @@ func _build_collision_signature() -> String:
 		var alternative := get_cell_alternative_tile(cell)
 		parts.append("%d,%d:%d:%d,%d:%d" % [cell.x, cell.y, source_id, atlas.x, atlas.y, alternative])
 	return "|".join(parts)
+
+func _log_collision_stats(tag: String) -> void:
+	if not debug_log_collision_stats:
+		return
+	var collision_root := _ensure_collision_root()
+	print("[GroundTiles] %s: used_cells=%d collision_shapes=%d layer=%d mask=%d" % [
+		tag,
+		get_used_cells().size(),
+		collision_root.get_child_count(),
+		collision_root.collision_layer,
+		collision_root.collision_mask
+	])

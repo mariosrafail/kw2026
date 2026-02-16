@@ -1,0 +1,265 @@
+[gd_scene load_steps=8 format=3 uid="uid://bwi1lce5egw38"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="9_mcfv1"]
+[ext_resource type="Script" path="res://scripts/world/test_map_controller.gd" id="10_test"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
+size = Vector2(1120, 48)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_platform"]
+size = Vector2(260, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_map_border_v"]
+size = Vector2(32, 720)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_map_border_h"]
+size = Vector2(1280, 32)
+
+[node name="Main2" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="MapController" type="Node" parent="World"]
+script = ExtResource("10_test")
+
+[node name="MapBg" type="Polygon2D" parent="World"]
+visible = false
+z_index = -20
+color = Color(0.11, 0.14, 0.19, 1)
+polygon = PackedVector2Array(0, 0, 1280, 0, 1280, 720, 0, 720)
+
+[node name="Ground" type="StaticBody2D" parent="World"]
+position = Vector2(640, 640)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/Ground"]
+shape = SubResource("RectangleShape2D_floor")
+
+[node name="PlatformLeft" type="StaticBody2D" parent="World"]
+position = Vector2(240, 364)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/PlatformLeft"]
+shape = SubResource("RectangleShape2D_platform")
+
+[node name="PlatformRight" type="StaticBody2D" parent="World"]
+position = Vector2(850, 364)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/PlatformRight"]
+shape = SubResource("RectangleShape2D_platform")
+
+[node name="WallLeft" type="StaticBody2D" parent="World"]
+position = Vector2(72, 360)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/WallLeft"]
+shape = SubResource("RectangleShape2D_map_border_v")
+
+[node name="WallRight" type="StaticBody2D" parent="World"]
+position = Vector2(1208, 360)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/WallRight"]
+shape = SubResource("RectangleShape2D_map_border_v")
+
+[node name="MainCamera" type="Camera2D" parent="World"]
+unique_name_in_owner = true
+position = Vector2(640, 360)
+zoom = Vector2(1.6, 1.6)
+limit_left = 128
+limit_top = 104
+limit_right = 1152
+limit_bottom = 616
+
+[node name="BorderTop" type="StaticBody2D" parent="World"]
+position = Vector2(640, -16)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/BorderTop"]
+shape = SubResource("RectangleShape2D_map_border_h")
+
+[node name="BorderBottom" type="StaticBody2D" parent="World"]
+position = Vector2(640, 736)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/BorderBottom"]
+shape = SubResource("RectangleShape2D_map_border_h")
+
+[node name="BorderLeft" type="StaticBody2D" parent="World"]
+position = Vector2(-16, 360)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/BorderLeft"]
+shape = SubResource("RectangleShape2D_map_border_v")
+
+[node name="BorderRight" type="StaticBody2D" parent="World"]
+position = Vector2(1296, 360)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="World/BorderRight"]
+shape = SubResource("RectangleShape2D_map_border_v")
+
+[node name="Players" type="Node2D" parent="World"]
+unique_name_in_owner = true
+
+[node name="Projectiles" type="Node2D" parent="World"]
+unique_name_in_owner = true
+
+[node name="MapFront" type="Sprite2D" parent="World"]
+z_index = 50
+position = Vector2(640, 360)
+
+[node name="UiPanel" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 462.0
+offset_bottom = 322.0
+
+[node name="Margin" type="MarginContainer" parent="UiPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="UiPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Multiplayer Platform Demo"
+
+[node name="ControlsLabel" type="Label" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+text = "Move: A/D or Arrows | Jump: Space | Shoot: Left Click"
+
+[node name="LocalIpLabel" type="Label" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Local IP: ..."
+
+[node name="ServerRow" type="HBoxContainer" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PortText" type="Label" parent="UiPanel/Margin/VBox/ServerRow"]
+layout_mode = 2
+text = "Port"
+
+[node name="PortSpin" type="SpinBox" parent="UiPanel/Margin/VBox/ServerRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+min_value = 1.0
+max_value = 65535.0
+value = 7777.0
+
+[node name="StartServerButton" type="Button" parent="UiPanel/Margin/VBox/ServerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Start"
+
+[node name="StopButton" type="Button" parent="UiPanel/Margin/VBox/ServerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Stop"
+
+[node name="ClientRow" type="HBoxContainer" parent="UiPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HostText" type="Label" parent="UiPanel/Margin/VBox/ClientRow"]
+layout_mode = 2
+text = "Host"
+
+[node name="HostInput" type="LineEdit" parent="UiPanel/Margin/VBox/ClientRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "127.0.0.1"
+placeholder_text = "127.0.0.1"
+
+[node name="ConnectButton" type="Button" parent="UiPanel/Margin/VBox/ClientRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Connect"
+
+[node name="DisconnectButton" type="Button" parent="UiPanel/Margin/VBox/ClientRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Disconnect"
+
+[node name="StatusLabel" type="Label" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Status: Idle"
+
+[node name="PeersLabel" type="Label" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "My peer id: 1 | Net peers: - | Players: -"
+
+[node name="LogLabel" type="RichTextLabel" parent="UiPanel/Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+size_flags_vertical = 3
+scroll_following = true
+
+[node name="ClientHud" type="CanvasLayer" parent="."]
+
+[node name="KdLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 188.0
+offset_bottom = 44.0
+theme_override_fonts/font = ExtResource("9_mcfv1")
+text = "K/D : 0/0"
+vertical_alignment = 1
+
+[node name="ScoreboardLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -170.0
+offset_top = 12.0
+offset_right = 170.0
+offset_bottom = 88.0
+grow_horizontal = 2
+theme_override_fonts/font = ExtResource("9_mcfv1")
+theme_override_font_sizes/font_size = 14
+text = "K/D
+-"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PingLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -188.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = 44.0
+grow_horizontal = 0
+theme_override_fonts/font = ExtResource("9_mcfv1")
+text = "Ping: -"
+horizontal_alignment = 2
+vertical_alignment = 1
