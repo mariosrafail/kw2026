@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=4 uid="uid://bwi1lce5egw38"]
+[gd_scene load_steps=10 format=4 uid="uid://bwi1lce5egw38"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Texture2D" uid="uid://7hm0c4gl3fgu" path="res://assets/maps/cyber1v1/cyber_sky.png" id="2_oqwdm"]
@@ -7,6 +7,12 @@
 [ext_resource type="Script" path="res://scripts/world/ground_tilemap_layer.gd" id="4_lv7e5"]
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="9_mcfv1"]
 [ext_resource type="Script" path="res://scripts/world/test_map_controller.gd" id="10_test"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_6vpgc"]
+size = Vector2(1280, 32)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_8grr5"]
+size = Vector2(32, 720)
 
 [node name="Main2" type="Control"]
 layout_mode = 3
@@ -205,3 +211,31 @@ theme_override_fonts/font = ExtResource("9_mcfv1")
 text = "Ping: -"
 horizontal_alignment = 2
 vertical_alignment = 1
+
+[node name="BorderTop" type="StaticBody2D" parent="."]
+position = Vector2(640, -16)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="BorderTop"]
+shape = SubResource("RectangleShape2D_6vpgc")
+
+[node name="BorderBottom" type="StaticBody2D" parent="."]
+position = Vector2(640, 736)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="BorderBottom"]
+shape = SubResource("RectangleShape2D_6vpgc")
+
+[node name="BorderLeft" type="StaticBody2D" parent="."]
+position = Vector2(-16, 360)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="BorderLeft"]
+shape = SubResource("RectangleShape2D_8grr5")
+
+[node name="BorderRight" type="StaticBody2D" parent="."]
+position = Vector2(1296, 360)
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="BorderRight"]
+shape = SubResource("RectangleShape2D_8grr5")

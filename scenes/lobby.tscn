@@ -240,7 +240,6 @@ size_flags_horizontal = 3
 theme_override_fonts/font = ExtResource("2_font")
 
 [node name="MapRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
-visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
