@@ -1,6 +1,8 @@
 {
-  "version": "0.1.1",
-  "package_url": "https://your-domain-or-ip/kw/kw_update.zip",
-  "exe_url": "https://your-domain-or-ip/kw/kw.exe",
-  "pck_url": "https://your-domain-or-ip/kw/kw.pck"
+  "version": "alpha-0.1.22",
+  "package_url": "file:///c:/Users/mario/Documents/kw_godot/build/release.zip",
+  "exe_url": "file:///c:/Users/mario/Documents/kw_godot/build/kw.exe",
+  "pck_url": "file:///c:/Users/mario/Documents/kw_godot/build/kw.pck",
+  "exe_sha256": "66b26ad96df7458ea917b632a73ac7c88bb058db24dbd11a457fd50435ab7b13",
+  "pck_sha256": "3fc2676d7762b28e71e3bdb05b53d3e581812194fc9537e027be2c2eb18f12a4"
 }

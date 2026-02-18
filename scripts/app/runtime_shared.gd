@@ -3,15 +3,17 @@
 const DEFAULT_PORT := 8080
 const MAX_CLIENTS := 8
 const DEFAULT_HOST := "127.0.0.1"
-const SNAPSHOT_RATE := 30.0
-const INPUT_SEND_RATE := 60.0
+const SNAPSHOT_RATE := 45.0
+const INPUT_SEND_RATE := 90.0
 const PING_INTERVAL := 0.75
 const PLAYER_HISTORY_MS := 800
 const MAX_INPUT_PACKETS_PER_SEC := 120
 const MAX_REPORTED_RTT_MS := 300
-const LOCAL_RECONCILE_SNAP_DISTANCE := 180.0
-const LOCAL_RECONCILE_POS_BLEND := 0.18
-const LOCAL_RECONCILE_VEL_BLEND := 0.35
+const MAX_INPUT_STALE_MS := 120
+const LOCAL_RECONCILE_SNAP_DISTANCE := 96.0
+const LOCAL_RECONCILE_VERTICAL_SNAP_DISTANCE := 6.0
+const LOCAL_RECONCILE_POS_BLEND := 0.08
+const LOCAL_RECONCILE_VEL_BLEND := 0.12
 
 const ARG_MODE_PREFIX := "--mode="
 const ARG_HOST_PREFIX := "--host="
@@ -205,6 +207,9 @@ func _rpc_play_reload_sfx(_peer_id: int, _weapon_id: String) -> void:
 func _rpc_sync_player_ammo(_peer_id: int, _ammo: int, _is_reloading: bool) -> void:
 	pass
 
+func _rpc_sync_player_weapon(_peer_id: int, _weapon_id: String) -> void:
+	pass
+
 func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
 	pass
 
@@ -231,4 +236,3 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	pass
-

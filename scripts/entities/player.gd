@@ -8,11 +8,13 @@ const FALL_GRAVITY_MULTIPLIER := 1.35
 const MAX_FALL_SPEED := 1300.0
 const JUMP_RELEASE_DAMP := 0.55
 const COYOTE_TIME := 0.16
+const JUMP_BUFFER_TIME := 0.1
 const SNAP_LERP_SPEED_X := 14.0
 const SNAP_LERP_SPEED_Y := 10.0
 const AIM_LERP_SPEED := 20.0
 const REMOTE_SNAP_DISTANCE := 150.0
 const REMOTE_VELOCITY_BLEND := 0.45
+const VISUAL_CORRECTION_DECAY := 9.0
 const MAX_HEALTH := 100
 const HIT_RADIUS := 12.0
 const GUN_VISUAL_ANGLE_OFFSET := 0.0
@@ -34,15 +36,16 @@ const PLAYER_MAX_SLIDES := 8
 
 @onready var body: Polygon2D = get_node_or_null("Body") as Polygon2D
 @onready var feet: Polygon2D = get_node_or_null("Feet") as Polygon2D
-@onready var player_sprite: Node2D = $Sprite2D
-@onready var gun_pivot: Node2D = $GunPivot
-@onready var gun: Node2D = $GunPivot/Gun
-@onready var muzzle: Marker2D = $GunPivot/Muzzle
-@onready var shot_audio: AudioStreamPlayer2D = $GunPivot/ShotAudio
-@onready var reload_audio: AudioStreamPlayer2D = $GunPivot/ReloadAudio
+@onready var visual_root: Node2D = $VisualRoot
+@onready var player_sprite: Node2D = $VisualRoot/Sprite2D
+@onready var gun_pivot: Node2D = $VisualRoot/GunPivot
+@onready var gun: Node2D = $VisualRoot/GunPivot/Gun
+@onready var muzzle: Marker2D = $VisualRoot/GunPivot/Muzzle
+@onready var shot_audio: AudioStreamPlayer2D = $VisualRoot/GunPivot/ShotAudio
+@onready var reload_audio: AudioStreamPlayer2D = $VisualRoot/GunPivot/ReloadAudio
 @onready var death_audio: AudioStreamPlayer2D = $DeathAudio
-@onready var health_label: Label = $HealthLabel
-@onready var ammo_label: Label = $AmmoLabel
+@onready var health_label: Label = $VisualRoot/HealthLabel
+@onready var ammo_label: Label = $VisualRoot/AmmoLabel
 
 var peer_id: int = 0
 var use_network_smoothing := false
@@ -54,6 +57,7 @@ var target_health := MAX_HEALTH
 var ammo_count := 0
 var is_reloading := false
 var coyote_time_left := 0.0
+var jump_buffer_time_left := 0.0
 var gun_recoil_tween: Tween
 var gun_base_scale_abs := Vector2.ONE
 var configured_gun_position := DEFAULT_GUN_POSITION
@@ -68,6 +72,7 @@ var gun_reload_texture_frames: Array = []
 var gun_reload_frame_duration_sec := DEFAULT_RELOAD_FRAME_DURATION_SEC
 var gun_reload_animation_tween: Tween
 var gun_reload_animation_nonce := 0
+var visual_correction_offset := Vector2.ZERO
 
 func _ready() -> void:
 	_configure_floor_movement()
@@ -75,6 +80,8 @@ func _ready() -> void:
 	target_velocity = velocity
 	target_aim_angle = 0.0
 	target_health = health
+	if visual_root != null:
+		visual_root.position = Vector2.ZERO
 	_normalize_gun_sprite_anchor()
 	if gun != null:
 		gun_base_scale_abs = Vector2(absf(gun.scale.x), absf(gun.scale.y))
@@ -258,6 +265,7 @@ func force_respawn(spawn_position: Vector2) -> void:
 	velocity = Vector2.ZERO
 	target_velocity = Vector2.ZERO
 	coyote_time_left = 0.0
+	jump_buffer_time_left = 0.0
 	_reset_gun_scale()
 	_reset_gun_shot_animation()
 	_reset_gun_reload_animation()
@@ -296,7 +304,6 @@ func _apply_weapon_mount_offsets_from_angle(angle: float) -> void:
 	var muzzle_position := configured_muzzle_position
 	if looking_left:
 		gun_position.y = -gun_position.y
-		muzzle_position.y = -muzzle_position.y
 	if gun != null:
 		gun.position = gun_position
 	if muzzle != null:
@@ -454,10 +461,16 @@ func get_muzzle_world_position() -> Vector2:
 func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_held: bool) -> void:
 	axis = clamp(axis, -1.0, 1.0)
 	var on_floor := is_on_floor()
+	var jumped_this_frame := false
 	if on_floor:
 		coyote_time_left = COYOTE_TIME
 	else:
 		coyote_time_left = maxf(coyote_time_left - delta, 0.0)
+
+	if jump_pressed:
+		jump_buffer_time_left = JUMP_BUFFER_TIME
+	else:
+		jump_buffer_time_left = maxf(jump_buffer_time_left - delta, 0.0)
 
 	var target_speed := axis * SPEED
 	if absf(axis) > 0.001:
@@ -471,11 +484,13 @@ func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_
 	elif velocity.y > 0.0:
 		velocity.y = 0.0
 
-	if jump_pressed and (on_floor or coyote_time_left > 0.0):
+	if jump_buffer_time_left > 0.0 and (on_floor or coyote_time_left > 0.0):
 		velocity.y = JUMP_VELOCITY
 		coyote_time_left = 0.0
+		jump_buffer_time_left = 0.0
+		jumped_this_frame = true
 
-	if not jump_held and velocity.y < 0.0:
+	if not jumped_this_frame and not jump_held and velocity.y < 0.0:
 		velocity.y *= JUMP_RELEASE_DAMP
 
 	move_and_slide()
@@ -501,6 +516,8 @@ func apply_snapshot(new_position: Vector2, new_velocity: Vector2, new_aim_angle:
 		set_health(target_health)
 
 func _physics_process(delta: float) -> void:
+	if visual_root != null:
+		_tick_visual_correction(delta)
 	if not use_network_smoothing:
 		return
 
@@ -518,3 +535,17 @@ func _physics_process(delta: float) -> void:
 	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
 	if health != target_health:
 		set_health(target_health)
+
+func apply_visual_correction(offset: Vector2) -> void:
+	if visual_root == null:
+		return
+	visual_correction_offset += offset
+	visual_root.position = visual_correction_offset
+
+func _tick_visual_correction(delta: float) -> void:
+	if visual_correction_offset.length_squared() <= 0.0001:
+		visual_correction_offset = Vector2.ZERO
+		visual_root.position = Vector2.ZERO
+		return
+	visual_correction_offset = visual_correction_offset.lerp(Vector2.ZERO, min(1.0, delta * VISUAL_CORRECTION_DECAY))
+	visual_root.position = visual_correction_offset

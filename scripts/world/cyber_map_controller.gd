@@ -1,19 +1,23 @@
 extends MapController
 class_name CyberMapController
 
-@export var world_local_play_bounds: Rect2i = Rect2i(392, 112, 496, 496)
-@export var camera_padding: Vector2i = Vector2i(64, 56)
-@export var spawn_padding := 40.0
-@export_range(0.0, 1.0, 0.01) var spawn_row_ratio := 0.58
+@export var world_local_play_bounds: Rect2i = Rect2i(640, 360, 512, 512)
+@export var camera_padding: Vector2i = Vector2i(0, 0)
+@export var spawn_left := 720.0
+@export var spawn_right := 560.0
+@export var spawn_y := 416.0
 
 func _init() -> void:
 	map_id = "cyber"
 	map_label = "Cyber"
 	scene_path = "res://scenes/main_cyber.tscn"
 	max_players = 2
-	spawn_points = []
-	play_bounds = Rect2i(64, 80, 512, 512)
-	camera_limits_rect = Rect2i(64, 80, 512, 512)
+	spawn_points = [
+		Vector2(spawn_left, spawn_y),
+		Vector2(spawn_right, spawn_y)
+	]
+	play_bounds = Rect2i(0, 0, 1280, 720)
+	camera_limits_rect = Rect2i(640, 360, 512, 512)
 
 func apply_runtime_bounds(
 	main_camera: Camera2D,
@@ -50,24 +54,7 @@ func apply_runtime_bounds(
 	_apply_border_bodies(_runtime_play_bounds, border_nodes)
 
 func configured_spawn_points() -> Array:
-	var runtime_rect := runtime_play_bounds_rect()
-	if runtime_rect.size.x <= 0 or runtime_rect.size.y <= 0:
-		return super.configured_spawn_points()
-	var min_x := float(runtime_rect.position.x) + spawn_padding
-	var max_x := float(runtime_rect.position.x + runtime_rect.size.x) - spawn_padding
-	var min_y := float(runtime_rect.position.y) + spawn_padding
-	var max_y := float(runtime_rect.position.y + runtime_rect.size.y) - spawn_padding
-	if min_x > max_x or min_y > max_y:
-		return super.configured_spawn_points()
-	var spawn_y := clampf(
-		float(runtime_rect.position.y) + float(runtime_rect.size.y) * spawn_row_ratio,
-		min_y,
-		max_y
-	)
-	return [
-		Vector2(lerpf(min_x, max_x, 0.25), spawn_y),
-		Vector2(lerpf(min_x, max_x, 0.75), spawn_y)
-	]
+	return spawn_points.duplicate()
 
 func _sanitized_local_rect(rect: Rect2i) -> Rect2i:
 	return Rect2i(

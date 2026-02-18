@@ -474,7 +474,7 @@ func _deferred_scene_switch() -> void:
 		_append_log("Scene switch failed: %s" % error_string(err))
 
 func _send_spawn_player_rpc(target_peer_id: int, peer_id: int, spawn_position: Vector2, display_name: String) -> void:
-	_rpc_spawn_player.rpc_id(target_peer_id, peer_id, spawn_position, display_name)
+	_rpc_spawn_player.rpc_id(target_peer_id, peer_id, spawn_position, display_name, _weapon_id_for_peer(peer_id))
 
 func _broadcast_despawn_player_rpc(peer_id: int) -> void:
 	_rpc_despawn_player.rpc(peer_id)

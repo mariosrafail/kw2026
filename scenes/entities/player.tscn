@@ -18,30 +18,29 @@ floor_block_on_wall = false
 safe_margin = 0.02
 script = ExtResource("1_blu24")
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
+[node name="VisualRoot" type="Node2D" parent="."]
+
+[node name="Sprite2D" type="Sprite2D" parent="VisualRoot"]
 texture_filter = 1
 texture = ExtResource("2_dpso1")
 region_enabled = true
 region_rect = Rect2(114, 15, 20, 32)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("CapsuleShape2D_0vb8o")
+[node name="GunPivot" type="Node2D" parent="VisualRoot"]
 
-[node name="GunPivot" type="Node2D" parent="."]
+[node name="Muzzle" type="Marker2D" parent="VisualRoot/GunPivot"]
 
-[node name="Muzzle" type="Marker2D" parent="GunPivot"]
-
-[node name="ShotAudio" type="AudioStreamPlayer2D" parent="GunPivot"]
+[node name="ShotAudio" type="AudioStreamPlayer2D" parent="VisualRoot/GunPivot"]
 stream = ExtResource("5_ifk0o")
 volume_db = -1.0
 max_polyphony = 6
 
-[node name="ReloadAudio" type="AudioStreamPlayer2D" parent="GunPivot"]
+[node name="ReloadAudio" type="AudioStreamPlayer2D" parent="VisualRoot/GunPivot"]
 stream = ExtResource("7_ak_reload")
 volume_db = -2.0
 max_polyphony = 3
 
-[node name="Gun" type="Sprite2D" parent="GunPivot"]
+[node name="Gun" type="Sprite2D" parent="VisualRoot/GunPivot"]
 z_index = 1
 texture_filter = 1
 texture = ExtResource("3_tfnx5")
@@ -49,12 +48,7 @@ centered = false
 region_enabled = true
 region_rect = Rect2(150, 85, 36, 21)
 
-[node name="DeathAudio" type="AudioStreamPlayer2D" parent="."]
-stream = ExtResource("6_6oc35")
-volume_db = 2.0
-max_polyphony = 2
-
-[node name="HealthLabel" type="Label" parent="."]
+[node name="HealthLabel" type="Label" parent="VisualRoot"]
 z_index = 2
 texture_filter = 1
 offset_left = -26.0
@@ -66,7 +60,7 @@ theme_override_font_sizes/font_size = 12
 text = "100"
 horizontal_alignment = 1
 
-[node name="AmmoLabel" type="Label" parent="."]
+[node name="AmmoLabel" type="Label" parent="VisualRoot"]
 z_index = 2
 texture_filter = 1
 offset_left = 28.0
@@ -77,3 +71,11 @@ theme_override_colors/font_color = Color(1, 0.87451, 0.176471, 1)
 theme_override_fonts/font = ExtResource("3_u0ukb")
 theme_override_font_sizes/font_size = 10
 text = "25"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CapsuleShape2D_0vb8o")
+
+[node name="DeathAudio" type="AudioStreamPlayer2D" parent="."]
+stream = ExtResource("6_6oc35")
+volume_db = 2.0
+max_polyphony = 2

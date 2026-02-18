@@ -129,6 +129,20 @@ func _rpc_sync_player_ammo(peer_id: int, ammo: int, is_reloading: bool) -> void:
 		return
 	client_rpc_flow_service.rpc_sync_player_ammo(peer_id, ammo, is_reloading)
 
+func _rpc_sync_player_weapon(peer_id: int, weapon_id: String) -> void:
+	if multiplayer.is_server():
+		return
+	if peer_id <= 0:
+		return
+	var resolved_weapon_id := _normalize_weapon_id(weapon_id)
+	peer_weapon_ids[peer_id] = resolved_weapon_id
+	var player := players.get(peer_id, null) as NetPlayer
+	if player == null:
+		return
+	player.set_weapon_visual(_weapon_visual_for_id(resolved_weapon_id))
+	player.set_shot_audio_stream(_weapon_shot_sfx(resolved_weapon_id))
+	player.set_reload_audio_stream(_weapon_reload_sfx(resolved_weapon_id))
+
 func _rpc_play_death_sfx(impact_position: Vector2) -> void:
 	if multiplayer.is_server():
 		return
@@ -182,14 +196,29 @@ func _rpc_lobby_set_weapon(weapon_id: String) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
-	peer_weapon_ids[peer_id] = _normalize_weapon_id(weapon_id)
+	var normalized_weapon_id := _normalize_weapon_id(weapon_id)
+	peer_weapon_ids[peer_id] = normalized_weapon_id
 	if lobby_service != null:
-		lobby_service.set_peer_weapon(peer_id, _normalize_weapon_id(weapon_id))
+		lobby_service.set_peer_weapon(peer_id, normalized_weapon_id)
 	if players.has(peer_id):
 		var player := players[peer_id] as NetPlayer
 		if player != null:
-			player.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
+			player.set_weapon_visual(_weapon_visual_for_id(normalized_weapon_id))
+			player.set_shot_audio_stream(_weapon_shot_sfx(normalized_weapon_id))
+			player.set_reload_audio_stream(_weapon_reload_sfx(normalized_weapon_id))
 		combat_flow_service.server_sync_player_ammo(peer_id)
+	var lobby_id := _peer_lobby(peer_id)
+	var recipients := _lobby_members(lobby_id)
+	if recipients.is_empty() and not _uses_lobby_scene_flow():
+		if multiplayer != null and multiplayer.multiplayer_peer != null:
+			recipients = []
+			for id_value in multiplayer.get_peers():
+				recipients.append(int(id_value))
+	for member_value in recipients:
+		var member_id := int(member_value)
+		if member_id <= 0:
+			continue
+		_rpc_sync_player_weapon.rpc_id(member_id, peer_id, normalized_weapon_id)
 
 func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:

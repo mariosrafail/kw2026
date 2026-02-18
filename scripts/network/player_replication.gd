@@ -14,6 +14,7 @@ var player_display_names: Dictionary = {}
 var max_input_packets_per_sec := 120
 var max_reported_rtt_ms := 300
 var local_reconcile_snap_distance := 180.0
+var local_reconcile_vertical_snap_distance := 6.0
 var local_reconcile_pos_blend := 0.18
 var local_reconcile_vel_blend := 0.35
 
@@ -59,6 +60,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	max_input_packets_per_sec = int(config.get("max_input_packets_per_sec", max_input_packets_per_sec))
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
 	local_reconcile_snap_distance = float(config.get("local_reconcile_snap_distance", local_reconcile_snap_distance))
+	local_reconcile_vertical_snap_distance = float(config.get("local_reconcile_vertical_snap_distance", local_reconcile_vertical_snap_distance))
 	local_reconcile_pos_blend = float(config.get("local_reconcile_pos_blend", local_reconcile_pos_blend))
 	local_reconcile_vel_blend = float(config.get("local_reconcile_vel_blend", local_reconcile_vel_blend))
 
@@ -247,13 +249,16 @@ func server_submit_input(
 		return false
 
 	var state: Dictionary = input_states.get(peer_id, _default_input_state()) as Dictionary
+	var previous_jump_held := bool(state.get("jump_held", false))
+	var inferred_jump_pressed := jump_held and not previous_jump_held
 	state["axis"] = clamp(axis, -1.0, 1.0)
-	state["jump_pressed"] = bool(state.get("jump_pressed", false)) or jump_pressed
+	state["jump_pressed"] = bool(state.get("jump_pressed", false)) or jump_pressed or inferred_jump_pressed
 	state["jump_held"] = jump_held
 	state["aim_world"] = active_weapon.clamp_aim_world(player.global_position, aim_world)
 	state["shoot_held"] = shoot_held
 	state["boost_damage"] = boost_damage
 	state["reported_rtt_ms"] = clampi(reported_rtt_ms, 0, max_reported_rtt_ms)
+	state["last_packet_msec"] = Time.get_ticks_msec()
 	input_states[peer_id] = state
 	return true
 
@@ -275,13 +280,30 @@ func client_apply_state_snapshot(
 
 	if peer_id == local_peer_id:
 		player.set_health(health)
+		var prev_position := player.global_position
 		var delta_pos := new_position - player.global_position
-		if delta_pos.length() > local_reconcile_snap_distance:
+		var vertical_error := absf(delta_pos.y)
+		var has_vertical_direction_conflict := (
+			absf(player.velocity.y) > 1.0
+			and absf(new_velocity.y) > 1.0
+			and signf(player.velocity.y) != signf(new_velocity.y)
+		)
+		var should_hard_snap := (
+			delta_pos.length() > local_reconcile_snap_distance
+			or vertical_error >= local_reconcile_vertical_snap_distance
+			or has_vertical_direction_conflict
+		)
+		if should_hard_snap:
 			player.global_position = new_position
 			player.velocity = new_velocity
 		else:
 			player.global_position = player.global_position.lerp(new_position, local_reconcile_pos_blend)
 			player.velocity = player.velocity.lerp(new_velocity, local_reconcile_vel_blend)
+		var applied_delta := player.global_position - prev_position
+		if applied_delta.length_squared() > 0.0001:
+			if new_velocity.y < -1.0:
+				applied_delta = Vector2(applied_delta.x, applied_delta.y * 0.3)
+			player.apply_visual_correction(-applied_delta)
 		return
 
 	player.apply_snapshot(new_position, new_velocity, aim_angle, health)
@@ -296,7 +318,8 @@ func _default_input_state() -> Dictionary:
 		"aim_world": Vector2.ZERO,
 		"shoot_held": false,
 		"boost_damage": false,
-		"reported_rtt_ms": 0
+		"reported_rtt_ms": 0,
+		"last_packet_msec": 0
 	}
 
 func _peer_lobby(peer_id: int) -> int:

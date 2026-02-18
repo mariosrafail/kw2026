@@ -12,6 +12,9 @@ var input_send_rate := 60.0
 var _input_send_accumulator := 0.0
 var _cached_local_input_state: Dictionary = {}
 var _local_last_non_zero_move_axis := 1.0
+var _last_sent_axis := 0.0
+var _last_sent_jump_held := false
+var _last_sent_shoot_held := false
 
 func configure(refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = refs.get("players", {}) as Dictionary
@@ -26,6 +29,9 @@ func reset() -> void:
 	_input_send_accumulator = 0.0
 	_cached_local_input_state.clear()
 	_local_last_non_zero_move_axis = 1.0
+	_last_sent_axis = 0.0
+	_last_sent_jump_held = false
+	_last_sent_shoot_held = false
 
 func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bool) -> void:
 	if multiplayer == null:
@@ -35,26 +41,39 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 		return
 
 	var state: Dictionary = _cached_local_input_state if not _cached_local_input_state.is_empty() else _read_local_input_state(damage_boost_enabled)
+	var axis := float(state.get("axis", 0.0))
+	var jump_pressed := bool(state.get("jump_pressed", false))
+	var jump_held := bool(state.get("jump_held", false))
+	var shoot_held := bool(state.get("shoot_held", false))
+	var changed := (
+		absf(axis - _last_sent_axis) > 0.001
+		or jump_pressed
+		or jump_held != _last_sent_jump_held
+		or shoot_held != _last_sent_shoot_held
+	)
 	var local_player := players[local_id] as NetPlayer
 	if local_player != null:
 		local_player.set_aim_world(state.get("aim_world", local_player.global_position + Vector2.RIGHT * 120.0) as Vector2)
 
 	_input_send_accumulator += delta
-	if _input_send_accumulator < 1.0 / input_send_rate:
+	if not changed and _input_send_accumulator < 1.0 / input_send_rate:
 		return
 	_input_send_accumulator = 0.0
 	if not submit_input_cb.is_valid():
 		return
 
 	submit_input_cb.call(
-		float(state.get("axis", 0.0)),
-		bool(state.get("jump_pressed", false)),
-		bool(state.get("jump_held", false)),
+		axis,
+		jump_pressed,
+		jump_held,
 		state.get("aim_world", Vector2.ZERO) as Vector2,
-		bool(state.get("shoot_held", false)),
+		shoot_held,
 		bool(state.get("boost_damage", false)),
 		last_ping_ms
 	)
+	_last_sent_axis = axis
+	_last_sent_jump_held = jump_held
+	_last_sent_shoot_held = shoot_held
 
 func client_predict_local_player(delta: float, damage_boost_enabled: bool) -> void:
 	if multiplayer == null:

@@ -1,12 +1,14 @@
 extends "res://scripts/app/main_runtime.gd"
-const CLIENT_VERSION := "alpha-0.1.20"
+const CLIENT_VERSION := "alpha-0.1.21"
 
 @rpc("any_peer", "reliable")
 func _rpc_request_spawn() -> void:
 	super._rpc_request_spawn()
 
 @rpc("authority", "reliable")
-func _rpc_spawn_player(peer_id: int, spawn_position: Vector2, display_name: String = "") -> void:
+func _rpc_spawn_player(peer_id: int, spawn_position: Vector2, display_name: String = "", weapon_id: String = "") -> void:
+	if not weapon_id.is_empty():
+		peer_weapon_ids[peer_id] = weapon_id
 	super._rpc_spawn_player(peer_id, spawn_position, display_name)
 
 @rpc("authority", "reliable")
@@ -89,6 +91,10 @@ func _rpc_sync_player_ammo(peer_or_payload: Variant, ammo: int = 0, is_reloading
 	else:
 		peer_id = int(peer_or_payload)
 	super._rpc_sync_player_ammo(peer_id, resolved_ammo, resolved_is_reloading)
+
+@rpc("authority", "reliable")
+func _rpc_sync_player_weapon(peer_id: int, weapon_id: String) -> void:
+	super._rpc_sync_player_weapon(peer_id, weapon_id)
 
 @rpc("authority", "reliable")
 func _rpc_play_death_sfx(impact_position: Vector2) -> void:

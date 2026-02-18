@@ -33,6 +33,7 @@ var broadcast_player_state_cb: Callable = Callable()
 var max_reported_rtt_ms := 300
 var snapshot_rate := 30.0
 var weapon_id_ak47 := "ak47"
+var max_input_stale_ms := 120
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -67,6 +68,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
 	snapshot_rate = float(config.get("snapshot_rate", snapshot_rate))
 	weapon_id_ak47 = str(config.get("weapon_id_ak47", weapon_id_ak47))
+	max_input_stale_ms = int(config.get("max_input_stale_ms", max_input_stale_ms))
 
 func default_input_state() -> Dictionary:
 	return {
@@ -76,7 +78,8 @@ func default_input_state() -> Dictionary:
 		"aim_world": Vector2.ZERO,
 		"shoot_held": false,
 		"boost_damage": false,
-		"reported_rtt_ms": 0
+		"reported_rtt_ms": 0,
+		"last_packet_msec": 0
 	}
 
 func server_sync_player_ammo(peer_id: int, target_peer_id: int = 0) -> void:
@@ -303,6 +306,13 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 			continue
 
 		var state: Dictionary = input_states.get(peer_id, default_input_state()) as Dictionary
+		var now_msec := Time.get_ticks_msec()
+		var last_packet_msec := int(state.get("last_packet_msec", 0))
+		if last_packet_msec > 0 and now_msec - last_packet_msec > max_input_stale_ms:
+			state["axis"] = 0.0
+			state["jump_pressed"] = false
+			state["jump_held"] = false
+			state["shoot_held"] = false
 		var aim_world: Vector2 = state.get("aim_world", player.global_position + Vector2.RIGHT * 160.0) as Vector2
 		player.set_aim_world(aim_world)
 		player.simulate_authoritative(

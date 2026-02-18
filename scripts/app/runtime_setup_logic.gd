@@ -118,6 +118,7 @@ func _configure_services() -> void:
 			"max_input_packets_per_sec": MAX_INPUT_PACKETS_PER_SEC,
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,
 			"local_reconcile_snap_distance": LOCAL_RECONCILE_SNAP_DISTANCE,
+			"local_reconcile_vertical_snap_distance": LOCAL_RECONCILE_VERTICAL_SNAP_DISTANCE,
 			"local_reconcile_pos_blend": LOCAL_RECONCILE_POS_BLEND,
 			"local_reconcile_vel_blend": LOCAL_RECONCILE_VEL_BLEND
 		}
@@ -179,7 +180,8 @@ func _configure_services() -> void:
 		{
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,
 			"snapshot_rate": SNAPSHOT_RATE,
-			"weapon_id_ak47": WEAPON_ID_AK47
+			"weapon_id_ak47": WEAPON_ID_AK47,
+			"max_input_stale_ms": MAX_INPUT_STALE_MS
 		}
 	)
 
