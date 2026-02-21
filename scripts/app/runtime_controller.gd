@@ -82,9 +82,33 @@ func _input(event: InputEvent) -> void:
 			_handle_escape_pressed()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_F4:
 			_toggle_fullscreen()
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_Q:
+			_try_cast_skill1()
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_E:
+			_try_cast_skill2()
 		elif key_event.keycode == KEY_TAB:
 			scoreboard_visible = key_event.pressed
 			_update_ui_visibility()
+
+func _try_cast_skill1() -> void:
+	if role != Role.CLIENT:
+		return
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if main_camera == null:
+		return
+	var target_world := main_camera.get_global_mouse_position()
+	_rpc_cast_skill1.rpc_id(1, target_world)
+
+func _try_cast_skill2() -> void:
+	if role != Role.CLIENT:
+		return
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if main_camera == null:
+		return
+	var target_world := main_camera.get_global_mouse_position()
+	_rpc_cast_skill2.rpc_id(1, target_world)
 
 func _handle_escape_pressed() -> void:
 	if _uses_lobby_scene_flow():

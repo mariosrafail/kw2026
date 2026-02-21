@@ -211,6 +211,19 @@ func set_weapon_visual(visual_config: Dictionary) -> void:
 	gun_base_scale_abs = Vector2(absf(gun_sprite.scale.x), absf(gun_sprite.scale.y))
 	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
 
+func set_character_visual(character_id: String) -> void:
+	if player_sprite == null or not (player_sprite is Sprite2D):
+		return
+	var sprite := player_sprite as Sprite2D
+	var normalized := str(character_id).strip_edges().to_lower()
+	match normalized:
+		"erebus":
+			sprite.modulate = Color(0.72, 0.78, 1.0, 1.0)
+		"outrage":
+			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		_:
+			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
 func set_health(value: int) -> void:
 	var previous_health := health
 	health = clampi(value, 0, MAX_HEALTH)

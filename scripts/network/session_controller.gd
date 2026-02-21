@@ -131,7 +131,8 @@ func apply_editor_localhost_override() -> void:
 func configure_retry_hosts() -> void:
 	if connect_retry == null or host_input == null:
 		return
-	var include_editor_fallback := is_editor and not lobby_scene_mode_for_boot
+	# In editor, allow automatic fallback to localhost/private IP if the chosen host hangs (common when using a public IP on the same LAN).
+	var include_editor_fallback := is_editor
 	connect_retry.configure(host_input.text, include_editor_fallback, first_private_ipv4, default_host)
 
 func start_server(port: int) -> void:

@@ -33,11 +33,15 @@ func _init_weapons() -> void:
 		WEAPON_ID_UZI: UZI_RELOAD_SFX
 	}
 	var startup_weapon_id := default_selected_weapon_id
+	var startup_character_id := default_selected_character_id
 	if lobby_service != null:
 		startup_weapon_id = lobby_service.get_local_selected_weapon(default_selected_weapon_id)
+		startup_character_id = lobby_service.get_local_selected_character(default_selected_character_id)
 	selected_weapon_id = _normalize_weapon_id(startup_weapon_id)
+	selected_character_id = _normalize_character_id(startup_character_id)
 	if lobby_service != null:
 		lobby_service.set_local_selected_weapon(selected_weapon_id)
+		lobby_service.set_local_selected_character(selected_character_id)
 
 func _init_scene_map_context() -> void:
 	var scene_map_id := map_catalog.map_id_for_scene_path(scene_file_path)
@@ -156,6 +160,7 @@ func _configure_services() -> void:
 			"multiplayer": multiplayer,
 			"projectile_system": projectile_system,
 			"combat_effects": combat_effects,
+			"camera_shake": camera_shake,
 			"hit_damage_resolver": hit_damage_resolver,
 			"player_replication": player_replication
 		},
@@ -175,7 +180,10 @@ func _configure_services() -> void:
 			"send_spawn_surface_particles": Callable(self, "_send_spawn_surface_particles_rpc"),
 			"send_projectile_impact": Callable(self, "_send_projectile_impact_rpc"),
 			"send_despawn_projectile": Callable(self, "_send_despawn_projectile_rpc"),
-			"broadcast_player_state": Callable(self, "_server_broadcast_player_state")
+			"broadcast_player_state": Callable(self, "_server_broadcast_player_state"),
+			"send_spawn_outrage_bomb": Callable(self, "_send_spawn_outrage_bomb_rpc"),
+			"send_spawn_erebus_immunity": Callable(self, "_send_spawn_erebus_immunity_rpc"),
+			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer")
 		},
 		{
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,

@@ -58,12 +58,17 @@ func encode_create_lobby_payload(
 	map_catalog: MapCatalog,
 	normalize_weapon_id_cb: Callable,
 	weapon_id: String,
-	map_id: String
+	map_id: String,
+	character_id: String = ""
 ) -> String:
 	var normalized_weapon := weapon_id
 	if normalize_weapon_id_cb.is_valid():
 		normalized_weapon = str(normalize_weapon_id_cb.call(weapon_id))
-	return "%s|%s" % [normalized_weapon, normalize_map_id(map_catalog, map_id)]
+	var normalized_character := character_id.strip_edges().to_lower()
+	if normalized_character != "erebus":
+		normalized_character = "outrage"
+	# v2 payload: weapon|character|map (still supports v1 weapon|map)
+	return "%s|%s|%s" % [normalized_weapon, normalized_character, normalize_map_id(map_catalog, map_id)]
 
 func decode_create_lobby_payload(
 	map_catalog: MapCatalog,
@@ -76,9 +81,11 @@ func decode_create_lobby_payload(
 	var fallback_weapon_id := default_weapon_id
 	if normalize_weapon_id_cb.is_valid():
 		fallback_weapon_id = str(normalize_weapon_id_cb.call(default_weapon_id))
+	var fallback_character_id := "outrage"
 	if normalized_payload.is_empty():
 		return {
 			"weapon_id": fallback_weapon_id,
+			"character_id": fallback_character_id,
 			"map_id": fallback_map_id
 		}
 
@@ -89,20 +96,43 @@ func decode_create_lobby_payload(
 			weapon_only = str(normalize_weapon_id_cb.call(normalized_payload))
 		return {
 			"weapon_id": weapon_only,
+			"character_id": fallback_character_id,
 			"map_id": fallback_map_id
 		}
 
-	var weapon_part := normalized_payload.substr(0, sep_index)
-	var map_part := normalized_payload.substr(sep_index + 1)
-	var raw_map_id := map_part.strip_edges().to_lower()
+	var parts := normalized_payload.split("|", false)
+	if parts.size() == 2:
+		# v1 payload: weapon|map
+		var weapon_part_v1 := parts[0]
+		var map_part_v1 := parts[1]
+		var raw_map_id_v1 := map_part_v1.strip_edges().to_lower()
+		if raw_map_id_v1.is_empty():
+			raw_map_id_v1 = fallback_map_id
+		var normalized_weapon_part_v1 := weapon_part_v1
+		if normalize_weapon_id_cb.is_valid():
+			normalized_weapon_part_v1 = str(normalize_weapon_id_cb.call(weapon_part_v1))
+		return {
+			"weapon_id": normalized_weapon_part_v1,
+			"character_id": fallback_character_id,
+			"map_id": raw_map_id_v1
+		}
+
+	var weapon_part := parts[0] if parts.size() > 0 else ""
+	var character_part := parts[1] if parts.size() > 1 else fallback_character_id
+	var map_part := parts[2] if parts.size() > 2 else fallback_map_id
+	var raw_map_id := str(map_part).strip_edges().to_lower()
 	if raw_map_id.is_empty():
 		raw_map_id = fallback_map_id
+	var normalized_character_part := str(character_part).strip_edges().to_lower()
+	if normalized_character_part != "erebus":
+		normalized_character_part = "outrage"
 
 	var normalized_weapon_part := weapon_part
 	if normalize_weapon_id_cb.is_valid():
 		normalized_weapon_part = str(normalize_weapon_id_cb.call(weapon_part))
 	return {
 		"weapon_id": normalized_weapon_part,
+		"character_id": normalized_character_part,
 		"map_id": raw_map_id
 	}
 

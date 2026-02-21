@@ -172,6 +172,26 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 	if server_broadcast_player_state_cb.is_valid():
 		server_broadcast_player_state_cb.call(target_peer_id, target_player)
 
+func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, target_player: NetPlayer, damage: int) -> void:
+	if target_player == null:
+		return
+	var applied_damage := maxi(0, damage)
+	var remaining_health := target_player.apply_damage(applied_damage)
+	var target_lobby_id := _peer_lobby(target_peer_id)
+	if remaining_health <= 0:
+		if register_kill_death_cb.is_valid():
+			register_kill_death_cb.call(attacker_peer_id, target_peer_id)
+		var death_position := target_player.global_position
+		if play_death_sfx_local_cb.is_valid():
+			play_death_sfx_local_cb.call(death_position)
+		if send_play_death_sfx_cb.is_valid():
+			for member_value in _lobby_members(target_lobby_id):
+				send_play_death_sfx_cb.call(int(member_value), death_position)
+		if server_respawn_player_cb.is_valid():
+			server_respawn_player_cb.call(target_peer_id, target_player)
+	if server_broadcast_player_state_cb.is_valid():
+		server_broadcast_player_state_cb.call(target_peer_id, target_player)
+
 func _peer_lobby(peer_id: int) -> int:
 	if get_peer_lobby_cb.is_valid():
 		return int(get_peer_lobby_cb.call(peer_id))

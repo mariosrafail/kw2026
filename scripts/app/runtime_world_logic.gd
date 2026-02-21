@@ -74,6 +74,7 @@ func _reset_runtime_state() -> void:
 	ammo_by_peer.clear()
 	reload_remaining_by_peer.clear()
 	peer_weapon_ids.clear()
+	peer_character_ids.clear()
 	_reset_spawn_request_state()
 	_reset_ping_state()
 	client_input_controller.reset()
@@ -206,6 +207,13 @@ func _append_log(message: String) -> void:
 func _client_ping_tick(delta: float) -> void:
 	if role != Role.CLIENT:
 		return
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	var peer := multiplayer.multiplayer_peer
+	if peer is OfflineMultiplayerPeer:
+		return
+	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
 	ping_accumulator += delta
 	if ping_accumulator < PING_INTERVAL:
 		return
@@ -220,6 +228,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 		var existing := players[peer_id] as NetPlayer
 		if existing != null:
 			existing.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
+			if existing.has_method("set_character_visual"):
+				existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
 			existing.force_respawn(resolved_spawn)
 		return
 
@@ -231,6 +241,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	player.configure(peer_id, _player_color(peer_id))
 	player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
 	player.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
+	if player.has_method("set_character_visual"):
+		player.call("set_character_visual", _warrior_id_for_peer(peer_id))
 	player.set_shot_audio_stream(_weapon_shot_sfx(_weapon_id_for_peer(peer_id)))
 	player.set_reload_audio_stream(_weapon_reload_sfx(_weapon_id_for_peer(peer_id)))
 	if ammo_by_peer.has(peer_id):
@@ -253,6 +265,7 @@ func _remove_player_local(peer_id: int) -> void:
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
+	peer_character_ids.erase(peer_id)
 	_update_peer_labels()
 	_update_ui_visibility()
 
@@ -271,6 +284,7 @@ func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
+	peer_character_ids.erase(peer_id)
 	spawn_slots.erase(peer_id)
 	_update_peer_labels()
 	_update_score_labels()
@@ -474,7 +488,14 @@ func _deferred_scene_switch() -> void:
 		_append_log("Scene switch failed: %s" % error_string(err))
 
 func _send_spawn_player_rpc(target_peer_id: int, peer_id: int, spawn_position: Vector2, display_name: String) -> void:
-	_rpc_spawn_player.rpc_id(target_peer_id, peer_id, spawn_position, display_name, _weapon_id_for_peer(peer_id))
+	_rpc_spawn_player.rpc_id(
+		target_peer_id,
+		peer_id,
+		spawn_position,
+		display_name,
+		_weapon_id_for_peer(peer_id),
+		_warrior_id_for_peer(peer_id)
+	)
 
 func _broadcast_despawn_player_rpc(peer_id: int) -> void:
 	_rpc_despawn_player.rpc(peer_id)
@@ -517,6 +538,24 @@ func _play_death_sfx_local(impact_position: Vector2) -> void:
 
 func _send_play_death_sfx_rpc(target_peer_id: int, impact_position: Vector2) -> void:
 	_rpc_play_death_sfx.rpc_id(target_peer_id, impact_position)
+
+func _send_spawn_outrage_bomb_rpc(target_peer_id: int, caster_peer_id: int, world_position: Vector2, fuse_sec: float) -> void:
+	_rpc_spawn_outrage_bomb.rpc_id(target_peer_id, caster_peer_id, world_position, fuse_sec)
+
+func _send_spawn_erebus_immunity_rpc(target_peer_id: int, caster_peer_id: int, duration_sec: float) -> void:
+	_rpc_spawn_erebus_immunity.rpc_id(target_peer_id, caster_peer_id, duration_sec)
+
+func _warrior_id_for_peer(peer_id: int) -> String:
+	var normalized := str(peer_character_ids.get(peer_id, "")).strip_edges().to_lower()
+	if normalized == CHARACTER_ID_EREBUS:
+		return CHARACTER_ID_EREBUS
+	if normalized == CHARACTER_ID_OUTRAGE:
+		return CHARACTER_ID_OUTRAGE
+	# Fallback to local selection for local peer (useful before server echoes selection).
+	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
+		var local_normalized := str(selected_character_id).strip_edges().to_lower()
+		return CHARACTER_ID_EREBUS if local_normalized == CHARACTER_ID_EREBUS else CHARACTER_ID_OUTRAGE
+	return CHARACTER_ID_OUTRAGE
 
 func _default_input_state() -> Dictionary:
 	return {
@@ -659,6 +698,12 @@ func _normalize_weapon_id(weapon_id: String) -> String:
 	if normalized == WEAPON_ID_UZI:
 		return WEAPON_ID_UZI
 	return WEAPON_ID_AK47
+
+func _normalize_character_id(character_id: String) -> String:
+	var normalized := character_id.strip_edges().to_lower()
+	if normalized == CHARACTER_ID_EREBUS:
+		return CHARACTER_ID_EREBUS
+	return CHARACTER_ID_OUTRAGE
 
 func _has_active_lobbies() -> bool:
 	return lobby_service != null and lobby_service.has_active_lobbies()

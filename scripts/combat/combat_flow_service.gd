@@ -1,6 +1,8 @@
 extends RefCounted
 class_name CombatFlowService
 
+const SKILLS_SERVICE_SCRIPT := preload("res://scripts/skills/skills_service.gd")
+
 var players: Dictionary = {}
 var input_states: Dictionary = {}
 var fire_cooldowns: Dictionary = {}
@@ -10,8 +12,14 @@ var peer_weapon_ids: Dictionary = {}
 var multiplayer: MultiplayerAPI
 var projectile_system: ProjectileSystem
 var combat_effects: CombatEffects
+var camera_shake: CameraShake
 var hit_damage_resolver: HitDamageResolver
 var player_replication: PlayerReplication
+
+var skills_service: SkillsService
+var send_spawn_outrage_bomb_cb: Callable = Callable()
+var send_spawn_erebus_immunity_cb: Callable = Callable()
+var warrior_id_for_peer_cb: Callable = Callable()
 
 var get_world_2d_cb: Callable = Callable()
 var get_peer_lobby_cb: Callable = Callable()
@@ -45,6 +53,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	multiplayer = state_refs.get("multiplayer", null) as MultiplayerAPI
 	projectile_system = state_refs.get("projectile_system", null) as ProjectileSystem
 	combat_effects = state_refs.get("combat_effects", null) as CombatEffects
+	camera_shake = state_refs.get("camera_shake", null) as CameraShake
 	hit_damage_resolver = state_refs.get("hit_damage_resolver", null) as HitDamageResolver
 	player_replication = state_refs.get("player_replication", null) as PlayerReplication
 
@@ -64,11 +73,50 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_projectile_impact_cb = callbacks.get("send_projectile_impact", Callable()) as Callable
 	send_despawn_projectile_cb = callbacks.get("send_despawn_projectile", Callable()) as Callable
 	broadcast_player_state_cb = callbacks.get("broadcast_player_state", Callable()) as Callable
+	send_spawn_outrage_bomb_cb = callbacks.get("send_spawn_outrage_bomb", Callable()) as Callable
+	send_spawn_erebus_immunity_cb = callbacks.get("send_spawn_erebus_immunity", Callable()) as Callable
+	warrior_id_for_peer_cb = callbacks.get("warrior_id_for_peer", Callable()) as Callable
 
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
 	snapshot_rate = float(config.get("snapshot_rate", snapshot_rate))
 	weapon_id_ak47 = str(config.get("weapon_id_ak47", weapon_id_ak47))
 	max_input_stale_ms = int(config.get("max_input_stale_ms", max_input_stale_ms))
+
+	if skills_service == null:
+		skills_service = SKILLS_SERVICE_SCRIPT.new() as SkillsService
+	if skills_service != null:
+		skills_service.configure(
+			{
+				"players": players,
+				"multiplayer": multiplayer,
+				"projectile_system": projectile_system,
+				"hit_damage_resolver": hit_damage_resolver,
+				"camera_shake": camera_shake
+			},
+			{
+				"get_peer_lobby": get_peer_lobby_cb,
+				"get_lobby_members": get_lobby_members_cb,
+				"warrior_id_for_peer": warrior_id_for_peer_cb,
+				"send_spawn_outrage_bomb": send_spawn_outrage_bomb_cb,
+				"send_spawn_erebus_immunity": send_spawn_erebus_immunity_cb
+			}
+		)
+
+func server_cast_skill1(caster_peer_id: int, target_world: Vector2) -> void:
+	if skills_service != null:
+		skills_service.server_cast_skill(1, caster_peer_id, target_world)
+
+func server_cast_skill2(caster_peer_id: int, target_world: Vector2) -> void:
+	if skills_service != null:
+		skills_service.server_cast_skill(2, caster_peer_id, target_world)
+
+func client_spawn_outrage_bomb(world_position: Vector2, fuse_sec: float) -> void:
+	if skills_service != null:
+		skills_service.client_spawn_outrage_bomb(world_position, fuse_sec)
+
+func client_spawn_erebus_immunity(peer_id: int, duration_sec: float) -> void:
+	if skills_service != null:
+		skills_service.client_spawn_erebus_immunity(peer_id, duration_sec)
 
 func default_input_state() -> Dictionary:
 	return {
@@ -162,6 +210,8 @@ func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: Wea
 			)
 
 func server_tick_projectiles(delta: float) -> void:
+	if skills_service != null:
+		skills_service.server_tick(delta)
 	if projectile_system == null:
 		return
 	projectile_system.server_tick(

@@ -56,6 +56,9 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_main")
 enable_lobby_scene_flow = true
+damage_boost_enabled = null
+default_selected_weapon_id = null
+default_selected_map_id = null
 
 [node name="UiPanel" type="PanelContainer" parent="."]
 visible = false
@@ -235,6 +238,16 @@ theme_override_fonts/font = ExtResource("2_font")
 text = "Weapon"
 
 [node name="LobbyWeaponOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("2_font")
+
+[node name="LobbyCharacterLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+text = "Character"
+
+[node name="LobbyCharacterOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_fonts/font = ExtResource("2_font")

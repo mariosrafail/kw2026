@@ -23,6 +23,8 @@ const ARG_NO_AUTOSTART := "--no-autostart"
 const MAP_ID_CLASSIC := "classic"
 const WEAPON_ID_AK47 := "ak47"
 const WEAPON_ID_UZI := "uzi"
+const CHARACTER_ID_OUTRAGE := "outrage"
+const CHARACTER_ID_EREBUS := "erebus"
 
 const PLAYER_SCENE := preload("res://scenes/entities/player.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/entities/bullet.tscn")
@@ -62,6 +64,7 @@ enum Role { NONE, SERVER, CLIENT }
 @export var damage_boost_enabled := false
 @export var default_selected_weapon_id := WEAPON_ID_AK47
 @export var default_selected_map_id := MAP_ID_CLASSIC
+@export var default_selected_character_id := CHARACTER_ID_OUTRAGE
 
 @onready var port_spin: SpinBox = %PortSpin
 @onready var host_input: LineEdit = %HostInput
@@ -101,6 +104,7 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var lobby_refresh_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyRefreshButton") as Button
 @onready var lobby_leave_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyLeaveButton") as Button
 @onready var lobby_weapon_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyWeaponOption") as OptionButton
+@onready var lobby_character_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyCharacterOption") as OptionButton
 @onready var lobby_map_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/MapRow/LobbyMapOption") as OptionButton
 @onready var lobby_panel: PanelContainer = get_node_or_null("LobbyUi/LobbyPanel") as PanelContainer
 @onready var lobby_room_bg: ColorRect = get_node_or_null("LobbyUi/LobbyRoomBg") as ColorRect
@@ -122,6 +126,7 @@ var player_display_names: Dictionary = {}
 var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
 var peer_weapon_ids: Dictionary = {}
+var peer_character_ids: Dictionary = {}
 
 var snapshot_accumulator := 0.0
 var ping_accumulator := 0.0
@@ -130,6 +135,7 @@ var spawn_request_sent := false
 
 var selected_weapon_id := WEAPON_ID_AK47
 var selected_map_id := MAP_ID_CLASSIC
+var selected_character_id := CHARACTER_ID_OUTRAGE
 var client_target_map_id := MAP_ID_CLASSIC
 var client_lobby_id := 0
 var lobby_auto_action_inflight := false
@@ -165,7 +171,7 @@ var weapon_reload_sfx_by_id: Dictionary = {}
 func _rpc_request_spawn() -> void:
 	pass
 
-func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "") -> void:
+func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "") -> void:
 	pass
 
 func _rpc_despawn_player(_peer_id: int) -> void:
@@ -210,6 +216,9 @@ func _rpc_sync_player_ammo(_peer_id: int, _ammo: int, _is_reloading: bool) -> vo
 func _rpc_sync_player_weapon(_peer_id: int, _weapon_id: String) -> void:
 	pass
 
+func _rpc_sync_player_character(_peer_id: int, _character_id: String) -> void:
+	pass
+
 func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
 	pass
 
@@ -219,13 +228,16 @@ func _rpc_request_lobby_list() -> void:
 func _rpc_lobby_create(_requested_name: String, _payload: String) -> void:
 	pass
 
-func _rpc_lobby_join(_lobby_id: int, _weapon_id: String) -> void:
+func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String = "") -> void:
 	pass
 
-func _rpc_lobby_leave() -> void:
+func _rpc_lobby_leave(_legacy_a: Variant = null, _legacy_b: Variant = null) -> void:
 	pass
 
 func _rpc_lobby_set_weapon(_weapon_id: String) -> void:
+	pass
+
+func _rpc_lobby_set_character(_character_id: String) -> void:
 	pass
 
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
@@ -235,4 +247,16 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 	pass
 
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
+	pass
+
+func _rpc_cast_skill1(_target_world: Vector2) -> void:
+	pass
+
+func _rpc_cast_skill2(_target_world: Vector2) -> void:
+	pass
+
+func _rpc_spawn_outrage_bomb(_caster_peer_id: int, _world_position: Vector2, _fuse_sec: float) -> void:
+	pass
+
+func _rpc_spawn_erebus_immunity(_caster_peer_id: int, _duration_sec: float) -> void:
 	pass
