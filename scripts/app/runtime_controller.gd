@@ -1,5 +1,10 @@
 extends "res://scripts/app/runtime_rpc_logic.gd"
 
+var _client_skill_cd_q_remaining := 0.0
+var _client_skill_cd_e_remaining := 0.0
+var _client_skill_cd_q_max := 0.0
+var _client_skill_cd_e_max := 0.0
+
 func _ready() -> void:
 	randomize()
 	_ensure_input_actions()
@@ -36,19 +41,19 @@ func _ready() -> void:
 	var has_resumable_peer := false
 	if peer != null and not (peer is OfflineMultiplayerPeer):
 		has_resumable_peer = multiplayer.is_server() or peer.get_connection_status() != MultiplayerPeer.CONNECTION_DISCONNECTED
+	var is_lobby_scene := scene_file_path == _lobby_scene_path()
 
-	if has_resumable_peer and not _uses_lobby_scene_flow():
-		_reset_runtime_state()
+	if has_resumable_peer and not is_lobby_scene:
 		_set_role(Role.SERVER if multiplayer.is_server() else Role.CLIENT)
 		_append_log("Detected active peer after scene load. Session resumed.")
-		if role == Role.CLIENT and not _uses_lobby_scene_flow():
+		if role == Role.CLIENT:
 			_request_spawn_from_server()
 		_update_ui_visibility()
 		_update_peer_labels()
 		_update_buttons()
 		_update_ping_label()
 		return
-	elif has_resumable_peer and _uses_lobby_scene_flow():
+	elif has_resumable_peer and _uses_lobby_scene_flow() and is_lobby_scene:
 		_append_log("Lobby startup: clearing stale peer and continuing normal connect flow.")
 		session_controller.close_peer()
 	elif peer != null and not (peer is OfflineMultiplayerPeer):
@@ -72,8 +77,43 @@ func _physics_process(delta: float) -> void:
 		client_input_controller.client_send_input(delta, last_ping_ms, damage_boost_enabled)
 		_client_ping_tick(delta)
 		combat_flow_service.client_tick_projectiles(delta)
+		_client_tick_skill_cooldowns_hud(delta)
 
 	client_input_controller.follow_local_player_camera(delta)
+
+func _client_tick_skill_cooldowns_hud(delta: float) -> void:
+	if ui_controller == null:
+		return
+	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
+	if local_peer_id <= 0 or not players.has(local_peer_id):
+		_update_skill_cooldowns_hud(0.0, 0.0)
+		return
+
+	_client_skill_cd_q_remaining = maxf(0.0, _client_skill_cd_q_remaining - delta)
+	_client_skill_cd_e_remaining = maxf(0.0, _client_skill_cd_e_remaining - delta)
+	_update_skill_cooldowns_hud(_client_skill_cd_q_remaining, _client_skill_cd_e_remaining)
+
+func _begin_client_skill_cooldown(skill_number: int) -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	var local_peer_id := multiplayer.get_unique_id()
+	if local_peer_id <= 0:
+		return
+	if combat_flow_service == null:
+		return
+	if skill_number == 1 and _client_skill_cd_q_remaining > 0.0:
+		return
+	if skill_number == 2 and _client_skill_cd_e_remaining > 0.0:
+		return
+	var max_cd := combat_flow_service.skill_cooldown_max_for_peer(local_peer_id, skill_number)
+	if max_cd <= 0.0:
+		return
+	if skill_number == 1:
+		_client_skill_cd_q_max = max_cd
+		_client_skill_cd_q_remaining = max_cd
+	elif skill_number == 2:
+		_client_skill_cd_e_max = max_cd
+		_client_skill_cd_e_remaining = max_cd
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -86,6 +126,8 @@ func _input(event: InputEvent) -> void:
 			_try_cast_skill1()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_E:
 			_try_cast_skill2()
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_R:
+			_try_reload()
 		elif key_event.keycode == KEY_TAB:
 			scoreboard_visible = key_event.pressed
 			_update_ui_visibility()
@@ -98,6 +140,7 @@ func _try_cast_skill1() -> void:
 	if main_camera == null:
 		return
 	var target_world := main_camera.get_global_mouse_position()
+	_begin_client_skill_cooldown(1)
 	_rpc_cast_skill1.rpc_id(1, target_world)
 
 func _try_cast_skill2() -> void:
@@ -108,7 +151,15 @@ func _try_cast_skill2() -> void:
 	if main_camera == null:
 		return
 	var target_world := main_camera.get_global_mouse_position()
+	_begin_client_skill_cooldown(2)
 	_rpc_cast_skill2.rpc_id(1, target_world)
+
+func _try_reload() -> void:
+	if role != Role.CLIENT:
+		return
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	_rpc_request_reload.rpc_id(1)
 
 func _handle_escape_pressed() -> void:
 	if _uses_lobby_scene_flow():

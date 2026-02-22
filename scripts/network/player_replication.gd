@@ -251,14 +251,21 @@ func server_submit_input(
 	var state: Dictionary = input_states.get(peer_id, _default_input_state()) as Dictionary
 	var previous_jump_held := bool(state.get("jump_held", false))
 	var inferred_jump_pressed := jump_held and not previous_jump_held
+	var now_msec := Time.get_ticks_msec()
+	var boost_until_msec := int(state.get("boost_server_until_msec", 0))
 	state["axis"] = clamp(axis, -1.0, 1.0)
 	state["jump_pressed"] = bool(state.get("jump_pressed", false)) or jump_pressed or inferred_jump_pressed
 	state["jump_held"] = jump_held
 	state["aim_world"] = active_weapon.clamp_aim_world(player.global_position, aim_world)
 	state["shoot_held"] = shoot_held
-	state["boost_damage"] = boost_damage
+	if boost_until_msec > now_msec:
+		state["boost_damage"] = true
+	else:
+		state["boost_damage"] = boost_damage
+		if boost_until_msec != 0:
+			state.erase("boost_server_until_msec")
 	state["reported_rtt_ms"] = clampi(reported_rtt_ms, 0, max_reported_rtt_ms)
-	state["last_packet_msec"] = Time.get_ticks_msec()
+	state["last_packet_msec"] = now_msec
 	input_states[peer_id] = state
 	return true
 

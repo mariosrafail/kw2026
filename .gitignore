@@ -21,3 +21,11 @@ launcher/obj/
 updates_site/kw/*.exe
 updates_site/kw/*.pck
 updates_site/kw/*.zip
+
+# Launcher build artifacts
+launcher/bin/
+launcher/obj/
+
+# OS-specific
+.DS_Store
+Thumbs.db

@@ -10,6 +10,9 @@ var host_input: LineEdit
 var peers_label: Label
 var ping_label: Label
 var kd_label: Label
+var cooldown_label: Label
+var cooldown_q_label: Label
+var cooldown_e_label: Label
 var scoreboard_label: Label
 var ui_panel: PanelContainer
 var world_root: Node2D
@@ -33,6 +36,9 @@ func configure(refs: Dictionary) -> void:
 	peers_label = refs.get("peers_label", null) as Label
 	ping_label = refs.get("ping_label", null) as Label
 	kd_label = refs.get("kd_label", null) as Label
+	cooldown_label = refs.get("cooldown_label", null) as Label
+	cooldown_q_label = refs.get("cooldown_q_label", null) as Label
+	cooldown_e_label = refs.get("cooldown_e_label", null) as Label
 	scoreboard_label = refs.get("scoreboard_label", null) as Label
 	ui_panel = refs.get("ui_panel", null) as PanelContainer
 	world_root = refs.get("world_root", null) as Node2D
@@ -107,6 +113,23 @@ func update_kd_label(local_peer_id: int, player_stats: Dictionary) -> void:
 		kills = int(stats.get("kills", 0))
 		deaths = int(stats.get("deaths", 0))
 	kd_label.text = "K/D : %d/%d" % [kills, deaths]
+
+func update_cooldown_label(cooldown_text: String) -> void:
+	if cooldown_label != null:
+		cooldown_label.text = cooldown_text
+
+func set_status_text(text: String) -> void:
+	if cooldown_label == null:
+		return
+	var normalized := text.strip_edges()
+	cooldown_label.visible = not normalized.is_empty()
+	cooldown_label.text = normalized
+
+func update_skill_cooldowns(q_text: String, e_text: String) -> void:
+	if cooldown_q_label != null:
+		cooldown_q_label.text = q_text
+	if cooldown_e_label != null:
+		cooldown_e_label.text = e_text
 
 func update_scoreboard_label(player_stats: Dictionary, player_display_names: Dictionary) -> void:
 	if scoreboard_label == null:

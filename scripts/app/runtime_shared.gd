@@ -25,6 +25,7 @@ const WEAPON_ID_AK47 := "ak47"
 const WEAPON_ID_UZI := "uzi"
 const CHARACTER_ID_OUTRAGE := "outrage"
 const CHARACTER_ID_EREBUS := "erebus"
+const CHARACTER_ID_TASKO := "tasko"
 
 const PLAYER_SCENE := preload("res://scenes/entities/player.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/entities/bullet.tscn")
@@ -78,6 +79,9 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var local_ip_label: Label = %LocalIpLabel
 @onready var ping_label: Label = %PingLabel
 @onready var kd_label: Label = %KdLabel
+@onready var cooldown_label: Label = get_node_or_null("%CooldownLabel") as Label
+@onready var cooldown_q_label: Label = get_node_or_null("%CooldownQLabel") as Label
+@onready var cooldown_e_label: Label = get_node_or_null("%CooldownELabel") as Label
 @onready var scoreboard_label: Label = %ScoreboardLabel
 @onready var ui_panel: PanelContainer = get_node_or_null("UiPanel") as PanelContainer
 @onready var world_root: Node2D = get_node_or_null("World") as Node2D
@@ -105,6 +109,8 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var lobby_leave_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyLeaveButton") as Button
 @onready var lobby_weapon_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyWeaponOption") as OptionButton
 @onready var lobby_character_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyCharacterOption") as OptionButton
+@onready var lobby_skin_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/SkinRow/SkinLabel") as Label
+@onready var lobby_skin_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/SkinRow/LobbySkinOption") as OptionButton
 @onready var lobby_map_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/MapRow/LobbyMapOption") as OptionButton
 @onready var lobby_panel: PanelContainer = get_node_or_null("LobbyUi/LobbyPanel") as PanelContainer
 @onready var lobby_room_bg: ColorRect = get_node_or_null("LobbyUi/LobbyRoomBg") as ColorRect
@@ -127,6 +133,7 @@ var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
 var peer_weapon_ids: Dictionary = {}
 var peer_character_ids: Dictionary = {}
+var peer_skin_indices_by_peer: Dictionary = {}
 
 var snapshot_accumulator := 0.0
 var ping_accumulator := 0.0
@@ -171,7 +178,10 @@ var weapon_reload_sfx_by_id: Dictionary = {}
 func _rpc_request_spawn() -> void:
 	pass
 
-func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "") -> void:
+func _rpc_request_reload() -> void:
+	pass
+
+func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "", _skin_index: int = 0) -> void:
 	pass
 
 func _rpc_despawn_player(_peer_id: int) -> void:
@@ -219,6 +229,9 @@ func _rpc_sync_player_weapon(_peer_id: int, _weapon_id: String) -> void:
 func _rpc_sync_player_character(_peer_id: int, _character_id: String) -> void:
 	pass
 
+func _rpc_sync_player_skin(_peer_id: int, _skin_index: int) -> void:
+	pass
+
 func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
 	pass
 
@@ -240,6 +253,9 @@ func _rpc_lobby_set_weapon(_weapon_id: String) -> void:
 func _rpc_lobby_set_character(_character_id: String) -> void:
 	pass
 
+func _rpc_lobby_set_skin(_skin_index: int) -> void:
+	pass
+
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	pass
 
@@ -258,5 +274,17 @@ func _rpc_cast_skill2(_target_world: Vector2) -> void:
 func _rpc_spawn_outrage_bomb(_caster_peer_id: int, _world_position: Vector2, _fuse_sec: float) -> void:
 	pass
 
+func _rpc_spawn_outrage_boost(_caster_peer_id: int, _duration_sec: float) -> void:
+	pass
+
 func _rpc_spawn_erebus_immunity(_caster_peer_id: int, _duration_sec: float) -> void:
+	pass
+
+func _rpc_spawn_erebus_shield(_caster_peer_id: int, _duration_sec: float) -> void:
+	pass
+
+func _rpc_spawn_tasko_invis_field(_caster_peer_id: int, _world_position: Vector2) -> void:
+	pass
+
+func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> void:
 	pass

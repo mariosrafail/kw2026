@@ -1,7 +1,7 @@
 extends RefCounted
 class_name CombatFlowService
 
-const SKILLS_SERVICE_SCRIPT := preload("res://scripts/skills/skills_service.gd")
+const WARRIOR_FACTORY_SCRIPT := preload("res://scripts/warriors/warrior_factory.gd")
 
 var players: Dictionary = {}
 var input_states: Dictionary = {}
@@ -9,6 +9,8 @@ var fire_cooldowns: Dictionary = {}
 var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
 var peer_weapon_ids: Dictionary = {}
+var peer_warrior_ids: Dictionary = {}  # Track warrior per player
+var warriors_by_id: Dictionary = {}  # WarriorProfile instances by warrior_id
 var multiplayer: MultiplayerAPI
 var projectile_system: ProjectileSystem
 var combat_effects: CombatEffects
@@ -16,9 +18,7 @@ var camera_shake: CameraShake
 var hit_damage_resolver: HitDamageResolver
 var player_replication: PlayerReplication
 
-var skills_service: SkillsService
-var send_spawn_outrage_bomb_cb: Callable = Callable()
-var send_spawn_erebus_immunity_cb: Callable = Callable()
+var send_skill_cast_cb: Callable = Callable()  # Generic skill callback
 var warrior_id_for_peer_cb: Callable = Callable()
 
 var get_world_2d_cb: Callable = Callable()
@@ -73,50 +73,36 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_projectile_impact_cb = callbacks.get("send_projectile_impact", Callable()) as Callable
 	send_despawn_projectile_cb = callbacks.get("send_despawn_projectile", Callable()) as Callable
 	broadcast_player_state_cb = callbacks.get("broadcast_player_state", Callable()) as Callable
-	send_spawn_outrage_bomb_cb = callbacks.get("send_spawn_outrage_bomb", Callable()) as Callable
-	send_spawn_erebus_immunity_cb = callbacks.get("send_spawn_erebus_immunity", Callable()) as Callable
+	send_skill_cast_cb = callbacks.get("send_skill_cast", Callable()) as Callable
 	warrior_id_for_peer_cb = callbacks.get("warrior_id_for_peer", Callable()) as Callable
 
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
 	snapshot_rate = float(config.get("snapshot_rate", snapshot_rate))
 	weapon_id_ak47 = str(config.get("weapon_id_ak47", weapon_id_ak47))
 	max_input_stale_ms = int(config.get("max_input_stale_ms", max_input_stale_ms))
+	
+	_init_warriors()
 
-	if skills_service == null:
-		skills_service = SKILLS_SERVICE_SCRIPT.new() as SkillsService
-	if skills_service != null:
-		skills_service.configure(
-			{
-				"players": players,
-				"multiplayer": multiplayer,
-				"projectile_system": projectile_system,
-				"hit_damage_resolver": hit_damage_resolver,
-				"camera_shake": camera_shake
-			},
-			{
-				"get_peer_lobby": get_peer_lobby_cb,
-				"get_lobby_members": get_lobby_members_cb,
-				"warrior_id_for_peer": warrior_id_for_peer_cb,
-				"send_spawn_outrage_bomb": send_spawn_outrage_bomb_cb,
-				"send_spawn_erebus_immunity": send_spawn_erebus_immunity_cb
-			}
-		)
+func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
+	var warrior_id = _warrior_id_for_peer(caster_peer_id)
+	var warrior = warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior != null:
+		warrior.server_cast_skill(skill_number, caster_peer_id, target_world)
+	else:
+		print("[SKILL ERROR] Warrior not found for id=%s (peer_id=%d)" % [warrior_id, caster_peer_id])
 
-func server_cast_skill1(caster_peer_id: int, target_world: Vector2) -> void:
-	if skills_service != null:
-		skills_service.server_cast_skill(1, caster_peer_id, target_world)
+func client_receive_skill_cast(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
+	var warrior_id = _warrior_id_for_peer(caster_peer_id)
+	var warrior = warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior != null:
+		warrior.client_receive_skill_cast(skill_number, caster_peer_id, target_world)
 
-func server_cast_skill2(caster_peer_id: int, target_world: Vector2) -> void:
-	if skills_service != null:
-		skills_service.server_cast_skill(2, caster_peer_id, target_world)
-
-func client_spawn_outrage_bomb(world_position: Vector2, fuse_sec: float) -> void:
-	if skills_service != null:
-		skills_service.client_spawn_outrage_bomb(world_position, fuse_sec)
-
-func client_spawn_erebus_immunity(peer_id: int, duration_sec: float) -> void:
-	if skills_service != null:
-		skills_service.client_spawn_erebus_immunity(peer_id, duration_sec)
+func skill_cooldown_max_for_peer(peer_id: int, skill_number: int) -> float:
+	var warrior_id = _warrior_id_for_peer(peer_id)
+	var warrior = warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null:
+		return 0.0
+	return float(warrior.get_skill_cooldown_max(skill_number))
 
 func default_input_state() -> Dictionary:
 	return {
@@ -210,8 +196,7 @@ func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: Wea
 			)
 
 func server_tick_projectiles(delta: float) -> void:
-	if skills_service != null:
-		skills_service.server_tick(delta)
+	_server_tick_warrior_cooldowns(delta)
 	if projectile_system == null:
 		return
 	projectile_system.server_tick(
@@ -461,3 +446,48 @@ func _weapon_reload_sfx(weapon_id: String) -> AudioStream:
 func _server_send_player_ammo(target_peer_id: int, peer_id: int, ammo: int, is_reloading: bool) -> void:
 	if send_player_ammo_cb.is_valid():
 		send_player_ammo_cb.call(target_peer_id, peer_id, ammo, is_reloading)
+
+# ============================================================================
+# Warrior Management
+# ============================================================================
+
+func _init_warriors() -> void:
+	"""Initialize all available warriors"""
+	for warrior_id in WARRIOR_FACTORY_SCRIPT.get_all_warrior_ids():
+		var warrior = WARRIOR_FACTORY_SCRIPT.create_warrior(warrior_id)
+		if warrior != null:
+			warrior.configure(
+				{
+					"players": players,
+					"input_states": input_states,
+					"multiplayer": multiplayer,
+					"projectile_system": projectile_system,
+					"hit_damage_resolver": hit_damage_resolver,
+					"camera_shake": camera_shake
+				},
+				{
+					"get_peer_lobby": get_peer_lobby_cb,
+					"get_lobby_members": get_lobby_members_cb,
+					"send_skill_cast": send_skill_cast_cb,
+					"character_id_for_peer": warrior_id_for_peer_cb
+				}
+			)
+			warriors_by_id[warrior_id] = warrior
+
+func _warrior_id_for_peer(peer_id: int) -> String:
+	"""Get warrior ID for a peer, defaults to outrage"""
+	if warrior_id_for_peer_cb.is_valid():
+		var warrior_id = warrior_id_for_peer_cb.call(peer_id) as String
+		peer_warrior_ids[peer_id] = warrior_id
+		return warrior_id
+	return peer_warrior_ids.get(peer_id, "outrage") as String
+
+func _server_tick_warrior_cooldowns(delta: float) -> void:
+	"""Tick cooldowns and per-skill server logic for all warriors"""
+	for warrior in warriors_by_id.values():
+		if warrior is WarriorProfile:
+			warrior.server_tick_cooldowns(delta)
+			if warrior.skill1 != null and warrior.skill1.has_method("server_tick"):
+				warrior.skill1.call("server_tick", delta)
+			if warrior.skill2 != null and warrior.skill2.has_method("server_tick"):
+				warrior.skill2.call("server_tick", delta)

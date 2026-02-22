@@ -75,12 +75,13 @@ func _reset_runtime_state() -> void:
 	reload_remaining_by_peer.clear()
 	peer_weapon_ids.clear()
 	peer_character_ids.clear()
+	peer_skin_indices_by_peer.clear()
 	_reset_spawn_request_state()
 	_reset_ping_state()
 	client_input_controller.reset()
 	camera_shake.reset()
 	if _uses_lobby_scene_flow():
-		lobby_service.reset()
+		lobby_service.reset(true)
 		lobby_entries.clear()
 		lobby_map_by_id.clear()
 		client_lobby_id = 0
@@ -186,6 +187,23 @@ func _update_score_labels() -> void:
 		local_peer_id = multiplayer.get_unique_id()
 	ui_controller.update_kd_label(local_peer_id, player_stats)
 	ui_controller.update_scoreboard_label(player_stats, player_display_names)
+	# Cooldown UI is updated per-frame in runtime_controller (client only).
+
+func _cooldown_text(prefix: String, remaining_sec: float) -> String:
+	if remaining_sec <= 0.0:
+		return "%s: Ready" % prefix
+	return "%s: %.1fs" % [prefix, remaining_sec]
+
+func _update_skill_cooldowns_hud(q_remaining: float, e_remaining: float) -> void:
+	if ui_controller == null:
+		return
+	ui_controller.update_skill_cooldowns(_cooldown_text("Q", q_remaining), _cooldown_text("E", e_remaining))
+
+func client_set_status_text(text: String) -> void:
+	if ui_controller == null:
+		return
+	if ui_controller.has_method("set_status_text"):
+		ui_controller.call("set_status_text", text)
 
 func _show_local_ip() -> void:
 	var ips := PackedStringArray()
@@ -230,6 +248,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 			existing.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
 			if existing.has_method("set_character_visual"):
 				existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
+			if existing.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
+				existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 1)))
 			existing.force_respawn(resolved_spawn)
 		return
 
@@ -243,6 +263,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	player.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
 	if player.has_method("set_character_visual"):
 		player.call("set_character_visual", _warrior_id_for_peer(peer_id))
+	if player.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
+		player.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 1)))
 	player.set_shot_audio_stream(_weapon_shot_sfx(_weapon_id_for_peer(peer_id)))
 	player.set_reload_audio_stream(_weapon_reload_sfx(_weapon_id_for_peer(peer_id)))
 	if ammo_by_peer.has(peer_id):
@@ -488,13 +510,23 @@ func _deferred_scene_switch() -> void:
 		_append_log("Scene switch failed: %s" % error_string(err))
 
 func _send_spawn_player_rpc(target_peer_id: int, peer_id: int, spawn_position: Vector2, display_name: String) -> void:
+	var warrior_id = _warrior_id_for_peer(peer_id)
+	print("[DBG SPAWN] Sending spawn RPC to peer %d for peer_id %d with warrior_id=%s (from peer_character_ids[%d]=%s)" % [target_peer_id, peer_id, warrior_id, peer_id, peer_character_ids.get(peer_id, "NOT SET")])
+	var skin_index: int = 0
+	if lobby_service != null:
+		skin_index = int(lobby_service.get_peer_skin(peer_id, 0))
+	if skin_index <= 0:
+		skin_index = int(peer_skin_indices_by_peer.get(peer_id, 0))
+	if skin_index <= 0 and warrior_id == CHARACTER_ID_OUTRAGE:
+		skin_index = 12
 	_rpc_spawn_player.rpc_id(
 		target_peer_id,
 		peer_id,
 		spawn_position,
 		display_name,
 		_weapon_id_for_peer(peer_id),
-		_warrior_id_for_peer(peer_id)
+		warrior_id,
+		skin_index
 	)
 
 func _broadcast_despawn_player_rpc(peer_id: int) -> void:
@@ -545,16 +577,60 @@ func _send_spawn_outrage_bomb_rpc(target_peer_id: int, caster_peer_id: int, worl
 func _send_spawn_erebus_immunity_rpc(target_peer_id: int, caster_peer_id: int, duration_sec: float) -> void:
 	_rpc_spawn_erebus_immunity.rpc_id(target_peer_id, caster_peer_id, duration_sec)
 
+func _send_spawn_erebus_shield_rpc(target_peer_id: int, caster_peer_id: int, duration_sec: float) -> void:
+	_rpc_spawn_erebus_shield.rpc_id(target_peer_id, caster_peer_id, duration_sec)
+
+func _send_skill_cast_rpc(target_peer_id: int, skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
+	"""Generic skill cast RPC dispatcher - routes to appropriate warrior skill RPC"""
+	var warrior_id = _warrior_id_for_peer(caster_peer_id)
+	match warrior_id:
+		"outrage":
+			if skill_number == 1:
+				# Outrage Skill 1: Bomb Blast
+				_rpc_spawn_outrage_bomb.rpc_id(target_peer_id, caster_peer_id, target_world, 0.9)
+			elif skill_number == 2:
+				# Outrage Skill 2: Damage Boost
+				_rpc_spawn_outrage_boost.rpc_id(target_peer_id, caster_peer_id, 4.0)
+		"erebus":
+			if skill_number == 1:
+				# Erebus Skill 1: Immunity
+				_rpc_spawn_erebus_immunity.rpc_id(target_peer_id, caster_peer_id, 5.0)
+			elif skill_number == 2:
+				# Erebus Skill 2: Shield
+				_rpc_spawn_erebus_shield.rpc_id(target_peer_id, caster_peer_id, 6.0)
+		"tasko":
+			if skill_number == 1:
+				_rpc_spawn_tasko_invis_field.rpc_id(target_peer_id, caster_peer_id, target_world)
+			elif skill_number == 2:
+				_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+
 func _warrior_id_for_peer(peer_id: int) -> String:
 	var normalized := str(peer_character_ids.get(peer_id, "")).strip_edges().to_lower()
 	if normalized == CHARACTER_ID_EREBUS:
 		return CHARACTER_ID_EREBUS
 	if normalized == CHARACTER_ID_OUTRAGE:
 		return CHARACTER_ID_OUTRAGE
+	if normalized == CHARACTER_ID_TASKO:
+		return CHARACTER_ID_TASKO
+	if lobby_service != null:
+		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
+		if persisted == CHARACTER_ID_EREBUS:
+			peer_character_ids[peer_id] = CHARACTER_ID_EREBUS
+			return CHARACTER_ID_EREBUS
+		if persisted == CHARACTER_ID_OUTRAGE:
+			peer_character_ids[peer_id] = CHARACTER_ID_OUTRAGE
+			return CHARACTER_ID_OUTRAGE
+		if persisted == CHARACTER_ID_TASKO:
+			peer_character_ids[peer_id] = CHARACTER_ID_TASKO
+			return CHARACTER_ID_TASKO
 	# Fallback to local selection for local peer (useful before server echoes selection).
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
-		return CHARACTER_ID_EREBUS if local_normalized == CHARACTER_ID_EREBUS else CHARACTER_ID_OUTRAGE
+		if local_normalized == CHARACTER_ID_EREBUS:
+			return CHARACTER_ID_EREBUS
+		if local_normalized == CHARACTER_ID_TASKO:
+			return CHARACTER_ID_TASKO
+		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
 
 func _default_input_state() -> Dictionary:
@@ -703,6 +779,8 @@ func _normalize_character_id(character_id: String) -> String:
 	var normalized := character_id.strip_edges().to_lower()
 	if normalized == CHARACTER_ID_EREBUS:
 		return CHARACTER_ID_EREBUS
+	if normalized == CHARACTER_ID_TASKO:
+		return CHARACTER_ID_TASKO
 	return CHARACTER_ID_OUTRAGE
 
 func _has_active_lobbies() -> bool:

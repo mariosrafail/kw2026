@@ -1,4 +1,4 @@
-extends RefCounted
+extends Skill
 
 const CHARACTER_ID_EREBUS := "erebus"
 
@@ -6,24 +6,16 @@ const DURATION_SEC := 5.0
 const VFX_NAME := "ErebusImmunityVfx"
 const VFX_COLOR := Color(0.55, 0.85, 1.0, 0.75)
 
-var players: Dictionary = {}
-var multiplayer: MultiplayerAPI
-
-var get_peer_lobby_cb: Callable = Callable()
-var get_lobby_members_cb: Callable = Callable()
 var character_id_for_peer_cb: Callable = Callable()
-var send_spawn_immunity_cb: Callable = Callable()
+
+func _init() -> void:
+	super._init("erebus_immunity", "Immunity", 5.0, "5 second temporary invulnerability")
 
 func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
-	players = state_refs.get("players", {}) as Dictionary
-	multiplayer = state_refs.get("multiplayer", null) as MultiplayerAPI
-
-	get_peer_lobby_cb = callbacks.get("get_peer_lobby", Callable()) as Callable
-	get_lobby_members_cb = callbacks.get("get_lobby_members", Callable()) as Callable
+	super.configure(state_refs, callbacks)
 	character_id_for_peer_cb = callbacks.get("character_id_for_peer", Callable()) as Callable
-	send_spawn_immunity_cb = callbacks.get("send_spawn_erebus_immunity", Callable()) as Callable
 
-func server_cast_skill1(caster_peer_id: int) -> void:
+func _execute_cast(caster_peer_id: int, target_world: Vector2) -> void:
 	if _character_id_for_peer(caster_peer_id) != CHARACTER_ID_EREBUS:
 		return
 	var lobby_id := _peer_lobby(caster_peer_id)
@@ -34,8 +26,11 @@ func server_cast_skill1(caster_peer_id: int) -> void:
 		player.call("set_damage_immune", DURATION_SEC)
 
 	for member_value in _lobby_members(lobby_id):
-		if send_spawn_immunity_cb.is_valid():
-			send_spawn_immunity_cb.call(int(member_value), caster_peer_id, DURATION_SEC)
+		if send_skill_cast_cb.is_valid():
+			send_skill_cast_cb.call(int(member_value), 1, caster_peer_id, target_world)
+
+func _execute_client_visual(caster_peer_id: int, target_world: Vector2) -> void:
+	client_spawn_immunity(caster_peer_id, DURATION_SEC)
 
 func client_spawn_immunity(peer_id: int, duration_sec: float) -> void:
 	var player: NetPlayer = players.get(peer_id, null) as NetPlayer
@@ -97,14 +92,10 @@ func client_spawn_immunity(peer_id: int, duration_sec: float) -> void:
 	)
 
 func _peer_lobby(peer_id: int) -> int:
-	if get_peer_lobby_cb.is_valid():
-		return int(get_peer_lobby_cb.call(peer_id))
-	return 0
+	return _get_peer_lobby(peer_id)
 
 func _lobby_members(lobby_id: int) -> Array:
-	if get_lobby_members_cb.is_valid():
-		return get_lobby_members_cb.call(lobby_id) as Array
-	return []
+	return _get_lobby_members(lobby_id)
 
 func _character_id_for_peer(peer_id: int) -> String:
 	if character_id_for_peer_cb.is_valid():

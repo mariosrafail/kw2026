@@ -38,6 +38,10 @@ const PLAYER_MAX_SLIDES := 8
 @onready var feet: Polygon2D = get_node_or_null("Feet") as Polygon2D
 @onready var visual_root: Node2D = $VisualRoot
 @onready var player_sprite: Node2D = $VisualRoot/Sprite2D
+@onready var head_sprite: Sprite2D = $VisualRoot/head
+@onready var torso_sprite: Sprite2D = $VisualRoot/torso
+@onready var leg1_sprite: Sprite2D = $VisualRoot/leg1
+@onready var leg2_sprite: Sprite2D = $VisualRoot/leg2
 @onready var gun_pivot: Node2D = $VisualRoot/GunPivot
 @onready var gun: Node2D = $VisualRoot/GunPivot/Gun
 @onready var muzzle: Marker2D = $VisualRoot/GunPivot/Muzzle
@@ -54,6 +58,9 @@ var target_velocity := Vector2.ZERO
 var target_aim_angle := 0.0
 var health := MAX_HEALTH
 var target_health := MAX_HEALTH
+var damage_immune_remaining_sec := 0.0
+var shield_health := 0
+var shield_remaining_sec := 0.0
 var ammo_count := 0
 var is_reloading := false
 var coyote_time_left := 0.0
@@ -73,6 +80,8 @@ var gun_reload_frame_duration_sec := DEFAULT_RELOAD_FRAME_DURATION_SEC
 var gun_reload_animation_tween: Tween
 var gun_reload_animation_nonce := 0
 var visual_correction_offset := Vector2.ZERO
+var modular_visual: PlayerModularVisual
+var sfx_suppressed := false
 
 func _ready() -> void:
 	_configure_floor_movement()
@@ -82,6 +91,7 @@ func _ready() -> void:
 	target_health = health
 	if visual_root != null:
 		visual_root.position = Vector2.ZERO
+	_init_modular_visual()
 	_normalize_gun_sprite_anchor()
 	if gun != null:
 		gun_base_scale_abs = Vector2(absf(gun.scale.x), absf(gun.scale.y))
@@ -119,6 +129,11 @@ func _normalize_gun_sprite_anchor() -> void:
 	gun_sprite.position += draw_size * 0.5
 	gun_sprite.position.y += GUN_CENTERING_Y_TWEAK
 	gun_sprite.centered = true
+
+func _init_modular_visual() -> void:
+	modular_visual = PlayerModularVisual.new()
+	modular_visual.configure(self, visual_root, leg1_sprite, leg2_sprite, torso_sprite, head_sprite)
+	modular_visual.set_character_visual("outrage")
 
 func configure(new_peer_id: int, color: Color) -> void:
 	peer_id = new_peer_id
@@ -212,17 +227,31 @@ func set_weapon_visual(visual_config: Dictionary) -> void:
 	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
 
 func set_character_visual(character_id: String) -> void:
+	print("[DBG PLAYER %d] set_character_visual called with %s, modular_visual=%s" % [peer_id, character_id, "valid" if modular_visual != null else "NULL"])
+	if modular_visual != null:
+		modular_visual.set_character_visual(character_id)
+	else:
+		print("[DBG PLAYER %d] modular_visual is null!" % peer_id)
 	if player_sprite == null or not (player_sprite is Sprite2D):
 		return
 	var sprite := player_sprite as Sprite2D
 	var normalized := str(character_id).strip_edges().to_lower()
+	print("[DBG PLAYER %d] Applying tint for %s" % [peer_id, normalized])
 	match normalized:
 		"erebus":
 			sprite.modulate = Color(0.72, 0.78, 1.0, 1.0)
+		"tasko":
+			sprite.modulate = Color(1.0, 0.65, 0.92, 1.0)
 		"outrage":
 			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		_:
 			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+func set_skin_index(skin_index: int) -> void:
+	if modular_visual == null:
+		return
+	var idx := maxi(1, skin_index)
+	modular_visual.set_modular_part_indices(idx, idx, idx)
 
 func set_health(value: int) -> void:
 	var previous_health := health
@@ -243,6 +272,8 @@ func set_ammo(value: int, reloading: bool = false) -> void:
 
 func play_reload_audio() -> void:
 	_play_gun_reload_animation()
+	if sfx_suppressed:
+		return
 	if reload_audio == null or reload_audio.stream == null:
 		return
 	reload_audio.pitch_scale = randf_range(0.98, 1.03)
@@ -250,15 +281,47 @@ func play_reload_audio() -> void:
 	reload_audio.play()
 
 func apply_damage(amount: int) -> int:
-	set_health(health - max(0, amount))
+	if damage_immune_remaining_sec > 0.0:
+		return health
+	var remaining: int = maxi(0, amount)
+	if shield_remaining_sec > 0.0 and shield_health > 0 and remaining > 0:
+		var absorbed: int = mini(shield_health, remaining)
+		shield_health = maxi(0, shield_health - absorbed)
+		remaining = maxi(0, remaining - absorbed)
+		if shield_health <= 0:
+			shield_remaining_sec = 0.0
+	if remaining <= 0:
+		return health
+	set_health(health - remaining)
 	return health
 
+func set_damage_immune(duration_sec: float) -> void:
+	damage_immune_remaining_sec = maxf(damage_immune_remaining_sec, maxf(0.0, duration_sec))
+
+func is_damage_immune() -> bool:
+	return damage_immune_remaining_sec > 0.0
+
+func set_shield(amount: int, duration_sec: float) -> void:
+	var normalized_amount := maxi(0, amount)
+	var normalized_duration := maxf(0.0, duration_sec)
+	if normalized_amount <= 0 or normalized_duration <= 0.0:
+		shield_health = 0
+		shield_remaining_sec = 0.0
+		return
+	shield_health = maxi(shield_health, normalized_amount)
+	shield_remaining_sec = maxf(shield_remaining_sec, normalized_duration)
+
 func _play_death_audio() -> void:
+	if sfx_suppressed:
+		return
 	if death_audio == null or death_audio.stream == null:
 		return
 	death_audio.pitch_scale = randf_range(0.96, 1.04)
 	death_audio.stop()
 	death_audio.play()
+
+func set_sfx_suppressed(value: bool) -> void:
+	sfx_suppressed = value
 
 func get_hit_radius() -> float:
 	return HIT_RADIUS
@@ -317,6 +380,7 @@ func _apply_weapon_mount_offsets_from_angle(angle: float) -> void:
 	var muzzle_position := configured_muzzle_position
 	if looking_left:
 		gun_position.y = -gun_position.y
+		muzzle_position.y = -muzzle_position.y
 	if gun != null:
 		gun.position = gun_position
 	if muzzle != null:
@@ -325,7 +389,7 @@ func _apply_weapon_mount_offsets_from_angle(angle: float) -> void:
 func play_shot_recoil() -> void:
 	if gun == null:
 		return
-	if shot_audio != null and shot_audio.stream != null:
+	if not sfx_suppressed and shot_audio != null and shot_audio.stream != null:
 		shot_audio.pitch_scale = randf_range(0.95, 1.08)
 		shot_audio.stop()
 		shot_audio.play()
@@ -529,6 +593,12 @@ func apply_snapshot(new_position: Vector2, new_velocity: Vector2, new_aim_angle:
 		set_health(target_health)
 
 func _physics_process(delta: float) -> void:
+	if damage_immune_remaining_sec > 0.0:
+		damage_immune_remaining_sec = maxf(0.0, damage_immune_remaining_sec - delta)
+	if shield_remaining_sec > 0.0:
+		shield_remaining_sec = maxf(0.0, shield_remaining_sec - delta)
+		if shield_remaining_sec <= 0.0:
+			shield_health = 0
 	if visual_root != null:
 		_tick_visual_correction(delta)
 	if not use_network_smoothing:

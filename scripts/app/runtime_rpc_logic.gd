@@ -8,22 +8,38 @@ func _rpc_request_spawn() -> void:
 	if _uses_lobby_scene_flow():
 		if peer_lobby_id <= 0:
 			return
-		_server_spawn_peer_if_needed(peer_id, peer_lobby_id)
-		return
-	if peer_lobby_id > 0:
-		_server_spawn_peer_if_needed(peer_id, peer_lobby_id)
-		return
-	if lobby_service != null and lobby_service.has_active_lobbies():
-		return
-	_server_spawn_peer_if_needed(peer_id, 1)
+	_server_spawn_peer_if_needed(peer_id, peer_lobby_id)
 
-func _rpc_spawn_player(peer_id: int, spawn_position: Vector2, display_name: String = "", weapon_id: String = "", character_id: String = "") -> void:
+func _rpc_request_reload() -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id <= 0:
+		return
+	var player := players.get(peer_id, null) as NetPlayer
+	if player == null:
+		return
+	var weapon_profile := _weapon_profile_for_peer(peer_id)
+	if weapon_profile == null:
+		return
+	var max_ammo := maxi(0, weapon_profile.magazine_size())
+	var ammo := int(ammo_by_peer.get(peer_id, max_ammo))
+	var reload_remaining := float(reload_remaining_by_peer.get(peer_id, 0.0))
+	if reload_remaining > 0.0:
+		return
+	if ammo >= max_ammo:
+		return
+	combat_flow_service.server_begin_reload(peer_id, weapon_profile)
+
+func _rpc_spawn_player(peer_id: int, spawn_position: Vector2, display_name: String = "", weapon_id: String = "", character_id: String = "", skin_index: int = 0) -> void:
 	if not display_name.strip_edges().is_empty():
 		player_display_names[peer_id] = display_name
 	if not weapon_id.strip_edges().is_empty():
 		peer_weapon_ids[peer_id] = _normalize_weapon_id(weapon_id)
 	if not character_id.strip_edges().is_empty():
 		peer_character_ids[peer_id] = _normalize_character_id(character_id)
+	if skin_index > 0:
+		peer_skin_indices_by_peer[peer_id] = int(skin_index)
 	_spawn_player_local(peer_id, spawn_position)
 	_append_log("Spawn sync: player %d" % peer_id)
 
@@ -158,6 +174,17 @@ func _rpc_sync_player_character(peer_id: int, character_id: String) -> void:
 	if player != null and player.has_method("set_character_visual"):
 		player.call("set_character_visual", resolved_character_id)
 
+func _rpc_sync_player_skin(peer_id: int, skin_index: int) -> void:
+	if multiplayer.is_server():
+		return
+	if peer_id <= 0:
+		return
+	var resolved := maxi(0, skin_index)
+	peer_skin_indices_by_peer[peer_id] = resolved
+	var player := players.get(peer_id, null) as NetPlayer
+	if player != null and player.has_method("set_skin_index") and resolved > 0:
+		player.call("set_skin_index", resolved)
+
 func _rpc_play_death_sfx(impact_position: Vector2) -> void:
 	if multiplayer.is_server():
 		return
@@ -196,11 +223,13 @@ func _rpc_lobby_join(lobby_id: int, weapon_id: String, character_id: String = ""
 	if not multiplayer.is_server():
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
+	var normalized_character_id := _normalize_character_id(character_id)
+	print("[DBG JOIN] Peer %d joining with weapon=%s character=%s (normalized=%s)" % [peer_id, weapon_id, character_id, normalized_character_id])
 	peer_weapon_ids[peer_id] = _normalize_weapon_id(weapon_id)
-	peer_character_ids[peer_id] = _normalize_character_id(character_id)
+	peer_character_ids[peer_id] = normalized_character_id
 	if lobby_service != null:
 		lobby_service.set_peer_weapon(peer_id, _normalize_weapon_id(weapon_id))
-		lobby_service.set_peer_character(peer_id, _normalize_character_id(character_id))
+		lobby_service.set_peer_character(peer_id, normalized_character_id)
 	lobby_flow_controller.server_join_lobby(peer_id, lobby_id)
 	if not _uses_lobby_scene_flow():
 		var active_lobby_id := _peer_lobby(peer_id)
@@ -248,13 +277,19 @@ func _rpc_lobby_set_character(character_id: String) -> void:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	var normalized_character_id := _normalize_character_id(character_id)
+	print("[DBG SERVER] _rpc_lobby_set_character: peer_id=%d, character=%s" % [peer_id, normalized_character_id])
 	peer_character_ids[peer_id] = normalized_character_id
 	if lobby_service != null:
 		lobby_service.set_peer_character(peer_id, normalized_character_id)
 	if players.has(peer_id):
 		var player := players[peer_id] as NetPlayer
 		if player != null and player.has_method("set_character_visual"):
+			print("[DBG SERVER] Calling set_character_visual on player %d with %s" % [peer_id, normalized_character_id])
 			player.call("set_character_visual", normalized_character_id)
+		else:
+			print("[DBG SERVER] Player %d doesn't have set_character_visual method or is null" % peer_id)
+	else:
+		print("[DBG SERVER] Player %d not found in players dict" % peer_id)
 
 	var lobby_id := _peer_lobby(peer_id)
 	var recipients := _lobby_members(lobby_id)
@@ -268,6 +303,32 @@ func _rpc_lobby_set_character(character_id: String) -> void:
 		if member_id <= 0:
 			continue
 		_rpc_sync_player_character.rpc_id(member_id, peer_id, normalized_character_id)
+
+func _rpc_lobby_set_skin(skin_index: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var resolved := maxi(0, skin_index)
+	peer_skin_indices_by_peer[peer_id] = resolved
+	if lobby_service != null:
+		lobby_service.set_peer_skin(peer_id, resolved)
+	if players.has(peer_id) and resolved > 0:
+		var player := players.get(peer_id, null) as NetPlayer
+		if player != null and player.has_method("set_skin_index"):
+			player.call("set_skin_index", resolved)
+
+	var lobby_id := _peer_lobby(peer_id)
+	var recipients := _lobby_members(lobby_id)
+	if recipients.is_empty() and not _uses_lobby_scene_flow():
+		if multiplayer != null and multiplayer.multiplayer_peer != null:
+			recipients = []
+			for id_value in multiplayer.get_peers():
+				recipients.append(int(id_value))
+	for member_value in recipients:
+		var member_id := int(member_value)
+		if member_id <= 0:
+			continue
+		_rpc_sync_player_skin.rpc_id(member_id, peer_id, resolved)
 
 func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:
@@ -298,20 +359,44 @@ func _rpc_cast_skill1(target_world: Vector2) -> void:
 	if not multiplayer.is_server():
 		return
 	var caster_peer_id := multiplayer.get_remote_sender_id()
-	combat_flow_service.server_cast_skill1(caster_peer_id, target_world)
+	combat_flow_service.server_cast_skill(1, caster_peer_id, target_world)
 
 func _rpc_cast_skill2(target_world: Vector2) -> void:
 	if not multiplayer.is_server():
 		return
 	var caster_peer_id := multiplayer.get_remote_sender_id()
-	combat_flow_service.server_cast_skill2(caster_peer_id, target_world)
+	combat_flow_service.server_cast_skill(2, caster_peer_id, target_world)
 
-func _rpc_spawn_outrage_bomb(_caster_peer_id: int, world_position: Vector2, fuse_sec: float) -> void:
+func _rpc_spawn_outrage_bomb(caster_peer_id: int, world_position: Vector2, _fuse_sec: float) -> void:
 	if multiplayer.is_server():
 		return
-	combat_flow_service.client_spawn_outrage_bomb(world_position, fuse_sec)
+	# Delegate to new warrior system (Outrage skill 1 = Bomb)
+	combat_flow_service.client_receive_skill_cast(1, caster_peer_id, world_position)
 
-func _rpc_spawn_erebus_immunity(caster_peer_id: int, duration_sec: float) -> void:
+func _rpc_spawn_outrage_boost(caster_peer_id: int, duration_sec: float) -> void:
 	if multiplayer.is_server():
 		return
-	combat_flow_service.client_spawn_erebus_immunity(caster_peer_id, duration_sec)
+	# Delegate to new warrior system (Outrage skill 2 = Damage Boost)
+	combat_flow_service.client_receive_skill_cast(2, caster_peer_id, Vector2(duration_sec, 0.0))
+
+func _rpc_spawn_erebus_immunity(caster_peer_id: int, _duration_sec: float) -> void:
+	if multiplayer.is_server():
+		return
+	# Delegate to new warrior system (Erebus skill 1 = Immunity)
+	combat_flow_service.client_receive_skill_cast(1, caster_peer_id, Vector2.ZERO)
+
+func _rpc_spawn_erebus_shield(caster_peer_id: int, _duration_sec: float) -> void:
+	if multiplayer.is_server():
+		return
+	# Delegate to new warrior system (Erebus skill 2 = Shield)
+	combat_flow_service.client_receive_skill_cast(2, caster_peer_id, Vector2.ZERO)
+
+func _rpc_spawn_tasko_invis_field(caster_peer_id: int, world_position: Vector2) -> void:
+	if multiplayer.is_server():
+		return
+	combat_flow_service.client_receive_skill_cast(1, caster_peer_id, world_position)
+
+func _rpc_spawn_tasko_mine(caster_peer_id: int, world_position: Vector2) -> void:
+	if multiplayer.is_server():
+		return
+	combat_flow_service.client_receive_skill_cast(2, caster_peer_id, world_position)

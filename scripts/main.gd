@@ -1,17 +1,21 @@
-extends "res://scripts/app/main_runtime.gd"
+extends "res://scripts/app/runtime_controller.gd"
 const CLIENT_VERSION := "alpha-0.1.21"
 
 @rpc("any_peer", "reliable")
 func _rpc_request_spawn() -> void:
 	super._rpc_request_spawn()
 
+@rpc("any_peer", "reliable")
+func _rpc_request_reload() -> void:
+	super._rpc_request_reload()
+
 @rpc("authority", "reliable")
-func _rpc_spawn_player(peer_id: int, spawn_position: Vector2, display_name: String = "", weapon_id: String = "", character_id: String = "") -> void:
+func _rpc_spawn_player(peer_id: int, spawn_position: Vector2, display_name: String = "", weapon_id: String = "", character_id: String = "", skin_index: int = 0) -> void:
 	if not weapon_id.is_empty():
 		peer_weapon_ids[peer_id] = weapon_id
 	if not character_id.is_empty():
 		peer_character_ids[peer_id] = character_id
-	super._rpc_spawn_player(peer_id, spawn_position, display_name, weapon_id, character_id)
+	super._rpc_spawn_player(peer_id, spawn_position, display_name, weapon_id, character_id, skin_index)
 
 @rpc("authority", "reliable")
 func _rpc_despawn_player(peer_id: int) -> void:
@@ -126,6 +130,10 @@ func _rpc_lobby_set_weapon(peer_or_weapon: Variant, weapon_id: String = "") -> v
 func _rpc_lobby_set_character(character_id: String) -> void:
 	super._rpc_lobby_set_character(character_id)
 
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_skin(skin_index: int) -> void:
+	super._rpc_lobby_set_skin(skin_index)
+
 @rpc("authority", "reliable")
 func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	super._rpc_lobby_list(entries, active_lobby_id)
@@ -133,6 +141,10 @@ func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 @rpc("authority", "reliable")
 func _rpc_sync_player_character(peer_id: int, character_id: String) -> void:
 	super._rpc_sync_player_character(peer_id, character_id)
+
+@rpc("authority", "reliable")
+func _rpc_sync_player_skin(peer_id: int, skin_index: int) -> void:
+	super._rpc_sync_player_skin(peer_id, skin_index)
 
 @rpc("authority", "reliable")
 func _rpc_lobby_action_result(success: bool, message: String, active_lobby_id: int, map_id: String, lobby_scene_mode: bool) -> void:
@@ -155,5 +167,21 @@ func _rpc_spawn_outrage_bomb(caster_peer_id: int, world_position: Vector2, fuse_
 	super._rpc_spawn_outrage_bomb(caster_peer_id, world_position, fuse_sec)
 
 @rpc("authority", "reliable")
+func _rpc_spawn_outrage_boost(caster_peer_id: int, duration_sec: float) -> void:
+	super._rpc_spawn_outrage_boost(caster_peer_id, duration_sec)
+
+@rpc("authority", "reliable")
 func _rpc_spawn_erebus_immunity(caster_peer_id: int, duration_sec: float) -> void:
 	super._rpc_spawn_erebus_immunity(caster_peer_id, duration_sec)
+
+@rpc("authority", "reliable")
+func _rpc_spawn_erebus_shield(caster_peer_id: int, duration_sec: float) -> void:
+	super._rpc_spawn_erebus_shield(caster_peer_id, duration_sec)
+
+@rpc("authority", "reliable")
+func _rpc_spawn_tasko_invis_field(caster_peer_id: int, world_position: Vector2) -> void:
+	super._rpc_spawn_tasko_invis_field(caster_peer_id, world_position)
+
+@rpc("authority", "reliable")
+func _rpc_spawn_tasko_mine(caster_peer_id: int, world_position: Vector2) -> void:
+	super._rpc_spawn_tasko_mine(caster_peer_id, world_position)

@@ -21,6 +21,8 @@ func _connect_local_signals() -> void:
 		lobby_weapon_option.item_selected.connect(_on_lobby_weapon_selected)
 	if lobby_character_option != null:
 		lobby_character_option.item_selected.connect(_on_lobby_character_selected)
+	if lobby_skin_option != null:
+		lobby_skin_option.item_selected.connect(_on_lobby_skin_selected)
 	if lobby_map_option != null:
 		lobby_map_option.item_selected.connect(_on_lobby_map_selected)
 
@@ -33,6 +35,7 @@ func _connect_local_signals() -> void:
 func _setup_ui_defaults() -> void:
 	_setup_weapon_picker()
 	_setup_character_picker()
+	_setup_skin_picker()
 	_setup_map_picker()
 	_refresh_lobby_buttons()
 	_update_peer_labels()
@@ -68,11 +71,56 @@ func _setup_character_picker() -> void:
 	lobby_character_option.set_item_metadata(0, CHARACTER_ID_OUTRAGE)
 	lobby_character_option.add_item("Erebus")
 	lobby_character_option.set_item_metadata(1, CHARACTER_ID_EREBUS)
+	lobby_character_option.add_item("Tasko")
+	lobby_character_option.set_item_metadata(2, CHARACTER_ID_TASKO)
+	print("[DBG SETUP] Character picker: added Outrage (meta: %s), Erebus (meta: %s), Tasko (meta: %s)" % [CHARACTER_ID_OUTRAGE, CHARACTER_ID_EREBUS, CHARACTER_ID_TASKO])
 	var target_character := _normalize_character_id(selected_character_id)
+	print("[DBG SETUP] Character picker: looking for target character: %s" % target_character)
+	var found_index := -1
 	for index in range(lobby_character_option.item_count):
-		if _normalize_character_id(str(lobby_character_option.get_item_metadata(index))) == target_character:
-			lobby_character_option.select(index)
+		var item_metadata = lobby_character_option.get_item_metadata(index)
+		var normalized_meta = _normalize_character_id(str(item_metadata))
+		print("[DBG SETUP] Index %d: metadata=%s, normalized=%s" % [index, item_metadata, normalized_meta])
+		if normalized_meta == target_character:
+			found_index = index
 			break
+	if found_index >= 0:
+		print("[DBG SETUP] Selecting character at index %d" % found_index)
+		lobby_character_option.select(found_index)
+	else:
+		print("[DBG SETUP] No matching character found for %s, selecting index 0" % target_character)
+		lobby_character_option.select(0)
+	_setup_skin_picker()
+
+func _setup_skin_picker() -> void:
+	if lobby_skin_option == null:
+		return
+	var skin_row := lobby_skin_option.get_parent() as CanvasItem
+	if skin_row != null:
+		skin_row.visible = selected_character_id == CHARACTER_ID_OUTRAGE
+	if lobby_skin_label != null:
+		lobby_skin_label.visible = selected_character_id == CHARACTER_ID_OUTRAGE
+	lobby_skin_option.visible = selected_character_id == CHARACTER_ID_OUTRAGE
+	lobby_skin_option.clear()
+
+	if selected_character_id != CHARACTER_ID_OUTRAGE:
+		return
+
+	var indices := PackedInt32Array([12, 13, 20, 21, 22, 23, 24, 25])
+	for i in range(indices.size()):
+		var idx := int(indices[i])
+		lobby_skin_option.add_item("Skin %d" % (i + 1))
+		lobby_skin_option.set_item_metadata(i, idx)
+
+	var target := 12
+	if lobby_service != null:
+		target = int(lobby_service.get_local_selected_skin(CHARACTER_ID_OUTRAGE, 12))
+	for i in range(lobby_skin_option.item_count):
+		if int(lobby_skin_option.get_item_metadata(i)) == target:
+			lobby_skin_option.select(i)
+			return
+	if lobby_skin_option.item_count > 0:
+		lobby_skin_option.select(0)
 
 func _on_start_server_pressed() -> void:
 	session_controller.start_server(int(port_spin.value))
@@ -128,6 +176,7 @@ func _on_lobby_create_pressed() -> void:
 		return
 	_persist_local_weapon_selection()
 	_persist_local_character_selection()
+	_persist_local_outage_skin_if_needed()
 	lobby_auto_action_inflight = true
 	_refresh_lobby_buttons()
 	_set_lobby_status("Creating lobby...")
@@ -145,6 +194,7 @@ func _on_lobby_join_pressed() -> void:
 		return
 	_persist_local_weapon_selection()
 	_persist_local_character_selection()
+	_persist_local_outage_skin_if_needed()
 	var lobby_id := ui_controller.selected_lobby_id()
 	if lobby_id <= 0:
 		_set_lobby_status("Select a lobby first.")
@@ -152,6 +202,7 @@ func _on_lobby_join_pressed() -> void:
 	lobby_auto_action_inflight = true
 	_refresh_lobby_buttons()
 	_set_lobby_status("Joining lobby...")
+	print("[DBG CHAR] JOIN pressed -> lobby_id=%d weapon=%s character=%s" % [lobby_id, selected_weapon_id, selected_character_id])
 	_rpc_lobby_join.rpc_id(1, lobby_id, selected_weapon_id, selected_character_id)
 
 func _on_lobby_refresh_pressed() -> void:
@@ -184,10 +235,37 @@ func _on_lobby_weapon_selected(index: int) -> void:
 func _on_lobby_character_selected(index: int) -> void:
 	if lobby_character_option == null:
 		return
-	selected_character_id = _normalize_character_id(str(lobby_character_option.get_item_metadata(index)))
+	if index < 0 or index >= lobby_character_option.item_count:
+		print("[DBG CHAR] Invalid character index: %d (item_count: %d)" % [index, lobby_character_option.item_count])
+		return
+	var metadata = lobby_character_option.get_item_metadata(index)
+	if metadata == null:
+		print("[DBG CHAR] Character metadata at index %d is null!" % index)
+		return
+	selected_character_id = _normalize_character_id(str(metadata))
+	print("[DBG CHAR] ===>>> SELECTED CHARACTER: %s (index: %d, metadata: %s, client_lobby_id: %d)" % [selected_character_id, index, metadata, client_lobby_id])
 	_persist_local_character_selection()
+	_setup_skin_picker()
 	if _is_client_connected() and client_lobby_id > 0:
+		print("[DBG CHAR] Sending RPC to server for character: %s" % selected_character_id)
 		_rpc_lobby_set_character.rpc_id(1, selected_character_id)
+	else:
+		print("[DBG CHAR] Not sending RPC yet (connected=%s, lobby_id=%d)" % [_is_client_connected(), client_lobby_id])
+
+func _on_lobby_skin_selected(index: int) -> void:
+	if lobby_skin_option == null:
+		return
+	if selected_character_id != CHARACTER_ID_OUTRAGE:
+		return
+	if index < 0 or index >= lobby_skin_option.item_count:
+		return
+	var meta: Variant = lobby_skin_option.get_item_metadata(index)
+	if meta == null:
+		return
+	var skin_index: int = int(meta)
+	_persist_local_skin_selection(selected_character_id, skin_index)
+	if _is_client_connected():
+		_rpc_lobby_set_skin.rpc_id(1, skin_index)
 
 func _on_lobby_map_selected(index: int) -> void:
 	if lobby_map_option == null:
@@ -217,3 +295,28 @@ func _persist_local_character_selection() -> void:
 	if local_peer_id <= 0:
 		return
 	lobby_service.set_peer_character(local_peer_id, selected_character_id)
+
+func _persist_local_skin_selection(character_id: String, skin_index: int) -> void:
+	if lobby_service == null:
+		return
+	lobby_service.set_local_selected_skin(character_id, skin_index)
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	var local_peer_id := multiplayer.get_unique_id()
+	if local_peer_id <= 0:
+		return
+	lobby_service.set_peer_skin(local_peer_id, skin_index)
+
+func _persist_local_outage_skin_if_needed() -> void:
+	if selected_character_id != CHARACTER_ID_OUTRAGE:
+		return
+	var skin_index: int = 12
+	if lobby_skin_option != null and lobby_skin_option.item_count > 0:
+		var selected_index := int(lobby_skin_option.selected)
+		if selected_index >= 0 and selected_index < lobby_skin_option.item_count:
+			var meta: Variant = lobby_skin_option.get_item_metadata(selected_index)
+			if meta != null:
+				skin_index = int(meta)
+	_persist_local_skin_selection(selected_character_id, skin_index)
+	if _is_client_connected():
+		_rpc_lobby_set_skin.rpc_id(1, skin_index)

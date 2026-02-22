@@ -1,6 +1,7 @@
 extends TileMapLayer
 
 const COLLISION_ROOT_NAME := "_GroundCollision"
+const OCCLUDER_ROOT_NAME := "_GroundOccluders"
 const DEFAULT_TILE_SIZE := Vector2i(8, 8)
 const DEFAULT_TILE_SOURCE_ID := 0
 
@@ -11,6 +12,8 @@ const DEFAULT_TILE_SOURCE_ID := 0
 @export_range(0.0, 1.0, 0.01) var min_solid_ratio := 0.18
 @export var ignore_atlas_zero_tile_for_collision := false
 @export var debug_log_collision_stats := false
+@export var generate_light_occluders := false
+@export var occluder_light_mask := 1
 
 var _last_collision_signature := ""
 var _source_image_cache: Dictionary = {}
@@ -105,7 +108,14 @@ func _rebuild_collision() -> void:
 	for child in collision_root.get_children():
 		child.queue_free()
 
+	var occluder_root: Node2D = null
+	if generate_light_occluders:
+		occluder_root = _ensure_occluder_root()
+		for child in occluder_root.get_children():
+			child.queue_free()
+
 	var built_shapes := 0
+	var built_occluders := 0
 	for cell in get_used_cells():
 		if ignore_atlas_zero_tile_for_collision and get_cell_source_id(cell) == DEFAULT_TILE_SOURCE_ID and get_cell_atlas_coords(cell) == Vector2i.ZERO:
 			continue
@@ -120,10 +130,21 @@ func _rebuild_collision() -> void:
 		collision_polygon.polygon = tile_polygon
 		collision_root.add_child(collision_polygon)
 		built_shapes += 1
+
+		if generate_light_occluders and occluder_root != null:
+			var occluder_polygon := OccluderPolygon2D.new()
+			occluder_polygon.polygon = tile_polygon
+			var occluder := LightOccluder2D.new()
+			occluder.position = map_to_local(cell)
+			occluder.occluder = occluder_polygon
+			occluder.occluder_light_mask = occluder_light_mask
+			occluder_root.add_child(occluder)
+			built_occluders += 1
 	if debug_log_collision_stats:
-		print("[GroundTiles] rebuilt: used_cells=%d collision_shapes=%d tile_size=%s layer=%d" % [
+		print("[GroundTiles] rebuilt: used_cells=%d collision_shapes=%d occluders=%d tile_size=%s layer=%d" % [
 			get_used_cells().size(),
 			built_shapes,
+			built_occluders,
 			str(_resolve_tile_size()),
 			collision_root.collision_layer
 		])
@@ -223,6 +244,16 @@ func _ensure_collision_root() -> StaticBody2D:
 	collision_root.collision_mask = 0
 	add_child(collision_root)
 	return collision_root
+
+func _ensure_occluder_root() -> Node2D:
+	var occluder_root := get_node_or_null(OCCLUDER_ROOT_NAME) as Node2D
+	if occluder_root != null:
+		return occluder_root
+
+	occluder_root = Node2D.new()
+	occluder_root.name = OCCLUDER_ROOT_NAME
+	add_child(occluder_root)
+	return occluder_root
 
 func _resolve_tile_size() -> Vector2i:
 	if tile_set != null and tile_set.tile_size.x > 0 and tile_set.tile_size.y > 0:

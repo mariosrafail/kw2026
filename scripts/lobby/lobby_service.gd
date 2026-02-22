@@ -6,21 +6,41 @@ static var _global_server_lobbies: Dictionary = {}
 static var _global_peer_lobby_by_peer: Dictionary = {}
 static var _global_peer_weapon_by_peer: Dictionary = {}
 static var _global_peer_character_by_peer: Dictionary = {}
+static var _global_peer_skin_by_peer: Dictionary = {}
 static var _global_local_selected_weapon := "ak47"
 static var _global_local_selected_character := "outrage"
+static var _global_local_selected_skin_by_character: Dictionary = {}
 static var _global_next_lobby_id := 1
 
 func _init(config: LobbyConfig = null) -> void:
 	lobby_config = config if config != null else LobbyConfig.new()
 
-func reset() -> void:
+func reset(keep_local_selection: bool = false) -> void:
+	var saved_weapon := _global_local_selected_weapon
+	var saved_character := _global_local_selected_character
+	var saved_skins := _global_local_selected_skin_by_character.duplicate(true)
+
 	_global_server_lobbies.clear()
 	_global_peer_lobby_by_peer.clear()
 	_global_peer_weapon_by_peer.clear()
 	_global_peer_character_by_peer.clear()
-	_global_local_selected_weapon = "ak47"
-	_global_local_selected_character = "outrage"
+	_global_peer_skin_by_peer.clear()
 	_global_next_lobby_id = 1
+
+	if keep_local_selection:
+		_global_local_selected_weapon = str(saved_weapon).strip_edges().to_lower()
+		var normalized_saved := str(saved_character).strip_edges().to_lower()
+		if normalized_saved == "erebus":
+			_global_local_selected_character = "erebus"
+		elif normalized_saved == "tasko":
+			_global_local_selected_character = "tasko"
+		else:
+			_global_local_selected_character = "outrage"
+		_global_local_selected_skin_by_character = saved_skins
+	else:
+		_global_local_selected_weapon = "ak47"
+		_global_local_selected_character = "outrage"
+		_global_local_selected_skin_by_character.clear()
 
 func get_peer_lobby(peer_id: int) -> int:
 	return int(_global_peer_lobby_by_peer.get(peer_id, 0))
@@ -145,29 +165,67 @@ func set_peer_character(peer_id: int, character_id: String) -> void:
 	if peer_id <= 0:
 		return
 	var normalized := str(character_id).strip_edges().to_lower()
-	if normalized != "erebus":
+	if normalized != "erebus" and normalized != "tasko":
 		normalized = "outrage"
 	_global_peer_character_by_peer[peer_id] = normalized
+
+func set_peer_skin(peer_id: int, skin_index: int) -> void:
+	if peer_id <= 0:
+		return
+	_global_peer_skin_by_peer[peer_id] = maxi(0, skin_index)
+
+func get_peer_skin(peer_id: int, fallback: int = 0) -> int:
+	if peer_id <= 0:
+		return maxi(0, fallback)
+	return int(_global_peer_skin_by_peer.get(peer_id, fallback))
 
 func get_peer_character(peer_id: int, fallback: String = "outrage") -> String:
 	var character_id := str(_global_peer_character_by_peer.get(peer_id, "")).strip_edges().to_lower()
 	if character_id.is_empty():
 		var normalized_fallback := fallback.strip_edges().to_lower()
-		return "erebus" if normalized_fallback == "erebus" else "outrage"
-	return "erebus" if character_id == "erebus" else "outrage"
+		if normalized_fallback == "erebus":
+			return "erebus"
+		if normalized_fallback == "tasko":
+			return "tasko"
+		return "outrage"
+	if character_id == "erebus":
+		return "erebus"
+	if character_id == "tasko":
+		return "tasko"
+	return "outrage"
 
 func set_local_selected_character(character_id: String) -> void:
 	var normalized := str(character_id).strip_edges().to_lower()
-	if normalized != "erebus":
+	if normalized != "erebus" and normalized != "tasko":
 		normalized = "outrage"
 	_global_local_selected_character = normalized
+
+func set_local_selected_skin(character_id: String, skin_index: int) -> void:
+	var normalized_character := str(character_id).strip_edges().to_lower()
+	if normalized_character.is_empty():
+		return
+	_global_local_selected_skin_by_character[normalized_character] = maxi(0, skin_index)
+
+func get_local_selected_skin(character_id: String, fallback: int = 0) -> int:
+	var normalized_character := str(character_id).strip_edges().to_lower()
+	if normalized_character.is_empty():
+		return maxi(0, fallback)
+	return int(_global_local_selected_skin_by_character.get(normalized_character, fallback))
 
 func get_local_selected_character(fallback: String = "outrage") -> String:
 	var normalized := _global_local_selected_character.strip_edges().to_lower()
 	if normalized.is_empty():
 		var normalized_fallback := fallback.strip_edges().to_lower()
-		return "erebus" if normalized_fallback == "erebus" else "outrage"
-	return "erebus" if normalized == "erebus" else "outrage"
+		if normalized_fallback == "erebus":
+			return "erebus"
+		if normalized_fallback == "tasko":
+			return "tasko"
+		return "outrage"
+	if normalized == "erebus":
+		return "erebus"
+	if normalized == "tasko":
+		return "tasko"
+	return "outrage"
 
 func set_lobby_members(lobby_id: int, members: Array) -> void:
 	if not _global_server_lobbies.has(lobby_id):

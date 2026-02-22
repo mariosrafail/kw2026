@@ -11,6 +11,7 @@ static func bind_scene_ui(
 	on_selection_changed: Callable,
 	on_empty_clicked: Callable,
 	on_weapon_selected: Callable,
+	on_character_selected: Callable,
 	on_map_selected: Callable
 ) -> Dictionary:
 	var refs := {
@@ -24,6 +25,7 @@ static func bind_scene_ui(
 		"lobby_refresh_button": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyRefreshButton") as Button,
 		"lobby_leave_button": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyLeaveButton") as Button,
 		"lobby_weapon_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyWeaponOption") as OptionButton,
+		"lobby_character_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyCharacterOption") as OptionButton,
 		"lobby_map_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/MapRow/LobbyMapOption") as OptionButton,
 		"lobby_room_bg": owner.get_node_or_null("LobbyUi/LobbyRoomBg") as ColorRect,
 		"lobby_room_title": owner.get_node_or_null("LobbyUi/LobbyRoomTitle") as Label
@@ -64,6 +66,10 @@ static func bind_scene_ui(
 	if lobby_weapon_option != null:
 		if on_weapon_selected.is_valid() and not lobby_weapon_option.item_selected.is_connected(on_weapon_selected):
 			lobby_weapon_option.item_selected.connect(on_weapon_selected)
+	var lobby_character_option := refs.get("lobby_character_option", null) as OptionButton
+	if lobby_character_option != null:
+		if on_character_selected.is_valid() and not lobby_character_option.item_selected.is_connected(on_character_selected):
+			lobby_character_option.item_selected.connect(on_character_selected)
 	if lobby_map_option != null:
 		if on_map_selected.is_valid() and not lobby_map_option.item_selected.is_connected(on_map_selected):
 			lobby_map_option.item_selected.connect(on_map_selected)
@@ -79,6 +85,7 @@ static func build(
 	on_leave_pressed: Callable,
 	on_selection_changed: Callable,
 	on_weapon_selected: Callable,
+	on_character_selected: Callable,
 	on_map_selected: Callable
 ) -> Dictionary:
 	var refs: Dictionary = {}
@@ -187,6 +194,38 @@ static func build(
 		lobby_weapon_option.item_selected.connect(on_weapon_selected)
 	loadout_row.add_child(lobby_weapon_option)
 
+	var character_label := Label.new()
+	character_label.text = "Character"
+	loadout_row.add_child(character_label)
+
+	var lobby_character_option := OptionButton.new()
+	lobby_character_option.name = "LobbyCharacterOption"
+	lobby_character_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lobby_character_option.add_item("Outrage")
+	lobby_character_option.set_item_metadata(0, "outrage")
+	lobby_character_option.add_item("Erebus")
+	lobby_character_option.set_item_metadata(1, "erebus")
+	lobby_character_option.add_item("Tasko")
+	lobby_character_option.set_item_metadata(2, "tasko")
+	if on_character_selected.is_valid():
+		lobby_character_option.item_selected.connect(on_character_selected)
+	loadout_row.add_child(lobby_character_option)
+
+	var skin_row := HBoxContainer.new()
+	skin_row.name = "SkinRow"
+	skin_row.add_theme_constant_override("separation", 6)
+	vbox.add_child(skin_row)
+
+	var skin_label := Label.new()
+	skin_label.name = "SkinLabel"
+	skin_label.text = "Skin"
+	skin_row.add_child(skin_label)
+
+	var lobby_skin_option := OptionButton.new()
+	lobby_skin_option.name = "LobbySkinOption"
+	lobby_skin_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skin_row.add_child(lobby_skin_option)
+
 	var map_row := HBoxContainer.new()
 	map_row.name = "MapRow"
 	map_row.add_theme_constant_override("separation", 6)
@@ -235,6 +274,8 @@ static func build(
 		lobby_leave_button,
 		weapon_label,
 		lobby_weapon_option,
+		character_label,
+		lobby_character_option,
 		map_label,
 		lobby_map_option
 	]:
@@ -255,6 +296,7 @@ static func build(
 	refs["lobby_refresh_button"] = lobby_refresh_button
 	refs["lobby_leave_button"] = lobby_leave_button
 	refs["lobby_weapon_option"] = lobby_weapon_option
+	refs["lobby_character_option"] = lobby_character_option
 	refs["lobby_map_option"] = lobby_map_option
 	refs["lobby_room_bg"] = lobby_room_bg
 	refs["lobby_room_title"] = lobby_room_title

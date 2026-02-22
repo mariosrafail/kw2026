@@ -47,7 +47,7 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
-[node name="Main3" type="Control"]
+[node name="Main4" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -59,6 +59,7 @@ enable_lobby_scene_flow = true
 damage_boost_enabled = null
 default_selected_weapon_id = null
 default_selected_map_id = null
+default_selected_character_id = null
 
 [node name="UiPanel" type="PanelContainer" parent="."]
 visible = false
@@ -252,6 +253,20 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_fonts/font = ExtResource("2_font")
 
+[node name="SkinRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="SkinLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/SkinRow"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+text = "Skin"
+
+[node name="LobbySkinOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/SkinRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("2_font")
+
 [node name="MapRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 6
@@ -340,6 +355,43 @@ offset_top = 12.0
 offset_right = 188.0
 offset_bottom = 44.0
 text = "K/D : 0/0"
+vertical_alignment = 1
+
+[node name="CooldownLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+visible = false
+offset_left = 12.0
+offset_top = 46.0
+offset_right = 188.0
+offset_bottom = 78.0
+text = "Cooldown: -"
+vertical_alignment = 1
+
+[node name="CooldownQLabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -70.0
+offset_right = 188.0
+offset_bottom = -38.0
+text = "Q: -"
+vertical_alignment = 1
+
+[node name="CooldownELabel" type="Label" parent="ClientHud"]
+unique_name_in_owner = true
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -188.0
+offset_top = -70.0
+offset_right = -12.0
+offset_bottom = -38.0
+text = "E: -"
+horizontal_alignment = 2
 vertical_alignment = 1
 
 [node name="ScoreboardLabel" type="Label" parent="ClientHud"]

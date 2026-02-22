@@ -1,9 +1,12 @@
-[gd_scene load_steps=9 format=3 uid="uid://dmx2f1xqqr411"]
+[gd_scene load_steps=12 format=3 uid="uid://dmx2f1xqqr411"]
 
 [ext_resource type="Script" path="res://scripts/entities/player.gd" id="1_blu24"]
 [ext_resource type="Texture2D" uid="uid://ladjw5xjjhe4" path="res://assets/warriors/allWarriors.png" id="2_dpso1"]
+[ext_resource type="Texture2D" uid="uid://ceidsgb66833f" path="res://assets/warriors/allHeads.png" id="2_tfa38"]
+[ext_resource type="Texture2D" uid="uid://cuglxxbnc765x" path="res://assets/warriors/allTorso.png" id="3_5fh4r"]
 [ext_resource type="Texture2D" uid="uid://bu5qjamiys787" path="res://assets/warriors/guns.png" id="3_tfnx5"]
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="3_u0ukb"]
+[ext_resource type="Texture2D" uid="uid://bplbglw4w4fel" path="res://assets/warriors/allLegs.png" id="4_m8oy2"]
 [ext_resource type="AudioStream" uid="uid://cgpcofbhh12qk" path="res://assets/sounds/sfx/guns/ak47/ak_shoot.wav" id="5_ifk0o"]
 [ext_resource type="AudioStream" uid="uid://bfw70vkoi8g3d" path="res://assets/sounds/sfx/general/death.wav" id="6_6oc35"]
 [ext_resource type="AudioStream" uid="uid://df6ui2tae54xb" path="res://assets/sounds/sfx/guns/ak47/ak_reload.wav" id="7_ak_reload"]
@@ -20,7 +23,36 @@ script = ExtResource("1_blu24")
 
 [node name="VisualRoot" type="Node2D" parent="."]
 
+[node name="head" type="Sprite2D" parent="VisualRoot"]
+texture_filter = 1
+position = Vector2(0, -9)
+texture = ExtResource("2_tfa38")
+region_enabled = true
+region_rect = Rect2(0, 0, 64, 64)
+
+[node name="torso" type="Sprite2D" parent="VisualRoot"]
+texture_filter = 1
+position = Vector2(-3, 3)
+texture = ExtResource("3_5fh4r")
+region_enabled = true
+region_rect = Rect2(0, 0, 64, 64)
+
+[node name="leg1" type="Sprite2D" parent="VisualRoot"]
+texture_filter = 1
+position = Vector2(-8, 14)
+texture = ExtResource("4_m8oy2")
+region_enabled = true
+region_rect = Rect2(0, 0, 64, 64)
+
+[node name="leg2" type="Sprite2D" parent="VisualRoot"]
+texture_filter = 1
+position = Vector2(5, 14)
+texture = ExtResource("4_m8oy2")
+region_enabled = true
+region_rect = Rect2(0, 0, 64, 64)
+
 [node name="Sprite2D" type="Sprite2D" parent="VisualRoot"]
+visible = false
 texture_filter = 1
 texture = ExtResource("2_dpso1")
 region_enabled = true

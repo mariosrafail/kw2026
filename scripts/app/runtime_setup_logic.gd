@@ -181,8 +181,7 @@ func _configure_services() -> void:
 			"send_projectile_impact": Callable(self, "_send_projectile_impact_rpc"),
 			"send_despawn_projectile": Callable(self, "_send_despawn_projectile_rpc"),
 			"broadcast_player_state": Callable(self, "_server_broadcast_player_state"),
-			"send_spawn_outrage_bomb": Callable(self, "_send_spawn_outrage_bomb_rpc"),
-			"send_spawn_erebus_immunity": Callable(self, "_send_spawn_erebus_immunity_rpc"),
+			"send_skill_cast": Callable(self, "_send_skill_cast_rpc"),
 			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer")
 		},
 		{
@@ -237,6 +236,9 @@ func _configure_services() -> void:
 			"peers_label": peers_label,
 			"ping_label": ping_label,
 			"kd_label": kd_label,
+			"cooldown_label": cooldown_label,
+			"cooldown_q_label": cooldown_q_label,
+			"cooldown_e_label": cooldown_e_label,
 			"scoreboard_label": scoreboard_label,
 			"ui_panel": ui_panel,
 			"world_root": world_root,

@@ -65,7 +65,7 @@ func encode_create_lobby_payload(
 	if normalize_weapon_id_cb.is_valid():
 		normalized_weapon = str(normalize_weapon_id_cb.call(weapon_id))
 	var normalized_character := character_id.strip_edges().to_lower()
-	if normalized_character != "erebus":
+	if normalized_character != "erebus" and normalized_character != "tasko":
 		normalized_character = "outrage"
 	# v2 payload: weapon|character|map (still supports v1 weapon|map)
 	return "%s|%s|%s" % [normalized_weapon, normalized_character, normalize_map_id(map_catalog, map_id)]
@@ -124,7 +124,7 @@ func decode_create_lobby_payload(
 	if raw_map_id.is_empty():
 		raw_map_id = fallback_map_id
 	var normalized_character_part := str(character_part).strip_edges().to_lower()
-	if normalized_character_part != "erebus":
+	if normalized_character_part != "erebus" and normalized_character_part != "tasko":
 		normalized_character_part = "outrage"
 
 	var normalized_weapon_part := weapon_part
