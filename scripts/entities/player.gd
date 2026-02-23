@@ -50,6 +50,7 @@ const PLAYER_MAX_SLIDES := 8
 @onready var death_audio: AudioStreamPlayer2D = $DeathAudio
 @onready var health_label: Label = $VisualRoot/HealthLabel
 @onready var ammo_label: Label = $VisualRoot/AmmoLabel
+@onready var name_label: Label = $VisualRoot/NameLabel
 
 var peer_id: int = 0
 var use_network_smoothing := false
@@ -150,6 +151,13 @@ func configure(new_peer_id: int, color: Color) -> void:
 		gun.modulate = color.lightened(0.15)
 	set_health(MAX_HEALTH)
 	set_ammo(0, false)
+
+func set_display_name(display_name: String) -> void:
+	if name_label == null:
+		return
+	var trimmed := display_name.strip_edges()
+	name_label.text = trimmed
+	name_label.visible = not trimmed.is_empty()
 
 func set_shot_audio_stream(stream: AudioStream) -> void:
 	if shot_audio == null:

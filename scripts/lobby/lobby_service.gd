@@ -7,6 +7,7 @@ static var _global_peer_lobby_by_peer: Dictionary = {}
 static var _global_peer_weapon_by_peer: Dictionary = {}
 static var _global_peer_character_by_peer: Dictionary = {}
 static var _global_peer_skin_by_peer: Dictionary = {}
+static var _global_peer_display_name_by_peer: Dictionary = {}
 static var _global_local_selected_weapon := "ak47"
 static var _global_local_selected_character := "outrage"
 static var _global_local_selected_skin_by_character: Dictionary = {}
@@ -25,6 +26,7 @@ func reset(keep_local_selection: bool = false) -> void:
 	_global_peer_weapon_by_peer.clear()
 	_global_peer_character_by_peer.clear()
 	_global_peer_skin_by_peer.clear()
+	_global_peer_display_name_by_peer.clear()
 	_global_next_lobby_id = 1
 
 	if keep_local_selection:
@@ -178,6 +180,23 @@ func get_peer_skin(peer_id: int, fallback: int = 0) -> int:
 	if peer_id <= 0:
 		return maxi(0, fallback)
 	return int(_global_peer_skin_by_peer.get(peer_id, fallback))
+
+func set_peer_display_name(peer_id: int, display_name: String) -> void:
+	if peer_id <= 0:
+		return
+	var trimmed := str(display_name).strip_edges()
+	if trimmed.is_empty():
+		_global_peer_display_name_by_peer.erase(peer_id)
+		return
+	_global_peer_display_name_by_peer[peer_id] = trimmed
+
+func get_peer_display_name(peer_id: int, fallback: String = "") -> String:
+	if peer_id <= 0:
+		return fallback
+	var trimmed := str(_global_peer_display_name_by_peer.get(peer_id, "")).strip_edges()
+	if trimmed.is_empty():
+		return fallback
+	return trimmed
 
 func get_peer_character(peer_id: int, fallback: String = "outrage") -> String:
 	var character_id := str(_global_peer_character_by_peer.get(peer_id, "")).strip_edges().to_lower()

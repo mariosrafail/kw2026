@@ -103,18 +103,40 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var lobby_name_input: LineEdit = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyNameRow/LobbyNameInput") as LineEdit
 @onready var lobby_list: ItemList = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyList") as ItemList
 @onready var lobby_status_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyStatusLabel") as Label
+@onready var wallet_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/WalletLabel") as Label
 @onready var lobby_create_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyNameRow/LobbyCreateButton") as Button
 @onready var lobby_join_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyJoinButton") as Button
 @onready var lobby_refresh_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyRefreshButton") as Button
 @onready var lobby_leave_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyLeaveButton") as Button
+@onready var lobby_logout_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LogoutButton") as Button
 @onready var lobby_weapon_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyWeaponOption") as OptionButton
-@onready var lobby_character_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyCharacterOption") as OptionButton
+@onready var lobby_character_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/CharacterRow/LobbyCharacterOption") as OptionButton
 @onready var lobby_skin_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/SkinRow/SkinLabel") as Label
 @onready var lobby_skin_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/SkinRow/LobbySkinOption") as OptionButton
 @onready var lobby_map_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/MapRow/LobbyMapOption") as OptionButton
 @onready var lobby_panel: PanelContainer = get_node_or_null("LobbyUi/LobbyPanel") as PanelContainer
 @onready var lobby_room_bg: ColorRect = get_node_or_null("LobbyUi/LobbyRoomBg") as ColorRect
 @onready var lobby_room_title: Label = get_node_or_null("LobbyUi/LobbyRoomTitle") as Label
+@onready var auth_panel: PanelContainer = get_node_or_null("LobbyUi/AuthPanel") as PanelContainer
+@onready var auth_username_input: LineEdit = get_node_or_null("LobbyUi/AuthPanel/Margin/VBox/AuthUserRow/AuthUsernameInput") as LineEdit
+@onready var auth_password_input: LineEdit = get_node_or_null("LobbyUi/AuthPanel/Margin/VBox/AuthPassRow/AuthPasswordInput") as LineEdit
+@onready var auth_login_button: Button = get_node_or_null("LobbyUi/AuthPanel/Margin/VBox/AuthButtonsRow/AuthLoginButton") as Button
+@onready var auth_register_button: Button = get_node_or_null("LobbyUi/AuthPanel/Margin/VBox/AuthButtonsRow/AuthRegisterButton") as Button
+@onready var auth_status_label: Label = get_node_or_null("LobbyUi/AuthPanel/Margin/VBox/AuthStatusLabel") as Label
+@onready var auth_request: HTTPRequest = get_node_or_null("AuthRequest") as HTTPRequest
+@onready var esc_overlay: ColorRect = get_node_or_null("ModalUi/EscOverlay") as ColorRect
+@onready var esc_menu: PanelContainer = get_node_or_null("ModalUi/EscMenu") as PanelContainer
+@onready var esc_logout_button: Button = get_node_or_null("ModalUi/EscMenu/Margin/VBox/EscButtonsRow/EscLogoutButton") as Button
+@onready var esc_exit_button: Button = get_node_or_null("ModalUi/EscMenu/Margin/VBox/EscButtonsRow/EscExitButton") as Button
+@onready var esc_cancel_button: Button = get_node_or_null("ModalUi/EscMenu/Margin/VBox/EscCancelButton") as Button
+@onready var purchase_overlay: ColorRect = get_node_or_null("ModalUi/PurchaseOverlay") as ColorRect
+@onready var purchase_menu: PanelContainer = get_node_or_null("ModalUi/PurchaseMenu") as PanelContainer
+@onready var purchase_text: Label = get_node_or_null("ModalUi/PurchaseMenu/Margin/VBox/PurchaseText") as Label
+@onready var purchase_buy_button: Button = get_node_or_null("ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow/PurchaseBuyButton") as Button
+@onready var purchase_cancel_button: Button = get_node_or_null("ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow/PurchaseCancelButton") as Button
+@onready var loading_overlay: ColorRect = get_node_or_null("ModalUi/LoadingOverlay") as ColorRect
+@onready var loading_panel: PanelContainer = get_node_or_null("ModalUi/LoadingPanel") as PanelContainer
+@onready var loading_label: Label = get_node_or_null("ModalUi/LoadingPanel/Margin/LoadingLabel") as Label
 
 var role: int = Role.NONE
 var startup_mode: int = Role.CLIENT
@@ -148,6 +170,9 @@ var client_lobby_id := 0
 var lobby_auto_action_inflight := false
 var lobby_entries: Array = []
 var lobby_map_by_id: Dictionary = {}
+
+var auth_token := ""
+var auth_username := ""
 var pending_scene_switch := ""
 var escape_return_pending := false
 var escape_return_nonce := 0
@@ -232,6 +257,9 @@ func _rpc_sync_player_character(_peer_id: int, _character_id: String) -> void:
 func _rpc_sync_player_skin(_peer_id: int, _skin_index: int) -> void:
 	pass
 
+func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void:
+	pass
+
 func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
 	pass
 
@@ -254,6 +282,9 @@ func _rpc_lobby_set_character(_character_id: String) -> void:
 	pass
 
 func _rpc_lobby_set_skin(_skin_index: int) -> void:
+	pass
+
+func _rpc_lobby_set_display_name(_display_name: String) -> void:
 	pass
 
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:

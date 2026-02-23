@@ -14,7 +14,7 @@ size = Vector2(280, 26)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_p3"]
 size = Vector2(220, 24)
 
-[node name="Main" type="Control"]
+[node name="Main3" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

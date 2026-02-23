@@ -54,6 +54,13 @@ Then:
 3. Select weapon/character and create/join lobby
 4. When 2+ players → game starts automatically
 
+### Accounts (Login/Register)
+
+The game expects an auth HTTP API for login/register (do **not** connect directly to Postgres from the client).
+
+- Auth server: `tools/auth_api/README.md`
+- Client setting: `project.godot` → `kw/auth_api_base_url` (default `http://127.0.0.1:8090`)
+
 ---
 
 ## Documentation

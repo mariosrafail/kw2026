@@ -16,6 +16,10 @@ config/features=PackedStringArray("4.3", "Forward Plus")
 boot_splash/show_image=false
 config/icon="res://icon.svg"
 
+[kw]
+
+auth_api_base_url="http://127.0.0.1:8090"
+
 [display]
 
 window/size/viewport_width=640

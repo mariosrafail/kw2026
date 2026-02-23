@@ -33,7 +33,10 @@ func _rpc_request_reload() -> void:
 
 func _rpc_spawn_player(peer_id: int, spawn_position: Vector2, display_name: String = "", weapon_id: String = "", character_id: String = "", skin_index: int = 0) -> void:
 	if not display_name.strip_edges().is_empty():
-		player_display_names[peer_id] = display_name
+		var trimmed := display_name.strip_edges()
+		player_display_names[peer_id] = trimmed
+		if lobby_service != null and lobby_service.has_method("set_peer_display_name"):
+			lobby_service.call("set_peer_display_name", peer_id, trimmed)
 	if not weapon_id.strip_edges().is_empty():
 		peer_weapon_ids[peer_id] = _normalize_weapon_id(weapon_id)
 	if not character_id.strip_edges().is_empty():
@@ -185,6 +188,22 @@ func _rpc_sync_player_skin(peer_id: int, skin_index: int) -> void:
 	if player != null and player.has_method("set_skin_index") and resolved > 0:
 		player.call("set_skin_index", resolved)
 
+func _rpc_sync_player_display_name(peer_id: int, display_name: String) -> void:
+	if multiplayer.is_server():
+		return
+	if peer_id <= 0:
+		return
+	var trimmed := display_name.strip_edges()
+	if trimmed.is_empty():
+		return
+	player_display_names[peer_id] = trimmed
+	if lobby_service != null and lobby_service.has_method("set_peer_display_name"):
+		lobby_service.call("set_peer_display_name", peer_id, trimmed)
+	var player := players.get(peer_id, null) as NetPlayer
+	if player != null and player.has_method("set_display_name"):
+		player.call("set_display_name", trimmed)
+	_update_score_labels()
+
 func _rpc_play_death_sfx(impact_position: Vector2) -> void:
 	if multiplayer.is_server():
 		return
@@ -329,6 +348,36 @@ func _rpc_lobby_set_skin(skin_index: int) -> void:
 		if member_id <= 0:
 			continue
 		_rpc_sync_player_skin.rpc_id(member_id, peer_id, resolved)
+
+func _rpc_lobby_set_display_name(display_name: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var trimmed := display_name.strip_edges()
+	if trimmed.is_empty():
+		return
+	if trimmed.length() > 16:
+		trimmed = trimmed.substr(0, 16)
+	player_display_names[peer_id] = trimmed
+	if lobby_service != null and lobby_service.has_method("set_peer_display_name"):
+		lobby_service.call("set_peer_display_name", peer_id, trimmed)
+	if players.has(peer_id):
+		var player := players.get(peer_id, null) as NetPlayer
+		if player != null and player.has_method("set_display_name"):
+			player.call("set_display_name", trimmed)
+
+	var lobby_id := _peer_lobby(peer_id)
+	var recipients := _lobby_members(lobby_id)
+	if recipients.is_empty() and not _uses_lobby_scene_flow():
+		if multiplayer != null and multiplayer.multiplayer_peer != null:
+			recipients = []
+			for id_value in multiplayer.get_peers():
+				recipients.append(int(id_value))
+	for member_value in recipients:
+		var member_id := int(member_value)
+		if member_id <= 0:
+			continue
+		_rpc_sync_player_display_name.rpc_id(member_id, peer_id, trimmed)
 
 func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:

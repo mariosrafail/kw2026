@@ -171,6 +171,7 @@ func _update_ping_label() -> void:
 	ui_controller.update_ping_label(ui_controller.local_ping_text(role == Role.SERVER, role == Role.CLIENT, last_ping_ms))
 
 func _update_ui_visibility() -> void:
+	var auth_blocking := auth_panel != null and auth_panel.visible
 	ui_controller.update_ui_visibility(
 		_uses_lobby_scene_flow(),
 		role == Role.SERVER,
@@ -178,7 +179,8 @@ func _update_ui_visibility() -> void:
 		_is_local_player_spawned(),
 		scoreboard_visible,
 		true,
-		true
+		true,
+		auth_blocking
 	)
 
 func _update_score_labels() -> void:
@@ -245,6 +247,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if players.has(peer_id):
 		var existing := players[peer_id] as NetPlayer
 		if existing != null:
+			if existing.has_method("set_display_name"):
+				existing.call("set_display_name", _ensure_player_display_name(peer_id))
 			existing.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
 			if existing.has_method("set_character_visual"):
 				existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
@@ -259,6 +263,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	player.global_position = resolved_spawn
 	players_root.add_child(player)
 	player.configure(peer_id, _player_color(peer_id))
+	if player.has_method("set_display_name"):
+		player.call("set_display_name", _ensure_player_display_name(peer_id))
 	player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
 	player.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
 	if player.has_method("set_character_visual"):
@@ -339,8 +345,6 @@ func _return_to_lobby_scene(disconnect_session: bool = true) -> void:
 	_request_lobby_scene_switch()
 
 func _begin_escape_return_to_lobby_menu() -> void:
-	if _uses_lobby_scene_flow():
-		return
 	if escape_return_pending:
 		return
 
@@ -349,7 +353,13 @@ func _begin_escape_return_to_lobby_menu() -> void:
 	var nonce := escape_return_nonce
 	_append_log("Escape pressed: leaving match and returning to lobby menu.")
 
-	if role == Role.CLIENT and _is_client_connected() and client_lobby_id > 0:
+	var effective_lobby_id := client_lobby_id
+	if effective_lobby_id <= 0 and role == Role.CLIENT and lobby_service != null and multiplayer != null and multiplayer.multiplayer_peer != null:
+		var local_peer_id := multiplayer.get_unique_id()
+		if local_peer_id > 0:
+			effective_lobby_id = lobby_service.get_peer_lobby(local_peer_id)
+
+	if role == Role.CLIENT and _is_client_connected() and effective_lobby_id > 0:
 		lobby_auto_action_inflight = true
 		_refresh_lobby_buttons()
 		_set_lobby_status("Leaving lobby...")
@@ -370,6 +380,11 @@ func _on_escape_leave_timeout(nonce: int) -> void:
 
 func _complete_escape_return_to_lobby_menu(nonce: int) -> void:
 	if not escape_return_pending or nonce != escape_return_nonce:
+		return
+	if _uses_lobby_scene_flow():
+		# In lobby scene flow we keep the network session alive and return to the lobby room scene.
+		escape_return_pending = false
+		_request_lobby_scene_switch()
 		return
 	_return_to_lobby_scene(true)
 
@@ -518,7 +533,7 @@ func _send_spawn_player_rpc(target_peer_id: int, peer_id: int, spawn_position: V
 	if skin_index <= 0:
 		skin_index = int(peer_skin_indices_by_peer.get(peer_id, 0))
 	if skin_index <= 0 and warrior_id == CHARACTER_ID_OUTRAGE:
-		skin_index = 12
+		skin_index = 1
 	_rpc_spawn_player.rpc_id(
 		target_peer_id,
 		peer_id,
@@ -651,6 +666,11 @@ func _random_spawn_position() -> Vector2:
 	return spawn_identity.random_spawn_position()
 
 func _ensure_player_display_name(peer_id: int) -> String:
+	if lobby_service != null and lobby_service.has_method("get_peer_display_name"):
+		var persisted := str(lobby_service.call("get_peer_display_name", peer_id, "")).strip_edges()
+		if not persisted.is_empty():
+			player_display_names[peer_id] = persisted
+			return persisted
 	return spawn_identity.ensure_player_display_name(peer_id)
 
 func _player_color(peer_id: int) -> Color:

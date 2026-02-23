@@ -134,6 +134,10 @@ func _rpc_lobby_set_character(character_id: String) -> void:
 func _rpc_lobby_set_skin(skin_index: int) -> void:
 	super._rpc_lobby_set_skin(skin_index)
 
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_display_name(display_name: String) -> void:
+	super._rpc_lobby_set_display_name(display_name)
+
 @rpc("authority", "reliable")
 func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	super._rpc_lobby_list(entries, active_lobby_id)
@@ -145,6 +149,10 @@ func _rpc_sync_player_character(peer_id: int, character_id: String) -> void:
 @rpc("authority", "reliable")
 func _rpc_sync_player_skin(peer_id: int, skin_index: int) -> void:
 	super._rpc_sync_player_skin(peer_id, skin_index)
+
+@rpc("authority", "reliable")
+func _rpc_sync_player_display_name(peer_id: int, display_name: String) -> void:
+	super._rpc_sync_player_display_name(peer_id, display_name)
 
 @rpc("authority", "reliable")
 func _rpc_lobby_action_result(success: bool, message: String, active_lobby_id: int, map_id: String, lobby_scene_mode: bool) -> void:

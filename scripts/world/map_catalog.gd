@@ -2,8 +2,7 @@ extends RefCounted
 class_name MapCatalog
 
 const CLASSIC_MAP_CONTROLLER := preload("res://scripts/world/classic_map_controller.gd")
-const CYBER_MAP_CONTROLLER := preload("res://scripts/world/cyber_map_controller.gd")
-const TEST_MAP_CONTROLLER := preload("res://scripts/world/test_map_controller.gd")
+const CYBERNEW_MAP_CONTROLLER := preload("res://scripts/world/cybernew_map_controller.gd")
 
 var _maps_by_id: Dictionary = {}
 var _ordered_map_ids: Array[String] = []
@@ -11,8 +10,7 @@ var _default_map_id := "classic"
 
 func _init() -> void:
 	_register_controller(CLASSIC_MAP_CONTROLLER.new())
-	_register_controller(CYBER_MAP_CONTROLLER.new())
-	_register_controller(TEST_MAP_CONTROLLER.new())
+	_register_controller(CYBERNEW_MAP_CONTROLLER.new())
 	if _ordered_map_ids.is_empty():
 		_ordered_map_ids.append(_default_map_id)
 		_maps_by_id[_default_map_id] = {

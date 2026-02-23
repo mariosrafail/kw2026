@@ -29,3 +29,15 @@ launcher/obj/
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# Secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# Local debug artifacts
+tools/auth_api/tmp.err
+tools/auth_api/tmp.out

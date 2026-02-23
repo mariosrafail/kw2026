@@ -226,7 +226,8 @@ func update_ui_visibility(
 	local_spawned: bool,
 	scoreboard_visible: bool,
 	lobby_room_bg_enabled: bool,
-	lobby_room_title_enabled: bool
+	lobby_room_title_enabled: bool,
+	auth_blocking: bool = false
 ) -> void:
 	var show_lobby_room := lobby_scene_mode and not is_server_role and not local_spawned
 	if lobby_scene_mode and lobby_panel == null:
@@ -255,7 +256,7 @@ func update_ui_visibility(
 	if scoreboard_label != null:
 		scoreboard_label.visible = is_client_role and local_spawned and scoreboard_visible
 	if lobby_panel != null:
-		lobby_panel.visible = show_lobby_room
+		lobby_panel.visible = show_lobby_room and not auth_blocking
 	if lobby_room_bg != null:
 		lobby_room_bg.visible = show_lobby_room and lobby_room_bg_enabled
 	if lobby_room_title != null:

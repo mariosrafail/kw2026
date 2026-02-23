@@ -25,7 +25,7 @@ static func bind_scene_ui(
 		"lobby_refresh_button": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyRefreshButton") as Button,
 		"lobby_leave_button": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyLeaveButton") as Button,
 		"lobby_weapon_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyWeaponOption") as OptionButton,
-		"lobby_character_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyCharacterOption") as OptionButton,
+		"lobby_character_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/CharacterRow/LobbyCharacterOption") as OptionButton,
 		"lobby_map_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/MapRow/LobbyMapOption") as OptionButton,
 		"lobby_room_bg": owner.get_node_or_null("LobbyUi/LobbyRoomBg") as ColorRect,
 		"lobby_room_title": owner.get_node_or_null("LobbyUi/LobbyRoomTitle") as Label

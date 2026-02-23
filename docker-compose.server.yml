@@ -11,6 +11,20 @@ services:
       - "8080:8080/udp"
     restart: unless-stopped
 
+  kw_auth_api:
+    build:
+      context: ./tools/auth_api
+    container_name: kw_auth_api
+    environment:
+      # Set this in your shell before running docker compose:
+      #   DATABASE_URL="postgresql://..."
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_API_HOST: "0.0.0.0"
+      AUTH_API_PORT: "8090"
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+
   kw_updates_http:
     image: nginx:alpine
     container_name: kw_updates_http

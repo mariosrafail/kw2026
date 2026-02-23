@@ -1,53 +1,115 @@
-[gd_scene load_steps=7 format=3 uid="uid://cctmbs8n77won"]
+[gd_scene load_steps=11 format=3 uid="uid://cctmbs8n77won"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_panel"]
+content_margin_left = 14.0
+content_margin_top = 14.0
+content_margin_right = 14.0
+content_margin_bottom = 14.0
+bg_color = Color(0.2, 0.17, 0.26, 0.98)
+border_width_left = 6
+border_width_top = 6
+border_width_right = 6
+border_width_bottom = 6
+border_color = Color(0.9, 0.74, 0.27, 1)
+shadow_color = Color(0, 0, 0, 0.5)
+shadow_size = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_field_focus"]
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.12, 0.11, 0.16, 0.95)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.9, 0.74, 0.27, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_field_normal"]
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.12, 0.11, 0.16, 0.9)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.16, 0.16, 0.2, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_btn_hover"]
 content_margin_left = 14.0
 content_margin_top = 8.0
 content_margin_right = 14.0
 content_margin_bottom = 8.0
-bg_color = Color(0.23, 0.27, 0.33, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+bg_color = Color(0.28, 0.24, 0.38, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 1)
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_btn_disabled"]
 content_margin_left = 14.0
 content_margin_top = 8.0
 content_margin_right = 14.0
 content_margin_bottom = 8.0
-bg_color = Color(0.14, 0.16, 0.2, 0.55)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+bg_color = Color(0.14, 0.13, 0.17, 0.65)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 0.85)
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_btn_pressed"]
 content_margin_left = 14.0
 content_margin_top = 8.0
 content_margin_right = 14.0
 content_margin_bottom = 8.0
-bg_color = Color(0.12, 0.15, 0.19, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+bg_color = Color(0.14, 0.12, 0.2, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 1)
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 1
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_btn_normal"]
 content_margin_left = 14.0
 content_margin_top = 8.0
 content_margin_right = 14.0
 content_margin_bottom = 8.0
-bg_color = Color(0.17, 0.2, 0.24, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+bg_color = Color(0.22, 0.19, 0.3, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 1)
+shadow_color = Color(0, 0, 0, 0.35)
+shadow_size = 3
 
-[node name="Main4" type="Control"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_list_panel"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.11, 0.16, 0.95)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 1)
+
+[node name="Main3" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -56,10 +118,9 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_main")
 enable_lobby_scene_flow = true
-damage_boost_enabled = null
-default_selected_weapon_id = null
-default_selected_map_id = null
-default_selected_character_id = null
+
+[node name="AuthRequest" type="HTTPRequest" parent="."]
+unique_name_in_owner = true
 
 [node name="UiPanel" type="PanelContainer" parent="."]
 visible = false
@@ -149,72 +210,236 @@ scroll_following = true
 layer = 30
 
 [node name="LobbyRoomBg" type="ColorRect" parent="LobbyUi"]
-visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.08, 0.11, 0.16, 1)
+mouse_filter = 2
+color = Color(0.07, 0.06, 0.09, 1)
+
+[node name="LobbyRoomBgInset" type="ColorRect" parent="LobbyUi"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+mouse_filter = 2
+color = Color(0.1, 0.09, 0.13, 1)
 
 [node name="LobbyRoomTitle" type="Label" parent="LobbyUi"]
-visible = false
-anchors_preset = -1
+anchors_preset = 5
 anchor_left = 0.5
-anchor_top = 0.18
 anchor_right = 0.5
-anchor_bottom = 0.18
 offset_left = -220.0
-offset_top = -22.0
+offset_top = 8.0
 offset_right = 220.0
-offset_bottom = 22.0
+offset_bottom = 36.0
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 6
 theme_override_fonts/font = ExtResource("2_font")
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 22
 text = "KW LOBBY ROOM"
 horizontal_alignment = 1
 
-[node name="LobbyPanel" type="PanelContainer" parent="LobbyUi"]
+[node name="AuthPanel" type="PanelContainer" parent="LobbyUi"]
+unique_name_in_owner = true
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -220.0
-offset_top = -170.0
-offset_right = 220.0
-offset_bottom = 170.0
+offset_left = -200.0
+offset_top = -78.0
+offset_right = 200.0
+offset_bottom = 78.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_panel")
+
+[node name="Margin" type="MarginContainer" parent="LobbyUi/AuthPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="LobbyUi/AuthPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="AuthTitle" type="Label" parent="LobbyUi/AuthPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 18
+text = "ACCOUNT"
+horizontal_alignment = 1
+
+[node name="AuthUserRow" type="HBoxContainer" parent="LobbyUi/AuthPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AuthUserLabel" type="Label" parent="LobbyUi/AuthPanel/Margin/VBox/AuthUserRow"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+text = "User"
+
+[node name="AuthUsernameInput" type="LineEdit" parent="LobbyUi/AuthPanel/Margin/VBox/AuthUserRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
+placeholder_text = "username"
+
+[node name="AuthPassRow" type="HBoxContainer" parent="LobbyUi/AuthPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AuthPassLabel" type="Label" parent="LobbyUi/AuthPanel/Margin/VBox/AuthPassRow"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+text = "Pass"
+
+[node name="AuthPasswordInput" type="LineEdit" parent="LobbyUi/AuthPanel/Margin/VBox/AuthPassRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
+placeholder_text = "password"
+caret_blink = true
+secret = true
+
+[node name="AuthButtonsRow" type="HBoxContainer" parent="LobbyUi/AuthPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AuthLoginButton" type="Button" parent="LobbyUi/AuthPanel/Margin/VBox/AuthButtonsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Login"
+
+[node name="AuthRegisterButton" type="Button" parent="LobbyUi/AuthPanel/Margin/VBox/AuthButtonsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Register"
+
+[node name="AuthStatusLabel" type="Label" parent="LobbyUi/AuthPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.92, 0.95, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 12
+text = "Auth: not logged in"
+horizontal_alignment = 1
+
+[node name="LobbyPanel" type="PanelContainer" parent="LobbyUi"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 44.0
+offset_right = -12.0
+offset_bottom = -10.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_panel")
 
 [node name="Margin" type="MarginContainer" parent="LobbyUi/LobbyPanel"]
 layout_mode = 2
-theme_override_constants/margin_left = 14
-theme_override_constants/margin_top = 14
-theme_override_constants/margin_right = 14
-theme_override_constants/margin_bottom = 14
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
 
-[node name="VBox" type="VBoxContainer" parent="LobbyUi/LobbyPanel/Margin"]
+[node name="VBox" type="Control" parent="LobbyUi/LobbyPanel/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 8
 
 [node name="LobbyStatusLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
+anchor_right = 1.0
+offset_bottom = 18.0
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 4
 theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
 text = "Choose lobby"
 horizontal_alignment = 1
 
-[node name="LobbyList" type="ItemList" parent="LobbyUi/LobbyPanel/Margin/VBox"]
-custom_minimum_size = Vector2(0, 130)
+[node name="WalletLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox"]
+unique_name_in_owner = true
 layout_mode = 2
+anchor_right = 1.0
+offset_left = 306.0
+offset_bottom = 18.0
+theme_override_colors/font_color = Color(0.93, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 3
 theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 12
+text = "Coins: - | CLK: -"
+horizontal_alignment = 2
+
+[node name="LobbyList" type="ItemList" parent="LobbyUi/LobbyPanel/Margin/VBox"]
+custom_minimum_size = Vector2(290, 76)
+layout_mode = 2
+offset_top = 20.0
+offset_right = 290.0
+offset_bottom = 180.0
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_list_panel")
 
 [node name="LobbyNameRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+offset_top = 185.0
+offset_right = 290.0
+offset_bottom = 219.0
+theme_override_constants/separation = 4
 
 [node name="LobbyNameInput" type="LineEdit" parent="LobbyUi/LobbyPanel/Margin/VBox/LobbyNameRow"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
 placeholder_text = "Lobby name"
 
 [node name="LobbyCreateButton" type="Button" parent="LobbyUi/LobbyPanel/Margin/VBox/LobbyNameRow"]
+custom_minimum_size = Vector2(86, 0)
 layout_mode = 2
 theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
@@ -227,11 +452,14 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
 theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
 text = "Create Lobby"
-flat = true
 
 [node name="LoadoutRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+anchor_right = 1.0
+offset_left = 306.0
+offset_top = 20.0
+offset_bottom = 42.0
+theme_override_constants/separation = 4
 
 [node name="LobbyWeaponLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow"]
 layout_mode = 2
@@ -241,21 +469,43 @@ text = "Weapon"
 [node name="LobbyWeaponOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
 
-[node name="LobbyCharacterLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow"]
+[node name="CharacterRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
+layout_mode = 2
+anchor_right = 1.0
+offset_left = 306.0
+offset_top = 56.0
+offset_bottom = 68.0
+theme_override_constants/separation = 4
+
+[node name="LobbyCharacterLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/CharacterRow"]
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 text = "Character"
 
-[node name="LobbyCharacterOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow"]
+[node name="LobbyCharacterOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/CharacterRow"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
 
 [node name="SkinRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+anchor_right = 1.0
+offset_left = 306.0
+offset_top = 92.0
+offset_bottom = 94.0
+theme_override_constants/separation = 4
 
 [node name="SkinLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/SkinRow"]
 layout_mode = 2
@@ -265,11 +515,20 @@ text = "Skin"
 [node name="LobbySkinOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/SkinRow"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
 
 [node name="MapRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+anchor_right = 1.0
+offset_left = 306.0
+offset_top = 128.0
+offset_bottom = 120.0
+theme_override_constants/separation = 4
 
 [node name="LobbyMapLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/MapRow"]
 layout_mode = 2
@@ -279,11 +538,20 @@ text = "Map"
 [node name="LobbyMapOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/MapRow"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
 
 [node name="LobbyActionsRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+anchor_right = 1.0
+offset_top = 226.0
+offset_right = -306.0
+offset_bottom = 260.0
+theme_override_constants/separation = 4
 
 [node name="LobbyJoinButton" type="Button" parent="LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow"]
 layout_mode = 2
@@ -299,7 +567,6 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
 theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
 text = "Join Lobby"
-flat = true
 
 [node name="LobbyRefreshButton" type="Button" parent="LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow"]
 layout_mode = 2
@@ -314,7 +581,6 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
 theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
 text = "Refresh"
-flat = true
 
 [node name="LobbyLeaveButton" type="Button" parent="LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow"]
 layout_mode = 2
@@ -329,7 +595,267 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
 theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
 text = "Leave"
-flat = true
+
+[node name="LogoutButton" type="Button" parent="LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Logout"
+
+[node name="ModalUi" type="CanvasLayer" parent="."]
+layer = 60
+
+[node name="EscOverlay" type="ColorRect" parent="ModalUi"]
+unique_name_in_owner = true
+visible = false
+z_index = 400
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.4)
+
+[node name="EscMenu" type="PanelContainer" parent="ModalUi"]
+unique_name_in_owner = true
+visible = false
+z_index = 401
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -190.0
+offset_top = -66.0
+offset_right = 190.0
+offset_bottom = 66.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_panel")
+
+[node name="Margin" type="MarginContainer" parent="ModalUi/EscMenu"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="ModalUi/EscMenu/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="EscTitle" type="Label" parent="ModalUi/EscMenu/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+text = "MENU"
+horizontal_alignment = 1
+
+[node name="EscButtonsRow" type="HBoxContainer" parent="ModalUi/EscMenu/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="EscLogoutButton" type="Button" parent="ModalUi/EscMenu/Margin/VBox/EscButtonsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Logout"
+
+[node name="EscExitButton" type="Button" parent="ModalUi/EscMenu/Margin/VBox/EscButtonsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Exit"
+
+[node name="EscCancelButton" type="Button" parent="ModalUi/EscMenu/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Cancel"
+
+[node name="PurchaseOverlay" type="ColorRect" parent="ModalUi"]
+unique_name_in_owner = true
+visible = false
+z_index = 420
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.4)
+
+[node name="PurchaseMenu" type="PanelContainer" parent="ModalUi"]
+unique_name_in_owner = true
+visible = false
+z_index = 421
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -210.0
+offset_top = -70.0
+offset_right = 210.0
+offset_bottom = 70.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_panel")
+
+[node name="Margin" type="MarginContainer" parent="ModalUi/PurchaseMenu"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="ModalUi/PurchaseMenu/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PurchaseTitle" type="Label" parent="ModalUi/PurchaseMenu/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+text = "BUY SKIN?"
+horizontal_alignment = 1
+
+[node name="PurchaseText" type="Label" parent="ModalUi/PurchaseMenu/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.93, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 3
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 12
+text = "Skin: -
+Cost: - CLK"
+horizontal_alignment = 1
+
+[node name="PurchaseButtonsRow" type="HBoxContainer" parent="ModalUi/PurchaseMenu/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PurchaseBuyButton" type="Button" parent="ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Buy"
+
+[node name="PurchaseCancelButton" type="Button" parent="ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
+text = "Cancel"
+
+[node name="LoadingOverlay" type="ColorRect" parent="ModalUi"]
+unique_name_in_owner = true
+visible = false
+z_index = 480
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="LoadingPanel" type="PanelContainer" parent="ModalUi"]
+unique_name_in_owner = true
+visible = false
+z_index = 481
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -140.0
+offset_top = -34.0
+offset_right = 140.0
+offset_bottom = 34.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_panel")
+
+[node name="Margin" type="MarginContainer" parent="ModalUi/LoadingPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="LoadingLabel" type="Label" parent="ModalUi/LoadingPanel/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+text = "LOADING..."
+horizontal_alignment = 1
 
 [node name="World" type="Node2D" parent="."]
 

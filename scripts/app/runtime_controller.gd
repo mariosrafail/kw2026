@@ -5,7 +5,10 @@ var _client_skill_cd_e_remaining := 0.0
 var _client_skill_cd_q_max := 0.0
 var _client_skill_cd_e_max := 0.0
 
+const RPC_ROOT_NODE_NAME := "Main3"
+
 func _ready() -> void:
+	_ensure_rpc_root_node_name()
 	randomize()
 	_ensure_input_actions()
 	_init_services()
@@ -43,19 +46,19 @@ func _ready() -> void:
 		has_resumable_peer = multiplayer.is_server() or peer.get_connection_status() != MultiplayerPeer.CONNECTION_DISCONNECTED
 	var is_lobby_scene := scene_file_path == _lobby_scene_path()
 
-	if has_resumable_peer and not is_lobby_scene:
+	if has_resumable_peer:
 		_set_role(Role.SERVER if multiplayer.is_server() else Role.CLIENT)
 		_append_log("Detected active peer after scene load. Session resumed.")
 		if role == Role.CLIENT:
-			_request_spawn_from_server()
+			if is_lobby_scene:
+				_request_lobby_list()
+			else:
+				_request_spawn_from_server()
 		_update_ui_visibility()
 		_update_peer_labels()
 		_update_buttons()
 		_update_ping_label()
 		return
-	elif has_resumable_peer and _uses_lobby_scene_flow() and is_lobby_scene:
-		_append_log("Lobby startup: clearing stale peer and continuing normal connect flow.")
-		session_controller.close_peer()
 	elif peer != null and not (peer is OfflineMultiplayerPeer):
 		# Clear stale/disconnected peer object so normal startup/connect flow can proceed.
 		session_controller.close_peer()
@@ -64,6 +67,30 @@ func _ready() -> void:
 	_append_log("Ready.")
 	_append_log("Boot config: mode=%s host=%s port=%d" % [_role_name(startup_mode), host_input.text, int(port_spin.value)])
 	session_controller.auto_boot_from_environment()
+
+func _ensure_rpc_root_node_name() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var root := tree.get_root()
+	if root == null:
+		return
+	if get_parent() != root:
+		return
+	if name == RPC_ROOT_NODE_NAME:
+		return
+
+	var existing := root.get_node_or_null(RPC_ROOT_NODE_NAME)
+	if existing != null and existing != self:
+		print("[RPC ROOT] Cannot rename %s -> %s; /root already has %s at %s" % [name, RPC_ROOT_NODE_NAME, existing.name, str(existing.get_path())])
+		return
+
+	var before := name
+	name = RPC_ROOT_NODE_NAME
+	var child_names: Array[String] = []
+	for child in root.get_children():
+		child_names.append(str(child.name))
+	print("[RPC ROOT] Renamed scene root %s -> %s (self_path=%s root_children=%s)" % [before, name, str(get_path()), str(child_names)])
 
 func _physics_process(delta: float) -> void:
 	session_controller.client_connect_watchdog_tick(delta)
@@ -163,7 +190,14 @@ func _try_reload() -> void:
 
 func _handle_escape_pressed() -> void:
 	if _uses_lobby_scene_flow():
-		get_tree().quit()
+		var is_lobby_scene := scene_file_path == _lobby_scene_path()
+		if is_lobby_scene:
+			if has_method("_toggle_escape_menu"):
+				call("_toggle_escape_menu")
+			else:
+				get_tree().quit()
+		else:
+			_begin_escape_return_to_lobby_menu()
 		return
 	_begin_escape_return_to_lobby_menu()
 

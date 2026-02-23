@@ -93,8 +93,7 @@ const CHARACTERS := {
 # ============================================================================
 
 const MAP_ID_CLASSIC := "classic"
-const MAP_ID_CYBER := "cyber"
-const MAP_ID_TEST := "test"
+const MAP_ID_CYBERNEW := "cybernew"
 
 const MAPS := {
 	MAP_ID_CLASSIC: {
@@ -103,17 +102,11 @@ const MAPS := {
 		"max_players": 2,
 		"description": "Original warriors arena"
 	},
-	MAP_ID_CYBER: {
-		"name": "Cyber",
-		"scene_path": "res://scenes/main_cyber.tscn",
+	MAP_ID_CYBERNEW: {
+		"name": "CyberNew",
+		"scene_path": "res://scenes/cybernew.tscn",
 		"max_players": 2,
-		"description": "Futuristic variant"
-	},
-	MAP_ID_TEST: {
-		"name": "Test",
-		"scene_path": "res://scenes/main_test.tscn",
-		"max_players": 2,
-		"description": "Development map"
+		"description": "CyberNew"
 	}
 }
 
