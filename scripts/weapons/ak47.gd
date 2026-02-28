@@ -59,7 +59,7 @@ func clamp_aim_world(player_position: Vector2, desired_aim_world: Vector2) -> Ve
 	return desired_aim_world
 
 func visual_advance_ms(last_ping_ms: int, lag_comp_ms: int, owner_is_local: bool) -> int:
-	var advance_ms := clampi(last_ping_ms / 2, 0, CLIENT_VISUAL_ADVANCE_MAX_MS)
+	var advance_ms := clampi(last_ping_ms >> 1, 0, CLIENT_VISUAL_ADVANCE_MAX_MS)
 	if owner_is_local:
 		advance_ms = clampi(advance_ms + lag_comp_ms, 0, CLIENT_VISUAL_ADVANCE_MAX_MS)
 	return advance_ms
@@ -82,7 +82,7 @@ func build_server_shot(
 		trail_origin = player.global_position
 
 	var reported_rtt_ms := int(input_state.get("reported_rtt_ms", 0))
-	var lag_comp_ms := int(clampi(reported_rtt_ms / 2, 0, max_reported_rtt_ms / 2))
+	var lag_comp_ms := clampi(reported_rtt_ms >> 1, 0, max_reported_rtt_ms >> 1)
 
 	return {
 		"projectile_id": next_projectile_id,

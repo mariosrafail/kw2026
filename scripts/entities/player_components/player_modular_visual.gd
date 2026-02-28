@@ -101,12 +101,12 @@ func _region_from_index(texture: Texture2D, index_1_based: int, frame_size: Vect
 	if frame_width <= 0 or frame_height <= 0 or texture_width <= 0 or texture_height <= 0:
 		return Rect2(0, 0, frame_width, frame_height)
 
-	var columns := maxi(1, texture_width / frame_width)
-	var rows := maxi(1, texture_height / frame_height)
+	var columns := maxi(1, int(texture_width / float(frame_width)))
+	var rows := maxi(1, int(texture_height / float(frame_height)))
 	var max_frames := maxi(1, columns * rows)
 	var frame_index := clampi(index_1_based - 1, 0, max_frames - 1)
 	var column := frame_index % columns
-	var row := frame_index / columns
+	var row := int(frame_index / float(columns))
 	return Rect2(column * frame_width, row * frame_height, frame_width, frame_height)
 
 func _offset_region(region: Rect2, offset: Vector2i) -> Rect2:

@@ -252,7 +252,7 @@ def _normalize_character_id(raw: str) -> str:
     return (raw or "").strip().lower()
 
 
-def _skin_cost_clk(character_id: str, skin_index: int) -> int:
+def _skin_cost_coins(character_id: str, skin_index: int) -> int:
     # "Classic" (index 1) is always free/unlocked.
     if skin_index <= 1:
         return 0
@@ -399,8 +399,8 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
     if skin_index <= 0:
         raise HTTPException(status_code=400, detail="invalid skin_index")
 
-    cost_clk = _skin_cost_clk(character_id, skin_index)
-    if cost_clk <= 0:
+    cost_coins = _skin_cost_coins(character_id, skin_index)
+    if cost_coins <= 0:
         coins, clk = _wallet_for_account(account_uuid)
         owned = _owned_skins_for_account(account_uuid)
         return ProfileResponse(username=username, coins=coins, clk=clk, owned_skins=owned)
@@ -441,12 +441,12 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
                 )
                 conn.commit()
             else:
-                if clk < cost_clk:
+                if coins < cost_coins:
                     conn.rollback()
-                    raise HTTPException(status_code=402, detail="not enough CLK")
+                    raise HTTPException(status_code=402, detail="not enough coins")
                 cur.execute(
-                    "update wallets set clk = clk - %s, updated_at = now() where account_id = %s",
-                    (cost_clk, account_uuid),
+                    "update wallets set coins = coins - %s, updated_at = now() where account_id = %s",
+                    (cost_coins, account_uuid),
                 )
                 if cur.rowcount != 1:
                     conn.rollback()
@@ -464,16 +464,16 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
                     coins2_tx = int(row2[0])
                     clk2_tx = int(row2[1])
                 else:
-                    coins2_tx = coins
-                    clk2_tx = clk - cost_clk
+                    coins2_tx = coins - cost_coins
+                    clk2_tx = clk
                 log.info(
-                    "purchase_skin ok: user=%s skin=%s/%d cost_clk=%d clk_before=%d clk_after=%d",
+                    "purchase_skin ok: user=%s skin=%s/%d cost_coins=%d coins_before=%d coins_after=%d",
                     username,
                     character_id,
                     skin_index,
-                    cost_clk,
-                    clk,
-                    clk2_tx,
+                    cost_coins,
+                    coins,
+                    coins2_tx,
                 )
                 conn.commit()
 

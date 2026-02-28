@@ -1,5 +1,7 @@
 extends "res://scripts/app/runtime_rpc_logic.gd"
 
+const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
+
 var _client_skill_cd_q_remaining := 0.0
 var _client_skill_cd_e_remaining := 0.0
 var _client_skill_cd_q_max := 0.0
@@ -9,6 +11,7 @@ const RPC_ROOT_NODE_NAME := "Main3"
 
 func _ready() -> void:
 	_ensure_rpc_root_node_name()
+	_ensure_cursor_manager()
 	randomize()
 	_ensure_input_actions()
 	_init_services()
@@ -67,6 +70,19 @@ func _ready() -> void:
 	_append_log("Ready.")
 	_append_log("Boot config: mode=%s host=%s port=%d" % [_role_name(startup_mode), host_input.text, int(port_spin.value)])
 	session_controller.auto_boot_from_environment()
+
+func _ensure_cursor_manager() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var root := tree.get_root()
+	if root == null:
+		return
+	if root.get_node_or_null("CursorManager") != null:
+		return
+	var cm := CURSOR_MANAGER_SCRIPT.new()
+	cm.name = "CursorManager"
+	root.call_deferred("add_child", cm)
 
 func _ensure_rpc_root_node_name() -> void:
 	var tree := get_tree()

@@ -18,6 +18,13 @@ var _auth_pending_action := ""
 var _auth_logout_token := ""
 var _auth_profile := "default"
 
+@export var dev_auto_login_on_autostart := true
+@export var dev_auto_login_password := "test"
+@export var dev_auto_login_max_attempts := 3
+
+var _dev_auto_login_active := false
+var _dev_auto_login_attempts := 0
+
 var wallet_coins := 0
 var wallet_clk := 0
 var owned_skins_by_character: Dictionary = {}
@@ -103,11 +110,45 @@ func _setup_auth_flow() -> void:
 	_append_log("[AUTH] profile=%s session file: %s (exists=%s)" % [_auth_profile, ProjectSettings.globalize_path(session_path), str(FileAccess.file_exists(session_path))])
 	_load_auth_session()
 	if auth_token.strip_edges().is_empty():
+		if _try_dev_auto_login_if_needed():
+			return
 		_show_auth_panel(true)
 		_set_auth_status("Auth: login or register")
 		_set_auth_buttons_enabled(true)
 		return
 	_auth_me()
+
+func _try_dev_auto_login_if_needed() -> bool:
+	if not dev_auto_login_on_autostart:
+		return false
+	if session_controller == null or not session_controller.is_auto_start_enabled():
+		return false
+	if auth_request == null or auth_username_input == null or auth_password_input == null:
+		return false
+	if _auth_inflight:
+		return false
+	if _dev_auto_login_attempts >= maxi(1, dev_auto_login_max_attempts):
+		return false
+
+	var startup_mode := session_controller.get_startup_mode()
+	if startup_mode == Role.NONE:
+		return false
+
+	_dev_auto_login_active = true
+	_dev_auto_login_attempts += 1
+	var suffix := "%06d" % int(randi() % 1000000)
+	var username := ("auto_%s" % suffix).strip_edges()
+	var password := str(dev_auto_login_password)
+	if password.length() < 4:
+		password = "test"
+
+	auth_username_input.text = username
+	auth_password_input.text = password
+	_show_auth_panel(true)
+	_set_auth_status("Auth: auto-registering %s..." % username)
+	_set_auth_buttons_enabled(false)
+	call_deferred("_auth_submit", "register")
+	return true
 
 func _show_auth_panel(show: bool) -> void:
 	if auth_panel != null:
@@ -368,6 +409,13 @@ func _on_auth_request_completed(_result: int, response_code: int, _headers: Pack
 		return
 
 	if response_code < 200 or response_code >= 300:
+		if _dev_auto_login_active and action == "register" and response_code == 409 and _dev_auto_login_attempts < maxi(1, dev_auto_login_max_attempts):
+			_append_log("[AUTH] Auto-register conflict, retrying with a different username.")
+			_dev_auto_login_active = false
+			_try_dev_auto_login_if_needed()
+			return
+		if _dev_auto_login_active:
+			_dev_auto_login_active = false
 		if action == "profile":
 			# Don't block login if the server is on an older version without /profile yet.
 			_set_wallet(9999, 9999)
@@ -388,6 +436,7 @@ func _on_auth_request_completed(_result: int, response_code: int, _headers: Pack
 			return
 		_show_auth_panel(true)
 		_set_auth_status("Auth failed: %s" % detail)
+		_set_auth_buttons_enabled(true)
 		return
 
 	if action == "profile":
@@ -414,10 +463,12 @@ func _on_auth_request_completed(_result: int, response_code: int, _headers: Pack
 			_show_auth_panel(true)
 			_set_auth_status("Auth failed: invalid session")
 			_clear_auth_session()
+			_set_auth_buttons_enabled(true)
 			return
 		auth_username = username
 		_show_auth_panel(false)
 		_set_auth_status("")
+		_set_auth_buttons_enabled(true)
 		_after_auth_success()
 		return
 
@@ -433,6 +484,8 @@ func _on_auth_request_completed(_result: int, response_code: int, _headers: Pack
 	_save_auth_session()
 	_show_auth_panel(false)
 	_set_auth_status("")
+	_set_auth_buttons_enabled(true)
+	_dev_auto_login_active = false
 	_after_auth_success()
 
 func _after_auth_success() -> void:
@@ -506,8 +559,8 @@ func _is_skin_owned(character_id: String, skin_index: int) -> bool:
 	var arr := owned_skins_by_character.get(normalized, PackedInt32Array()) as PackedInt32Array
 	return arr.has(skin_index)
 
-func _skin_cost_clk(character_id: String, skin_index: int) -> int:
-	# Must match auth API pricing (tools/auth_api/app.py::_skin_cost_clk).
+func _skin_cost_coins(character_id: String, skin_index: int) -> int:
+	# Must match auth API pricing (tools/auth_api/app.py::_skin_cost_coins).
 	var normalized := _normalize_character_id(character_id)
 	if skin_index <= 1:
 		return 0
@@ -529,8 +582,8 @@ func _prompt_purchase_skin(character_id: String, skin_index: int, skin_label: St
 	cleaned = cleaned.strip_edges()
 	_purchase_pending_skin_name = cleaned
 	if purchase_text != null:
-		var cost := _skin_cost_clk(character_id, skin_index)
-		purchase_text.text = "Skin: %s\nCost: %d CLK" % [_purchase_pending_skin_name, cost]
+		var cost := _skin_cost_coins(character_id, skin_index)
+		purchase_text.text = "Skin: %s\nCost: %d Coins" % [_purchase_pending_skin_name, cost]
 	if purchase_buy_button != null:
 		purchase_buy_button.disabled = false
 	_show_purchase_menu(true)
@@ -656,8 +709,8 @@ func _setup_skin_picker() -> void:
 			if _is_skin_owned(CHARACTER_ID_OUTRAGE, idx):
 				lobby_skin_option.add_item(base)
 			else:
-				var cost := _skin_cost_clk(CHARACTER_ID_OUTRAGE, idx)
-				lobby_skin_option.add_item("%s (%d CLK) [LOCKED]" % [base, cost])
+				var cost := _skin_cost_coins(CHARACTER_ID_OUTRAGE, idx)
+				lobby_skin_option.add_item("%s (%d Coins) [LOCKED]" % [base, cost])
 		lobby_skin_option.set_item_metadata(i, idx)
 
 	var target := 1
@@ -927,9 +980,7 @@ func _apply_pixel_dropdown_popup(option: OptionButton) -> void:
 	popup.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
 	popup.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
 	popup.add_theme_color_override("font_disabled_color", Color(0.62, 0.65, 0.7, 0.9))
-	popup.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
-
-	popup.add_theme_constant_override("outline_size", 2)
+	popup.add_theme_constant_override("outline_size", 0)
 	popup.add_theme_constant_override("v_separation", 2)
 	popup.add_theme_constant_override("h_separation", 10)
 	popup.add_theme_constant_override("item_start_padding", 10)

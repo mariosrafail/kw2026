@@ -41,7 +41,7 @@ func clamp_aim_world(_player_position: Vector2, desired_aim_world: Vector2) -> V
 	return desired_aim_world
 
 func visual_advance_ms(last_ping_ms: int, lag_comp_ms: int, owner_is_local: bool) -> int:
-	var advance_ms := maxi(0, last_ping_ms / 2)
+	var advance_ms := maxi(0, last_ping_ms >> 1)
 	if owner_is_local:
 		advance_ms += maxi(0, lag_comp_ms)
 	return advance_ms
@@ -54,7 +54,7 @@ func build_server_shot(
 	_world_2d: World2D
 ) -> Dictionary:
 	var reported_rtt_ms := 0
-	var lag_comp_ms := int(clampi(reported_rtt_ms / 2, 0, max_reported_rtt_ms / 2))
+	var lag_comp_ms := clampi(reported_rtt_ms >> 1, 0, max_reported_rtt_ms >> 1)
 	return {
 		"projectile_id": next_projectile_id,
 		"spawn_position": player.global_position,

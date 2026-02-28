@@ -1,0 +1,767 @@
+[gd_scene format=3 uid="uid://wv12esw6y7ew"]
+
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="1_font"]
+[ext_resource type="Texture2D" uid="uid://dhiu1fi77ffb3" path="res://assets/textures/textLogo.png" id="2_logo"]
+[ext_resource type="Texture2D" uid="uid://do6fg4jb02puj" path="res://assets/textures/bullet.png" id="3_bullet"]
+[ext_resource type="PackedScene" uid="uid://dmx2f1xqqr411" path="res://scenes/entities/player.tscn" id="4_player"]
+[ext_resource type="Texture2D" uid="uid://bu5qjamiys787" path="res://assets/warriors/guns.png" id="5_guns"]
+[ext_resource type="Script" uid="uid://ys3w7q1ukqid" path="res://scripts/ui/test_menu.gd" id="6_script"]
+
+[sub_resource type="Theme" id="Theme_kw"]
+default_font = ExtResource("1_font")
+default_font_size = 18
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
+content_margin_left = 12.0
+content_margin_top = 7.0
+content_margin_right = 12.0
+content_margin_bottom = 7.0
+bg_color = Color(0.22, 0.19, 0.3, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 1)
+shadow_color = Color(0, 0, 0, 0.35)
+shadow_size = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
+content_margin_left = 12.0
+content_margin_top = 7.0
+content_margin_right = 12.0
+content_margin_bottom = 7.0
+bg_color = Color(0.14, 0.12, 0.2, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 1)
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
+content_margin_left = 12.0
+content_margin_top = 7.0
+content_margin_right = 12.0
+content_margin_bottom = 7.0
+bg_color = Color(0.28, 0.24, 0.38, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.9, 0.74, 0.27, 1)
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_focus"]
+bg_color = Color(0.25, 0.6, 0.85, 0.35)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.9, 0.74, 0.27, 0.9)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_ak_icon"]
+atlas = ExtResource("5_guns")
+region = Rect2(31, 12, 50, 12)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 14.0
+content_margin_top = 12.0
+content_margin_right = 14.0
+content_margin_bottom = 12.0
+bg_color = Color(0.12, 0.11, 0.16, 0.98)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.06, 0.05, 0.08, 1)
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 6
+
+[node name="TestMenu" type="Control" unique_id=800199876]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_kw")
+script = ExtResource("6_script")
+
+[node name="Background" type="ColorRect" parent="." unique_id=874838532]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.06666667, 0.13333334, 0.50980395, 1)
+
+[node name="BgNoise" type="TextureRect" parent="." unique_id=36156868]
+modulate = Color(1, 1, 1, 0.06)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("3_bullet")
+stretch_mode = 1
+
+[node name="WalletPanel" type="Control" parent="." unique_id=1498568740]
+z_index = 200
+layout_mode = 1
+anchors_preset = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 182.0
+offset_bottom = 56.0
+mouse_filter = 1
+
+[node name="Margin" type="MarginContainer" parent="WalletPanel" unique_id=387552268]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 0
+
+[node name="WalletBox" type="VBoxContainer" parent="WalletPanel/Margin" unique_id=773927424]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="CoinsLabel" type="Label" parent="WalletPanel/Margin/WalletBox" unique_id=1567004990]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 13
+text = "Coins: 0"
+
+[node name="ClkLabel" type="Label" parent="WalletPanel/Margin/WalletBox" unique_id=2039175208]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 13
+text = "CLK: 0"
+
+[node name="WalletClick" type="Button" parent="WalletPanel" unique_id=577705213]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+flat = true
+
+[node name="Screens" type="Control" parent="." unique_id=1383407726]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ScreenMain" type="Control" parent="Screens" unique_id=1313512517]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TextLogo" type="Sprite2D" parent="Screens/ScreenMain" unique_id=335711952]
+position = Vector2(325, 179.00002)
+scale = Vector2(0.33564815, 0.33564815)
+texture = ExtResource("2_logo")
+
+[node name="PlayButton" type="Button" parent="Screens/ScreenMain" unique_id=727405518]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -78.0
+offset_top = -16.0
+offset_right = 78.0
+offset_bottom = 24.0
+grow_horizontal = 2
+grow_vertical = 2
+pivot_offset = Vector2(78, 20)
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 24
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "PLAY"
+
+[node name="OptionsButton" type="Button" parent="Screens/ScreenMain" unique_id=1939518164]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -46.0
+offset_right = 132.0
+offset_bottom = -12.0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "OPTIONS"
+
+[node name="ExitButton" type="Button" parent="Screens/ScreenMain" unique_id=1065706683]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -132.0
+offset_top = -46.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "EXIT"
+
+[node name="WarriorArea" type="Control" parent="Screens/ScreenMain" unique_id=651435392]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -290.0
+offset_top = -78.0
+offset_right = -155.0
+offset_bottom = 112.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="WarriorButton" type="Button" parent="Screens/ScreenMain/WarriorArea" unique_id=1368013766]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_focus")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_focus")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_focus")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+
+[node name="MainWarriorPreview" parent="Screens/ScreenMain/WarriorArea" unique_id=2114441792 instance=ExtResource("4_player")]
+unique_name_in_owner = true
+position = Vector2(68, 118)
+scale = Vector2(2.2, 2.2)
+
+[node name="WarriorCaption" type="Label" parent="Screens/ScreenMain/WarriorArea" unique_id=1574571443]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -58.0
+offset_top = -22.0
+offset_right = 58.0
+offset_bottom = -6.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 12
+text = "WARRIORS"
+horizontal_alignment = 1
+
+[node name="WeaponArea" type="Control" parent="Screens/ScreenMain" unique_id=1036722893]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = 155.0
+offset_top = -76.0
+offset_right = 290.0
+offset_bottom = 112.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="WeaponButton" type="Button" parent="Screens/ScreenMain/WeaponArea" unique_id=902510389]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_focus")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_focus")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_focus")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+
+[node name="MainWeaponIconSlot" type="Control" parent="Screens/ScreenMain/WeaponArea" unique_id=527678763]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -58.0
+offset_top = -50.0
+offset_right = 58.0
+offset_bottom = 50.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="MainWeaponIcon" type="Sprite2D" parent="Screens/ScreenMain/WeaponArea/MainWeaponIconSlot" unique_id=877657011]
+unique_name_in_owner = true
+texture_filter = 1
+position = Vector2(58, 50)
+texture = SubResource("AtlasTexture_ak_icon")
+
+[node name="WeaponCaption" type="Label" parent="Screens/ScreenMain/WeaponArea" unique_id=1588315105]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -58.0
+offset_top = -22.0
+offset_right = 58.0
+offset_bottom = -6.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 12
+text = "GUNS"
+horizontal_alignment = 1
+
+[node name="ScreenOptions" type="Control" parent="Screens" unique_id=575967109]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="OptionsPanel" type="PanelContainer" parent="Screens/ScreenOptions" unique_id=444815398]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Screens/ScreenOptions/OptionsPanel" unique_id=1881782010]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="Screens/ScreenOptions/OptionsPanel/Margin" unique_id=1163091223]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1990738011]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 20
+text = "OPTIONS"
+horizontal_alignment = 1
+
+[node name="MusicRow" type="HBoxContainer" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1512535417]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="MusicLabel" type="Label" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox/MusicRow" unique_id=156899398]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+text = "Music"
+
+[node name="MusicSlider" type="HSlider" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox/MusicRow" unique_id=1436217738]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 18)
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.01
+value = 0.8
+
+[node name="SfxRow" type="HBoxContainer" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=280424742]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SfxLabel" type="Label" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox/SfxRow" unique_id=31314412]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+text = "SFX"
+
+[node name="SfxSlider" type="HSlider" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox/SfxRow" unique_id=26115757]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 18)
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.01
+value = 0.85
+
+[node name="OptionsBackButton" type="Button" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1927757150]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "BACK"
+
+[node name="ScreenWarriors" type="Control" parent="Screens" unique_id=1631116497]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="WarriorsPanel" type="PanelContainer" parent="Screens/ScreenWarriors" unique_id=177141693]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Screens/ScreenWarriors/WarriorsPanel" unique_id=1711035304]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="OuterVBox" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin" unique_id=2052628228]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="TopRow" type="HBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox" unique_id=337851289]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="WarriorsBackButton" type="Button" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/TopRow" unique_id=1380183365]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "BACK"
+
+[node name="WarriorsTitle" type="Label" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/TopRow" unique_id=754192360]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 18
+text = "WARRIORS"
+horizontal_alignment = 1
+
+[node name="BodyRow" type="HBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox" unique_id=1735431691]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 14
+
+[node name="PreviewCol" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow" unique_id=973612042]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="WarriorNameLabel" type="Label" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=1743055141]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+text = "Skin"
+horizontal_alignment = 1
+
+[node name="WarriorShopPreview" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=126348019 instance=ExtResource("4_player")]
+unique_name_in_owner = true
+position = Vector2(95, 120)
+scale = Vector2(2.2, 2.2)
+
+[node name="WarriorActionButton" type="Button" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=679315921]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "BUY"
+
+[node name="ListCol" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow" unique_id=2122181160]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="WarriorScroll" type="ScrollContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol" unique_id=1931113194]
+custom_minimum_size = Vector2(0, 190)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="WarriorGrid" type="GridContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorScroll" unique_id=1221873478]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 2
+
+[node name="ScreenWeapons" type="Control" parent="Screens" unique_id=1598157277]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="WeaponsPanel" type="PanelContainer" parent="Screens/ScreenWeapons" unique_id=1623826838]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Screens/ScreenWeapons/WeaponsPanel" unique_id=2013966359]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="OuterVBox" type="VBoxContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin" unique_id=1110120194]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="TopRow" type="HBoxContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox" unique_id=104581143]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="WeaponsBackButton" type="Button" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/TopRow" unique_id=1708706706]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "BACK"
+
+[node name="WeaponsTitle" type="Label" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/TopRow" unique_id=1746437990]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 18
+text = "GUNS"
+horizontal_alignment = 1
+
+[node name="BodyRow" type="HBoxContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox" unique_id=462451045]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 14
+
+[node name="PreviewCol" type="VBoxContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow" unique_id=1638933350]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="WeaponNameLabel" type="Label" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=1189782607]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+text = "Gun"
+horizontal_alignment = 1
+
+[node name="WeaponShopPreviewSlot" type="Control" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=2084490461]
+custom_minimum_size = Vector2(180, 110)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="WeaponShopPreview" type="Sprite2D" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol/WeaponShopPreviewSlot" unique_id=66382874]
+unique_name_in_owner = true
+texture_filter = 1
+position = Vector2(90, 68)
+texture = SubResource("AtlasTexture_ak_icon")
+
+[node name="WeaponActionButton" type="Button" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=150180992]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "BUY"
+
+[node name="ListCol" type="VBoxContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow" unique_id=1972903964]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="WeaponScroll" type="ScrollContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/ListCol" unique_id=560228089]
+custom_minimum_size = Vector2(0, 190)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="WeaponGrid" type="GridContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/ListCol/WeaponScroll" unique_id=307548040]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 2
+
+[node name="Intro" type="Control" parent="." unique_id=1964588908]
+unique_name_in_owner = true
+z_index = 1000
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="IntroFade" type="ColorRect" parent="Intro" unique_id=496223682]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0)
+
+[node name="IntroPlate" type="PanelContainer" parent="Intro" unique_id=1423866864]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -34.0
+offset_right = 230.0
+offset_bottom = 34.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="IntroLabel" type="Label" parent="Intro" unique_id=2066146377]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -28.0
+offset_right = 230.0
+offset_bottom = 28.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 26
+text = "KEYBOARD WARRIORS"
+horizontal_alignment = 1
+vertical_alignment = 1
