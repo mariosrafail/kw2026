@@ -29,9 +29,10 @@ Server listens on `http://127.0.0.1:8090` by default.
 ## Endpoints
 
 - `GET /health`
-- `POST /register` `{ "username": "...", "password": "..." }`
-- `POST /login` `{ "username": "...", "password": "...", "force": false }`
+- `POST /register` `{ "email": "...", "username": "...", "password": "..." }`
+- `POST /login` `{ "username": "...", "password": "...", "force": false }` or `{ "email": "...", "password": "...", "force": false }`
 - `GET /me` with header `Authorization: Bearer <token>`
 - `POST /logout` with header `Authorization: Bearer <token>` (deletes the current session token)
 - `GET /profile` with header `Authorization: Bearer <token>` (returns wallet + owned skins)
 - `POST /purchase/skin` `{ "character_id": "outrage", "skin_index": 12 }` with header `Authorization: Bearer <token>`
+- `POST /wallet/update` `{ "coins": 9800, "clk": 9999 }` with header `Authorization: Bearer <token>` (updates wallet and returns fresh profile)

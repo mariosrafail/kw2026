@@ -10,6 +10,9 @@ extends CanvasLayer
 @export var hover_rotation_deg := 3.0
 @export var press_rotation_deg := -7.0
 @export var press_square_scale := 0.82
+@export var motion_push_px := 3.5
+@export var hover_wiggle_px := 0.9
+@export var click_kick_px := 2.0
 @export var hover_alpha := 1.0
 @export var idle_alpha := 0.92
 @export var move_lerp := 0.55
@@ -29,6 +32,10 @@ var _sq_scale_mult := 1.0
 var _base_sq_scale := Vector2.ONE * 4.0
 var _last_mouse := Vector2.ZERO
 var _move_spread := 0.0
+var _motion_push := Vector2.ZERO
+var _hover_wiggle_mult := 0.0
+var _click_kick_mult := 0.0
+var _button_click_boost_mult := 0.0
 var _pixel_tex: Texture2D
 
 func _ready() -> void:
@@ -90,8 +97,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			var hovered := get_viewport().gui_get_hovered_control()
+			if hovered is BaseButton:
+				_trigger_button_click_fx()
 			_press_until_msec = Time.get_ticks_msec() + 120
 			_set_state("press")
+
+func _trigger_button_click_fx() -> void:
+	var tw := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "_button_click_boost_mult", 1.0, tween_sec * 0.9)
+	tw.tween_property(self, "_button_click_boost_mult", 0.0, tween_sec * 2.0)
 
 func _process(_delta: float) -> void:
 	if _root == null:
@@ -101,9 +116,14 @@ func _process(_delta: float) -> void:
 	_root.position = _root.position.lerp(mouse, clampf(move_lerp, 0.0, 1.0))
 
 	var dt := maxf(0.0001, float(_delta))
-	var speed := (mouse - _last_mouse).length() / dt
+	var mouse_delta := mouse - _last_mouse
+	var speed := mouse_delta.length() / dt
 	_last_mouse = mouse
 	_move_spread = clampf((speed / 2200.0) * clampf(move_spread_add, 0.0, 24.0), 0.0, clampf(move_spread_add, 0.0, 24.0))
+	var push_target := Vector2.ZERO
+	if mouse_delta.length_squared() > 0.0001:
+		push_target = mouse_delta.normalized() * clampf((speed / 1800.0) * clampf(motion_push_px, 0.0, 12.0), 0.0, clampf(motion_push_px, 0.0, 12.0))
+	_motion_push = _motion_push.lerp(push_target, 0.32)
 	_apply_crosshair_layout()
 
 	var now := Time.get_ticks_msec()
@@ -134,10 +154,48 @@ func _apply_crosshair_layout() -> void:
 		if spr != null:
 			spr.scale = _base_sq_scale * ssm
 
-	_sq_up.position = Vector2(0, -spread)
-	_sq_down.position = Vector2(0, spread)
-	_sq_left.position = Vector2(-spread, 0)
-	_sq_right.position = Vector2(spread, 0)
+	var up_pos := Vector2(0, -spread)
+	var down_pos := Vector2(0, spread)
+	var left_pos := Vector2(-spread, 0)
+	var right_pos := Vector2(spread, 0)
+
+	var p := _motion_push
+	if p.length_squared() > 0.0001:
+		var pos_x := maxf(0.0, p.x)
+		var neg_x := maxf(0.0, -p.x)
+		var pos_y := maxf(0.0, p.y)
+		var neg_y := maxf(0.0, -p.y)
+		right_pos.x += pos_x
+		left_pos.x -= neg_x
+		down_pos.y += pos_y
+		up_pos.y -= neg_y
+
+	if _hover_wiggle_mult > 0.0:
+		var t := Time.get_ticks_msec() * 0.001
+		var w := clampf(hover_wiggle_px, 0.0, 6.0) * _hover_wiggle_mult
+		up_pos.y += -cos(t * 9.0) * w
+		down_pos.y += cos(t * 8.6 + 0.7) * w
+		left_pos.x += -cos(t * 9.3 + 1.0) * w
+		right_pos.x += cos(t * 8.9 + 0.3) * w
+
+	if _click_kick_mult > 0.0:
+		var kick := clampf(click_kick_px, 0.0, 12.0) * _click_kick_mult
+		up_pos += Vector2(0, -kick)
+		down_pos += Vector2(0, kick)
+		left_pos += Vector2(-kick, 0)
+		right_pos += Vector2(kick, 0)
+
+	if _button_click_boost_mult > 0.0:
+		var btn_kick := clampf(click_kick_px * 1.7, 0.0, 18.0) * _button_click_boost_mult
+		up_pos += Vector2(0, -btn_kick)
+		down_pos += Vector2(0, btn_kick)
+		left_pos += Vector2(-btn_kick, 0)
+		right_pos += Vector2(btn_kick, 0)
+
+	_sq_up.position = up_pos
+	_sq_down.position = down_pos
+	_sq_left.position = left_pos
+	_sq_right.position = right_pos
 
 func _set_state(next: String) -> void:
 	if next == _state:
@@ -151,27 +209,30 @@ func _set_state(next: String) -> void:
 	var target_a := idle_alpha
 	var target_spread := 1.0
 	var target_root_scale := 1.0
-	var target_root_rot := 0.0
 	var target_sq_scale := 1.0
+	var target_hover_wiggle := 0.0
+	var target_click_kick := 0.0
 	if _state == "hover":
 		target_a = hover_alpha
 		target_root_scale = clampf(hover_scale, 0.5, 2.0)
-		target_root_rot = deg_to_rad(clampf(hover_rotation_deg, -45.0, 45.0))
+		target_hover_wiggle = 1.0
 	elif _state == "press":
 		target_a = 1.0
 		target_spread = clampf(press_spread_mult, 0.25, 1.2)
 		target_root_scale = clampf(press_scale, 0.5, 2.0)
-		target_root_rot = deg_to_rad(clampf(press_rotation_deg, -90.0, 90.0))
 		target_sq_scale = clampf(press_square_scale, 0.25, 2.0)
+		target_click_kick = 1.0
 
 	_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_tween.parallel().tween_property(_root, "modulate:a", target_a, tween_sec)
 	_tween.parallel().tween_property(self, "_spread_mult", target_spread, tween_sec)
 	_tween.parallel().tween_property(self, "_root_scale_mult", target_root_scale, tween_sec)
-	_tween.parallel().tween_property(_root, "rotation", target_root_rot, tween_sec)
+	_tween.parallel().tween_property(_root, "rotation", 0.0, tween_sec)
 	_tween.parallel().tween_property(self, "_sq_scale_mult", target_sq_scale, tween_sec)
+	_tween.parallel().tween_property(self, "_hover_wiggle_mult", target_hover_wiggle, tween_sec)
+	_tween.parallel().tween_property(self, "_click_kick_mult", target_click_kick, tween_sec)
 	if _state == "press":
 		_tween.tween_property(self, "_spread_mult", 1.0, tween_sec * 1.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		_tween.parallel().tween_property(self, "_root_scale_mult", 1.0, tween_sec * 1.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		_tween.parallel().tween_property(_root, "rotation", 0.0, tween_sec * 1.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		_tween.parallel().tween_property(self, "_sq_scale_mult", 1.0, tween_sec * 1.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_tween.parallel().tween_property(self, "_click_kick_mult", 0.0, tween_sec * 1.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

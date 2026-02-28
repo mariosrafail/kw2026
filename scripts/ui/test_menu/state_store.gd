@@ -43,6 +43,7 @@ func load_state_or_defaults(path: String, defaults: Dictionary, required_weapon_
 	if str(state["selected_weapon_id"]).is_empty() and not required_weapon_id.is_empty():
 		state["selected_weapon_id"] = required_weapon_id
 	state["selected_weapon_skin"] = maxi(0, int(d.get("selected_weapon_skin", int(state.get("selected_weapon_skin", 0)))))
+	state["username"] = str(d.get("username", str(state.get("username", "Player")))).strip_edges()
 
 	var skins_dict: Variant = d.get("owned_weapon_skins_by_weapon", null)
 	if skins_dict is Dictionary:

@@ -17,6 +17,7 @@ var _auth_inflight := false
 var _auth_pending_action := ""
 var _auth_logout_token := ""
 var _auth_profile := "default"
+@export var auth_require_login_on_startup := true
 
 @export var dev_auto_login_on_autostart := true
 @export var dev_auto_login_password := "test"
@@ -104,19 +105,39 @@ func _setup_ui_defaults() -> void:
 func _setup_auth_flow() -> void:
 	if auth_panel == null:
 		return
+	_configure_auth_ui_for_login_only()
 	_resolve_auth_profile()
 
 	var session_path := _auth_session_path()
 	_append_log("[AUTH] profile=%s session file: %s (exists=%s)" % [_auth_profile, ProjectSettings.globalize_path(session_path), str(FileAccess.file_exists(session_path))])
 	_load_auth_session()
+	if auth_username_input != null and auth_username_input.text.strip_edges().is_empty() and not auth_username.strip_edges().is_empty():
+		auth_username_input.text = auth_username
+
+	if auth_require_login_on_startup:
+		if not auth_token.strip_edges().is_empty():
+			_append_log("[AUTH] Startup requires login. Ignoring stored session token.")
+		auth_token = ""
+		_show_auth_panel(true)
+		_set_auth_status("Auth: login required")
+		_set_auth_buttons_enabled(true)
+		return
+
 	if auth_token.strip_edges().is_empty():
 		if _try_dev_auto_login_if_needed():
 			return
 		_show_auth_panel(true)
-		_set_auth_status("Auth: login or register")
+		_set_auth_status("Auth: login required")
 		_set_auth_buttons_enabled(true)
 		return
 	_auth_me()
+
+func _configure_auth_ui_for_login_only() -> void:
+	if auth_register_button != null:
+		auth_register_button.visible = false
+		auth_register_button.disabled = true
+	if auth_login_button != null:
+		auth_login_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 func _try_dev_auto_login_if_needed() -> bool:
 	if not dev_auto_login_on_autostart:
@@ -168,7 +189,7 @@ func _set_auth_buttons_enabled(enabled: bool) -> void:
 	if auth_login_button != null:
 		auth_login_button.disabled = not enabled
 	if auth_register_button != null:
-		auth_register_button.disabled = not enabled
+		auth_register_button.disabled = true
 
 func _on_logout_pressed() -> void:
 	_logout_to_login()
@@ -189,7 +210,7 @@ func _logout_to_login() -> void:
 		if local_peer_id > 0 and lobby_service.has_method("set_peer_display_name"):
 			lobby_service.call("set_peer_display_name", local_peer_id, "")
 	_show_auth_panel(true)
-	_set_auth_status("Auth: login or register")
+	_set_auth_status("Auth: login required")
 	_set_auth_buttons_enabled(true)
 	_update_ui_visibility()
 
@@ -349,7 +370,7 @@ func _on_auth_login_pressed() -> void:
 	_auth_submit("login")
 
 func _on_auth_register_pressed() -> void:
-	_auth_submit("register")
+	_set_auth_status("Auth: register disabled")
 
 func _auth_submit(action: String) -> void:
 	if _auth_inflight:

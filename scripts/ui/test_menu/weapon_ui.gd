@@ -17,6 +17,10 @@ func weapon_display_name(weapon_id: String) -> String:
 		return "UZI"
 	if normalized == DATA.WEAPON_GRENADE:
 		return "GRENADE"
+	if normalized == DATA.WEAPON_AK47:
+		return "AK"
+	if normalized == DATA.WEAPON_SHOTGUN:
+		return "SHOTGUN"
 	return normalized.to_upper()
 
 func weapon_ui_texture(weapon_id: String) -> Texture2D:
@@ -38,27 +42,145 @@ func weapon_ui_texture(weapon_id: String) -> Texture2D:
 	_weapon_ui_texture_cache[normalized] = atlas
 	return atlas
 
-func weapon_icon_effective_size(weapon_id: String) -> Vector2:
-	var tex := weapon_ui_texture(weapon_id)
+func _auto_crop_key(tex: Texture2D) -> String:
+	if tex == null:
+		return ""
+	if tex.resource_path != null and not tex.resource_path.is_empty():
+		return tex.resource_path
+	return str(tex.get_rid().get_id())
+
+func _auto_crop_region_offset(tex: Texture2D) -> Dictionary:
+	if tex == null:
+		return {"region": Rect2(), "offset": Vector2.ZERO}
+	var key := _auto_crop_key(tex)
+	if not key.is_empty() and _weapon_ui_texture_cache.has("_autocrop:%s" % key):
+		return _weapon_ui_texture_cache["_autocrop:%s" % key] as Dictionary
+
+	var img := tex.get_image()
+	if img == null or img.is_empty():
+		return {"region": Rect2(), "offset": Vector2.ZERO}
+
+	var w := img.get_width()
+	var h := img.get_height()
+	var min_x := w
+	var min_y := h
+	var max_x := -1
+	var max_y := -1
+	var sum_a := 0.0
+	var sum_x := 0.0
+	var sum_y := 0.0
+
+	for y in range(h):
+		for x in range(w):
+			var a := float(img.get_pixel(x, y).a)
+			if a <= 0.0:
+				continue
+			min_x = mini(min_x, x)
+			min_y = mini(min_y, y)
+			max_x = maxi(max_x, x)
+			max_y = maxi(max_y, y)
+			sum_a += a
+			sum_x += float(x) * a
+			sum_y += float(y) * a
+
+	if max_x < 0 or sum_a <= 0.0:
+		return {"region": Rect2(), "offset": Vector2.ZERO}
+
+	var region := Rect2(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+	var centroid := Vector2(sum_x / sum_a, sum_y / sum_a)
+	var bbox_center := region.position + region.size * 0.5
+	var offset := bbox_center - centroid
+
+	var out := {"region": region, "offset": offset}
+	if not key.is_empty():
+		_weapon_ui_texture_cache["_autocrop:%s" % key] = out
+	return out
+
+func _skin_entry(weapon_id: String, skin_index: int) -> Dictionary:
+	return weapon_skin_entry(weapon_id, skin_index)
+
+func weapon_ui_offset(weapon_id: String, skin_index: int) -> Vector2:
+	var normalized := weapon_id.strip_edges().to_lower()
+	var entry := _skin_entry(normalized, skin_index)
+	if not entry.is_empty():
+		if entry.has("offset") and entry.get("offset") is Vector2:
+			return entry.get("offset") as Vector2
+		if bool(entry.get("auto_crop", false)):
+			var tex := entry.get("ui_texture", null) as Texture2D
+			var computed := _auto_crop_region_offset(tex)
+			return computed.get("offset", Vector2.ZERO) as Vector2
+	return (DATA.WEAPON_UI_OFFSET_BY_ID.get(normalized, Vector2.ZERO) as Vector2)
+
+func _skin_ui_base_texture(weapon_id: String, skin_index: int) -> Texture2D:
+	var normalized := weapon_id.strip_edges().to_lower()
+	var entry := _skin_entry(normalized, skin_index)
+	if not entry.is_empty() and entry.has("ui_texture"):
+		var t := entry.get("ui_texture", null) as Texture2D
+		if t != null:
+			return t
+	return DATA.WEAPON_UI_TEXTURE_BY_ID.get(normalized, DATA.UZI_UI_TEXTURE) as Texture2D
+
+func _skin_ui_region(weapon_id: String, skin_index: int, base_tex: Texture2D) -> Rect2:
+	var normalized := weapon_id.strip_edges().to_lower()
+	var entry := _skin_entry(normalized, skin_index)
+	if not entry.is_empty():
+		if entry.has("region") and entry.get("region") is Rect2:
+			return entry.get("region") as Rect2
+		if bool(entry.get("auto_crop", false)):
+			return (_auto_crop_region_offset(base_tex).get("region", Rect2()) as Rect2)
+	return (DATA.WEAPON_UI_REGION_BY_ID.get(normalized, Rect2()) as Rect2)
+
+func weapon_ui_texture_for(weapon_id: String, skin_index: int) -> Texture2D:
+	var normalized := weapon_id.strip_edges().to_lower()
+	var key := "%s:%d" % [normalized, maxi(0, skin_index)]
+	if _weapon_ui_texture_cache.has(key):
+		return _weapon_ui_texture_cache[key] as Texture2D
+
+	var base := _skin_ui_base_texture(normalized, skin_index)
+	var region := _skin_ui_region(normalized, skin_index, base)
+	if base == null or region.size == Vector2.ZERO:
+		_weapon_ui_texture_cache[key] = base
+		return base
+
+	var atlas := AtlasTexture.new()
+	atlas.atlas = base
+	atlas.region = region
+	_weapon_ui_texture_cache[key] = atlas
+	return atlas
+
+func weapon_icon_effective_size(weapon_id: String, skin_index: int = 0) -> Vector2:
+	var tex := weapon_ui_texture_for(weapon_id, skin_index)
 	return tex.get_size() if tex != null else Vector2(64, 64)
 
-func weapon_icon_sprite_scale_normalized(weapon_id: String, slot_size: Vector2) -> Vector2:
-	var eff := weapon_icon_effective_size(weapon_id)
+func weapon_icon_sprite_scale_normalized(weapon_id: String, skin_index: int, slot_size: Vector2) -> Vector2:
+	var eff := weapon_icon_effective_size(weapon_id, skin_index)
 	if eff.x <= 0.0 or eff.y <= 0.0:
 		return Vector2.ONE
 	var w := maxf(1.0, float(slot_size.x))
 	var h := maxf(1.0, float(slot_size.y))
-	var s := w / float(eff.x)
 	var max_h := h * clampf(weapon_icon_max_height_ratio, 0.05, 1.0)
+
+	var ref_eff := weapon_icon_effective_size(DATA.WEAPON_UZI, 0)
+	if ref_eff.x <= 0.0 or ref_eff.y <= 0.0:
+		ref_eff = eff
+
+	var ref_scale := minf(w / float(ref_eff.x), max_h / float(ref_eff.y))
+	var ref_area := (float(ref_eff.x) * ref_scale) * (float(ref_eff.y) * ref_scale)
+	var s := sqrt(maxf(0.0001, ref_area / (float(eff.x) * float(eff.y))))
+
+	# Keep within slot bounds as a safety cap.
+	if float(eff.x) * s > w:
+		s = w / float(eff.x)
 	if float(eff.y) * s > max_h:
 		s = max_h / float(eff.y)
 	return Vector2(s, s)
 
-func set_weapon_icon_sprite(target: Sprite2D, weapon_id: String, extra_mult: float = 1.0, preview_sprite: Sprite2D = null) -> void:
+func set_weapon_icon_sprite(target: Sprite2D, weapon_id: String, extra_mult: float = 1.0, preview_sprite: Sprite2D = null, skin_index: int = 0) -> void:
 	if target == null:
 		return
 	var normalized := weapon_id.strip_edges().to_lower()
-	target.texture = weapon_ui_texture(normalized)
+	var idx := maxi(0, skin_index)
+	target.texture = weapon_ui_texture_for(normalized, idx)
 
 	var slot := target.get_parent() as Control
 	var slot_size := Vector2(116, 64)
@@ -69,12 +191,18 @@ func set_weapon_icon_sprite(target: Sprite2D, weapon_id: String, extra_mult: flo
 	var mult := clampf(extra_mult, 0.01, 8.0)
 	if preview_sprite != null and target == preview_sprite:
 		mult *= clampf(weapons_menu_preview_scale_mult, 0.01, 3.0)
-	target.scale = weapon_icon_sprite_scale_normalized(normalized, slot_size) * mult
+	target.scale = weapon_icon_sprite_scale_normalized(normalized, idx, slot_size) * mult
 
 func weapon_skins_for(weapon_id: String) -> Array:
 	var normalized := weapon_id.strip_edges().to_lower()
-	var arr := DATA.WEAPON_SKINS_BY_ID.get(normalized, []) as Array
-	return arr if arr != null else []
+	var out: Array = []
+	var base := DATA.WEAPON_SKINS_BY_ID.get(normalized, []) as Array
+	if base != null:
+		out.append_array(base)
+	var extra := DATA.WEAPON_SPECIAL_SKINS_BY_ID.get(normalized, []) as Array
+	if extra != null:
+		out.append_array(extra)
+	return out
 
 func weapon_skin_entry(weapon_id: String, skin_index: int) -> Dictionary:
 	var idx := maxi(0, skin_index)
@@ -89,6 +217,9 @@ func weapon_skin_label(weapon_id: String, skin_index: int) -> String:
 		return str(entry.get("name", "Skin %d" % skin_index))
 	return "Skin %d" % skin_index
 
+func weapon_item_title_text(weapon_id: String, skin_index: int) -> String:
+	return "%s - %s" % [weapon_display_name(weapon_id), weapon_skin_label(weapon_id, skin_index)]
+
 func weapon_skin_cost(weapon_id: String, skin_index: int) -> int:
 	var entry := weapon_skin_entry(weapon_id, skin_index)
 	if entry.is_empty():
@@ -102,6 +233,8 @@ func weapon_skin_material(weapon_id: String, skin_index: int) -> Material:
 	var idx := maxi(0, skin_index)
 	var entry := weapon_skin_entry(normalized, idx)
 	if entry.is_empty():
+		return null
+	if not bool(entry.get("rainbow", false)) and not entry.has("tint"):
 		return null
 
 	var key := "%s:%d" % [normalized, idx]
@@ -154,15 +287,31 @@ func weapon_item_status_text(host: Object, weapon_id: String, skin_index: int) -
 	if host != null and host.has_method("_weapon_skin_is_owned"):
 		skin_owned = bool(host.call("_weapon_skin_is_owned", normalized, idx))
 	if skin_owned:
-		var sel_id: String = ""
-		var sel_skin: int = 0
-		if host != null:
-			sel_id = str(host.get("selected_weapon_id"))
-			sel_skin = int(host.get("selected_weapon_skin"))
-		if normalized == sel_id and idx == sel_skin:
+		var equipped_skin := 0
+		if host != null and host.has_method("_equipped_weapon_skin"):
+			equipped_skin = int(host.call("_equipped_weapon_skin", normalized))
+		if idx == equipped_skin:
 			return "EQUIPPED"
 		return "OWNED"
 	return "BUY %d" % weapon_skin_cost(normalized, idx)
+
+func weapon_item_cost_text(host: Object, weapon_id: String, skin_index: int) -> String:
+	var normalized := weapon_id.strip_edges().to_lower()
+	var idx := maxi(0, skin_index)
+	var is_owned: bool = false
+	if host != null and host.has_method("_weapon_is_owned"):
+		is_owned = bool(host.call("_weapon_is_owned", normalized))
+	if not is_owned:
+		var weapon_cost := int(DATA.WEAPON_BASE_COST_BY_ID.get(normalized, 0))
+		return "Coins: %d" % maxi(0, weapon_cost)
+
+	var skin_owned: bool = (idx == 0)
+	if host != null and host.has_method("_weapon_skin_is_owned"):
+		skin_owned = bool(host.call("_weapon_skin_is_owned", normalized, idx))
+	if skin_owned:
+		return ""
+
+	return "Coins: %d" % maxi(0, weapon_skin_cost(normalized, idx))
 
 func update_weapon_item_button(host: Object, btn: Button) -> void:
 	if btn == null:
@@ -178,17 +327,20 @@ func update_weapon_item_button(host: Object, btn: Button) -> void:
 	var label := btn.get_node_or_null("Margin/VBox/Info") as Label
 
 	if name_label != null:
-		name_label.text = weapon_display_name(weapon_id)
+		name_label.text = weapon_item_title_text(weapon_id, skin_index)
+		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	if icon_slot != null and icon != null:
 		icon.position = icon_slot.size * 0.5
-		set_weapon_icon_sprite(icon, weapon_id, 1.0, null)
+		set_weapon_icon_sprite(icon, weapon_id, 1.0, null, skin_index)
 		apply_weapon_skin_visual(icon, weapon_id, skin_index)
+		btn.set_meta("_base_icon_scale", icon.scale)
 
 	if label != null:
-		label.text = weapon_item_status_text(host, weapon_id, skin_index)
+		label.text = weapon_item_cost_text(host, weapon_id, skin_index)
 
-	btn.tooltip_text = "%s - %s" % [weapon_id.to_upper(), weapon_skin_label(weapon_id, skin_index)]
+	btn.tooltip_text = "%s - %s  (%s)" % [weapon_id.to_upper(), weapon_skin_label(weapon_id, skin_index), weapon_item_status_text(host, weapon_id, skin_index)]
 
 	var locked := weapon_is_locked(host, weapon_id, skin_index)
 	btn.modulate = Color(0.65, 0.67, 0.72, 0.75) if locked else Color(1, 1, 1, 1)
@@ -239,7 +391,7 @@ func make_weapon_item_button(host: Object, make_shop_button: Callable, weapon_id
 	icon_slot.name = "IconSlot"
 	icon_slot.custom_minimum_size = Vector2(0, 34)
 	icon_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	icon_slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	icon_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(icon_slot)
 
@@ -256,6 +408,8 @@ func make_weapon_item_button(host: Object, make_shop_button: Callable, weapon_id
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info.add_theme_font_size_override("font_size", 11)
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(info)
 
 	update_weapon_item_button(host, btn)
@@ -306,18 +460,24 @@ func _animate_state(btn: Button, state: String) -> void:
 	var icon: Sprite2D = btn.get_node_or_null("Margin/VBox/IconSlot/Icon") as Sprite2D
 	var target_scale := Vector2.ONE
 	var target_rot := 0.0
-	var icon_scale := Vector2.ONE
+	var base_icon_scale := Vector2.ONE
+	if icon != null:
+		if btn.has_meta("_base_icon_scale") and btn.get_meta("_base_icon_scale") is Vector2:
+			base_icon_scale = btn.get_meta("_base_icon_scale") as Vector2
+		else:
+			base_icon_scale = icon.scale
+	var icon_scale := base_icon_scale
 	var dur := 0.08
 
 	if state == "hover":
 		target_scale = Vector2.ONE * 1.035
 		target_rot = 0.0
-		icon_scale = Vector2.ONE * 1.03
+		icon_scale = base_icon_scale * 1.03
 		dur = 0.08
 	elif state == "press":
 		target_scale = Vector2.ONE * 0.965
 		target_rot = deg_to_rad(-0.75)
-		icon_scale = Vector2.ONE * 0.97
+		icon_scale = base_icon_scale * 0.97
 		dur = 0.05
 
 	var tw := btn.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -329,7 +489,7 @@ func _animate_state(btn: Button, state: String) -> void:
 		tw.tween_property(btn, "scale", Vector2.ONE * 1.035, 0.10).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(btn, "rotation", 0.0, 0.10)
 		if icon != null:
-			tw.parallel().tween_property(icon, "scale", Vector2.ONE * 1.03, 0.10)
+			tw.parallel().tween_property(icon, "scale", base_icon_scale * 1.03, 0.10)
 	btn.set_meta("_fx_tween", tw)
 	if state == "idle":
 		_start_idle_anim(btn)

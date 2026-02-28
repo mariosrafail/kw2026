@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="kw_Godot"
-run/main_scene="res://scenes/lobby.tscn"
+run/main_scene="uid://wv12esw6y7ew"
 config/features=PackedStringArray("4.6", "Forward Plus")
 boot_splash/show_image=false
 config/icon="res://icon.svg"
@@ -36,3 +36,4 @@ auth_api_base_url="http://127.0.0.1:8090"
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"

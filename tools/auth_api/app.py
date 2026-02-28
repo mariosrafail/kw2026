@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _utc_now() -> datetime:
@@ -61,57 +62,58 @@ def _db():
 
 
 def _init_schema() -> None:
-    with _db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                create table if not exists accounts (
-                  id uuid primary key,
-                  username text not null unique,
-                  password_hash text not null,
-                  created_at timestamptz not null default now()
-                );
-                """
-            )
-            cur.execute(
-                """
-                create table if not exists sessions (
-                  token text primary key,
-                  account_id uuid not null references accounts(id) on delete cascade,
-                  created_at timestamptz not null default now(),
-                  expires_at timestamptz not null
-                );
-                """
-            )
-            cur.execute("create index if not exists sessions_account_id_idx on sessions(account_id);")
-            cur.execute("create index if not exists sessions_expires_at_idx on sessions(expires_at);")
-            # Cleanup any expired sessions.
-            cur.execute("delete from sessions where expires_at <= now();")
-            # Allow multiple active sessions per account.
-            cur.execute("drop index if exists sessions_one_per_account_uidx;")
-            cur.execute(
-                """
-                create table if not exists wallets (
-                  account_id uuid primary key references accounts(id) on delete cascade,
-                  coins integer not null default 0,
-                  clk integer not null default 0,
-                  updated_at timestamptz not null default now()
-                );
-                """
-            )
-            cur.execute("create index if not exists wallets_updated_at_idx on wallets(updated_at);")
-            cur.execute(
-                """
-                create table if not exists inventory_skins (
-                  account_id uuid not null references accounts(id) on delete cascade,
-                  character_id text not null,
-                  skin_index integer not null,
-                  purchased_at timestamptz not null default now(),
-                  primary key (account_id, character_id, skin_index)
-                );
-                """
-            )
-            cur.execute("create index if not exists inventory_skins_account_idx on inventory_skins(account_id);")
+        with _db() as conn:
+                with conn.cursor() as cur:
+                        cur.execute(
+                                """
+                                create table if not exists accounts (
+                                    id uuid primary key,
+                                    username text not null unique,
+                                    email text,
+                                    password_hash text not null,
+                                    created_at timestamptz not null default now()
+                                );
+                                """
+                        )
+                        cur.execute("alter table accounts add column if not exists email text;")
+                        cur.execute("create unique index if not exists accounts_email_uidx on accounts ((lower(email))) where email is not null;")
+                        cur.execute(
+                                """
+                                create table if not exists sessions (
+                                    token text primary key,
+                                    account_id uuid not null references accounts(id) on delete cascade,
+                                    created_at timestamptz not null default now(),
+                                    expires_at timestamptz not null
+                                );
+                                """
+                        )
+                        cur.execute("create index if not exists sessions_account_id_idx on sessions(account_id);")
+                        cur.execute("create index if not exists sessions_expires_at_idx on sessions(expires_at);")
+                        cur.execute("delete from sessions where expires_at <= now();")
+                        cur.execute("drop index if exists sessions_one_per_account_uidx;")
+                        cur.execute(
+                                """
+                                create table if not exists wallets (
+                                    account_id uuid primary key references accounts(id) on delete cascade,
+                                    coins integer not null default 0,
+                                    clk integer not null default 0,
+                                    updated_at timestamptz not null default now()
+                                );
+                                """
+                        )
+                        cur.execute("create index if not exists wallets_updated_at_idx on wallets(updated_at);")
+                        cur.execute(
+                                """
+                                create table if not exists inventory_skins (
+                                    account_id uuid not null references accounts(id) on delete cascade,
+                                    character_id text not null,
+                                    skin_index integer not null,
+                                    purchased_at timestamptz not null default now(),
+                                    primary key (account_id, character_id, skin_index)
+                                );
+                                """
+                        )
+                        cur.execute("create index if not exists inventory_skins_account_idx on inventory_skins(account_id);")
 
 
 @app.on_event("startup")
@@ -127,7 +129,8 @@ def _on_startup() -> None:
 
 
 class AuthRequest(BaseModel):
-    username: str
+    username: str = ""
+    email: str = ""
     password: str
     force: bool = False
 
@@ -135,10 +138,12 @@ class AuthRequest(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     username: str
+    email: str = ""
 
 
 class MeResponse(BaseModel):
     username: str
+    email: str = ""
 
 
 class OwnedSkin(BaseModel):
@@ -148,6 +153,7 @@ class OwnedSkin(BaseModel):
 
 class ProfileResponse(BaseModel):
     username: str
+    email: str = ""
     coins: int
     clk: int
     owned_skins: list[OwnedSkin]
@@ -156,6 +162,11 @@ class ProfileResponse(BaseModel):
 class PurchaseSkinRequest(BaseModel):
     character_id: str
     skin_index: int
+
+
+class WalletUpdateRequest(BaseModel):
+    coins: Optional[int] = None
+    clk: Optional[int] = None
 
 
 def _normalize_username(raw: str) -> str:
@@ -175,6 +186,15 @@ def _validate_password(password: str) -> None:
         raise HTTPException(status_code=400, detail="password too short")
     if len(password) > 72:
         raise HTTPException(status_code=400, detail="password too long")
+
+
+def _normalize_email(raw: str) -> str:
+    return (raw or "").strip().lower()
+
+
+def _validate_email(email: str) -> None:
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="email is invalid")
 
 
 def _hash_password(password: str) -> str:
@@ -259,7 +279,7 @@ def _skin_cost_coins(character_id: str, skin_index: int) -> int:
     return 10
 
 
-def _account_for_token(token: str) -> Optional[tuple[str, str]]:
+def _account_for_token(token: str) -> Optional[tuple[str, str, str]]:
     if not token:
         return None
     now = _utc_now()
@@ -267,7 +287,7 @@ def _account_for_token(token: str) -> Optional[tuple[str, str]]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select a.id::text, a.username
+                select a.id::text, a.username, coalesce(a.email, '')
                 from sessions s
                 join accounts a on a.id = s.account_id
                 where s.token = %s and s.expires_at > %s
@@ -277,7 +297,7 @@ def _account_for_token(token: str) -> Optional[tuple[str, str]]:
             row = cur.fetchone()
             if not row:
                 return None
-            return str(row[0]), str(row[1])
+            return str(row[0]), str(row[1]), str(row[2] or "")
 
 
 def _bearer_token(authorization: Optional[str]) -> str:
@@ -311,6 +331,9 @@ def health():
 def register(req: AuthRequest):
     username = _normalize_username(req.username)
     _validate_username(username)
+    email = _normalize_email(req.email)
+    if email:
+        _validate_email(email)
     _validate_password(req.password)
 
     pw_hash = _hash_password(req.password)
@@ -319,34 +342,54 @@ def register(req: AuthRequest):
         with _db() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "insert into accounts (id, username, password_hash) values (%s, %s, %s)",
-                    (account_id, username, pw_hash),
+                    "insert into accounts (id, username, email, password_hash) values (%s, %s, %s, %s)",
+                    (account_id, username, email if email else None, pw_hash),
                 )
     except psycopg.errors.UniqueViolation:
-        raise HTTPException(status_code=409, detail="username already exists")
+        raise HTTPException(status_code=409, detail="username or email already exists")
 
     _ensure_wallet(uuid.UUID(account_id))
 
     token = _create_session(account_id)
-    return AuthResponse(token=token, username=username)
+    return AuthResponse(token=token, username=username, email=email)
 
 
 @app.post("/login", response_model=AuthResponse)
 def login(req: AuthRequest):
     username = _normalize_username(req.username)
-    _validate_username(username)
+    email = _normalize_email(req.email)
     _validate_password(req.password)
+
+    lookup_is_email = False
+    lookup_value = username
+    if email:
+        _validate_email(email)
+        lookup_is_email = True
+        lookup_value = email
+    elif "@" in username:
+        email_candidate = _normalize_email(username)
+        _validate_email(email_candidate)
+        lookup_is_email = True
+        lookup_value = email_candidate
+    else:
+        _validate_username(username)
 
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "select id::text, password_hash from accounts where username = %s",
-                (username,),
-            )
+            if lookup_is_email:
+                cur.execute(
+                    "select id::text, username, coalesce(email, ''), password_hash from accounts where lower(email) = lower(%s)",
+                    (lookup_value,),
+                )
+            else:
+                cur.execute(
+                    "select id::text, username, coalesce(email, ''), password_hash from accounts where username = %s",
+                    (lookup_value,),
+                )
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=401, detail="invalid credentials")
-            account_id, pw_hash = str(row[0]), str(row[1])
+            account_id, resolved_username, resolved_email, pw_hash = str(row[0]), str(row[1]), str(row[2] or ""), str(row[3])
 
     if not _verify_password(req.password, pw_hash):
         raise HTTPException(status_code=401, detail="invalid credentials")
@@ -357,7 +400,7 @@ def login(req: AuthRequest):
                 cur.execute("delete from sessions where account_id = %s", (uuid.UUID(account_id),))
 
     token = _create_session(account_id)
-    return AuthResponse(token=token, username=username)
+    return AuthResponse(token=token, username=resolved_username, email=resolved_email)
 
 
 @app.get("/me", response_model=MeResponse)
@@ -366,8 +409,8 @@ def me(authorization: Optional[str] = Header(default=None)):
     account = _account_for_token(token)
     if not account:
         raise HTTPException(status_code=401, detail="unauthorized")
-    _account_id, username = account
-    return MeResponse(username=username)
+    _account_id, username, email = account
+    return MeResponse(username=username, email=email)
 
 
 @app.get("/profile", response_model=ProfileResponse)
@@ -376,11 +419,11 @@ def profile(authorization: Optional[str] = Header(default=None)):
     account = _account_for_token(token)
     if not account:
         raise HTTPException(status_code=401, detail="unauthorized")
-    account_id, username = account
+    account_id, username, email = account
     account_uuid = uuid.UUID(account_id)
     coins, clk = _wallet_for_account(account_uuid)
     owned = _owned_skins_for_account(account_uuid)
-    return ProfileResponse(username=username, coins=coins, clk=clk, owned_skins=owned)
+    return ProfileResponse(username=username, email=email, coins=coins, clk=clk, owned_skins=owned)
 
 
 @app.post("/purchase/skin", response_model=ProfileResponse)
@@ -389,7 +432,7 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
     account = _account_for_token(token)
     if not account:
         raise HTTPException(status_code=401, detail="unauthorized")
-    account_id, username = account
+    account_id, username, email = account
     account_uuid = uuid.UUID(account_id)
 
     character_id = _normalize_character_id(req.character_id)
@@ -403,7 +446,7 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
     if cost_coins <= 0:
         coins, clk = _wallet_for_account(account_uuid)
         owned = _owned_skins_for_account(account_uuid)
-        return ProfileResponse(username=username, coins=coins, clk=clk, owned_skins=owned)
+        return ProfileResponse(username=username, email=email, coins=coins, clk=clk, owned_skins=owned)
 
     # Transaction: check wallet + ownership then deduct + insert.
     with psycopg.connect(SETTINGS.database_url, autocommit=False) as conn:
@@ -479,7 +522,44 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
 
     coins2, clk2 = _wallet_for_account(account_uuid)
     owned2 = _owned_skins_for_account(account_uuid)
-    return ProfileResponse(username=username, coins=coins2, clk=clk2, owned_skins=owned2)
+    return ProfileResponse(username=username, email=email, coins=coins2, clk=clk2, owned_skins=owned2)
+
+
+@app.post("/wallet/update", response_model=ProfileResponse)
+def wallet_update(req: WalletUpdateRequest, authorization: Optional[str] = Header(default=None)):
+    token = _bearer_token(authorization)
+    account = _account_for_token(token)
+    if not account:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    if req.coins is None and req.clk is None:
+        raise HTTPException(status_code=400, detail="coins or clk required")
+
+    account_id, username, email = account
+    account_uuid = uuid.UUID(account_id)
+    _ensure_wallet(account_uuid)
+
+    set_clauses: list[str] = []
+    params: list[object] = []
+    if req.coins is not None:
+        set_clauses.append("coins = %s")
+        params.append(max(0, int(req.coins)))
+    if req.clk is not None:
+        set_clauses.append("clk = %s")
+        params.append(max(0, int(req.clk)))
+    set_clauses.append("updated_at = now()")
+
+    with _db() as conn:
+        with conn.cursor() as cur:
+            query = "update wallets set " + ", ".join(set_clauses) + " where account_id = %s"
+            params.append(account_uuid)
+            cur.execute(query, tuple(params))
+            if cur.rowcount != 1:
+                raise HTTPException(status_code=500, detail="wallet update failed")
+
+    coins, clk = _wallet_for_account(account_uuid)
+    owned = _owned_skins_for_account(account_uuid)
+    return ProfileResponse(username=username, email=email, coins=coins, clk=clk, owned_skins=owned)
 
 
 if __name__ == "__main__":

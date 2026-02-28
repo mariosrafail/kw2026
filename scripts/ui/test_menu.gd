@@ -7,9 +7,16 @@ const WEAPON_UI_SCRIPT := preload("res://scripts/ui/test_menu/weapon_ui.gd")
 const STATE_STORE_SCRIPT := preload("res://scripts/ui/test_menu/state_store.gd")
 const INTRO_FX_CTRL_SCRIPT := preload("res://scripts/ui/test_menu/intro_fx_controller.gd")
 const CONFIRM_OVERLAY_SCRIPT := preload("res://scripts/ui/test_menu/confirm_overlay.gd")
+const LOBBY_OVERLAY_CTRL_SCRIPT := preload("res://scripts/ui/test_menu/lobby_overlay_controller.gd")
+const UI_ANIMATOR_SCRIPT := preload("res://scripts/ui/test_menu/ui_animator.gd")
+const MENU_TRANSITION_CTRL_SCRIPT := preload("res://scripts/ui/test_menu/menu_transition_controller.gd")
+const IDLE_ANIMATOR_SCRIPT := preload("res://scripts/ui/test_menu/idle_animator.gd")
+const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8090"
 
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
+const WEAPON_AK47 := DATA.WEAPON_AK47
+const WEAPON_SHOTGUN := DATA.WEAPON_SHOTGUN
 
 @export var enable_intro_animation := true
 @export var intro_timeout_sec := 6.0
@@ -25,6 +32,10 @@ const WEAPON_GRENADE := DATA.WEAPON_GRENADE
 var _weapon_ui := WEAPON_UI_SCRIPT.new()
 var _state_store := STATE_STORE_SCRIPT.new()
 var _intro_fx := INTRO_FX_CTRL_SCRIPT.new()
+var _lobby_overlay_ctrl := LOBBY_OVERLAY_CTRL_SCRIPT.new()
+var _ui_anim := UI_ANIMATOR_SCRIPT.new()
+var _menu_transition_ctrl := MENU_TRANSITION_CTRL_SCRIPT.new()
+var _idle_anim := IDLE_ANIMATOR_SCRIPT.new()
 
 @onready var coins_label: Label = %CoinsLabel
 @onready var clk_label: Label = %ClkLabel
@@ -85,21 +96,34 @@ var owned_weapons := PackedStringArray([WEAPON_UZI])
 var owned_weapon_skins_by_weapon: Dictionary = {
 	WEAPON_UZI: PackedInt32Array([0]),
 	WEAPON_GRENADE: PackedInt32Array([0]),
+	WEAPON_AK47: PackedInt32Array([0]),
+	WEAPON_SHOTGUN: PackedInt32Array([0]),
+}
+var equipped_weapon_skin_by_weapon: Dictionary = {
+	WEAPON_UZI: 0,
+	WEAPON_AK47: 0,
+	WEAPON_SHOTGUN: 0,
+	WEAPON_GRENADE: 0,
 }
 var selected_weapon_id := WEAPON_UZI
 var selected_weapon_skin := 0
 var _pending_weapon_id := WEAPON_UZI
 var _pending_weapon_skin := 0
+var _visible_weapon_id := WEAPON_UZI
+var _visible_weapon_skin := 0
+var player_username := ""
+var _warrior_username_label: Label
+
+var _weapon_filter_weapon_id := ""
+var _weapon_filter_category := ""
+var _weapon_filter_weapon_buttons: Dictionary = {}
+var _weapon_filter_category_buttons: Dictionary = {}
 
 var _current_screen: Control
 var _transition_tween: Tween
-var _idle_tween: Tween
 var _fx_layer: Control
-var _open_menu_tween: Tween
-var _warrior_open_transition: Node2D
 var _main_warrior_preview_base_scale := Vector2.ONE
 var _warrior_shop_preview_base_scale := Vector2.ONE
-var _weapon_open_transition: Node2D
 var _weapon_shop_preview_base_scale := Vector2.ONE
 var _confirm_overlay_ui: Control
 
@@ -115,6 +139,19 @@ var _scroll_grabber: StyleBoxFlat = null
 var _scroll_grabber_hi: StyleBoxFlat = null
 var _scroll_grabber_pressed: StyleBoxFlat = null
 
+var _auth_api_base_url := AUTH_API_BASE_URL_DEFAULT
+var _auth_token := ""
+var _auth_logged_in := false
+var _auth_pending_action := ""
+var _auth_wallet_sync_queued := false
+var _auth_wallet_retry_timer: Timer
+var _auth_http: HTTPRequest
+var _auth_overlay: Control
+var _auth_status_label: Label
+var _auth_user_input: LineEdit
+var _auth_pass_input: LineEdit
+var _auth_login_button: Button
+
 func _ready() -> void:
 	_ensure_cursor_manager()
 	_current_screen = screen_main
@@ -123,9 +160,21 @@ func _ready() -> void:
 	_weapon_ui.weapons_menu_preview_scale_mult = weapons_menu_preview_scale_mult
 	_weapon_ui.rainbow_skin_cost = rainbow_skin_cost
 	_load_state_or_defaults()
+	_ensure_warrior_username_label()
+	_refresh_warrior_username_label()
+	_weapon_filter_weapon_id = selected_weapon_id
 	set_process_input(true)
 	set_process_unhandled_input(true)
 	_init_confirm_dialog()
+	_lobby_overlay_ctrl.configure(
+		self,
+		Callable(self, "_make_shop_button"),
+		Callable(self, "_add_hover_pop"),
+		Callable(self, "_center_pivot"),
+		Callable(self, "_pixel_burst_at"),
+		Callable(self, "_center_of"),
+		Callable(self, "_on_lobby_overlay_closed")
+	)
 	_intro_fx.configure(self, intro, intro_fade, intro_plate, intro_label, Callable(self, "_pixel_burst_at"))
 	_intro_fx.enable_intro_animation = enable_intro_animation
 	_intro_fx.intro_timeout_sec = intro_timeout_sec
@@ -144,12 +193,48 @@ func _ready() -> void:
 	_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_fx_layer)
 
-	_logo_base_pos = _node_pos(logo_node)
+	_menu_transition_ctrl.configure(
+		{
+			"host": self,
+			"screen_main": screen_main,
+			"screen_warriors": screen_warriors,
+			"screen_weapons": screen_weapons,
+			"main_warrior_preview": main_warrior_preview,
+			"warrior_shop_preview": warrior_shop_preview,
+			"main_weapon_icon": main_weapon_icon,
+			"weapon_shop_preview": weapon_shop_preview,
+			"fx_layer": _fx_layer,
+			"weapon_ui": _weapon_ui,
+		},
+		{
+			"set_current_screen": Callable(self, "_set_current_screen_ref"),
+			"stop_idle_loop": Callable(self, "_stop_idle_loop"),
+			"start_idle_loop": Callable(self, "_start_idle_loop"),
+			"set_weapon_icon_sprite": Callable(self, "_set_weapon_icon_sprite"),
+			"apply_weapon_skin_visual": Callable(self, "_apply_weapon_skin_visual"),
+		}
+	)
+
+	_idle_anim.configure(
+		{
+			"host": self,
+			"screen_main": screen_main,
+			"main_weapon_icon": main_weapon_icon,
+			"warrior_area": warrior_area,
+			"weapon_area": weapon_area,
+			"play_button": play_button,
+			"bg_noise": $BgNoise,
+			"logo_node": logo_node,
+		}
+	)
+
+	_logo_base_pos = _idle_anim.node_pos(logo_node)
 	_warrior_area_base_pos = warrior_area.position
 	_weapon_area_base_pos = weapon_area.position
 	var bg := $BgNoise as CanvasItem
 	if bg != null:
 		_bgnoise_base_alpha = bg.modulate.a
+	_idle_anim.set_base_state(_logo_base_pos, _warrior_area_base_pos, _weapon_area_base_pos, _bgnoise_base_alpha)
 
 	call_deferred("_apply_center_pivots")
 	_apply_pixel_slider_style(music_slider)
@@ -176,20 +261,317 @@ func _ready() -> void:
 	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_skin)
 	_apply_warrior_skin_to_player(warrior_shop_preview, selected_warrior_skin)
 
-	_set_weapon_icon_sprite(main_weapon_icon, selected_weapon_id)
-	_apply_weapon_skin_visual(main_weapon_icon, selected_weapon_id, selected_weapon_skin)
-	_set_weapon_icon_sprite(weapon_shop_preview, selected_weapon_id)
+	_set_weapon_icon_sprite(main_weapon_icon, _pending_weapon_id, 1.0, _pending_weapon_skin)
+	_apply_weapon_skin_visual(main_weapon_icon, _pending_weapon_id, _pending_weapon_skin)
+	_set_weapon_icon_sprite(weapon_shop_preview, selected_weapon_id, 1.0, selected_weapon_skin)
 	_apply_weapon_skin_visual(weapon_shop_preview, selected_weapon_id, selected_weapon_skin)
 
 	_update_wallet_labels(true)
 	_build_warrior_shop_grid()
+	_ensure_weapon_filter_ui()
 	_build_weapon_shop_grid()
 
 	_select_warrior_skin(selected_warrior_skin, true)
 	_select_weapon_skin(selected_weapon_id, selected_weapon_skin, true)
 
 	_connect_signals()
-	_start_idle_loop()
+	_setup_auth_gate()
+	if _auth_logged_in:
+		_start_idle_loop()
+
+func _auth_url(path: String) -> String:
+	return "%s%s" % [_auth_api_base_url, path]
+
+func _setup_auth_gate() -> void:
+	_auth_api_base_url = str(ProjectSettings.get_setting("kw/auth_api_base_url", AUTH_API_BASE_URL_DEFAULT)).strip_edges()
+	if _auth_api_base_url.is_empty():
+		_auth_api_base_url = AUTH_API_BASE_URL_DEFAULT
+	if _auth_api_base_url.ends_with("/"):
+		_auth_api_base_url = _auth_api_base_url.substr(0, _auth_api_base_url.length() - 1)
+
+	_auth_http = HTTPRequest.new()
+	_auth_http.name = "AuthHttp"
+	add_child(_auth_http)
+	_auth_http.request_completed.connect(_on_auth_http_completed)
+
+	_auth_wallet_retry_timer = Timer.new()
+	_auth_wallet_retry_timer.name = "AuthWalletRetryTimer"
+	_auth_wallet_retry_timer.one_shot = true
+	_auth_wallet_retry_timer.wait_time = 1.5
+	add_child(_auth_wallet_retry_timer)
+	_auth_wallet_retry_timer.timeout.connect(_on_auth_wallet_retry_timeout)
+
+	var overlay := Control.new()
+	overlay.name = "AuthOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.z_index = 2000
+	add_child(overlay)
+	_auth_overlay = overlay
+
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.04, 0.04, 0.07, 0.94)
+	overlay.add_child(bg)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(440, 240)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-220, -120)
+	overlay.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_bottom", 14)
+	panel.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.add_theme_constant_override("separation", 8)
+	margin.add_child(box)
+
+	var title := Label.new()
+	title.text = "LOGIN"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	box.add_child(title)
+
+	var user_input := LineEdit.new()
+	user_input.placeholder_text = "Username or Email"
+	user_input.text = player_username
+	box.add_child(user_input)
+	_auth_user_input = user_input
+
+	var pass_input := LineEdit.new()
+	pass_input.placeholder_text = "Password"
+	pass_input.secret = true
+	pass_input.text = "1234"
+	box.add_child(pass_input)
+	_auth_pass_input = pass_input
+
+	var login_btn := _make_shop_button()
+	login_btn.text = "LOG IN"
+	login_btn.custom_minimum_size = Vector2(0, 34)
+	login_btn.pressed.connect(_auth_submit_login)
+	box.add_child(login_btn)
+	_auth_login_button = login_btn
+	_add_hover_pop(login_btn)
+
+	var status := Label.new()
+	status.text = "Enter your account to continue"
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status.add_theme_font_size_override("font_size", 12)
+	box.add_child(status)
+	_auth_status_label = status
+
+	_auth_set_ui_locked(true)
+
+func _auth_set_ui_locked(locked: bool) -> void:
+	if _auth_overlay != null:
+		_auth_overlay.visible = locked
+	if play_button != null:
+		play_button.disabled = locked
+	if options_button != null:
+		options_button.disabled = locked
+	if warrior_button != null:
+		warrior_button.disabled = locked
+	if weapon_button != null:
+		weapon_button.disabled = locked
+
+func _auth_submit_login() -> void:
+	if _auth_http == null:
+		return
+	var user_raw := ""
+	var password := ""
+	if _auth_user_input != null:
+		user_raw = _auth_user_input.text.strip_edges()
+	if _auth_pass_input != null:
+		password = _auth_pass_input.text
+	if user_raw.is_empty() or password.is_empty():
+		if _auth_status_label != null:
+			_auth_status_label.text = "Fill username/email and password"
+		return
+
+	var payload: Dictionary = {"password": password, "force": false}
+	if user_raw.contains("@"):
+		payload["email"] = user_raw
+	else:
+		payload["username"] = user_raw
+	var body := JSON.stringify(payload)
+	_auth_pending_action = "login"
+	if _auth_status_label != null:
+		_auth_status_label.text = "Logging in..."
+	if _auth_login_button != null:
+		_auth_login_button.disabled = true
+	var err := _auth_http.request(
+		_auth_url("/login"),
+		PackedStringArray(["Content-Type: application/json"]),
+		HTTPClient.METHOD_POST,
+		body
+	)
+	if err != OK:
+		_auth_pending_action = ""
+		if _auth_status_label != null:
+			_auth_status_label.text = "Login request failed (%s)" % str(err)
+		if _auth_login_button != null:
+			_auth_login_button.disabled = false
+
+func _auth_request_profile() -> void:
+	if _auth_http == null or _auth_token.is_empty():
+		return
+	_auth_pending_action = "profile"
+	if _auth_status_label != null:
+		_auth_status_label.text = "Loading profile..."
+	var err := _auth_http.request(
+		_auth_url("/profile"),
+		PackedStringArray(["Authorization: Bearer %s" % _auth_token]),
+		HTTPClient.METHOD_GET
+	)
+	if err != OK:
+		_auth_pending_action = ""
+		if _auth_status_label != null:
+			_auth_status_label.text = "Profile request failed (%s)" % str(err)
+		if _auth_login_button != null:
+			_auth_login_button.disabled = false
+
+func _auth_sync_wallet() -> void:
+	if _auth_http == null or _auth_token.is_empty() or not _auth_logged_in:
+		return
+	if not _auth_pending_action.is_empty():
+		_auth_wallet_sync_queued = true
+		_auth_schedule_wallet_retry()
+		return
+	var body := JSON.stringify({"coins": wallet_coins, "clk": wallet_clk})
+	_auth_pending_action = "wallet_sync"
+	var err := _auth_http.request(
+		_auth_url("/wallet/update"),
+		PackedStringArray([
+			"Authorization: Bearer %s" % _auth_token,
+			"Content-Type: application/json"
+		]),
+		HTTPClient.METHOD_POST,
+		body
+	)
+	if err != OK:
+		_auth_pending_action = ""
+		_auth_wallet_sync_queued = true
+		_auth_schedule_wallet_retry()
+
+func _auth_schedule_wallet_retry() -> void:
+	if _auth_wallet_retry_timer == null:
+		return
+	if _auth_wallet_retry_timer.time_left > 0.0:
+		return
+	_auth_wallet_retry_timer.start()
+
+func _on_auth_wallet_retry_timeout() -> void:
+	_auth_maybe_flush_wallet_sync()
+
+func _auth_maybe_flush_wallet_sync() -> void:
+	if not _auth_wallet_sync_queued:
+		return
+	if not _auth_pending_action.is_empty():
+		return
+	_auth_wallet_sync_queued = false
+	_auth_sync_wallet()
+
+func _auth_apply_profile(profile: Dictionary) -> void:
+	wallet_coins = int(profile.get("coins", wallet_coins))
+	wallet_clk = int(profile.get("clk", wallet_clk))
+	player_username = str(profile.get("username", player_username)).strip_edges()
+	if player_username.is_empty():
+		player_username = "Player"
+
+	if profile.has("owned_skins"):
+		var owned := PackedInt32Array([0])
+		for item in profile.get("owned_skins", []) as Array:
+			if not (item is Dictionary):
+				continue
+			var d := item as Dictionary
+			if str(d.get("character_id", "")).strip_edges().to_lower() != "outrage":
+				continue
+			var idx := maxi(0, int(d.get("skin_index", 0)))
+			if not owned.has(idx):
+				owned.append(idx)
+		owned_warrior_skins = owned
+
+	if profile.has("owned_weapons"):
+		var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE])
+		var from_api := PackedStringArray()
+		for w in profile.get("owned_weapons", []) as Array:
+			var wid := str(w).strip_edges().to_lower()
+			if allowed.has(wid) and not from_api.has(wid):
+				from_api.append(wid)
+		if not from_api.has(WEAPON_UZI):
+			from_api.append(WEAPON_UZI)
+		owned_weapons = from_api
+
+	_update_wallet_labels(true)
+	_refresh_warrior_username_label()
+	_refresh_warrior_grid_texts()
+	_refresh_warrior_action()
+	_refresh_weapon_grid_texts()
+	_refresh_weapon_action()
+	_save_state()
+
+func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var text := body.get_string_from_utf8()
+	var parsed = JSON.parse_string(text)
+	if _auth_pending_action == "login":
+		if response_code < 200 or response_code >= 300 or not (parsed is Dictionary):
+			if _auth_status_label != null:
+				_auth_status_label.text = "Login failed (%d)" % response_code
+			if _auth_login_button != null:
+				_auth_login_button.disabled = false
+			_auth_pending_action = ""
+			return
+		var data := parsed as Dictionary
+		_auth_token = str(data.get("token", "")).strip_edges()
+		player_username = str(data.get("username", player_username)).strip_edges()
+		if _auth_token.is_empty():
+			if _auth_status_label != null:
+				_auth_status_label.text = "Login failed: missing token"
+			if _auth_login_button != null:
+				_auth_login_button.disabled = false
+			_auth_pending_action = ""
+			return
+		_auth_pending_action = ""
+		_auth_request_profile()
+		return
+
+	if _auth_pending_action == "profile":
+		if response_code < 200 or response_code >= 300 or not (parsed is Dictionary):
+			if _auth_status_label != null:
+				_auth_status_label.text = "Profile load failed (%d)" % response_code
+			if _auth_login_button != null:
+				_auth_login_button.disabled = false
+			_auth_pending_action = ""
+			return
+		_auth_apply_profile(parsed as Dictionary)
+		_auth_logged_in = true
+		_auth_set_ui_locked(false)
+		if _auth_status_label != null:
+			_auth_status_label.text = ""
+		if _auth_login_button != null:
+			_auth_login_button.disabled = false
+		_auth_pending_action = ""
+		_start_idle_loop()
+		_auth_maybe_flush_wallet_sync()
+		return
+
+	if _auth_pending_action == "wallet_sync":
+		if response_code >= 200 and response_code < 300 and (parsed is Dictionary):
+			_auth_apply_profile(parsed as Dictionary)
+			_auth_pending_action = ""
+			_auth_maybe_flush_wallet_sync()
+			return
+		_auth_pending_action = ""
+		_auth_wallet_sync_queued = true
+		_auth_schedule_wallet_retry()
 
 func _ensure_cursor_manager() -> void:
 	var tree := get_tree()
@@ -210,6 +592,9 @@ func _input(event: InputEvent) -> void:
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE:
 			if _confirm_overlay_ui != null and _confirm_overlay_ui.visible:
 				_confirm_overlay_ui.visible = false
+				return
+			if _lobby_overlay_ctrl != null and _lobby_overlay_ctrl.is_visible():
+				_lobby_overlay_ctrl.hide()
 				return
 			if _current_screen == screen_weapons:
 				_close_weapons_menu()
@@ -308,8 +693,20 @@ func _connect_signals() -> void:
 
 func _on_play_pressed() -> void:
 	_button_press_anim(play_button)
-	if ResourceLoader.exists("res://scenes/main.tscn"):
-		get_tree().change_scene_to_file("res://scenes/main.tscn")
+	_open_lobby_menu_flow()
+
+func _open_lobby_menu_flow() -> void:
+	_stop_idle_loop()
+	if _lobby_overlay_ctrl != null:
+		_lobby_overlay_ctrl.open(play_button)
+
+func _run_lobby_menu_loading_sequence() -> void:
+	if _lobby_overlay_ctrl != null:
+		await _lobby_overlay_ctrl.run_loading_sequence()
+
+func _on_lobby_overlay_closed() -> void:
+	if _current_screen == screen_main:
+		_start_idle_loop()
 
 func _on_exit_pressed() -> void:
 	_button_press_anim(exit_button)
@@ -324,9 +721,8 @@ func _switch_to(target: Control, direction: int) -> void:
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
-	if _open_menu_tween != null:
-		_open_menu_tween.kill()
-		_open_menu_tween = null
+	if _menu_transition_ctrl != null:
+		_menu_transition_ctrl.abort_transitions()
 
 	var from := _current_screen
 	var viewport_size := get_viewport_rect().size
@@ -403,332 +799,46 @@ func _switch_to(target: Control, direction: int) -> void:
 	)
 
 func _open_warriors_menu() -> void:
-	if screen_warriors == null or screen_main == null:
-		return
-	if _open_menu_tween != null:
-		_open_menu_tween.kill()
-		_open_menu_tween = null
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
-	if _warrior_open_transition != null and is_instance_valid(_warrior_open_transition):
-		_warrior_open_transition.queue_free()
-	_warrior_open_transition = null
-
-	_stop_idle_loop()
-
-	screen_warriors.visible = true
-	screen_warriors.position = Vector2.ZERO
-	screen_warriors.scale = Vector2.ONE
-	screen_warriors.modulate = Color(1, 1, 1, 0)
-
-	# Hide the real menu preview during the transition; we'll reveal it after the fade.
-	if warrior_shop_preview != null and warrior_shop_preview is CanvasItem:
-		(warrior_shop_preview as CanvasItem).visible = false
-
-	# Defer so Control layout updates and global positions are accurate.
-	call_deferred("_open_warriors_menu_stage2")
+	_menu_transition_ctrl.open_warriors_menu()
 
 func _open_warriors_menu_stage2() -> void:
-	if screen_warriors == null or screen_main == null:
-		return
-	var src_preview := main_warrior_preview as Node2D
-	var dst_preview := warrior_shop_preview as Node2D
-	if src_preview == null or dst_preview == null or _fx_layer == null:
-		# Fallback: just fade in menu.
-		_open_menu_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		_open_menu_tween.tween_property(screen_warriors, "modulate:a", 1.0, 0.18)
-		_open_menu_tween.tween_callback(func() -> void:
-			screen_main.visible = false
-			_current_screen = screen_warriors
-			if dst_preview != null:
-				dst_preview.visible = true
-		)
-		return
-
-	var start_pos := src_preview.global_position
-	var target_pos := dst_preview.global_position
-	var start_scale := src_preview.scale
-	var target_scale := dst_preview.scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
-
-	# Do NOT duplicate the full player node: it can run scripts/_ready() and change visuals.
-	# Instead, duplicate only the visual subtree exactly as it looks right now.
-	var src_visual := src_preview.get_node_or_null("VisualRoot") as Node2D
-	if src_visual == null:
-		return
-	_warrior_open_transition = Node2D.new()
-	_warrior_open_transition.global_position = start_pos
-	_warrior_open_transition.scale = start_scale
-	_warrior_open_transition.z_index = 950
-	_warrior_open_transition.add_child(src_visual.duplicate())
-	_fx_layer.add_child(_warrior_open_transition)
-
-	src_preview.visible = false
-
-	_open_menu_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_position", target_pos, 0.18)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "scale", start_scale * 1.35, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(_warrior_open_transition, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(screen_warriors, "modulate:a", 1.0, 0.18)
-
-	_open_menu_tween.tween_callback(func() -> void:
-		screen_main.visible = false
-		screen_main.position = Vector2.ZERO
-		screen_main.modulate = Color(1, 1, 1, 1)
-		_current_screen = screen_warriors
-		if _warrior_open_transition != null and is_instance_valid(_warrior_open_transition):
-			_warrior_open_transition.queue_free()
-		_warrior_open_transition = null
-		src_preview.visible = true
-		if dst_preview != null:
-			dst_preview.scale = _warrior_shop_preview_base_scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
-			dst_preview.visible = true
-	)
+	_menu_transition_ctrl.open_warriors_menu_stage2(warriors_menu_preview_scale_mult, _warrior_shop_preview_base_scale)
 
 func _close_warriors_menu() -> void:
-	if screen_warriors == null or screen_main == null:
-		return
-	if _open_menu_tween != null:
-		_open_menu_tween.kill()
-		_open_menu_tween = null
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
-	if _warrior_open_transition != null and is_instance_valid(_warrior_open_transition):
-		_warrior_open_transition.queue_free()
-	_warrior_open_transition = null
-	if warrior_shop_preview != null and warrior_shop_preview is CanvasItem:
-		(warrior_shop_preview as CanvasItem).visible = true
-	# Defer so Control layout updates and global positions are accurate.
-	call_deferred("_close_warriors_menu_stage2")
+	_menu_transition_ctrl.close_warriors_menu()
 
 func _close_warriors_menu_stage2() -> void:
-	if screen_warriors == null or screen_main == null:
-		return
-	if _fx_layer == null:
-		return
-	var src_preview := warrior_shop_preview as Node2D
-	var dst_preview := main_warrior_preview as Node2D
-	if src_preview == null or dst_preview == null:
-		return
-
-	var src_visual := src_preview.get_node_or_null("VisualRoot") as Node2D
-	if src_visual == null:
-		return
-
-	var start_pos := src_preview.global_position
-	var target_pos := dst_preview.global_position
-	var start_scale := src_preview.scale
-	var target_scale := dst_preview.scale
-
-	_warrior_open_transition = Node2D.new()
-	_warrior_open_transition.global_position = start_pos
-	_warrior_open_transition.scale = start_scale
-	_warrior_open_transition.z_index = 950
-	_warrior_open_transition.add_child(src_visual.duplicate())
-	_fx_layer.add_child(_warrior_open_transition)
-
-	src_preview.visible = false
-	dst_preview.visible = false
-
-	screen_main.visible = true
-	screen_main.position = Vector2.ZERO
-	screen_main.modulate = Color(1, 1, 1, 1)
-
-	_open_menu_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
-	_open_menu_tween.parallel().tween_property(screen_warriors, "modulate:a", 0.0, 0.14)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_position", target_pos, 0.18)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "scale", target_scale * 1.15, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(_warrior_open_transition, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_callback(func() -> void:
-		screen_warriors.visible = false
-		screen_warriors.modulate = Color(1, 1, 1, 1)
-		_current_screen = screen_main
-		if _warrior_open_transition != null and is_instance_valid(_warrior_open_transition):
-			_warrior_open_transition.queue_free()
-		_warrior_open_transition = null
-		dst_preview.visible = true
-		src_preview.visible = true
-		src_preview.scale = _warrior_shop_preview_base_scale
-		_start_idle_loop()
-	)
+	_menu_transition_ctrl.close_warriors_menu_stage2(_warrior_shop_preview_base_scale)
 
 func _open_weapons_menu() -> void:
-	if screen_weapons == null or screen_main == null:
-		return
-	if _open_menu_tween != null:
-		_open_menu_tween.kill()
-		_open_menu_tween = null
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
-	if _weapon_open_transition != null and is_instance_valid(_weapon_open_transition):
-		_weapon_open_transition.queue_free()
-	_weapon_open_transition = null
-
-	_stop_idle_loop()
-
-	screen_weapons.visible = true
-	screen_weapons.position = Vector2.ZERO
-	screen_weapons.scale = Vector2.ONE
-	screen_weapons.modulate = Color(1, 1, 1, 0)
-
-	# Hide the real menu preview during the transition; we'll reveal it after the fade.
-	if weapon_shop_preview != null:
-		_set_weapon_icon_sprite(weapon_shop_preview, _pending_weapon_id)
-		_apply_weapon_skin_visual(weapon_shop_preview, _pending_weapon_id, _pending_weapon_skin)
-		weapon_shop_preview.visible = true
-		weapon_shop_preview.modulate.a = 0.0
-
-	call_deferred("_open_weapons_menu_stage2")
+	_menu_transition_ctrl.open_weapons_menu(_pending_weapon_id, _pending_weapon_skin)
 
 func _open_weapons_menu_stage2() -> void:
-	if screen_weapons == null or screen_main == null:
-		return
-	if _fx_layer == null:
-		return
-	var src_icon := main_weapon_icon
-	var dst_icon := weapon_shop_preview
-	if src_icon == null or dst_icon == null:
-		_open_menu_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		_open_menu_tween.tween_property(screen_weapons, "modulate:a", 1.0, 0.18)
-		_open_menu_tween.tween_callback(func() -> void:
-			screen_main.visible = false
-			_current_screen = screen_weapons
-			if dst_icon != null:
-				dst_icon.visible = true
-		)
-		return
-
-	# Sprite2D transitions need to animate using the *visual* center of the weapon,
-	# not the geometric center of its cropped texture. UZI happens to be closer to
-	# centered, while AK/SHOTGUN have asymmetric silhouettes, so the motion looks off
-	# unless we compensate.
-	var delta := (DATA.WEAPON_UI_OFFSET_BY_ID.get(_pending_weapon_id, Vector2.ZERO) as Vector2)
-	var start_center := src_icon.global_position + delta * src_icon.global_scale
-	var target_center := dst_icon.global_position + delta * dst_icon.global_scale
-
-	var tex := src_icon.texture
-	if tex == null:
-		return
-
-	var start_scale := src_icon.global_scale
-	var target_scale := dst_icon.global_scale
-
-	_weapon_open_transition = Node2D.new()
-	_weapon_open_transition.global_position = start_center
-	_weapon_open_transition.z_index = 950
-	var spr := Sprite2D.new()
-	spr.centered = true
-	spr.texture = tex
-	spr.modulate = src_icon.modulate
-	spr.material = src_icon.material
-	spr.offset = -delta
-	spr.scale = start_scale
-	_weapon_open_transition.add_child(spr)
-	_fx_layer.add_child(_weapon_open_transition)
-
-	src_icon.visible = false
-
-	_open_menu_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.parallel().tween_property(_weapon_open_transition, "global_position", target_center, 0.18)
-	_open_menu_tween.parallel().tween_property(spr, "scale", start_scale * 1.35, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(spr, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(screen_weapons, "modulate:a", 1.0, 0.18)
-
-	_open_menu_tween.tween_callback(func() -> void:
-		screen_main.visible = false
-		screen_main.position = Vector2.ZERO
-		screen_main.modulate = Color(1, 1, 1, 1)
-		_current_screen = screen_weapons
-		if _weapon_open_transition != null and is_instance_valid(_weapon_open_transition):
-			_weapon_open_transition.queue_free()
-		_weapon_open_transition = null
-		src_icon.visible = true
-		if dst_icon != null:
-			_set_weapon_icon_sprite(dst_icon, _pending_weapon_id)
-			_apply_weapon_skin_visual(dst_icon, _pending_weapon_id, _pending_weapon_skin)
-			dst_icon.visible = true
-			dst_icon.modulate.a = 1.0
-	)
+	_menu_transition_ctrl.open_weapons_menu_stage2(_pending_weapon_id, _pending_weapon_skin, WEAPON_UZI)
 
 func _close_weapons_menu() -> void:
-	if screen_weapons == null or screen_main == null:
-		return
-	if _open_menu_tween != null:
-		_open_menu_tween.kill()
-		_open_menu_tween = null
+	_sync_visible_weapon_from_preview()
+	_pending_weapon_id = _visible_weapon_id
+	_pending_weapon_skin = _visible_weapon_skin
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
-	if _weapon_open_transition != null and is_instance_valid(_weapon_open_transition):
-		_weapon_open_transition.queue_free()
-	_weapon_open_transition = null
-	if weapon_shop_preview != null:
-		weapon_shop_preview.visible = true
-		weapon_shop_preview.modulate.a = 1.0
-
-	call_deferred("_close_weapons_menu_stage2")
+	_menu_transition_ctrl.close_weapons_menu()
 
 func _close_weapons_menu_stage2() -> void:
-	if screen_weapons == null or screen_main == null:
-		return
-	if _fx_layer == null:
-		return
-	var src_icon := weapon_shop_preview
-	var dst_icon := main_weapon_icon
-	if src_icon == null or dst_icon == null:
-		return
+	_menu_transition_ctrl.close_weapons_menu_stage2(_visible_weapon_id, _visible_weapon_skin, WEAPON_UZI)
 
-	var delta := (DATA.WEAPON_UI_OFFSET_BY_ID.get(_pending_weapon_id, Vector2.ZERO) as Vector2)
-	var start_center := src_icon.global_position + delta * src_icon.global_scale
-	var target_center := dst_icon.global_position + delta * dst_icon.global_scale
-
-	var tex := src_icon.texture
-	if tex == null:
-		return
-
-	var start_scale := src_icon.global_scale
-	var target_scale := dst_icon.global_scale
-
-	_weapon_open_transition = Node2D.new()
-	_weapon_open_transition.global_position = start_center
-	_weapon_open_transition.z_index = 950
-	var spr := Sprite2D.new()
-	spr.centered = true
-	spr.texture = tex
-	spr.modulate = src_icon.modulate
-	spr.material = src_icon.material
-	spr.offset = -delta
-	spr.scale = start_scale
-	_weapon_open_transition.add_child(spr)
-	_fx_layer.add_child(_weapon_open_transition)
-
-	src_icon.modulate.a = 0.0
-	dst_icon.visible = false
-
-	screen_main.visible = true
-	screen_main.position = Vector2.ZERO
-	screen_main.modulate = Color(1, 1, 1, 1)
-
-	_open_menu_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
-	_open_menu_tween.parallel().tween_property(screen_weapons, "modulate:a", 0.0, 0.14)
-	_open_menu_tween.parallel().tween_property(_weapon_open_transition, "global_position", target_center, 0.18)
-	_open_menu_tween.parallel().tween_property(spr, "scale", target_scale * 1.15, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(spr, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_callback(func() -> void:
-		screen_weapons.visible = false
-		screen_weapons.modulate = Color(1, 1, 1, 1)
-		_current_screen = screen_main
-		if _weapon_open_transition != null and is_instance_valid(_weapon_open_transition):
-			_weapon_open_transition.queue_free()
-		_weapon_open_transition = null
-		dst_icon.visible = true
-		src_icon.modulate.a = 1.0
-		_set_weapon_icon_sprite(src_icon, _pending_weapon_id)
-		_apply_weapon_skin_visual(src_icon, _pending_weapon_id, _pending_weapon_skin)
-		_start_idle_loop()
-	)
+func _set_current_screen_ref(target: Control) -> void:
+	_current_screen = target
 
 func _prepare_player_preview(player: Node) -> void:
 	if player == null:
@@ -777,8 +887,125 @@ func _apply_warrior_skin_to_player(player: Node, skin_index: int) -> void:
 			leg.region_enabled = true
 			leg.region_rect = region
 
-func _set_weapon_icon_sprite(target: Sprite2D, weapon_id: String, extra_mult: float = 1.0) -> void:
-	_weapon_ui.set_weapon_icon_sprite(target, weapon_id, extra_mult, weapon_shop_preview)
+func _set_weapon_icon_sprite(target: Sprite2D, weapon_id: String, extra_mult: float = 1.0, skin_index: int = 0) -> void:
+	var normalized := weapon_id.strip_edges().to_lower()
+	var idx := maxi(0, skin_index)
+	if target != null:
+		target.set_meta("weapon_id", normalized)
+		target.set_meta("skin_index", idx)
+	if target == weapon_shop_preview:
+		_visible_weapon_id = normalized
+		_visible_weapon_skin = idx
+	_weapon_ui.set_weapon_icon_sprite(target, normalized, extra_mult, weapon_shop_preview, idx)
+
+func _sync_visible_weapon_from_preview() -> void:
+	if weapon_shop_preview == null:
+		return
+	if weapon_shop_preview.has_meta("weapon_id"):
+		_visible_weapon_id = str(weapon_shop_preview.get_meta("weapon_id")).strip_edges().to_lower()
+	if weapon_shop_preview.has_meta("skin_index"):
+		_visible_weapon_skin = maxi(0, int(weapon_shop_preview.get_meta("skin_index")))
+
+func _make_filter_button(text: String) -> Button:
+	var btn := _make_shop_button()
+	btn.custom_minimum_size = Vector2(0, 28)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.text = text
+	return btn
+
+func _set_filter_btn_selected(btn: Button, selected: bool) -> void:
+	if btn == null:
+		return
+	btn.modulate = Color(1, 1, 1, 1) if selected else Color(0.78, 0.8, 0.86, 0.85)
+
+func _refresh_weapon_filter_button_state() -> void:
+	for key in _weapon_filter_weapon_buttons.keys():
+		_set_filter_btn_selected(_weapon_filter_weapon_buttons.get(key, null) as Button, str(key) == _weapon_filter_weapon_id)
+	for key in _weapon_filter_category_buttons.keys():
+		_set_filter_btn_selected(_weapon_filter_category_buttons.get(key, null) as Button, str(key) == _weapon_filter_category)
+
+	for key in _weapon_filter_weapon_buttons.keys():
+		var wid := str(key)
+		var btn := _weapon_filter_weapon_buttons.get(wid, null) as Button
+		if btn == null:
+			continue
+		if wid.is_empty():
+			btn.text = "ALL"
+			continue
+		var wname := _weapon_ui.weapon_display_name(wid)
+		if not _weapon_is_owned(wid):
+			btn.text = "%s  (LOCKED)" % wname
+			continue
+		var eq := _equipped_weapon_skin(wid)
+		btn.text = "%s - %s  (1 EQUIPPED)" % [wname, _weapon_skin_label(wid, eq)]
+
+func _ensure_weapon_filter_ui() -> void:
+	if weapon_scroll == null:
+		return
+	var list_col := weapon_scroll.get_parent() as Control
+	if list_col == null:
+		return
+	if list_col.get_node_or_null("WeaponFilters") != null:
+		return
+
+	var filters := VBoxContainer.new()
+	filters.name = "WeaponFilters"
+	filters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	filters.add_theme_constant_override("separation", 6)
+	list_col.add_child(filters)
+	list_col.move_child(filters, 0)
+
+	var weapon_row := HBoxContainer.new()
+	weapon_row.name = "WeaponRow"
+	weapon_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	weapon_row.add_theme_constant_override("separation", 6)
+	filters.add_child(weapon_row)
+
+	_weapon_filter_weapon_buttons = {}
+	var weapon_items := [
+		{"label": "ALL", "id": ""},
+		{"label": "UZI", "id": WEAPON_UZI},
+		{"label": "AK47", "id": WEAPON_AK47},
+		{"label": "SHOTGUN", "id": WEAPON_SHOTGUN},
+		{"label": "GRENADE", "id": WEAPON_GRENADE},
+	]
+	for it in weapon_items:
+		var wid := str(it.get("id", ""))
+		var btn := _make_filter_button(str(it.get("label", "")))
+		btn.pressed.connect(func() -> void:
+			_weapon_filter_weapon_id = wid
+			if not wid.is_empty():
+				_select_weapon_skin(wid, _equipped_weapon_skin(wid), true)
+			_refresh_weapon_filter_button_state()
+			_build_weapon_shop_grid()
+		)
+		weapon_row.add_child(btn)
+		_weapon_filter_weapon_buttons[wid] = btn
+
+	var cat_row := HBoxContainer.new()
+	cat_row.name = "CategoryRow"
+	cat_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cat_row.add_theme_constant_override("separation", 6)
+	filters.add_child(cat_row)
+
+	_weapon_filter_category_buttons = {}
+	var cat_items := [
+		{"label": "ALL", "id": ""},
+		{"label": "COLORS", "id": "colors"},
+		{"label": "SKINS", "id": "skins"},
+	]
+	for it in cat_items:
+		var cid := str(it.get("id", ""))
+		var btn := _make_filter_button(str(it.get("label", "")))
+		btn.pressed.connect(func() -> void:
+			_weapon_filter_category = cid
+			_refresh_weapon_filter_button_state()
+			_build_weapon_shop_grid()
+		)
+		cat_row.add_child(btn)
+		_weapon_filter_category_buttons[cid] = btn
+
+	_refresh_weapon_filter_button_state()
 
 func _icon_global_rect(icon: CanvasItem) -> Rect2:
 	if icon == null:
@@ -821,8 +1048,14 @@ func _build_warrior_shop_grid() -> void:
 
 func _build_weapon_shop_grid() -> void:
 	_clear_children(weapon_grid)
-	for weapon_id in [WEAPON_UZI, WEAPON_GRENADE]:
+	var weapon_list := [WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE]
+	if not _weapon_filter_weapon_id.is_empty():
+		weapon_list = [_weapon_filter_weapon_id]
+	for weapon_id in weapon_list:
 		for skin in _weapon_skins_for(weapon_id):
+			var cat := str(skin.get("category", "")).strip_edges().to_lower()
+			if not _weapon_filter_category.is_empty() and cat != _weapon_filter_category:
+				continue
 			var skin_index := int(skin.get("skin", 0))
 			var btn := _weapon_ui.make_weapon_item_button(self, Callable(self, "_make_shop_button"), weapon_id, skin_index)
 			btn.pressed.connect(Callable(self, "_on_weapon_item_button_pressed").bind(weapon_id, skin_index))
@@ -984,7 +1217,8 @@ func _apply_pixel_scrollbar(sb: ScrollBar) -> void:
 		return
 	sb.add_theme_stylebox_override("scroll", _scroll_sb)
 	sb.add_theme_stylebox_override("scroll_focus", _scroll_sb)
-	sb.add_theme_stylebox_override("grabber", _scroll_grabber)
+	# Keep the orange highlight visible all the time (not only on hover).
+	sb.add_theme_stylebox_override("grabber", _scroll_grabber_hi)
 	sb.add_theme_stylebox_override("grabber_highlight", _scroll_grabber_hi)
 	sb.add_theme_stylebox_override("grabber_pressed", _scroll_grabber_pressed)
 
@@ -1090,6 +1324,7 @@ func _try_buy_and_equip_warrior_skin(skin_index: int) -> void:
 	owned_warrior_skins.sort()
 	_update_wallet_labels(false)
 	_equip_warrior_skin(idx)
+	_auth_sync_wallet()
 	_pixel_burst_at(_center_of(wallet_panel), Color(0.25, 1, 0.85, 1))
 
 func _on_warrior_skin_button_pressed(skin_index: int) -> void:
@@ -1154,6 +1389,16 @@ func _weapon_skin_is_owned(weapon_id: String, skin_index: int) -> bool:
 		return skin_index == 0
 	return arr.has(skin_index)
 
+func _equipped_weapon_skin(weapon_id: String) -> int:
+	var normalized := weapon_id.strip_edges().to_lower()
+	if equipped_weapon_skin_by_weapon.has(normalized):
+		return maxi(0, int(equipped_weapon_skin_by_weapon.get(normalized, 0)))
+	return 0
+
+func _set_equipped_weapon_skin(weapon_id: String, skin_index: int) -> void:
+	var normalized := weapon_id.strip_edges().to_lower()
+	equipped_weapon_skin_by_weapon[normalized] = maxi(0, skin_index)
+
 func _weapon_item_button_text(weapon_id: String, skin_index: int) -> String:
 	var w := weapon_id.to_upper()
 	var skin_name := _weapon_skin_label(weapon_id, skin_index)
@@ -1176,10 +1421,10 @@ func _select_weapon_skin(weapon_id: String, skin_index: int, silent: bool) -> vo
 	_pending_weapon_id = weapon_id.strip_edges().to_lower()
 	_pending_weapon_skin = maxi(0, skin_index)
 
-	_set_weapon_icon_sprite(weapon_shop_preview, _pending_weapon_id)
+	_set_weapon_icon_sprite(weapon_shop_preview, _pending_weapon_id, 1.0, _pending_weapon_skin)
 	_apply_weapon_skin_visual(weapon_shop_preview, _pending_weapon_id, _pending_weapon_skin)
 
-	weapon_name_label.text = "%s - %s" % [_pending_weapon_id.to_upper(), _weapon_skin_label(_pending_weapon_id, _pending_weapon_skin)]
+	weapon_name_label.text = "%s - %s" % [_weapon_ui.weapon_display_name(_pending_weapon_id), _weapon_skin_label(_pending_weapon_id, _pending_weapon_skin)]
 	_refresh_weapon_grid_texts()
 	if not silent:
 		_pop(weapon_shop_preview)
@@ -1189,11 +1434,14 @@ func _equip_weapon_item(weapon_id: String, skin_index: int) -> void:
 	selected_weapon_skin = maxi(0, skin_index)
 	_pending_weapon_id = selected_weapon_id
 	_pending_weapon_skin = selected_weapon_skin
-	_set_weapon_icon_sprite(main_weapon_icon, selected_weapon_id)
-	_apply_weapon_skin_visual(main_weapon_icon, selected_weapon_id, selected_weapon_skin)
-	_set_weapon_icon_sprite(weapon_shop_preview, selected_weapon_id)
+	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
+	_set_weapon_icon_sprite(main_weapon_icon, _visible_weapon_id, 1.0, _visible_weapon_skin)
+	_apply_weapon_skin_visual(main_weapon_icon, _visible_weapon_id, _visible_weapon_skin)
+	_set_weapon_icon_sprite(weapon_shop_preview, selected_weapon_id, 1.0, selected_weapon_skin)
 	_apply_weapon_skin_visual(weapon_shop_preview, selected_weapon_id, selected_weapon_skin)
-	weapon_name_label.text = "%s - %s" % [selected_weapon_id.to_upper(), _weapon_skin_label(selected_weapon_id, selected_weapon_skin)]
+	weapon_name_label.text = "%s - %s" % [_weapon_ui.weapon_display_name(selected_weapon_id), _weapon_skin_label(selected_weapon_id, selected_weapon_skin)]
+	_weapon_filter_weapon_id = selected_weapon_id
+	_refresh_weapon_filter_button_state()
 	_save_state()
 	_refresh_weapon_grid_texts()
 	_pop(main_weapon_icon)
@@ -1213,6 +1461,7 @@ func _buy_weapon_if_needed(weapon_id: String) -> bool:
 	owned_weapons.append(normalized)
 	_update_wallet_labels(false)
 	_save_state()
+	_auth_sync_wallet()
 	return true
 
 func _buy_weapon_skin_if_needed(weapon_id: String, skin_index: int) -> bool:
@@ -1234,6 +1483,7 @@ func _buy_weapon_skin_if_needed(weapon_id: String, skin_index: int) -> bool:
 	owned_weapon_skins_by_weapon[normalized] = arr
 	_update_wallet_labels(false)
 	_save_state()
+	_auth_sync_wallet()
 	return true
 
 func _confirm_buy_weapon_skin_and_equip(weapon_id: String, skin_index: int) -> void:
@@ -1274,9 +1524,9 @@ func _on_weapon_item_button_pressed(weapon_id: String, skin_index: int) -> void:
 
 	_pending_weapon_id = normalized
 	_pending_weapon_skin = idx
-	_set_weapon_icon_sprite(weapon_shop_preview, normalized)
+	_set_weapon_icon_sprite(weapon_shop_preview, normalized, 1.0, idx)
 	_apply_weapon_skin_visual(weapon_shop_preview, normalized, idx)
-	weapon_name_label.text = "%s - %s" % [normalized.to_upper(), _weapon_skin_label(normalized, idx)]
+	weapon_name_label.text = "%s - %s" % [_weapon_ui.weapon_display_name(normalized), _weapon_skin_label(normalized, idx)]
 	_refresh_weapon_grid_texts()
 
 	if not needs_weapon and not needs_skin:
@@ -1370,13 +1620,18 @@ func _pixel_burst_at(global_pos: Vector2, color: Color) -> void:
 		t.tween_callback(func() -> void: p.queue_free())
 
 func _load_state_or_defaults() -> void:
+	var fallback_username := OS.get_environment("USERNAME").strip_edges()
+	if fallback_username.is_empty():
+		fallback_username = "Player"
 	var defaults := {
 		"coins": 1000000,
 		"clk": 50000,
+		"username": fallback_username,
 		"owned_warrior_skins": [0],
 		"selected_warrior_skin": 0,
 		"owned_weapons": [WEAPON_UZI],
-		"owned_weapon_skins_by_weapon": {WEAPON_UZI: [0], WEAPON_GRENADE: [0]},
+		"owned_weapon_skins_by_weapon": {WEAPON_UZI: [0], WEAPON_GRENADE: [0], WEAPON_AK47: [0], WEAPON_SHOTGUN: [0]},
+		"equipped_weapon_skin_by_weapon": {WEAPON_UZI: 0, WEAPON_GRENADE: 0, WEAPON_AK47: 0, WEAPON_SHOTGUN: 0},
 		"selected_weapon_id": WEAPON_UZI,
 		"selected_weapon_skin": 0,
 	}
@@ -1384,6 +1639,9 @@ func _load_state_or_defaults() -> void:
 
 	wallet_coins = int(st.get("coins", 0))
 	wallet_clk = int(st.get("clk", 0))
+	player_username = str(st.get("username", fallback_username)).strip_edges()
+	if player_username.is_empty():
+		player_username = fallback_username
 
 	owned_warrior_skins = PackedInt32Array(st.get("owned_warrior_skins", [0]) as Array)
 	selected_warrior_skin = maxi(0, int(st.get("selected_warrior_skin", 0)))
@@ -1393,7 +1651,7 @@ func _load_state_or_defaults() -> void:
 	selected_weapon_skin = maxi(0, int(st.get("selected_weapon_skin", 0)))
 
 	# Sanitize weapon ids (remove weapons that no longer exist in this menu).
-	var allowed := PackedStringArray([WEAPON_UZI, WEAPON_GRENADE])
+	var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE])
 	var filtered_owned := PackedStringArray()
 	for wid in owned_weapons:
 		var w := str(wid).strip_edges().to_lower()
@@ -1417,14 +1675,26 @@ func _load_state_or_defaults() -> void:
 	for wid in allowed:
 		if not owned_weapon_skins_by_weapon.has(wid):
 			owned_weapon_skins_by_weapon[wid] = PackedInt32Array([0])
+		if not equipped_weapon_skin_by_weapon.has(wid):
+			equipped_weapon_skin_by_weapon[wid] = 0
+
+	var eq := st.get("equipped_weapon_skin_by_weapon", {}) as Dictionary
+	if eq != null:
+		for key in eq.keys():
+			var wid := str(key).strip_edges().to_lower()
+			if not allowed.has(wid):
+				continue
+			equipped_weapon_skin_by_weapon[wid] = maxi(0, int(eq.get(key, 0)))
 
 	# Clamp selections to owned.
 	if not _is_warrior_skin_owned(selected_warrior_skin):
 		selected_warrior_skin = 0
 	if not _weapon_is_owned(selected_weapon_id):
 		selected_weapon_id = WEAPON_UZI
+	selected_weapon_skin = _equipped_weapon_skin(selected_weapon_id)
 	if not _weapon_skin_is_owned(selected_weapon_id, selected_weapon_skin):
 		selected_weapon_skin = 0
+		_set_equipped_weapon_skin(selected_weapon_id, 0)
 
 func _save_state() -> void:
 	var owned_warrior_list: Array = []
@@ -1447,14 +1717,49 @@ func _save_state() -> void:
 	var d := {
 		"coins": wallet_coins,
 		"clk": wallet_clk,
+		"username": player_username,
 		"owned_warrior_skins": owned_warrior_list,
 		"selected_warrior_skin": selected_warrior_skin,
 		"owned_weapons": owned_weapons_list,
 		"owned_weapon_skins_by_weapon": owned_weapon_skins_dict,
+		"equipped_weapon_skin_by_weapon": equipped_weapon_skin_by_weapon,
 		"selected_weapon_id": selected_weapon_id,
 		"selected_weapon_skin": selected_weapon_skin,
 	}
 	_state_store.save_state(DATA.SHOP_STATE_PATH, d)
+
+func _ensure_warrior_username_label() -> void:
+	if _warrior_username_label != null and is_instance_valid(_warrior_username_label):
+		return
+	if warrior_area == null:
+		return
+	var label := Label.new()
+	label.name = "WarriorUsername"
+	label.z_index = 20
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.layout_mode = 1
+	label.anchors_preset = Control.PRESET_CENTER_TOP
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.anchor_top = 0.0
+	label.anchor_bottom = 0.0
+	label.offset_left = -74
+	label.offset_right = 74
+	label.offset_top = -6
+	label.offset_bottom = 16
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(0.98, 0.97, 0.95, 1))
+	label.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
+	label.add_theme_constant_override("outline_size", 0)
+	warrior_area.add_child(label)
+	_warrior_username_label = label
+
+func _refresh_warrior_username_label() -> void:
+	if _warrior_username_label == null:
+		return
+	_warrior_username_label.text = player_username
 
 func _update_wallet_labels(silent: bool) -> void:
 	coins_label.text = "Coins: %d" % wallet_coins
@@ -1469,131 +1774,37 @@ func _clear_children(node: Node) -> void:
 		child.queue_free()
 
 func _add_hover_pop(btn: Button) -> void:
-	if btn == null:
-		return
-	btn.mouse_entered.connect(func() -> void:
-		btn.set_meta("kw_hovered", true)
-		_tween_scale(btn, Vector2(1.04, 1.04), 0.12)
-	)
-	btn.mouse_exited.connect(func() -> void:
-		btn.set_meta("kw_hovered", false)
-		_tween_scale(btn, Vector2(1, 1), 0.14)
-	)
-	btn.button_down.connect(func() -> void: _press_in(btn, 0.94))
-	btn.button_up.connect(func() -> void: _release_to_hover(btn, btn))
+	_ui_anim.add_hover_pop(btn)
 
 func _hover_area(area: Control, hovered: bool) -> void:
-	if area == null:
-		return
-	var target := Vector2(1.045, 1.045) if hovered else Vector2(1, 1)
-	_tween_scale(area, target, 0.12)
+	_ui_anim.hover_area(area, hovered)
 
 func _press_in(ci: CanvasItem, target_mult: float) -> void:
-	if ci == null:
-		return
-	_tween_scale(ci, ci.scale * target_mult, 0.06)
+	_ui_anim.press_in(ci, target_mult)
 
 func _release_to_hover(ci: CanvasItem, btn: Button) -> void:
-	if ci == null:
-		return
-	var hovered := false
-	if btn != null and btn.has_meta("kw_hovered"):
-		hovered = bool(btn.get_meta("kw_hovered"))
-	var target := Vector2(1.04, 1.04) if hovered else Vector2(1, 1)
-	_tween_scale(ci, target, 0.08)
+	_ui_anim.release_to_hover(ci, btn)
 
 func _button_press_anim(ci: CanvasItem, extra_scale: float = 0.06) -> void:
-	if ci == null:
-		return
-	var start_scale: Vector2 = Vector2.ONE
-	if ci is Node2D:
-		start_scale = (ci as Node2D).scale
-	elif ci is Control:
-		start_scale = (ci as Control).scale
-	var t := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	t.tween_property(ci, "scale", start_scale * (1.0 - extra_scale * 0.6), 0.06)
-	t.tween_property(ci, "scale", start_scale * (1.0 + extra_scale), 0.12)
-	t.tween_property(ci, "scale", start_scale, 0.08)
+	_ui_anim.button_press_anim(self, ci, extra_scale)
 
 func _tween_scale(ci: CanvasItem, target_scale: Vector2, duration: float) -> void:
-	if ci == null:
-		return
-	var t := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.tween_property(ci, "scale", target_scale, duration)
+	_ui_anim.tween_scale(ci, target_scale, duration)
 
 func _pop(ci: CanvasItem) -> void:
-	if ci == null:
-		return
-	var start_scale: Vector2 = Vector2.ONE
-	if ci is Node2D:
-		start_scale = (ci as Node2D).scale
-	elif ci is Control:
-		start_scale = (ci as Control).scale
-	var t := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	t.tween_property(ci, "scale", start_scale * 1.08, 0.12)
-	t.tween_property(ci, "scale", start_scale, 0.16)
+	_ui_anim.pop(self, ci)
 
 func _shake(ci: CanvasItem) -> void:
-	if ci == null:
-		return
-	var base := Vector2.ZERO
-	if ci is Control:
-		base = (ci as Control).position
-	var t := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	t.tween_property(ci, "position", base + Vector2(-6, 0), 0.05)
-	t.tween_property(ci, "position", base + Vector2(6, 0), 0.05)
-	t.tween_property(ci, "position", base + Vector2(-4, 0), 0.05)
-	t.tween_property(ci, "position", base + Vector2(4, 0), 0.05)
-	t.tween_property(ci, "position", base, 0.05)
+	_ui_anim.shake(self, ci)
 
 func _start_idle_loop() -> void:
-	_stop_idle_loop()
-	if _current_screen != screen_main:
-		return
-
-	_idle_tween = create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	if logo_node != null:
-		_idle_tween.parallel().tween_property(logo_node, "position", _logo_base_pos + Vector2(0, -4), 1.1)
-	_idle_tween.parallel().tween_property(warrior_area, "position", _warrior_area_base_pos + Vector2(0, -4), 1.1)
-	_idle_tween.parallel().tween_property(weapon_area, "position", _weapon_area_base_pos + Vector2(0, 4), 1.1)
-	_idle_tween.parallel().tween_property(play_button, "scale", Vector2(1.03, 1.03), 1.1)
-	_idle_tween.parallel().tween_property($BgNoise, "modulate:a", minf(0.16, _bgnoise_base_alpha + 0.05), 1.1)
-	_idle_tween.tween_interval(0.02)
-	if logo_node != null:
-		_idle_tween.parallel().tween_property(logo_node, "position", _logo_base_pos, 1.1)
-	_idle_tween.parallel().tween_property(warrior_area, "position", _warrior_area_base_pos, 1.1)
-	_idle_tween.parallel().tween_property(weapon_area, "position", _weapon_area_base_pos, 1.1)
-	_idle_tween.parallel().tween_property(play_button, "scale", Vector2(1, 1), 1.1)
-	_idle_tween.parallel().tween_property($BgNoise, "modulate:a", _bgnoise_base_alpha, 1.1)
+	_idle_anim.start_idle_loop(
+		_current_screen,
+		_visible_weapon_id,
+		_visible_weapon_skin,
+		Callable(self, "_set_weapon_icon_sprite"),
+		Callable(self, "_apply_weapon_skin_visual")
+	)
 
 func _stop_idle_loop() -> void:
-	if _idle_tween != null:
-		_idle_tween.kill()
-		_idle_tween = null
-	_node_set_pos(logo_node, _logo_base_pos)
-	if warrior_area != null:
-		warrior_area.position = _warrior_area_base_pos
-	if weapon_area != null:
-		weapon_area.position = _weapon_area_base_pos
-	var bg := $BgNoise as CanvasItem
-	if bg != null:
-		bg.modulate.a = _bgnoise_base_alpha
-	if play_button != null:
-		play_button.scale = Vector2(1, 1)
-
-func _node_pos(n: Node) -> Vector2:
-	if n == null:
-		return Vector2.ZERO
-	if n is Node2D:
-		return (n as Node2D).position
-	if n is Control:
-		return (n as Control).position
-	return Vector2.ZERO
-
-func _node_set_pos(n: Node, p: Vector2) -> void:
-	if n == null:
-		return
-	if n is Node2D:
-		(n as Node2D).position = p
-	elif n is Control:
-		(n as Control).position = p
+	_idle_anim.stop_idle_loop()

@@ -177,7 +177,7 @@ func _set_weapon(weapon_id: String, skin_index: int) -> void:
 	_weapon_slot.visible = true
 	_weapon_sprite.position = _weapon_slot.size * 0.5
 	if _set_weapon_icon.is_valid():
-		_set_weapon_icon.call(_weapon_sprite, normalized, 0.85)
+		_set_weapon_icon.call(_weapon_sprite, normalized, 0.85, maxi(0, skin_index))
 	if _apply_weapon_skin.is_valid():
 		_apply_weapon_skin.call(_weapon_sprite, normalized, maxi(0, skin_index))
 
