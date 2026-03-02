@@ -1,4 +1,4 @@
-﻿extends "res://scripts/app/runtime_world_logic.gd"
+extends "res://scripts/app/runtime_world_logic.gd"
 
 
 const PIXEL_FONT := preload("res://assets/fonts/kwfont.ttf")
@@ -19,7 +19,7 @@ var _auth_logout_token := ""
 var _auth_profile := "default"
 @export var auth_require_login_on_startup := true
 
-@export var dev_auto_login_on_autostart := true
+@export var dev_auto_login_on_autostart := false
 @export var dev_auto_login_password := "test"
 @export var dev_auto_login_max_attempts := 3
 
@@ -403,8 +403,10 @@ func _auth_submit(action: String) -> void:
 		_set_auth_status("Auth error: request failed (%s)" % error_string(err))
 		_set_loading(false)
 
-func _on_auth_request_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_auth_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	var action := _auth_pending_action
+	var wallet_before_coins := wallet_coins
+	var wallet_before_clk := wallet_clk
 	_auth_inflight = false
 	_auth_pending_action = ""
 	_set_loading(false)
@@ -419,11 +421,13 @@ func _on_auth_request_completed(_result: int, response_code: int, _headers: Pack
 
 	var detail := str(payload.get("detail", "")).strip_edges()
 	if detail.is_empty() and response_code == 0:
-		detail = "no response (auth API offline?)"
+		detail = "no response (result=%d; auth API offline/unreachable?)" % result
 	if detail.is_empty() and not trimmed_text.is_empty() and trimmed_text.length() <= 200:
 		detail = trimmed_text
 	if detail.is_empty():
 		detail = "HTTP %d" % response_code
+	if action == "profile" or action == "purchase_skin":
+		_append_log("[AUTH][%s] response code=%d user=%s detail=%s" % [action, response_code, auth_username, detail])
 
 	if action == "logout":
 		_auth_logout_token = ""
@@ -462,6 +466,7 @@ func _on_auth_request_completed(_result: int, response_code: int, _headers: Pack
 
 	if action == "profile":
 		_apply_profile_payload(payload)
+		_append_log("[AUTH][profile] wallet %d/%d -> %d/%d" % [wallet_before_coins, wallet_before_clk, wallet_coins, wallet_clk])
 		return
 
 	if action == "purchase_skin":
@@ -469,6 +474,8 @@ func _on_auth_request_completed(_result: int, response_code: int, _headers: Pack
 		if not _purchase_pending_character_id.is_empty() and _purchase_pending_skin_index > 0:
 			_persist_local_skin_selection(_purchase_pending_character_id, _purchase_pending_skin_index)
 		_apply_profile_payload(payload)
+		_append_log("[AUTH][purchase_skin] user=%s char=%s skin=%d wallet %d/%d -> %d/%d" % [auth_username, _purchase_pending_character_id, _purchase_pending_skin_index, wallet_before_coins, wallet_before_clk, wallet_coins, wallet_clk])
+		_api_profile()
 		_show_purchase_menu(false)
 		_set_lobby_status("Purchased: %s" % _purchase_pending_skin_name)
 		if _purchase_pending_character_id == CHARACTER_ID_OUTRAGE and _purchase_pending_skin_index > 0 and _is_client_connected():
@@ -527,6 +534,7 @@ func _api_profile() -> void:
 	_auth_pending_action = "profile"
 	_set_loading(true, "LOADING...")
 	var url := "%s/profile" % _auth_api_base_url()
+	_append_log("[AUTH][profile] request user=%s url=%s" % [auth_username, url])
 	var headers := PackedStringArray(["Authorization: Bearer %s" % token])
 	var err := auth_request.request(url, headers, HTTPClient.METHOD_GET)
 	if err != OK:
@@ -639,6 +647,7 @@ func _api_purchase_skin(character_id: String, skin_index: int) -> void:
 	_auth_inflight = true
 	_auth_pending_action = "purchase_skin"
 	var url := "%s/purchase/skin" % _auth_api_base_url()
+	_append_log("[AUTH][purchase_skin] request user=%s char=%s skin=%d coins_ui=%d" % [auth_username, character_id, skin_index, wallet_coins])
 	var headers := PackedStringArray([
 		"Authorization: Bearer %s" % token,
 		"Content-Type: application/json"
@@ -798,8 +807,15 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_update_peer_labels()
 	_update_score_labels()
 
+func _can_issue_lobby_actions() -> bool:
+	if _is_client_connected():
+		return true
+	if multiplayer != null and multiplayer.multiplayer_peer != null and multiplayer.is_server():
+		return true
+	return false
+
 func _on_lobby_create_pressed() -> void:
-	if not _is_client_connected() or lobby_auto_action_inflight:
+	if not _can_issue_lobby_actions() or lobby_auto_action_inflight:
 		return
 	_persist_local_weapon_selection()
 	_persist_local_character_selection()
@@ -819,7 +835,7 @@ func _on_lobby_create_pressed() -> void:
 	_rpc_lobby_create.rpc_id(1, _lobby_name_value(), payload)
 
 func _on_lobby_join_pressed() -> void:
-	if not _is_client_connected() or lobby_auto_action_inflight:
+	if not _can_issue_lobby_actions() or lobby_auto_action_inflight:
 		return
 	_persist_local_weapon_selection()
 	_persist_local_character_selection()
@@ -837,12 +853,12 @@ func _on_lobby_join_pressed() -> void:
 	_rpc_lobby_join.rpc_id(1, lobby_id, selected_weapon_id, selected_character_id)
 
 func _on_lobby_refresh_pressed() -> void:
-	if not _is_client_connected():
+	if not _can_issue_lobby_actions():
 		return
 	_request_lobby_list()
 
 func _on_lobby_leave_pressed() -> void:
-	if not _is_client_connected() or lobby_auto_action_inflight:
+	if not _can_issue_lobby_actions() or lobby_auto_action_inflight:
 		return
 	lobby_auto_action_inflight = true
 	_refresh_lobby_buttons()
@@ -907,7 +923,7 @@ func _on_lobby_skin_selected(index: int) -> void:
 		_prompt_purchase_skin(selected_character_id, skin_index, lobby_skin_option.get_item_text(index))
 		return
 	_persist_local_skin_selection(selected_character_id, skin_index)
-	if _is_client_connected():
+	if _can_issue_lobby_actions():
 		_rpc_lobby_set_skin.rpc_id(1, skin_index)
 
 func _on_lobby_map_selected(index: int) -> void:
@@ -961,7 +977,7 @@ func _persist_local_outage_skin_if_needed() -> void:
 			if meta != null:
 				skin_index = int(meta)
 	_persist_local_skin_selection(selected_character_id, skin_index)
-	if _is_client_connected():
+	if _can_issue_lobby_actions():
 		_rpc_lobby_set_skin.rpc_id(1, skin_index)
 
 func _apply_pixel_dropdown_popups() -> void:

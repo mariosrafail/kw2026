@@ -140,10 +140,19 @@ var _scroll_grabber_hi: StyleBoxFlat = null
 var _scroll_grabber_pressed: StyleBoxFlat = null
 
 var _auth_api_base_url := AUTH_API_BASE_URL_DEFAULT
+var _auth_login_base_url_candidates := PackedStringArray()
+var _auth_login_base_url_index := 0
+var _auth_login_payload := ""
 var _auth_token := ""
 var _auth_logged_in := false
 var _auth_pending_action := ""
+var _auth_pending_purchase_skin_index := -1
 var _auth_wallet_sync_queued := false
+var _auth_wallet_sync_endpoint_candidates: Array = ["/wallet/update", "/wallet/update/", "/wallet"]
+var _auth_wallet_sync_endpoint_index := 0
+var _auth_wallet_sync_supported := true
+var _auth_wallet_sync_snapshot_active := false
+var _auth_wallet_sync_snapshot: Dictionary = {}
 var _auth_wallet_retry_timer: Timer
 var _auth_http: HTTPRequest
 var _auth_overlay: Control
@@ -282,12 +291,75 @@ func _ready() -> void:
 func _auth_url(path: String) -> String:
 	return "%s%s" % [_auth_api_base_url, path]
 
+func _auth_login_current_base_url() -> String:
+	if _auth_login_base_url_candidates.is_empty():
+		return _auth_api_base_url
+	return str(_auth_login_base_url_candidates[_auth_login_base_url_index])
+
+func _auth_build_base_url_with_port(base_url: String, port: int) -> String:
+	var trimmed := base_url.strip_edges()
+	var scheme_idx := trimmed.find("://")
+	if scheme_idx < 0:
+		return trimmed
+	var scheme := trimmed.substr(0, scheme_idx)
+	var rest := trimmed.substr(scheme_idx + 3)
+	var slash_idx := rest.find("/")
+	var host_port := rest
+	var suffix := ""
+	if slash_idx >= 0:
+		host_port = rest.substr(0, slash_idx)
+		suffix = rest.substr(slash_idx)
+	var host := host_port
+	if host_port.find("]") < 0:
+		var colon_idx := host_port.rfind(":")
+		if colon_idx >= 0:
+			host = host_port.substr(0, colon_idx)
+	return "%s://%s:%d%s" % [scheme, host, port, suffix]
+
+func _auth_trim_suffix(url: String, suffix: String) -> String:
+	var trimmed := url.strip_edges()
+	if trimmed.ends_with(suffix):
+		return trimmed.substr(0, trimmed.length() - suffix.length())
+	return trimmed
+
+func _auth_rebuild_login_base_candidates() -> void:
+	_auth_login_base_url_candidates = PackedStringArray()
+	var base_variants := PackedStringArray([_auth_api_base_url])
+	var without_auth := _auth_trim_suffix(_auth_api_base_url, "/auth")
+	if without_auth != _auth_api_base_url:
+		base_variants.append(without_auth)
+
+	var candidates := PackedStringArray()
+	for base in base_variants:
+		candidates.append(base)
+		candidates.append(_auth_build_base_url_with_port(base, 8080))
+		candidates.append(_auth_build_base_url_with_port(base, 8081))
+		candidates.append(_auth_build_base_url_with_port(base, 8090))
+
+	for c in candidates:
+		var v := str(c).strip_edges()
+		if v.is_empty() or _auth_login_base_url_candidates.has(v):
+			continue
+		_auth_login_base_url_candidates.append(v)
+	_auth_login_base_url_index = 0
+
+func _auth_request_login_with_current_candidate() -> int:
+	var url := "%s/login" % _auth_login_current_base_url()
+	print("[AUTH][LOGIN] request url=%s user=%s" % [url, (_auth_user_input.text.strip_edges() if _auth_user_input != null else "")])
+	return _auth_http.request(
+		url,
+		PackedStringArray(["Content-Type: application/json"]),
+		HTTPClient.METHOD_POST,
+		_auth_login_payload
+	)
+
 func _setup_auth_gate() -> void:
 	_auth_api_base_url = str(ProjectSettings.get_setting("kw/auth_api_base_url", AUTH_API_BASE_URL_DEFAULT)).strip_edges()
 	if _auth_api_base_url.is_empty():
 		_auth_api_base_url = AUTH_API_BASE_URL_DEFAULT
 	if _auth_api_base_url.ends_with("/"):
 		_auth_api_base_url = _auth_api_base_url.substr(0, _auth_api_base_url.length() - 1)
+	_auth_rebuild_login_base_candidates()
 
 	_auth_http = HTTPRequest.new()
 	_auth_http.name = "AuthHttp"
@@ -402,17 +474,14 @@ func _auth_submit_login() -> void:
 	else:
 		payload["username"] = user_raw
 	var body := JSON.stringify(payload)
+	_auth_login_payload = body
+	_auth_login_base_url_index = 0
 	_auth_pending_action = "login"
 	if _auth_status_label != null:
 		_auth_status_label.text = "Logging in..."
 	if _auth_login_button != null:
 		_auth_login_button.disabled = true
-	var err := _auth_http.request(
-		_auth_url("/login"),
-		PackedStringArray(["Content-Type: application/json"]),
-		HTTPClient.METHOD_POST,
-		body
-	)
+	var err := _auth_request_login_with_current_candidate()
 	if err != OK:
 		_auth_pending_action = ""
 		if _auth_status_label != null:
@@ -441,14 +510,50 @@ func _auth_request_profile() -> void:
 func _auth_sync_wallet() -> void:
 	if _auth_http == null or _auth_token.is_empty() or not _auth_logged_in:
 		return
+	if not _auth_wallet_sync_supported:
+		return
 	if not _auth_pending_action.is_empty():
 		_auth_wallet_sync_queued = true
 		_auth_schedule_wallet_retry()
 		return
-	var body := JSON.stringify({"coins": wallet_coins, "clk": wallet_clk})
+	var owned_skins_payload: Array = []
+	for skin_idx in owned_warrior_skins:
+		var idx := maxi(0, int(skin_idx))
+		if idx <= 0:
+			continue
+		owned_skins_payload.append({"character_id": "outrage", "skin_index": idx})
+
+	var owned_weapons_payload: Array = []
+	for wid in owned_weapons:
+		var normalized := str(wid).strip_edges().to_lower()
+		if normalized.is_empty() or owned_weapons_payload.has(normalized):
+			continue
+		owned_weapons_payload.append(normalized)
+
+	var owned_weapon_skins_payload: Dictionary = {}
+	for wid in owned_weapon_skins_by_weapon.keys():
+		var normalized := str(wid).strip_edges().to_lower()
+		if normalized.is_empty():
+			continue
+		var arr := owned_weapon_skins_by_weapon.get(wid, PackedInt32Array([0])) as PackedInt32Array
+		var out_arr: Array = []
+		if arr != null:
+			for s in arr:
+				out_arr.append(maxi(0, int(s)))
+		owned_weapon_skins_payload[normalized] = out_arr
+
+	var body := JSON.stringify({
+		"coins": wallet_coins,
+		"clk": wallet_clk,
+		"owned_skins": owned_skins_payload,
+		"owned_weapons": owned_weapons_payload,
+		"owned_weapon_skins_by_weapon": owned_weapon_skins_payload,
+	})
+	var endpoint := str(_auth_wallet_sync_endpoint_candidates[_auth_wallet_sync_endpoint_index])
+	print("[AUTH][WALLET_SYNC] request user=%s url=%s coins=%d clk=%d" % [player_username, _auth_url(endpoint), wallet_coins, wallet_clk])
 	_auth_pending_action = "wallet_sync"
 	var err := _auth_http.request(
-		_auth_url("/wallet/update"),
+		_auth_url(endpoint),
 		PackedStringArray([
 			"Authorization: Bearer %s" % _auth_token,
 			"Content-Type: application/json"
@@ -457,9 +562,102 @@ func _auth_sync_wallet() -> void:
 		body
 	)
 	if err != OK:
+		print("[AUTH][WALLET_SYNC] request failed err=%s" % str(err))
 		_auth_pending_action = ""
 		_auth_wallet_sync_queued = true
 		_auth_schedule_wallet_retry()
+
+func _copy_weapon_skins_dict(src: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for key in src.keys():
+		var normalized := str(key).strip_edges().to_lower()
+		var arr := src.get(key, PackedInt32Array([0])) as PackedInt32Array
+		if arr == null:
+			out[normalized] = PackedInt32Array([0])
+			continue
+		var arr_copy := PackedInt32Array()
+		for v in arr:
+			arr_copy.append(int(v))
+		out[normalized] = arr_copy
+	return out
+
+func _auth_capture_wallet_sync_snapshot() -> void:
+	if not _auth_logged_in or _auth_token.is_empty():
+		return
+	_auth_wallet_sync_snapshot = {
+		"coins": wallet_coins,
+		"clk": wallet_clk,
+		"owned_warrior_skins": PackedInt32Array(owned_warrior_skins),
+		"owned_weapons": PackedStringArray(owned_weapons),
+		"owned_weapon_skins_by_weapon": _copy_weapon_skins_dict(owned_weapon_skins_by_weapon),
+		"equipped_weapon_skin_by_weapon": equipped_weapon_skin_by_weapon.duplicate(true),
+		"selected_warrior_skin": selected_warrior_skin,
+		"selected_weapon_id": selected_weapon_id,
+		"selected_weapon_skin": selected_weapon_skin,
+	}
+	_auth_wallet_sync_snapshot_active = true
+
+func _auth_restore_wallet_sync_snapshot() -> void:
+	if not _auth_wallet_sync_snapshot_active:
+		return
+	wallet_coins = int(_auth_wallet_sync_snapshot.get("coins", wallet_coins))
+	wallet_clk = int(_auth_wallet_sync_snapshot.get("clk", wallet_clk))
+	owned_warrior_skins = PackedInt32Array(_auth_wallet_sync_snapshot.get("owned_warrior_skins", [0]) as Array)
+	owned_weapons = PackedStringArray(_auth_wallet_sync_snapshot.get("owned_weapons", [WEAPON_UZI]) as Array)
+	owned_weapon_skins_by_weapon = _copy_weapon_skins_dict(_auth_wallet_sync_snapshot.get("owned_weapon_skins_by_weapon", {}) as Dictionary)
+	equipped_weapon_skin_by_weapon = (_auth_wallet_sync_snapshot.get("equipped_weapon_skin_by_weapon", {}) as Dictionary).duplicate(true)
+	selected_warrior_skin = maxi(0, int(_auth_wallet_sync_snapshot.get("selected_warrior_skin", selected_warrior_skin)))
+	selected_weapon_id = str(_auth_wallet_sync_snapshot.get("selected_weapon_id", selected_weapon_id)).strip_edges().to_lower()
+	selected_weapon_skin = maxi(0, int(_auth_wallet_sync_snapshot.get("selected_weapon_skin", selected_weapon_skin)))
+	_pending_warrior_skin = selected_warrior_skin
+	_pending_weapon_id = selected_weapon_id
+	_pending_weapon_skin = selected_weapon_skin
+	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_skin)
+	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_skin)
+	_set_weapon_icon_sprite(main_weapon_icon, selected_weapon_id, 1.0, selected_weapon_skin)
+	_apply_weapon_skin_visual(main_weapon_icon, selected_weapon_id, selected_weapon_skin)
+	_set_weapon_icon_sprite(weapon_shop_preview, _pending_weapon_id, 1.0, _pending_weapon_skin)
+	_apply_weapon_skin_visual(weapon_shop_preview, _pending_weapon_id, _pending_weapon_skin)
+	_update_wallet_labels(true)
+	_refresh_warrior_grid_texts()
+	_refresh_warrior_action()
+	_refresh_weapon_grid_texts()
+	_refresh_weapon_action()
+	_save_state()
+	_auth_wallet_sync_snapshot_active = false
+	_auth_wallet_sync_snapshot = {}
+	print("[AUTH][WALLET_SYNC] rollback applied (server rejected wallet update)")
+
+func _auth_purchase_warrior_skin(skin_index: int) -> void:
+	if _auth_http == null or _auth_token.is_empty() or not _auth_logged_in:
+		return
+	if not _auth_pending_action.is_empty():
+		if _auth_status_label != null:
+			_auth_status_label.text = "Please wait..."
+		return
+	var idx := maxi(0, skin_index)
+	if idx <= 0:
+		_equip_warrior_skin(idx)
+		return
+	_auth_pending_purchase_skin_index = idx
+	var body := JSON.stringify({"character_id": "outrage", "skin_index": idx})
+	print("[AUTH][BUY_SKIN] request user=%s skin=%d coins_ui=%d" % [player_username, idx, wallet_coins])
+	_auth_pending_action = "purchase_skin"
+	var err := _auth_http.request(
+		_auth_url("/purchase/skin"),
+		PackedStringArray([
+			"Authorization: Bearer %s" % _auth_token,
+			"Content-Type: application/json"
+		]),
+		HTTPClient.METHOD_POST,
+		body
+	)
+	if err != OK:
+		print("[AUTH][BUY_SKIN] request failed err=%s" % str(err))
+		_auth_pending_action = ""
+		_auth_pending_purchase_skin_index = -1
+		if _auth_status_label != null:
+			_auth_status_label.text = "Buy request failed (%s)" % str(err)
 
 func _auth_schedule_wallet_retry() -> void:
 	if _auth_wallet_retry_timer == null:
@@ -510,6 +708,24 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 			from_api.append(WEAPON_UZI)
 		owned_weapons = from_api
 
+	if profile.has("owned_weapon_skins_by_weapon"):
+		var allowed_skins := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE])
+		var incoming := profile.get("owned_weapon_skins_by_weapon", {}) as Dictionary
+		var out: Dictionary = {}
+		for wid in allowed_skins:
+			var arr_src := incoming.get(wid, [0]) as Array
+			var arr_out := PackedInt32Array([0])
+			if arr_src != null:
+				for v in arr_src:
+					var idx := maxi(0, int(v))
+					if not arr_out.has(idx):
+						arr_out.append(idx)
+			arr_out.sort()
+			if not owned_weapons.has(wid):
+				arr_out = PackedInt32Array([0])
+			out[wid] = arr_out
+		owned_weapon_skins_by_weapon = out
+
 	_update_wallet_labels(true)
 	_refresh_warrior_username_label()
 	_refresh_warrior_grid_texts()
@@ -519,9 +735,28 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 	_save_state()
 
 func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var action := _auth_pending_action
 	var text := body.get_string_from_utf8()
-	var parsed = JSON.parse_string(text)
-	if _auth_pending_action == "login":
+	var parsed: Variant = null
+	var trimmed := text.strip_edges()
+	if not trimmed.is_empty() and (trimmed.begins_with("{") or trimmed.begins_with("[")):
+		var json := JSON.new()
+		if json.parse(trimmed) == OK:
+			parsed = json.data
+	if action == "login":
+		if (response_code == 404 or response_code == 0) and _auth_login_base_url_index < _auth_login_base_url_candidates.size() - 1:
+			_auth_login_base_url_index += 1
+			print("[AUTH][LOGIN] code=%d on login endpoint, retry with %s" % [response_code, _auth_login_current_base_url()])
+			_auth_pending_action = "login"
+			var retry_err := _auth_request_login_with_current_candidate()
+			if retry_err == OK:
+				return
+			_auth_pending_action = ""
+			if _auth_status_label != null:
+				_auth_status_label.text = "Login request failed (%s)" % str(retry_err)
+			if _auth_login_button != null:
+				_auth_login_button.disabled = false
+			return
 		if response_code < 200 or response_code >= 300 or not (parsed is Dictionary):
 			if _auth_status_label != null:
 				_auth_status_label.text = "Login failed (%d)" % response_code
@@ -530,6 +765,10 @@ func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedS
 			_auth_pending_action = ""
 			return
 		var data := parsed as Dictionary
+		var active_base := _auth_login_current_base_url()
+		if _auth_api_base_url != active_base:
+			_auth_api_base_url = active_base
+			print("[AUTH][LOGIN] using auth base url %s" % _auth_api_base_url)
 		_auth_token = str(data.get("token", "")).strip_edges()
 		player_username = str(data.get("username", player_username)).strip_edges()
 		if _auth_token.is_empty():
@@ -543,15 +782,27 @@ func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedS
 		_auth_request_profile()
 		return
 
-	if _auth_pending_action == "profile":
+	if action == "profile":
 		if response_code < 200 or response_code >= 300 or not (parsed is Dictionary):
+			print("[AUTH][PROFILE] failed code=%d body=%s" % [response_code, text])
 			if _auth_status_label != null:
 				_auth_status_label.text = "Profile load failed (%d)" % response_code
 			if _auth_login_button != null:
 				_auth_login_button.disabled = false
 			_auth_pending_action = ""
 			return
-		_auth_apply_profile(parsed as Dictionary)
+		var profile := parsed as Dictionary
+		print("[AUTH][PROFILE] ok user=%s coins=%d clk=%d" % [str(profile.get("username", "")), int(profile.get("coins", wallet_coins)), int(profile.get("clk", wallet_clk))])
+		_auth_apply_profile(profile)
+		var has_wallet_inventory_fields := profile.has("owned_weapons") and profile.has("owned_weapon_skins_by_weapon")
+		if not has_wallet_inventory_fields:
+			_auth_wallet_sync_supported = false
+			print("[AUTH][PROFILE] legacy server detected (missing wallet inventory fields). wallet sync disabled.")
+			if _auth_status_label != null:
+				_auth_status_label.text = "Server supports only skin purchases"
+		else:
+			_auth_wallet_sync_supported = true
+			_auth_wallet_sync_endpoint_index = 0
 		_auth_logged_in = true
 		_auth_set_ui_locked(false)
 		if _auth_status_label != null:
@@ -563,15 +814,55 @@ func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedS
 		_auth_maybe_flush_wallet_sync()
 		return
 
-	if _auth_pending_action == "wallet_sync":
+	if action == "wallet_sync":
 		if response_code >= 200 and response_code < 300 and (parsed is Dictionary):
+			print("[AUTH][WALLET_SYNC] ok user=%s coins=%d clk=%d" % [str((parsed as Dictionary).get("username", player_username)), int((parsed as Dictionary).get("coins", wallet_coins)), int((parsed as Dictionary).get("clk", wallet_clk))])
 			_auth_apply_profile(parsed as Dictionary)
+			_auth_wallet_sync_endpoint_index = 0
+			_auth_wallet_sync_supported = true
+			_auth_wallet_sync_snapshot_active = false
+			_auth_wallet_sync_snapshot = {}
 			_auth_pending_action = ""
 			_auth_maybe_flush_wallet_sync()
+			return
+		print("[AUTH][WALLET_SYNC] failed code=%d body=%s" % [response_code, text])
+		if response_code == 404:
+			if _auth_wallet_sync_endpoint_index < _auth_wallet_sync_endpoint_candidates.size() - 1:
+				_auth_wallet_sync_endpoint_index += 1
+				print("[AUTH][WALLET_SYNC] endpoint not found, retry with %s" % str(_auth_wallet_sync_endpoint_candidates[_auth_wallet_sync_endpoint_index]))
+				_auth_pending_action = ""
+				_auth_wallet_sync_queued = true
+				_auth_schedule_wallet_retry()
+				return
+			_auth_restore_wallet_sync_snapshot()
+			_auth_wallet_sync_supported = false
+			if _auth_status_label != null:
+				_auth_status_label.text = "Server does not support wallet updates"
+			_auth_wallet_sync_queued = false
+			_auth_pending_action = ""
 			return
 		_auth_pending_action = ""
 		_auth_wallet_sync_queued = true
 		_auth_schedule_wallet_retry()
+		return
+
+	if action == "purchase_skin":
+		if response_code >= 200 and response_code < 300 and (parsed is Dictionary):
+			var profile := parsed as Dictionary
+			print("[AUTH][BUY_SKIN] ok user=%s skin=%d coins=%d clk=%d" % [str(profile.get("username", player_username)), _auth_pending_purchase_skin_index, int(profile.get("coins", wallet_coins)), int(profile.get("clk", wallet_clk))])
+			_auth_apply_profile(profile)
+			if _auth_pending_purchase_skin_index >= 0 and _is_warrior_skin_owned(_auth_pending_purchase_skin_index):
+				_equip_warrior_skin(_auth_pending_purchase_skin_index)
+			_pixel_burst_at(_center_of(wallet_panel), Color(0.25, 1, 0.85, 1))
+			_auth_pending_purchase_skin_index = -1
+			_auth_pending_action = ""
+			_auth_maybe_flush_wallet_sync()
+			return
+		print("[AUTH][BUY_SKIN] failed code=%d skin=%d body=%s" % [response_code, _auth_pending_purchase_skin_index, text])
+		if _auth_status_label != null:
+			_auth_status_label.text = "Purchase failed (%d)" % response_code
+		_auth_pending_purchase_skin_index = -1
+		_auth_pending_action = ""
 
 func _ensure_cursor_manager() -> void:
 	var tree := get_tree()
@@ -1041,6 +1332,7 @@ func _build_warrior_shop_grid() -> void:
 	# 12 test skins (0..11) - enough to feel like a shop.
 	for skin_index in range(12):
 		var btn := _make_shop_button()
+		btn.custom_minimum_size = Vector2(170, 48)
 		btn.text = _warrior_skin_button_text(skin_index)
 		btn.pressed.connect(Callable(self, "_on_warrior_skin_button_pressed").bind(skin_index))
 		warrior_grid.add_child(btn)
@@ -1288,9 +1580,9 @@ func _warrior_skin_button_text(skin_index: int) -> String:
 	var base := "Skin %d" % skin_index
 	if _is_warrior_skin_owned(skin_index):
 		if skin_index == selected_warrior_skin:
-			return "%s  [EQUIPPED]" % base
+			return "%s\n[EQUIPPED]" % base
 		return "%s" % base
-	return "%s  (%d)  [LOCKED]" % [base, _warrior_skin_cost(skin_index)]
+	return "%s\nBUY  %d" % [base, _warrior_skin_cost(skin_index)]
 
 func _select_warrior_skin(skin_index: int, silent: bool) -> void:
 	_pending_warrior_skin = maxi(0, skin_index)
@@ -1314,6 +1606,9 @@ func _try_buy_and_equip_warrior_skin(skin_index: int) -> void:
 	var idx := maxi(0, skin_index)
 	if _is_warrior_skin_owned(idx):
 		_equip_warrior_skin(idx)
+		return
+	if _auth_logged_in and not _auth_token.is_empty():
+		_auth_purchase_warrior_skin(idx)
 		return
 	var cost := _warrior_skin_cost(idx)
 	if wallet_coins < cost:
@@ -1451,12 +1746,19 @@ func _buy_weapon_if_needed(weapon_id: String) -> bool:
 	var normalized := weapon_id.strip_edges().to_lower()
 	if _weapon_is_owned(normalized):
 		return true
+	if _auth_logged_in and not _auth_token.is_empty() and not _auth_wallet_sync_supported:
+		print("[AUTH][BUY_WEAPON] local-only user=%s reason=wallet_update_missing weapon=%s" % [player_username, normalized])
+		if _auth_status_label != null:
+			_auth_status_label.text = "Weapon purchase is local only (server won't save it)"
 	var cost := int(DATA.WEAPON_BASE_COST_BY_ID.get(normalized, 0))
 	if cost <= 0:
 		return false
 	if wallet_coins < cost:
+		if _auth_status_label != null:
+			_auth_status_label.text = "Not enough coins"
 		_shake(wallet_panel)
 		return false
+	_auth_capture_wallet_sync_snapshot()
 	wallet_coins -= cost
 	owned_weapons.append(normalized)
 	_update_wallet_labels(false)
@@ -1469,12 +1771,19 @@ func _buy_weapon_skin_if_needed(weapon_id: String, skin_index: int) -> bool:
 	var idx := maxi(0, skin_index)
 	if _weapon_skin_is_owned(normalized, idx):
 		return true
+	if _auth_logged_in and not _auth_token.is_empty() and not _auth_wallet_sync_supported:
+		print("[AUTH][BUY_WEAPON_SKIN] local-only user=%s reason=wallet_update_missing weapon=%s skin=%d" % [player_username, normalized, idx])
+		if _auth_status_label != null:
+			_auth_status_label.text = "Weapon-skin purchase is local only (server won't save it)"
 	var cost := _weapon_skin_cost(normalized, idx)
 	if cost <= 0:
 		return false
 	if wallet_coins < cost:
+		if _auth_status_label != null:
+			_auth_status_label.text = "Not enough coins"
 		_shake(wallet_panel)
 		return false
+	_auth_capture_wallet_sync_snapshot()
 	wallet_coins -= cost
 	var arr := owned_weapon_skins_by_weapon.get(normalized, PackedInt32Array([0])) as PackedInt32Array
 	if not arr.has(idx):

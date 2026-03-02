@@ -16,6 +16,8 @@ from pydantic import BaseModel
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+ALLOWED_WEAPONS = ("uzi", "ak47", "shotgun", "grenade")
+DEFAULT_WEAPON_ID = "uzi"
 
 
 def _utc_now() -> datetime:
@@ -114,6 +116,29 @@ def _init_schema() -> None:
                                 """
                         )
                         cur.execute("create index if not exists inventory_skins_account_idx on inventory_skins(account_id);")
+                        cur.execute(
+                                """
+                                create table if not exists inventory_weapons (
+                                    account_id uuid not null references accounts(id) on delete cascade,
+                                    weapon_id text not null,
+                                    purchased_at timestamptz not null default now(),
+                                    primary key (account_id, weapon_id)
+                                );
+                                """
+                        )
+                        cur.execute("create index if not exists inventory_weapons_account_idx on inventory_weapons(account_id);")
+                        cur.execute(
+                                """
+                                create table if not exists inventory_weapon_skins (
+                                    account_id uuid not null references accounts(id) on delete cascade,
+                                    weapon_id text not null,
+                                    skin_index integer not null,
+                                    purchased_at timestamptz not null default now(),
+                                    primary key (account_id, weapon_id, skin_index)
+                                );
+                                """
+                        )
+                        cur.execute("create index if not exists inventory_weapon_skins_account_idx on inventory_weapon_skins(account_id);")
 
 
 @app.on_event("startup")
@@ -125,7 +150,7 @@ def _on_startup() -> None:
         # Don't log DATABASE_URL. Just the stack trace.
         log.exception("Schema init failed. Check DATABASE_URL connectivity/permissions.")
         raise
-    log.info("Schema ready (tables: accounts, sessions)")
+    log.info("Schema ready (tables: accounts, sessions, wallets, inventory_*)")
 
 
 class AuthRequest(BaseModel):
@@ -157,6 +182,8 @@ class ProfileResponse(BaseModel):
     coins: int
     clk: int
     owned_skins: list[OwnedSkin]
+    owned_weapons: list[str] = []
+    owned_weapon_skins_by_weapon: dict[str, list[int]] = {}
 
 
 class PurchaseSkinRequest(BaseModel):
@@ -167,6 +194,9 @@ class PurchaseSkinRequest(BaseModel):
 class WalletUpdateRequest(BaseModel):
     coins: Optional[int] = None
     clk: Optional[int] = None
+    owned_skins: Optional[list[OwnedSkin]] = None
+    owned_weapons: Optional[list[str]] = None
+    owned_weapon_skins_by_weapon: Optional[dict[str, list[int]]] = None
 
 
 def _normalize_username(raw: str) -> str:
@@ -268,15 +298,117 @@ def _owned_skins_for_account(account_uuid: uuid.UUID) -> list[OwnedSkin]:
             return out
 
 
+def _normalize_weapon_id(raw: str) -> str:
+    return (raw or "").strip().lower()
+
+
+def _normalize_owned_weapons(raw_weapons: list[str]) -> list[str]:
+    out: list[str] = []
+    for item in raw_weapons:
+        wid = _normalize_weapon_id(str(item))
+        if wid in ALLOWED_WEAPONS and wid not in out:
+            out.append(wid)
+    if DEFAULT_WEAPON_ID not in out:
+        out.append(DEFAULT_WEAPON_ID)
+    return out
+
+
+def _ensure_weapon_inventory_defaults(account_uuid: uuid.UUID) -> None:
+    with _db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into inventory_weapons (account_id, weapon_id)
+                values (%s, %s)
+                on conflict (account_id, weapon_id) do nothing
+                """,
+                (account_uuid, DEFAULT_WEAPON_ID),
+            )
+            cur.execute(
+                """
+                insert into inventory_weapon_skins (account_id, weapon_id, skin_index)
+                values (%s, %s, %s)
+                on conflict (account_id, weapon_id, skin_index) do nothing
+                """,
+                (account_uuid, DEFAULT_WEAPON_ID, 0),
+            )
+
+
+def _owned_weapons_for_account(account_uuid: uuid.UUID) -> list[str]:
+    _ensure_weapon_inventory_defaults(account_uuid)
+    with _db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select weapon_id
+                from inventory_weapons
+                where account_id = %s
+                order by weapon_id
+                """,
+                (account_uuid,),
+            )
+            raw = [str(row[0]) for row in cur.fetchall()]
+    return _normalize_owned_weapons(raw)
+
+
+def _owned_weapon_skins_for_account(account_uuid: uuid.UUID, owned_weapons: list[str]) -> dict[str, list[int]]:
+    owned_set = set(_normalize_owned_weapons(owned_weapons))
+    out: dict[str, list[int]] = {wid: [0] for wid in ALLOWED_WEAPONS}
+    with _db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select weapon_id, skin_index
+                from inventory_weapon_skins
+                where account_id = %s
+                order by weapon_id, skin_index
+                """,
+                (account_uuid,),
+            )
+            for weapon_id, skin_index in cur.fetchall():
+                wid = _normalize_weapon_id(str(weapon_id))
+                if wid not in ALLOWED_WEAPONS or wid not in owned_set:
+                    continue
+                idx = max(0, int(skin_index))
+                arr = out.get(wid, [0])
+                if idx not in arr:
+                    arr.append(idx)
+                out[wid] = sorted(arr)
+
+    for wid in ALLOWED_WEAPONS:
+        if wid not in owned_set:
+            out[wid] = [0]
+        elif 0 not in out[wid]:
+            out[wid].insert(0, 0)
+    return out
+
+
+def _profile_for_account(account_uuid: uuid.UUID, username: str, email: str) -> ProfileResponse:
+    coins, clk = _wallet_for_account(account_uuid)
+    owned_skins = _owned_skins_for_account(account_uuid)
+    owned_weapons = _owned_weapons_for_account(account_uuid)
+    owned_weapon_skins_by_weapon = _owned_weapon_skins_for_account(account_uuid, owned_weapons)
+    return ProfileResponse(
+        username=username,
+        email=email,
+        coins=coins,
+        clk=clk,
+        owned_skins=owned_skins,
+        owned_weapons=owned_weapons,
+        owned_weapon_skins_by_weapon=owned_weapon_skins_by_weapon,
+    )
+
+
 def _normalize_character_id(raw: str) -> str:
     return (raw or "").strip().lower()
 
 
 def _skin_cost_coins(character_id: str, skin_index: int) -> int:
-    # "Classic" (index 1) is always free/unlocked.
-    if skin_index <= 1:
+    if skin_index <= 0:
         return 0
-    return 10
+    if character_id == "outrage":
+        return 250 + skin_index * 120
+    return 250 + skin_index * 120
 
 
 def _account_for_token(token: str) -> Optional[tuple[str, str, str]]:
@@ -421,9 +553,7 @@ def profile(authorization: Optional[str] = Header(default=None)):
         raise HTTPException(status_code=401, detail="unauthorized")
     account_id, username, email = account
     account_uuid = uuid.UUID(account_id)
-    coins, clk = _wallet_for_account(account_uuid)
-    owned = _owned_skins_for_account(account_uuid)
-    return ProfileResponse(username=username, email=email, coins=coins, clk=clk, owned_skins=owned)
+    return _profile_for_account(account_uuid, username, email)
 
 
 @app.post("/purchase/skin", response_model=ProfileResponse)
@@ -444,9 +574,7 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
 
     cost_coins = _skin_cost_coins(character_id, skin_index)
     if cost_coins <= 0:
-        coins, clk = _wallet_for_account(account_uuid)
-        owned = _owned_skins_for_account(account_uuid)
-        return ProfileResponse(username=username, email=email, coins=coins, clk=clk, owned_skins=owned)
+        return _profile_for_account(account_uuid, username, email)
 
     # Transaction: check wallet + ownership then deduct + insert.
     with psycopg.connect(SETTINGS.database_url, autocommit=False) as conn:
@@ -520,9 +648,7 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
                 )
                 conn.commit()
 
-    coins2, clk2 = _wallet_for_account(account_uuid)
-    owned2 = _owned_skins_for_account(account_uuid)
-    return ProfileResponse(username=username, email=email, coins=coins2, clk=clk2, owned_skins=owned2)
+    return _profile_for_account(account_uuid, username, email)
 
 
 @app.post("/wallet/update", response_model=ProfileResponse)
@@ -532,34 +658,107 @@ def wallet_update(req: WalletUpdateRequest, authorization: Optional[str] = Heade
     if not account:
         raise HTTPException(status_code=401, detail="unauthorized")
 
-    if req.coins is None and req.clk is None:
-        raise HTTPException(status_code=400, detail="coins or clk required")
+    if (
+        req.coins is None
+        and req.clk is None
+        and req.owned_skins is None
+        and req.owned_weapons is None
+        and req.owned_weapon_skins_by_weapon is None
+    ):
+        raise HTTPException(status_code=400, detail="wallet or inventory fields required")
 
     account_id, username, email = account
     account_uuid = uuid.UUID(account_id)
-    _ensure_wallet(account_uuid)
-
-    set_clauses: list[str] = []
-    params: list[object] = []
-    if req.coins is not None:
-        set_clauses.append("coins = %s")
-        params.append(max(0, int(req.coins)))
-    if req.clk is not None:
-        set_clauses.append("clk = %s")
-        params.append(max(0, int(req.clk)))
-    set_clauses.append("updated_at = now()")
-
-    with _db() as conn:
+    with psycopg.connect(SETTINGS.database_url, autocommit=False) as conn:
         with conn.cursor() as cur:
-            query = "update wallets set " + ", ".join(set_clauses) + " where account_id = %s"
-            params.append(account_uuid)
-            cur.execute(query, tuple(params))
-            if cur.rowcount != 1:
-                raise HTTPException(status_code=500, detail="wallet update failed")
+            cur.execute(
+                """
+                insert into wallets (account_id, coins, clk)
+                values (%s, %s, %s)
+                on conflict (account_id) do nothing
+                """,
+                (account_uuid, 9999, 9999),
+            )
 
-    coins, clk = _wallet_for_account(account_uuid)
-    owned = _owned_skins_for_account(account_uuid)
-    return ProfileResponse(username=username, email=email, coins=coins, clk=clk, owned_skins=owned)
+            set_clauses: list[str] = []
+            params: list[object] = []
+            if req.coins is not None:
+                set_clauses.append("coins = %s")
+                params.append(max(0, int(req.coins)))
+            if req.clk is not None:
+                set_clauses.append("clk = %s")
+                params.append(max(0, int(req.clk)))
+            if set_clauses:
+                set_clauses.append("updated_at = now()")
+                query = "update wallets set " + ", ".join(set_clauses) + " where account_id = %s"
+                params.append(account_uuid)
+                cur.execute(query, tuple(params))
+                if cur.rowcount != 1:
+                    conn.rollback()
+                    raise HTTPException(status_code=500, detail="wallet update failed")
+
+            if req.owned_skins is not None:
+                cur.execute("delete from inventory_skins where account_id = %s", (account_uuid,))
+                for item in req.owned_skins:
+                    character_id = _normalize_character_id(item.character_id)
+                    skin_index = max(0, int(item.skin_index))
+                    if not character_id or skin_index <= 0:
+                        continue
+                    cur.execute(
+                        """
+                        insert into inventory_skins (account_id, character_id, skin_index)
+                        values (%s, %s, %s)
+                        on conflict (account_id, character_id, skin_index) do nothing
+                        """,
+                        (account_uuid, character_id, skin_index),
+                    )
+
+            owned_weapons = None
+            if req.owned_weapons is not None:
+                owned_weapons = _normalize_owned_weapons(req.owned_weapons)
+                cur.execute("delete from inventory_weapons where account_id = %s", (account_uuid,))
+                for wid in owned_weapons:
+                    cur.execute(
+                        """
+                        insert into inventory_weapons (account_id, weapon_id)
+                        values (%s, %s)
+                        on conflict (account_id, weapon_id) do nothing
+                        """,
+                        (account_uuid, wid),
+                    )
+
+            if req.owned_weapon_skins_by_weapon is not None:
+                if owned_weapons is None:
+                    cur.execute(
+                        "select weapon_id from inventory_weapons where account_id = %s",
+                        (account_uuid,),
+                    )
+                    owned_weapons = _normalize_owned_weapons([str(r[0]) for r in cur.fetchall()])
+                owned_set = set(owned_weapons)
+                cur.execute("delete from inventory_weapon_skins where account_id = %s", (account_uuid,))
+                incoming = req.owned_weapon_skins_by_weapon
+                for wid in ALLOWED_WEAPONS:
+                    if wid not in owned_set:
+                        continue
+                    raw_arr = incoming.get(wid, [0])
+                    normalized_arr: list[int] = [0]
+                    for value in raw_arr:
+                        idx = max(0, int(value))
+                        if idx not in normalized_arr:
+                            normalized_arr.append(idx)
+                    for idx in normalized_arr:
+                        cur.execute(
+                            """
+                            insert into inventory_weapon_skins (account_id, weapon_id, skin_index)
+                            values (%s, %s, %s)
+                            on conflict (account_id, weapon_id, skin_index) do nothing
+                            """,
+                            (account_uuid, wid, idx),
+                        )
+
+            conn.commit()
+
+    return _profile_for_account(account_uuid, username, email)
 
 
 if __name__ == "__main__":

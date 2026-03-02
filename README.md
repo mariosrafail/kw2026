@@ -60,6 +60,12 @@ The game expects an auth HTTP API for login/register (do **not** connect directl
 
 - Auth server: `tools/auth_api/README.md`
 - Client setting: `project.godot` → `kw/auth_api_base_url` (default `http://127.0.0.1:8090`)
+  - If you run `docker-compose.server.yml`, clients can use `http://<server-ip>:8081/auth` (nginx proxy) or `http://<server-ip>:8090` (direct).
+
+Game server port:
+
+- Default is UDP `8080`.
+- You can change the published UDP port with `KW_GAME_PORT` (Docker) and set the client port with `--port=<KW_GAME_PORT>` or `ProjectSettings` key `kw/server_port`.
 
 ---
 
@@ -284,6 +290,17 @@ godot --headless -s tools/diag_map_catalog.gd  # Validate maps
 docker-compose -f docker-compose.server.yml up
 ```
 
+If you are using a remote Docker engine (e.g. `docker context use stinis-server`), use the remote compose file (no bind mounts):
+
+```bash
+docker compose -f docker-compose.server.remote.yml up -d --build
+```
+
+Auth base URL options:
+
+- Direct auth API: `http://<server-ip>:8090` (works without nginx / updates site)
+- Nginx proxy (optional profile): `http://<server-ip>:${KW_UPDATES_PORT:-8081}/auth`
+
 ---
 
 ## Known Issues & Tech Debt
@@ -350,6 +367,10 @@ docker-compose -f docker-compose.server.yml up
 ```bash
 # Docker
 docker-compose -f docker-compose.server.yml up -d
+
+# Remote Docker (example)
+# docker context use stinis-server
+# docker compose -f docker-compose.server.yml up -d --build
 
 # Manual
 godot --headless --mode=server --host=0.0.0.0 --port=8080
