@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cuglxxbnc765x"
-path="res://.godot/imported/allTorso.png-e7aa9b2bdc1f45f951f7fb5b1e4b223c.ctex"
+uid="uid://dqis4cmmwiqkk"
+path="res://.godot/imported/torso.png-008a97c86773a885fef7f5b0d28c53b7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/warriors/allTorso.png"
-dest_files=["res://.godot/imported/allTorso.png-e7aa9b2bdc1f45f951f7fb5b1e4b223c.ctex"]
+source_file="res://assets/warriors/erebus/torso.png"
+dest_files=["res://.godot/imported/torso.png-008a97c86773a885fef7f5b0d28c53b7.ctex"]
 
 [params]
 

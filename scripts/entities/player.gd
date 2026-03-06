@@ -33,6 +33,8 @@ const FLOOR_SLOPE_TOLERANCE_DEGREES := 0.5
 const FLOOR_SNAP_LENGTH := 14.0
 const PLAYER_SAFE_MARGIN := 0.08
 const PLAYER_MAX_SLIDES := 8
+const HEALTH_BAR_MAX_WIDTH := 73.0
+const HEALTH_BAR_HEIGHT := 11.0
 
 @onready var body: Polygon2D = get_node_or_null("Body") as Polygon2D
 @onready var feet: Polygon2D = get_node_or_null("Feet") as Polygon2D
@@ -49,6 +51,7 @@ const PLAYER_MAX_SLIDES := 8
 @onready var reload_audio: AudioStreamPlayer2D = $VisualRoot/GunPivot/ReloadAudio
 @onready var death_audio: AudioStreamPlayer2D = $DeathAudio
 @onready var health_label: Label = $VisualRoot/HealthLabel
+@onready var health_bar_green: Sprite2D = $VisualRoot/HpBackground/HpGreen
 @onready var ammo_label: Label = $VisualRoot/AmmoLabel
 @onready var name_label: Label = $VisualRoot/NameLabel
 
@@ -134,6 +137,8 @@ func _normalize_gun_sprite_anchor() -> void:
 func _init_modular_visual() -> void:
 	modular_visual = PlayerModularVisual.new()
 	modular_visual.configure(self, visual_root, leg1_sprite, leg2_sprite, torso_sprite, head_sprite)
+	if player_sprite != null:
+		player_sprite.visible = false
 	modular_visual.set_character_visual("outrage")
 
 func configure(new_peer_id: int, color: Color) -> void:
@@ -178,6 +183,8 @@ func set_weapon_visual(visual_config: Dictionary) -> void:
 	if texture_value is Texture2D:
 		gun_sprite.texture = texture_value
 	gun_idle_texture = gun_sprite.texture
+	var material_value = visual_config.get("material", null)
+	gun_sprite.material = material_value as Material if material_value is Material else null
 
 	var region_enabled := bool(visual_config.get("region_enabled", true))
 	gun_sprite.region_enabled = region_enabled
@@ -258,7 +265,7 @@ func set_character_visual(character_id: String) -> void:
 func set_skin_index(skin_index: int) -> void:
 	if modular_visual == null:
 		return
-	var idx := maxi(1, skin_index)
+	var idx := maxi(0, skin_index) + 1
 	modular_visual.set_modular_part_indices(idx, idx, idx)
 
 func set_health(value: int) -> void:
@@ -336,7 +343,14 @@ func get_hit_radius() -> float:
 
 func _update_health_label() -> void:
 	if health_label != null:
-		health_label.text = str(health)
+		health_label.visible = false
+	if health_bar_green == null:
+		return
+	var health_ratio := clampf(float(health) / float(MAX_HEALTH), 0.0, 1.0)
+	var width := HEALTH_BAR_MAX_WIDTH * health_ratio
+	health_bar_green.visible = width > 0.0
+	health_bar_green.region_enabled = true
+	health_bar_green.region_rect = Rect2(0.0, 0.0, width, HEALTH_BAR_HEIGHT)
 
 func _update_ammo_label() -> void:
 	if ammo_label == null:
@@ -365,6 +379,8 @@ func set_aim_angle(angle: float) -> void:
 	_apply_gun_horizontal_flip_from_angle(angle)
 
 func _apply_player_facing_from_angle(angle: float) -> void:
+	if modular_visual != null:
+		modular_visual.apply_player_facing_from_angle(angle)
 	if player_sprite == null:
 		return
 	var looking_left := cos(angle) < 0.0
@@ -609,6 +625,8 @@ func _physics_process(delta: float) -> void:
 			shield_health = 0
 	if visual_root != null:
 		_tick_visual_correction(delta)
+	if modular_visual != null:
+		modular_visual.update_walk_animation(delta, velocity if not use_network_smoothing else target_velocity, is_on_floor())
 	if not use_network_smoothing:
 		return
 

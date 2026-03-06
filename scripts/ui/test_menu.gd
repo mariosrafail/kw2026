@@ -3,6 +3,7 @@ extends Control
 const DATA := preload("res://scripts/ui/test_menu/data.gd")
 const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
 const CURSOR_MANAGER_NAME := "CursorManager"
+const WARRIOR_UI_SCRIPT := preload("res://scripts/ui/test_menu/warrior_ui.gd")
 const WEAPON_UI_SCRIPT := preload("res://scripts/ui/test_menu/weapon_ui.gd")
 const STATE_STORE_SCRIPT := preload("res://scripts/ui/test_menu/state_store.gd")
 const INTRO_FX_CTRL_SCRIPT := preload("res://scripts/ui/test_menu/intro_fx_controller.gd")
@@ -30,6 +31,7 @@ const WEAPON_SHOTGUN := DATA.WEAPON_SHOTGUN
 @export var weapon_icon_max_height_ratio := 0.42
 @export var rainbow_skin_cost := 5000
 
+var _warrior_ui := WARRIOR_UI_SCRIPT.new()
 var _weapon_ui := WEAPON_UI_SCRIPT.new()
 var _state_store := STATE_STORE_SCRIPT.new()
 var _intro_fx := INTRO_FX_CTRL_SCRIPT.new()
@@ -90,8 +92,13 @@ var logo_node: Node = null
 var wallet_coins := 0
 var wallet_clk := 0
 
+var owned_warriors := PackedStringArray()
 var owned_warrior_skins := PackedInt32Array([0])
+var owned_warrior_skins_by_warrior: Dictionary = {}
+var equipped_warrior_skin_by_warrior: Dictionary = {}
+var selected_warrior_id := "outrage"
 var selected_warrior_skin := 0
+var _pending_warrior_id := "outrage"
 var _pending_warrior_skin := 0
 
 var owned_weapons := PackedStringArray([WEAPON_UZI])
@@ -120,6 +127,8 @@ var _weapon_filter_weapon_id := ""
 var _weapon_filter_category := ""
 var _weapon_filter_weapon_buttons: Dictionary = {}
 var _weapon_filter_category_buttons: Dictionary = {}
+var _warrior_filter_warrior_id := ""
+var _warrior_filter_warrior_buttons: Dictionary = {}
 
 var _current_screen: Control
 var _transition_tween: Tween
@@ -162,6 +171,7 @@ var _auth_status_label: Label
 var _auth_user_input: LineEdit
 var _auth_pass_input: LineEdit
 var _auth_login_button: Button
+var _auth_logout_button: Button
 
 func _ready() -> void:
 	_ensure_cursor_manager()
@@ -254,9 +264,14 @@ func _ready() -> void:
 	_apply_pixel_scroll_style(weapon_scroll)
 	_apply_grid_spacing(warrior_grid)
 	_apply_grid_spacing(weapon_grid)
-	if enable_intro_animation:
-		call_deferred("_play_intro_animation_safe")
-	elif intro != null:
+	_ensure_auth_logout_button()
+	if warrior_action_button != null:
+		warrior_action_button.visible = true
+	if weapon_action_button != null:
+		weapon_action_button.visible = true
+	# Temporarily disable the intro logo animation without removing the implementation.
+	enable_intro_animation = false
+	if intro != null:
 		intro.visible = false
 
 	_prepare_player_preview(main_warrior_preview)
@@ -269,8 +284,8 @@ func _ready() -> void:
 	if weapon_shop_preview != null:
 		_weapon_shop_preview_base_scale = weapon_shop_preview.scale
 
-	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_skin)
-	_apply_warrior_skin_to_player(warrior_shop_preview, selected_warrior_skin)
+	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_id, selected_warrior_skin)
+	_apply_warrior_skin_to_player(warrior_shop_preview, selected_warrior_id, selected_warrior_skin)
 
 	_set_weapon_icon_sprite(main_weapon_icon, _pending_weapon_id, 1.0, _pending_weapon_skin)
 	_apply_weapon_skin_visual(main_weapon_icon, _pending_weapon_id, _pending_weapon_skin)
@@ -278,11 +293,12 @@ func _ready() -> void:
 	_apply_weapon_skin_visual(weapon_shop_preview, selected_weapon_id, selected_weapon_skin)
 
 	_update_wallet_labels(true)
+	_ensure_warrior_filter_ui()
 	_build_warrior_shop_grid()
 	_ensure_weapon_filter_ui()
 	_build_weapon_shop_grid()
 
-	_select_warrior_skin(selected_warrior_skin, true)
+	_select_warrior_skin(selected_warrior_id, selected_warrior_skin, true)
 	_select_weapon_skin(selected_weapon_id, selected_weapon_skin, true)
 
 	_connect_signals()
@@ -396,6 +412,13 @@ func _setup_auth_gate() -> void:
 	_auth_status_label = status
 
 	_auth_set_ui_locked(true)
+	if _auth_restore_persisted_session():
+		_auth_set_ui_locked(false)
+		if _auth_status_label != null:
+			_auth_status_label.text = "Restoring session..."
+		if _auth_login_button != null:
+			_auth_login_button.disabled = true
+		_auth_request_profile()
 
 func _auth_set_ui_locked(locked: bool) -> void:
 	if _auth_overlay != null:
@@ -408,6 +431,8 @@ func _auth_set_ui_locked(locked: bool) -> void:
 		warrior_button.disabled = locked
 	if weapon_button != null:
 		weapon_button.disabled = locked
+	if _auth_logout_button != null:
+		_auth_logout_button.visible = not locked and _auth_logged_in
 
 func _auth_submit_login() -> void:
 	if _auth_http == null:
@@ -447,6 +472,24 @@ func _auth_submit_login() -> void:
 func _auth_request_profile() -> void:
 	_auth_flow.auth_request_profile(self)
 
+func _auth_restore_runtime_session() -> bool:
+	return _auth_flow.auth_restore_runtime_session(self)
+
+func _auth_save_runtime_session() -> void:
+	_auth_flow.auth_save_runtime_session(self)
+
+func _auth_clear_runtime_session() -> void:
+	_auth_flow.auth_clear_runtime_session(self)
+
+func _auth_restore_persisted_session() -> bool:
+	return _auth_flow.auth_restore_persisted_session(self)
+
+func _auth_save_persisted_session() -> void:
+	_auth_flow.auth_save_persisted_session(self)
+
+func _auth_clear_persisted_session() -> void:
+	_auth_flow.auth_clear_persisted_session(self)
+
 func _auth_sync_wallet() -> void:
 	if _auth_http == null or _auth_token.is_empty() or not _auth_logged_in:
 		return
@@ -457,11 +500,22 @@ func _auth_sync_wallet() -> void:
 		_auth_schedule_wallet_retry()
 		return
 	var owned_skins_payload: Array = []
-	for skin_idx in owned_warrior_skins:
-		var idx := maxi(0, int(skin_idx))
-		if idx <= 0:
+	var owned_warriors_payload: Array = []
+	for warrior_id in owned_warriors:
+		var normalized_warrior := str(warrior_id).strip_edges().to_lower()
+		if normalized_warrior.is_empty() or owned_warriors_payload.has(normalized_warrior):
 			continue
-		owned_skins_payload.append({"character_id": "outrage", "skin_index": idx})
+		owned_warriors_payload.append(normalized_warrior)
+	for warrior_id in owned_warrior_skins_by_warrior.keys():
+		var normalized_character := str(warrior_id).strip_edges().to_lower()
+		var skin_arr := owned_warrior_skins_by_warrior.get(warrior_id, PackedInt32Array([0])) as PackedInt32Array
+		if skin_arr == null:
+			continue
+		for skin_idx in skin_arr:
+			var idx := maxi(0, int(skin_idx))
+			if idx <= 0:
+				continue
+			owned_skins_payload.append({"character_id": normalized_character, "skin_index": idx})
 
 	var owned_weapons_payload: Array = []
 	for wid in owned_weapons:
@@ -485,9 +539,17 @@ func _auth_sync_wallet() -> void:
 	var body := JSON.stringify({
 		"coins": wallet_coins,
 		"clk": wallet_clk,
+		"owned_warriors": owned_warriors_payload,
 		"owned_skins": owned_skins_payload,
+		"owned_warrior_skins_by_warrior": _copy_warrior_skins_dict(owned_warrior_skins_by_warrior),
+		"equipped_warrior_skin_by_warrior": equipped_warrior_skin_by_warrior.duplicate(true),
+		"selected_warrior_id": selected_warrior_id,
+		"selected_warrior_skin": selected_warrior_skin,
 		"owned_weapons": owned_weapons_payload,
 		"owned_weapon_skins_by_weapon": owned_weapon_skins_payload,
+		"equipped_weapon_skin_by_weapon": equipped_weapon_skin_by_weapon.duplicate(true),
+		"selected_weapon_id": selected_weapon_id,
+		"selected_weapon_skin": selected_weapon_skin,
 	})
 	var endpoint := str(_auth_wallet_sync_endpoint_candidates[_auth_wallet_sync_endpoint_index])
 	print("[AUTH][WALLET_SYNC] request user=%s url=%s coins=%d clk=%d" % [player_username, _auth_url(endpoint), wallet_coins, wallet_clk])
@@ -510,6 +572,9 @@ func _auth_sync_wallet() -> void:
 func _copy_weapon_skins_dict(src: Dictionary) -> Dictionary:
 	return _auth_flow.copy_weapon_skins_dict(src)
 
+func _copy_warrior_skins_dict(src: Dictionary) -> Dictionary:
+	return _auth_flow.copy_warrior_skins_dict(src)
+
 func _auth_capture_wallet_sync_snapshot() -> void:
 	_auth_flow.auth_capture_wallet_sync_snapshot(self)
 
@@ -525,10 +590,10 @@ func _auth_purchase_warrior_skin(skin_index: int) -> void:
 		return
 	var idx := maxi(0, skin_index)
 	if idx <= 0:
-		_equip_warrior_skin(idx)
+		_equip_warrior_item(selected_warrior_id, idx)
 		return
 	_auth_pending_purchase_skin_index = idx
-	var body := JSON.stringify({"character_id": "outrage", "skin_index": idx})
+	var body := JSON.stringify({"character_id": selected_warrior_id, "skin_index": idx})
 	print("[AUTH][BUY_SKIN] request user=%s skin=%d coins_ui=%d" % [player_username, idx, wallet_coins])
 	_auth_pending_action = "purchase_skin"
 	var err := _auth_http.request(
@@ -565,6 +630,45 @@ func _auth_maybe_flush_wallet_sync() -> void:
 	_auth_wallet_sync_queued = false
 	_auth_sync_wallet()
 
+func _default_warrior_id() -> String:
+	return _warrior_ui.default_warrior_id()
+
+func _default_owned_warriors() -> PackedStringArray:
+	return _warrior_ui.default_owned_warriors()
+
+func _default_owned_warrior_skins_by_warrior() -> Dictionary:
+	return _warrior_ui.default_owned_warrior_skins_by_warrior()
+
+func _default_equipped_warrior_skin_by_warrior() -> Dictionary:
+	return _warrior_ui.default_equipped_warrior_skin_by_warrior()
+
+func _normalize_owned_warrior_skins_dict(src: Dictionary) -> Dictionary:
+	var out := _default_owned_warrior_skins_by_warrior()
+	for wid in _warrior_ui.warrior_ids():
+		var normalized := str(wid).strip_edges().to_lower()
+		var source: Variant = src.get(normalized, src.get(wid, [0]))
+		var arr := PackedInt32Array([0])
+		if source is PackedInt32Array:
+			for value in source:
+				var idx := maxi(0, int(value))
+				if not arr.has(idx):
+					arr.append(idx)
+		elif source is Array:
+			for value in source:
+				var idx := maxi(0, int(value))
+				if not arr.has(idx):
+					arr.append(idx)
+		arr.sort()
+		out[normalized] = arr
+	return out
+
+func _normalize_equipped_warrior_skins_dict(src: Dictionary) -> Dictionary:
+	var out := _default_equipped_warrior_skin_by_warrior()
+	for wid in _warrior_ui.warrior_ids():
+		var normalized := str(wid).strip_edges().to_lower()
+		out[normalized] = maxi(0, int(src.get(normalized, src.get(wid, 0))))
+	return out
+
 func _auth_apply_profile(profile: Dictionary) -> void:
 	wallet_coins = int(profile.get("coins", wallet_coins))
 	wallet_clk = int(profile.get("clk", wallet_clk))
@@ -572,18 +676,66 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 	if player_username.is_empty():
 		player_username = "Player"
 
-	if profile.has("owned_skins"):
-		var owned := PackedInt32Array([0])
+	if profile.has("owned_warriors"):
+		var incoming_owned_warriors := PackedStringArray()
+		for item in profile.get("owned_warriors", []) as Array:
+			var wid := str(item).strip_edges().to_lower()
+			if not wid.is_empty() and not incoming_owned_warriors.has(wid):
+				incoming_owned_warriors.append(wid)
+		var default_warrior := _default_warrior_id()
+		if not incoming_owned_warriors.has(default_warrior):
+			incoming_owned_warriors.append(default_warrior)
+		owned_warriors = incoming_owned_warriors
+
+	var incoming_warrior_skins := _default_owned_warrior_skins_by_warrior()
+	if profile.has("owned_warrior_skins_by_warrior"):
+		var incoming_skin_dict := profile.get("owned_warrior_skins_by_warrior", {}) as Dictionary
+		for key in incoming_skin_dict.keys():
+			var wid := str(key).strip_edges().to_lower()
+			var source := incoming_skin_dict.get(key, [0]) as Array
+			var arr := PackedInt32Array([0])
+			if source != null:
+				for v in source:
+					var idx := maxi(0, int(v))
+					if not arr.has(idx):
+						arr.append(idx)
+			arr.sort()
+			incoming_warrior_skins[wid] = arr
+	elif profile.has("owned_skins"):
 		for item in profile.get("owned_skins", []) as Array:
 			if not (item is Dictionary):
 				continue
 			var d := item as Dictionary
-			if str(d.get("character_id", "")).strip_edges().to_lower() != "outrage":
+			var wid := str(d.get("character_id", "")).strip_edges().to_lower()
+			if wid.is_empty():
 				continue
+			var arr := incoming_warrior_skins.get(wid, PackedInt32Array([0])) as PackedInt32Array
 			var idx := maxi(0, int(d.get("skin_index", 0)))
-			if not owned.has(idx):
-				owned.append(idx)
-		owned_warrior_skins = owned
+			if not arr.has(idx):
+				arr.append(idx)
+				arr.sort()
+			incoming_warrior_skins[wid] = arr
+			if not owned_warriors.has(wid):
+				owned_warriors.append(wid)
+	owned_warrior_skins_by_warrior = incoming_warrior_skins
+	owned_warrior_skins = owned_warrior_skins_by_warrior.get(_default_warrior_id(), PackedInt32Array([0])) as PackedInt32Array
+	if profile.has("equipped_warrior_skin_by_warrior"):
+		equipped_warrior_skin_by_warrior = _normalize_equipped_warrior_skins_dict((profile.get("equipped_warrior_skin_by_warrior", {}) as Dictionary).duplicate(true))
+	var next_selected_warrior_id := selected_warrior_id
+	if profile.has("selected_warrior_id"):
+		next_selected_warrior_id = str(profile.get("selected_warrior_id", selected_warrior_id)).strip_edges().to_lower()
+	selected_warrior_id = next_selected_warrior_id
+	if not owned_warriors.has(selected_warrior_id):
+		selected_warrior_id = _default_warrior_id()
+	var next_selected_warrior_skin := selected_warrior_skin
+	if profile.has("selected_warrior_skin"):
+		next_selected_warrior_skin = maxi(0, int(profile.get("selected_warrior_skin", selected_warrior_skin)))
+	elif profile.has("equipped_warrior_skin_by_warrior"):
+		next_selected_warrior_skin = _equipped_warrior_skin(selected_warrior_id)
+	if not _warrior_skin_is_owned(selected_warrior_id, next_selected_warrior_skin):
+		next_selected_warrior_skin = 0
+	selected_warrior_skin = next_selected_warrior_skin
+	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
 
 	if profile.has("owned_weapons"):
 		var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE])
@@ -613,6 +765,38 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 				arr_out = PackedInt32Array([0])
 			out[wid] = arr_out
 		owned_weapon_skins_by_weapon = out
+	if profile.has("equipped_weapon_skin_by_weapon"):
+		var incoming_equipped_weapon := profile.get("equipped_weapon_skin_by_weapon", {}) as Dictionary
+		for wid in PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE]):
+			equipped_weapon_skin_by_weapon[wid] = maxi(0, int(incoming_equipped_weapon.get(wid, equipped_weapon_skin_by_weapon.get(wid, 0))))
+	var next_selected_weapon_id := selected_weapon_id
+	if profile.has("selected_weapon_id"):
+		next_selected_weapon_id = str(profile.get("selected_weapon_id", selected_weapon_id)).strip_edges().to_lower()
+	selected_weapon_id = next_selected_weapon_id
+	if not _weapon_is_owned(selected_weapon_id):
+		selected_weapon_id = WEAPON_UZI
+	var next_selected_weapon_skin := selected_weapon_skin
+	if profile.has("selected_weapon_skin"):
+		next_selected_weapon_skin = maxi(0, int(profile.get("selected_weapon_skin", selected_weapon_skin)))
+	elif profile.has("equipped_weapon_skin_by_weapon"):
+		next_selected_weapon_skin = _equipped_weapon_skin(selected_weapon_id)
+	if not _weapon_skin_is_owned(selected_weapon_id, next_selected_weapon_skin):
+		next_selected_weapon_skin = 0
+	selected_weapon_skin = next_selected_weapon_skin
+	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
+	_pending_warrior_id = selected_warrior_id
+	_pending_warrior_skin = selected_warrior_skin
+	_pending_weapon_id = selected_weapon_id
+	_pending_weapon_skin = selected_weapon_skin
+	_weapon_filter_weapon_id = selected_weapon_id
+	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_id, selected_warrior_skin)
+	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_id, _pending_warrior_skin)
+	_set_weapon_icon_sprite(main_weapon_icon, selected_weapon_id, 1.0, selected_weapon_skin)
+	_apply_weapon_skin_visual(main_weapon_icon, selected_weapon_id, selected_weapon_skin)
+	_set_weapon_icon_sprite(weapon_shop_preview, _pending_weapon_id, 1.0, _pending_weapon_skin)
+	_apply_weapon_skin_visual(weapon_shop_preview, _pending_weapon_id, _pending_weapon_skin)
+	warrior_name_label.text = "%s - %s" % [_warrior_ui.warrior_display_name(_pending_warrior_id), _warrior_ui.warrior_skin_label(_pending_warrior_id, _pending_warrior_skin)]
+	weapon_name_label.text = "%s - %s" % [_weapon_ui.weapon_display_name(_pending_weapon_id), _weapon_skin_label(_pending_weapon_id, _pending_weapon_skin)]
 
 	_update_wallet_labels(true)
 	_refresh_warrior_username_label()
@@ -673,6 +857,23 @@ func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedS
 	if action == "profile":
 		if response_code < 200 or response_code >= 300 or not (parsed is Dictionary):
 			print("[AUTH][PROFILE] failed code=%d body=%s" % [response_code, text])
+			var had_runtime_session := _auth_logged_in and not _auth_token.is_empty()
+			if response_code == 401 or response_code == 403:
+				_auth_clear_persisted_session()
+				_auth_set_ui_locked(true)
+				if _auth_status_label != null:
+					_auth_status_label.text = "Session expired. Log in again."
+				if _auth_login_button != null:
+					_auth_login_button.disabled = false
+				_auth_pending_action = ""
+				return
+			if had_runtime_session:
+				if _auth_status_label != null:
+					_auth_status_label.text = ""
+				if _auth_login_button != null:
+					_auth_login_button.disabled = false
+				_auth_pending_action = ""
+				return
 			if _auth_status_label != null:
 				_auth_status_label.text = "Profile load failed (%d)" % response_code
 			if _auth_login_button != null:
@@ -692,6 +893,8 @@ func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedS
 			_auth_wallet_sync_supported = true
 			_auth_wallet_sync_endpoint_index = 0
 		_auth_logged_in = true
+		_auth_save_runtime_session()
+		_auth_save_persisted_session()
 		_auth_set_ui_locked(false)
 		if _auth_status_label != null:
 			_auth_status_label.text = ""
@@ -740,7 +943,7 @@ func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedS
 			print("[AUTH][BUY_SKIN] ok user=%s skin=%d coins=%d clk=%d" % [str(profile.get("username", player_username)), _auth_pending_purchase_skin_index, int(profile.get("coins", wallet_coins)), int(profile.get("clk", wallet_clk))])
 			_auth_apply_profile(profile)
 			if _auth_pending_purchase_skin_index >= 0 and _is_warrior_skin_owned(_auth_pending_purchase_skin_index):
-				_equip_warrior_skin(_auth_pending_purchase_skin_index)
+				_equip_warrior_item(selected_warrior_id, _auth_pending_purchase_skin_index)
 			_pixel_burst_at(_center_of(wallet_panel), Color(0.25, 1, 0.85, 1))
 			_auth_pending_purchase_skin_index = -1
 			_auth_pending_action = ""
@@ -826,6 +1029,26 @@ func _play_intro_animation_safe() -> void:
 	_intro_fx.play_intro_animation_safe()
 	enable_intro_animation = _intro_fx.enable_intro_animation
 
+func _ensure_auth_logout_button() -> void:
+	if _auth_logout_button != null and is_instance_valid(_auth_logout_button):
+		return
+	if screen_main == null:
+		return
+	var btn := _make_shop_button()
+	btn.name = "LogoutButton"
+	btn.text = "LOG OUT"
+	btn.visible = false
+	btn.z_index = 210
+	btn.custom_minimum_size = Vector2(172, 30)
+	btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	btn.offset_left = 10.0
+	btn.offset_top = 60.0
+	btn.offset_right = 182.0
+	btn.offset_bottom = 90.0
+	screen_main.add_child(btn)
+	_center_pivot(btn)
+	_auth_logout_button = btn
+
 func _connect_signals() -> void:
 	warrior_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	weapon_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -842,6 +1065,8 @@ func _connect_signals() -> void:
 		_switch_to(screen_options, 1)
 	)
 	exit_button.pressed.connect(_on_exit_pressed)
+	if _auth_logout_button != null:
+		_auth_logout_button.pressed.connect(_on_auth_logout_pressed)
 
 	warrior_button.pressed.connect(_open_warriors_menu)
 	weapon_button.pressed.connect(_open_weapons_menu)
@@ -859,6 +1084,8 @@ func _connect_signals() -> void:
 	_add_hover_pop(play_button)
 	_add_hover_pop(options_button)
 	_add_hover_pop(exit_button)
+	if _auth_logout_button != null:
+		_add_hover_pop(_auth_logout_button)
 	_add_hover_pop(options_back_button)
 	_add_hover_pop(warriors_back_button)
 	_add_hover_pop(weapons_back_button)
@@ -890,6 +1117,28 @@ func _on_lobby_overlay_closed() -> void:
 func _on_exit_pressed() -> void:
 	_button_press_anim(exit_button)
 	get_tree().quit()
+
+func _on_auth_logout_pressed() -> void:
+	if _auth_logout_button != null:
+		_button_press_anim(_auth_logout_button)
+	if _auth_http != null:
+		_auth_http.cancel_request()
+	_auth_clear_persisted_session()
+	_auth_pending_action = ""
+	_auth_pending_purchase_skin_index = -1
+	_auth_wallet_sync_queued = false
+	_auth_wallet_sync_snapshot_active = false
+	_auth_wallet_sync_snapshot = {}
+	_auth_logged_in = false
+	if _auth_status_label != null:
+		_auth_status_label.text = "Logged out"
+	if _auth_login_button != null:
+		_auth_login_button.disabled = false
+	if _auth_pass_input != null:
+		_auth_pass_input.text = ""
+	if _auth_overlay != null:
+		_auth_overlay.visible = true
+	_auth_set_ui_locked(true)
 
 func _switch_to(target: Control, direction: int) -> void:
 	if target == null:
@@ -1037,34 +1286,8 @@ func _prepare_player_preview(player: Node) -> void:
 		if label != null:
 			label.visible = false
 
-func _apply_warrior_skin_to_player(player: Node, skin_index: int) -> void:
-	if player == null:
-		return
-	var visual_root := player.get_node_or_null("VisualRoot") as Node
-	if visual_root == null:
-		return
-
-	var idx := maxi(0, skin_index)
-	var region := Rect2(float(idx * 64), 0.0, 64.0, 64.0)
-
-	var head := visual_root.get_node_or_null("head") as Sprite2D
-	if head != null:
-		head.texture = DATA.HEADS_TEXTURE
-		head.region_enabled = true
-		head.region_rect = region
-
-	var torso := visual_root.get_node_or_null("torso") as Sprite2D
-	if torso != null:
-		torso.texture = DATA.TORSO_TEXTURE
-		torso.region_enabled = true
-		torso.region_rect = region
-
-	for leg_name in ["leg1", "leg2"]:
-		var leg := visual_root.get_node_or_null(leg_name) as Sprite2D
-		if leg != null:
-			leg.texture = DATA.LEGS_TEXTURE
-			leg.region_enabled = true
-			leg.region_rect = region
+func _apply_warrior_skin_to_player(player: Node, warrior_id: String, skin_index: int) -> void:
+	_warrior_ui.apply_warrior_menu_preview(player, warrior_id, skin_index)
 
 func _set_weapon_icon_sprite(target: Sprite2D, weapon_id: String, extra_mult: float = 1.0, skin_index: int = 0) -> void:
 	var normalized := weapon_id.strip_edges().to_lower()
@@ -1217,14 +1440,16 @@ func _apply_weapon_skin_tint(target: CanvasItem, skin_index: int) -> void:
 
 func _build_warrior_shop_grid() -> void:
 	_clear_children(warrior_grid)
-	# 12 test skins (0..11) - enough to feel like a shop.
-	for skin_index in range(12):
-		var btn := _make_shop_button()
-		btn.custom_minimum_size = Vector2(170, 48)
-		btn.text = _warrior_skin_button_text(skin_index)
-		btn.pressed.connect(Callable(self, "_on_warrior_skin_button_pressed").bind(skin_index))
-		warrior_grid.add_child(btn)
-		_center_pivot(btn)
+	var warrior_list := _warrior_ui.warrior_ids()
+	if not _warrior_filter_warrior_id.is_empty():
+		warrior_list = [_warrior_filter_warrior_id]
+	for warrior_id in warrior_list:
+		for skin in _warrior_ui.warrior_skins_for(warrior_id):
+			var skin_index := int((skin as Dictionary).get("index", 0))
+			var btn := _warrior_ui.make_warrior_item_button(self, Callable(self, "_make_shop_button"), warrior_id, skin_index)
+			btn.pressed.connect(Callable(self, "_on_warrior_item_button_pressed").bind(warrior_id, skin_index))
+			warrior_grid.add_child(btn)
+			_center_pivot(btn)
 
 func _build_weapon_shop_grid() -> void:
 	_clear_children(weapon_grid)
@@ -1459,106 +1684,258 @@ func _pixel_empty_icon() -> Texture2D:
 	img.fill(Color(0, 0, 0, 0))
 	return ImageTexture.create_from_image(img)
 
-func _warrior_skin_cost(skin_index: int) -> int:
-	if skin_index <= 0:
-		return 0
-	return 250 + skin_index * 120
+func _warrior_cost(warrior_id: String) -> int:
+	return _warrior_ui.warrior_base_cost(warrior_id)
 
-func _warrior_skin_button_text(skin_index: int) -> String:
-	var base := "Skin %d" % skin_index
-	if _is_warrior_skin_owned(skin_index):
-		if skin_index == selected_warrior_skin:
-			return "%s\n[EQUIPPED]" % base
-		return "%s" % base
-	return "%s\nBUY  %d" % [base, _warrior_skin_cost(skin_index)]
+func _warrior_skin_cost(warrior_id: String, skin_index: int) -> int:
+	return _warrior_ui.warrior_skin_cost(warrior_id, skin_index)
 
-func _select_warrior_skin(skin_index: int, silent: bool) -> void:
+func _warrior_is_owned(warrior_id: String) -> bool:
+	return owned_warriors.has(warrior_id.strip_edges().to_lower())
+
+func _warrior_skin_is_owned(warrior_id: String, skin_index: int) -> bool:
+	var normalized := warrior_id.strip_edges().to_lower()
+	var idx := maxi(0, skin_index)
+	if not _warrior_is_owned(normalized):
+		return false
+	if idx <= 0:
+		return true
+	var arr := owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array
+	if arr == null:
+		return false
+	return arr.has(idx)
+
+func _equipped_warrior_skin(warrior_id: String) -> int:
+	var normalized := warrior_id.strip_edges().to_lower()
+	if equipped_warrior_skin_by_warrior.has(normalized):
+		return maxi(0, int(equipped_warrior_skin_by_warrior.get(normalized, 0)))
+	return 0
+
+func _set_equipped_warrior_skin(warrior_id: String, skin_index: int) -> void:
+	equipped_warrior_skin_by_warrior[warrior_id.strip_edges().to_lower()] = maxi(0, skin_index)
+
+func _ensure_warrior_filter_ui() -> void:
+	if warrior_scroll == null:
+		return
+	var list_col := warrior_scroll.get_parent() as Control
+	if list_col == null or list_col.get_node_or_null("WarriorFilters") != null:
+		return
+	var filters := HBoxContainer.new()
+	filters.name = "WarriorFilters"
+	filters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	filters.add_theme_constant_override("separation", 6)
+	list_col.add_child(filters)
+	list_col.move_child(filters, 0)
+	_warrior_filter_warrior_buttons = {}
+	var all_btn := _make_filter_button("ALL")
+	all_btn.pressed.connect(func() -> void:
+		_warrior_filter_warrior_id = ""
+		_refresh_warrior_filter_button_state()
+		_build_warrior_shop_grid()
+	)
+	filters.add_child(all_btn)
+	_warrior_filter_warrior_buttons[""] = all_btn
+	for warrior_id in _warrior_ui.warrior_ids():
+		var wid := str(warrior_id)
+		var btn := _make_filter_button(_warrior_ui.warrior_display_name(wid).to_upper())
+		btn.pressed.connect(func() -> void:
+			_warrior_filter_warrior_id = wid
+			_select_warrior_skin(wid, _equipped_warrior_skin(wid), true)
+			_refresh_warrior_filter_button_state()
+			_build_warrior_shop_grid()
+		)
+		filters.add_child(btn)
+		_warrior_filter_warrior_buttons[wid] = btn
+	_refresh_warrior_filter_button_state()
+
+func _refresh_warrior_filter_button_state() -> void:
+	for key in _warrior_filter_warrior_buttons.keys():
+		var btn := _warrior_filter_warrior_buttons.get(key, null) as Button
+		_set_filter_btn_selected(btn, str(key) == _warrior_filter_warrior_id)
+		if btn == null:
+			continue
+		if str(key).is_empty():
+			btn.text = "ALL"
+			continue
+		var wid := str(key)
+		var title := _warrior_ui.warrior_display_name(wid).to_upper()
+		if not _warrior_is_owned(wid):
+			btn.text = "%s  (LOCKED)" % title
+			continue
+		btn.text = "%s - %s" % [title, _warrior_ui.warrior_skin_label(wid, _equipped_warrior_skin(wid))]
+
+func _select_warrior_skin(warrior_id: String, skin_index: int, silent: bool) -> void:
+	_pending_warrior_id = warrior_id.strip_edges().to_lower()
 	_pending_warrior_skin = maxi(0, skin_index)
-	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_skin)
-	warrior_name_label.text = "Skin %d" % _pending_warrior_skin
+	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_id, _pending_warrior_skin)
+	warrior_name_label.text = "%s - %s" % [_warrior_ui.warrior_display_name(_pending_warrior_id), _warrior_ui.warrior_skin_label(_pending_warrior_id, _pending_warrior_skin)]
+	_refresh_warrior_filter_button_state()
 	_refresh_warrior_grid_texts()
+	_refresh_warrior_action()
 	if not silent:
 		_pop(warrior_shop_preview)
 
-func _equip_warrior_skin(skin_index: int) -> void:
+func _equip_warrior_item(warrior_id: String, skin_index: int) -> void:
+	selected_warrior_id = warrior_id.strip_edges().to_lower()
 	selected_warrior_skin = maxi(0, skin_index)
+	_pending_warrior_id = selected_warrior_id
 	_pending_warrior_skin = selected_warrior_skin
-	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_skin)
-	_apply_warrior_skin_to_player(warrior_shop_preview, selected_warrior_skin)
-	warrior_name_label.text = "Skin %d" % selected_warrior_skin
+	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
+	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_id, selected_warrior_skin)
+	_apply_warrior_skin_to_player(warrior_shop_preview, selected_warrior_id, selected_warrior_skin)
+	owned_warrior_skins = owned_warrior_skins_by_warrior.get(_default_warrior_id(), PackedInt32Array([0])) as PackedInt32Array
+	warrior_name_label.text = "%s - %s" % [_warrior_ui.warrior_display_name(selected_warrior_id), _warrior_ui.warrior_skin_label(selected_warrior_id, selected_warrior_skin)]
 	_save_state()
+	_auth_sync_wallet()
+	_refresh_warrior_filter_button_state()
 	_refresh_warrior_grid_texts()
+	_refresh_warrior_action()
 	_pop(warrior_shop_preview)
 
-func _try_buy_and_equip_warrior_skin(skin_index: int) -> void:
-	var idx := maxi(0, skin_index)
-	if _is_warrior_skin_owned(idx):
-		_equip_warrior_skin(idx)
-		return
-	if _auth_logged_in and not _auth_token.is_empty():
-		_auth_purchase_warrior_skin(idx)
-		return
-	var cost := _warrior_skin_cost(idx)
+func _buy_warrior_if_needed(warrior_id: String) -> bool:
+	var normalized := warrior_id.strip_edges().to_lower()
+	if _warrior_is_owned(normalized):
+		return true
+	var cost := _warrior_cost(normalized)
+	if cost <= 0:
+		return false
 	if wallet_coins < cost:
+		if _auth_status_label != null:
+			_auth_status_label.text = "Not enough coins"
+		_shake(wallet_panel)
+		return false
+	_auth_capture_wallet_sync_snapshot()
+	wallet_coins -= cost
+	owned_warriors.append(normalized)
+	var arr := owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array
+	if arr == null:
+		arr = PackedInt32Array([0])
+	if not arr.has(0):
+		arr.append(0)
+		arr.sort()
+	owned_warrior_skins_by_warrior[normalized] = arr
+	_update_wallet_labels(false)
+	_save_state()
+	_auth_sync_wallet()
+	return true
+
+func _buy_warrior_skin_if_needed(warrior_id: String, skin_index: int) -> bool:
+	var normalized := warrior_id.strip_edges().to_lower()
+	var idx := maxi(0, skin_index)
+	if _warrior_skin_is_owned(normalized, idx):
+		return true
+	var cost := _warrior_skin_cost(normalized, idx)
+	if cost <= 0:
+		return false
+	if wallet_coins < cost:
+		if _auth_status_label != null:
+			_auth_status_label.text = "Not enough coins"
+		_shake(wallet_panel)
+		return false
+	_auth_capture_wallet_sync_snapshot()
+	wallet_coins -= cost
+	var arr := owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array
+	if arr == null:
+		arr = PackedInt32Array([0])
+	if not arr.has(idx):
+		arr.append(idx)
+		arr.sort()
+	owned_warrior_skins_by_warrior[normalized] = arr
+	owned_warrior_skins = owned_warrior_skins_by_warrior.get(_default_warrior_id(), PackedInt32Array([0])) as PackedInt32Array
+	_update_wallet_labels(false)
+	_save_state()
+	_auth_sync_wallet()
+	return true
+
+func _confirm_buy_warrior_skin_and_equip(warrior_id: String, skin_index: int) -> void:
+	var normalized := warrior_id.strip_edges().to_lower()
+	if not _buy_warrior_skin_if_needed(normalized, skin_index):
+		return
+	_equip_warrior_item(normalized, skin_index)
+
+func _confirm_buy_warrior_then_maybe_skin(warrior_id: String, skin_index: int) -> void:
+	var normalized := warrior_id.strip_edges().to_lower()
+	var idx := maxi(0, skin_index)
+	if not _buy_warrior_if_needed(normalized):
+		return
+	if _warrior_skin_is_owned(normalized, idx):
+		_equip_warrior_item(normalized, idx)
+		return
+	var skin_cost := _warrior_skin_cost(normalized, idx)
+	if wallet_coins < skin_cost:
+		if _auth_status_label != null:
+			_auth_status_label.text = "Not enough coins for skin"
 		_shake(wallet_panel)
 		return
-	wallet_coins -= cost
-	owned_warrior_skins.append(idx)
-	owned_warrior_skins.sort()
-	_update_wallet_labels(false)
-	_equip_warrior_skin(idx)
-	_auth_sync_wallet()
-	_pixel_burst_at(_center_of(wallet_panel), Color(0.25, 1, 0.85, 1))
+	_ask_confirm(
+		"Buy skin?",
+		"Buy %s - %s for %d coins?" % [_warrior_ui.warrior_display_name(normalized), _warrior_ui.warrior_skin_label(normalized, idx), skin_cost],
+		Callable(self, "_confirm_buy_warrior_skin_and_equip").bind(normalized, idx)
+	)
 
-func _on_warrior_skin_button_pressed(skin_index: int) -> void:
+func _on_warrior_item_button_pressed(warrior_id: String, skin_index: int) -> void:
+	var normalized := warrior_id.strip_edges().to_lower()
 	var idx := maxi(0, skin_index)
-	_pending_warrior_skin = idx
-	_apply_warrior_skin_to_player(warrior_shop_preview, idx)
-	warrior_name_label.text = "Skin %d" % idx
-	_refresh_warrior_grid_texts()
-
-	if _is_warrior_skin_owned(idx):
-		_equip_warrior_skin(idx)
+	_select_warrior_skin(normalized, idx, false)
+	if not _warrior_is_owned(normalized):
+		var warrior_cost := _warrior_cost(normalized)
+		_ask_confirm(
+			"Buy warrior?",
+			"Buy %s for %d coins? You need the warrior before its skins." % [_warrior_ui.warrior_display_name(normalized), warrior_cost],
+			Callable(self, "_confirm_buy_warrior_then_maybe_skin").bind(normalized, idx)
+		)
 		return
-	var cost := _warrior_skin_cost(idx)
-	_ask_confirm("Buy skin?", "Buy Skin %d for %d coins?" % [idx, cost], Callable(self, "_try_buy_and_equip_warrior_skin").bind(idx))
+	if _warrior_skin_is_owned(normalized, idx):
+		_equip_warrior_item(normalized, idx)
+		return
+	var cost := _warrior_skin_cost(normalized, idx)
+	_ask_confirm(
+		"Buy skin?",
+		"Buy %s - %s for %d coins?" % [_warrior_ui.warrior_display_name(normalized), _warrior_ui.warrior_skin_label(normalized, idx), cost],
+		Callable(self, "_confirm_buy_warrior_skin_and_equip").bind(normalized, idx)
+	)
 
 func _refresh_warrior_grid_texts() -> void:
-	var i := 0
 	for child in warrior_grid.get_children():
 		var b := child as Button
 		if b != null:
-			b.text = _warrior_skin_button_text(i)
-		i += 1
+			_warrior_ui.update_warrior_item_button(self, b)
 
 func _refresh_warrior_action() -> void:
-	if _is_warrior_skin_owned(_pending_warrior_skin):
-		if _pending_warrior_skin == selected_warrior_skin:
-			warrior_action_button.text = "EQUIPPED"
-			warrior_action_button.disabled = true
-		else:
-			warrior_action_button.text = "EQUIP"
-			warrior_action_button.disabled = false
+	if warrior_action_button == null:
 		return
-
+	var status := _warrior_ui.warrior_item_status_text(self, _pending_warrior_id, _pending_warrior_skin)
+	if status == "EQUIPPED":
+		warrior_action_button.text = "EQUIPPED"
+		warrior_action_button.disabled = true
+		return
+	if status == "OWNED":
+		warrior_action_button.text = "EQUIP"
+		warrior_action_button.disabled = false
+		return
+	warrior_action_button.text = status
 	warrior_action_button.disabled = false
-	warrior_action_button.text = "BUY  (%d)" % _warrior_skin_cost(_pending_warrior_skin)
 
 func _on_warrior_action_pressed() -> void:
 	_button_press_anim(warrior_action_button)
-	if _is_warrior_skin_owned(_pending_warrior_skin):
-		_equip_warrior_skin(_pending_warrior_skin)
+	if not _warrior_is_owned(_pending_warrior_id):
+		var warrior_cost := _warrior_cost(_pending_warrior_id)
+		if wallet_coins < warrior_cost:
+			_shake(wallet_panel)
+			return
+		_confirm_buy_warrior_then_maybe_skin(_pending_warrior_id, _pending_warrior_skin)
 		return
-
-	var cost := _warrior_skin_cost(_pending_warrior_skin)
+	if _warrior_skin_is_owned(_pending_warrior_id, _pending_warrior_skin):
+		_equip_warrior_item(_pending_warrior_id, _pending_warrior_skin)
+		return
+	var cost := _warrior_skin_cost(_pending_warrior_id, _pending_warrior_skin)
 	if wallet_coins < cost:
 		_shake(wallet_panel)
 		return
-
-	_try_buy_and_equip_warrior_skin(_pending_warrior_skin)
+	_confirm_buy_warrior_skin_and_equip(_pending_warrior_id, _pending_warrior_skin)
 
 func _is_warrior_skin_owned(skin_index: int) -> bool:
-	return owned_warrior_skins.has(skin_index)
+	return _warrior_skin_is_owned(selected_warrior_id, skin_index)
 
 func _weapon_is_owned(weapon_id: String) -> bool:
 	return owned_weapons.has(weapon_id.strip_edges().to_lower())
@@ -1626,6 +2003,7 @@ func _equip_weapon_item(weapon_id: String, skin_index: int) -> void:
 	_weapon_filter_weapon_id = selected_weapon_id
 	_refresh_weapon_filter_button_state()
 	_save_state()
+	_auth_sync_wallet()
 	_refresh_weapon_grid_texts()
 	_pop(main_weapon_icon)
 	_pop(weapon_shop_preview)
@@ -1820,11 +2198,19 @@ func _load_state_or_defaults() -> void:
 	var fallback_username := OS.get_environment("USERNAME").strip_edges()
 	if fallback_username.is_empty():
 		fallback_username = "Player"
+	var default_warrior := _default_warrior_id()
+	var default_owned_warriors := _default_owned_warriors()
+	var default_warrior_skins := _default_owned_warrior_skins_by_warrior()
+	var default_equipped_warrior_skins := _default_equipped_warrior_skin_by_warrior()
 	var defaults := {
 		"coins": 1000000,
 		"clk": 50000,
 		"username": fallback_username,
+		"owned_warriors": Array(default_owned_warriors),
 		"owned_warrior_skins": [0],
+		"owned_warrior_skins_by_warrior": default_warrior_skins,
+		"equipped_warrior_skin_by_warrior": default_equipped_warrior_skins,
+		"selected_warrior_id": default_warrior,
 		"selected_warrior_skin": 0,
 		"owned_weapons": [WEAPON_UZI],
 		"owned_weapon_skins_by_weapon": {WEAPON_UZI: [0], WEAPON_GRENADE: [0], WEAPON_AK47: [0], WEAPON_SHOTGUN: [0]},
@@ -1840,8 +2226,19 @@ func _load_state_or_defaults() -> void:
 	if player_username.is_empty():
 		player_username = fallback_username
 
+	owned_warriors = PackedStringArray(st.get("owned_warriors", Array(default_owned_warriors)) as Array)
 	owned_warrior_skins = PackedInt32Array(st.get("owned_warrior_skins", [0]) as Array)
+	selected_warrior_id = str(st.get("selected_warrior_id", default_warrior)).strip_edges().to_lower()
 	selected_warrior_skin = maxi(0, int(st.get("selected_warrior_skin", 0)))
+	var warrior_skin_dict := st.get("owned_warrior_skins_by_warrior", default_warrior_skins) as Dictionary
+	owned_warrior_skins_by_warrior = _normalize_owned_warrior_skins_dict(warrior_skin_dict)
+	var equipped_warrior := st.get("equipped_warrior_skin_by_warrior", default_equipped_warrior_skins) as Dictionary
+	equipped_warrior_skin_by_warrior = _normalize_equipped_warrior_skins_dict(equipped_warrior.duplicate(true))
+	for wid in _warrior_ui.warrior_ids():
+		if not owned_warrior_skins_by_warrior.has(wid):
+			owned_warrior_skins_by_warrior[wid] = PackedInt32Array([0])
+		if not equipped_warrior_skin_by_warrior.has(wid):
+			equipped_warrior_skin_by_warrior[wid] = 0
 
 	owned_weapons = PackedStringArray(st.get("owned_weapons", [WEAPON_UZI]) as Array)
 	selected_weapon_id = str(st.get("selected_weapon_id", WEAPON_UZI)).strip_edges().to_lower()
@@ -1857,6 +2254,8 @@ func _load_state_or_defaults() -> void:
 	owned_weapons = filtered_owned
 	if not owned_weapons.has(WEAPON_UZI):
 		owned_weapons.append(WEAPON_UZI)
+	if not owned_warriors.has(default_warrior):
+		owned_warriors.append(default_warrior)
 
 	var out := {}
 	var skins_dict := st.get("owned_weapon_skins_by_weapon", {}) as Dictionary
@@ -1884,19 +2283,38 @@ func _load_state_or_defaults() -> void:
 			equipped_weapon_skin_by_weapon[wid] = maxi(0, int(eq.get(key, 0)))
 
 	# Clamp selections to owned.
-	if not _is_warrior_skin_owned(selected_warrior_skin):
+	if not _warrior_is_owned(selected_warrior_id):
+		selected_warrior_id = default_warrior
+	if not _warrior_skin_is_owned(selected_warrior_id, selected_warrior_skin):
 		selected_warrior_skin = 0
+	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
+	_pending_warrior_id = selected_warrior_id
+	_pending_warrior_skin = selected_warrior_skin
 	if not _weapon_is_owned(selected_weapon_id):
 		selected_weapon_id = WEAPON_UZI
-	selected_weapon_skin = _equipped_weapon_skin(selected_weapon_id)
 	if not _weapon_skin_is_owned(selected_weapon_id, selected_weapon_skin):
 		selected_weapon_skin = 0
-		_set_equipped_weapon_skin(selected_weapon_id, 0)
+	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
+	_pending_weapon_id = selected_weapon_id
+	_pending_weapon_skin = selected_weapon_skin
 
 func _save_state() -> void:
-	var owned_warrior_list: Array = []
+	var owned_warriors_list: Array = []
+	for wid in owned_warriors:
+		owned_warriors_list.append(str(wid))
+
+	var owned_warrior_skins_dict: Dictionary = {}
+	for wid in owned_warrior_skins_by_warrior.keys():
+		var warrior_arr := owned_warrior_skins_by_warrior.get(wid, PackedInt32Array([0])) as PackedInt32Array
+		var warrior_out: Array = []
+		if warrior_arr != null:
+			for s in warrior_arr:
+				warrior_out.append(int(s))
+		owned_warrior_skins_dict[str(wid)] = warrior_out
+
+	var owned_warrior_skin_list: Array = []
 	for v in owned_warrior_skins:
-		owned_warrior_list.append(int(v))
+		owned_warrior_skin_list.append(int(v))
 
 	var owned_weapons_list: Array = []
 	for w in owned_weapons:
@@ -1915,7 +2333,11 @@ func _save_state() -> void:
 		"coins": wallet_coins,
 		"clk": wallet_clk,
 		"username": player_username,
-		"owned_warrior_skins": owned_warrior_list,
+		"owned_warriors": owned_warriors_list,
+		"owned_warrior_skins": owned_warrior_skin_list,
+		"owned_warrior_skins_by_warrior": owned_warrior_skins_dict,
+		"equipped_warrior_skin_by_warrior": equipped_warrior_skin_by_warrior,
+		"selected_warrior_id": selected_warrior_id,
 		"selected_warrior_skin": selected_warrior_skin,
 		"owned_weapons": owned_weapons_list,
 		"owned_weapon_skins_by_weapon": owned_weapon_skins_dict,
@@ -1934,7 +2356,6 @@ func _ensure_warrior_username_label() -> void:
 	label.name = "WarriorUsername"
 	label.z_index = 20
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.layout_mode = 1
 	label.anchors_preset = Control.PRESET_CENTER_TOP
 	label.anchor_left = 0.5
 	label.anchor_right = 0.5

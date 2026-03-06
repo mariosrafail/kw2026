@@ -5,10 +5,12 @@ var lobby_config: LobbyConfig
 static var _global_server_lobbies: Dictionary = {}
 static var _global_peer_lobby_by_peer: Dictionary = {}
 static var _global_peer_weapon_by_peer: Dictionary = {}
+static var _global_peer_weapon_skin_by_peer: Dictionary = {}
 static var _global_peer_character_by_peer: Dictionary = {}
 static var _global_peer_skin_by_peer: Dictionary = {}
 static var _global_peer_display_name_by_peer: Dictionary = {}
 static var _global_local_selected_weapon := "ak47"
+static var _global_local_selected_weapon_skin_by_weapon: Dictionary = {}
 static var _global_local_selected_character := "outrage"
 static var _global_local_selected_skin_by_character: Dictionary = {}
 static var _global_next_lobby_id := 1
@@ -18,12 +20,14 @@ func _init(config: LobbyConfig = null) -> void:
 
 func reset(keep_local_selection: bool = false) -> void:
 	var saved_weapon := _global_local_selected_weapon
+	var saved_weapon_skins := _global_local_selected_weapon_skin_by_weapon.duplicate(true)
 	var saved_character := _global_local_selected_character
 	var saved_skins := _global_local_selected_skin_by_character.duplicate(true)
 
 	_global_server_lobbies.clear()
 	_global_peer_lobby_by_peer.clear()
 	_global_peer_weapon_by_peer.clear()
+	_global_peer_weapon_skin_by_peer.clear()
 	_global_peer_character_by_peer.clear()
 	_global_peer_skin_by_peer.clear()
 	_global_peer_display_name_by_peer.clear()
@@ -31,6 +35,7 @@ func reset(keep_local_selection: bool = false) -> void:
 
 	if keep_local_selection:
 		_global_local_selected_weapon = str(saved_weapon).strip_edges().to_lower()
+		_global_local_selected_weapon_skin_by_weapon = saved_weapon_skins
 		var normalized_saved := str(saved_character).strip_edges().to_lower()
 		if normalized_saved == "erebus":
 			_global_local_selected_character = "erebus"
@@ -41,6 +46,7 @@ func reset(keep_local_selection: bool = false) -> void:
 		_global_local_selected_skin_by_character = saved_skins
 	else:
 		_global_local_selected_weapon = "ak47"
+		_global_local_selected_weapon_skin_by_weapon.clear()
 		_global_local_selected_character = "outrage"
 		_global_local_selected_skin_by_character.clear()
 
@@ -145,6 +151,16 @@ func set_peer_weapon(peer_id: int, weapon_id: String) -> void:
 		return
 	_global_peer_weapon_by_peer[peer_id] = normalized
 
+func set_peer_weapon_skin(peer_id: int, skin_index: int) -> void:
+	if peer_id <= 0:
+		return
+	_global_peer_weapon_skin_by_peer[peer_id] = maxi(0, skin_index)
+
+func get_peer_weapon_skin(peer_id: int, fallback: int = 0) -> int:
+	if peer_id <= 0:
+		return maxi(0, fallback)
+	return int(_global_peer_weapon_skin_by_peer.get(peer_id, fallback))
+
 func get_peer_weapon(peer_id: int, fallback: String = "") -> String:
 	var weapon_id := str(_global_peer_weapon_by_peer.get(peer_id, "")).strip_edges().to_lower()
 	if weapon_id.is_empty():
@@ -162,6 +178,18 @@ func get_local_selected_weapon(fallback: String = "ak47") -> String:
 	if normalized.is_empty():
 		return fallback.strip_edges().to_lower()
 	return normalized
+
+func set_local_selected_weapon_skin(weapon_id: String, skin_index: int) -> void:
+	var normalized_weapon := str(weapon_id).strip_edges().to_lower()
+	if normalized_weapon.is_empty():
+		return
+	_global_local_selected_weapon_skin_by_weapon[normalized_weapon] = maxi(0, skin_index)
+
+func get_local_selected_weapon_skin(weapon_id: String, fallback: int = 0) -> int:
+	var normalized_weapon := str(weapon_id).strip_edges().to_lower()
+	if normalized_weapon.is_empty():
+		return maxi(0, fallback)
+	return int(_global_local_selected_weapon_skin_by_weapon.get(normalized_weapon, fallback))
 
 func set_peer_character(peer_id: int, character_id: String) -> void:
 	if peer_id <= 0:

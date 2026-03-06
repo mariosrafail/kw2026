@@ -137,6 +137,24 @@ func set_display_name(display_name: String) -> bool:
 	_rpc_lobby_set_display_name.rpc_id(1, trimmed)
 	return true
 
+func set_warrior_skin(skin_index: int) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_warrior_skin blocked can_send=false")
+		return false
+	var resolved := maxi(0, skin_index)
+	_log("set_warrior_skin rpc_id(1) skin_index=%d" % resolved)
+	_rpc_lobby_set_skin.rpc_id(1, resolved)
+	return true
+
+func set_weapon_skin(skin_index: int) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_weapon_skin blocked can_send=false")
+		return false
+	var resolved := maxi(0, skin_index)
+	_log("set_weapon_skin rpc_id(1) skin_index=%d" % resolved)
+	_rpc_lobby_set_weapon_skin.rpc_id(1, resolved)
+	return true
+
 func can_send_lobby_rpc() -> bool:
 	return _can_send_server_rpc()
 
@@ -188,7 +206,7 @@ func _rpc_request_reload() -> void:
 	pass
 
 @rpc("authority", "reliable")
-func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "", _skin_index: int = 0) -> void:
+func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "", _skin_index: int = 0, _weapon_skin_index: int = 0) -> void:
 	pass
 
 @rpc("authority", "reliable")
@@ -204,7 +222,7 @@ func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 	pass
 
 @rpc("any_peer", "unreliable_ordered")
-func _rpc_submit_input(_axis: float, _jump_pressed: bool, _jump_held: bool, _aim_world: Vector2, _shoot_held: bool, _boost_or_rtt: Variant, _reported_rtt_ms: int = -1) -> void:
+func _rpc_submit_input(_axis: float, _jump_pressed: bool, _jump_held: bool, _aim_world: Vector2, _shoot_held: bool, _boost_damage: bool, _reported_rtt_ms: int) -> void:
 	pass
 
 @rpc("any_peer", "unreliable")
@@ -248,6 +266,10 @@ func _rpc_sync_player_weapon(_peer_id: int, _weapon_id: String) -> void:
 	pass
 
 @rpc("authority", "reliable")
+func _rpc_sync_player_weapon_skin(_peer_id: int, _skin_index: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
 func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
 	pass
 
@@ -272,6 +294,10 @@ func _rpc_lobby_set_weapon(_peer_or_weapon: Variant, _weapon_id: String = "") ->
 	pass
 
 @rpc("any_peer", "reliable")
+func _rpc_lobby_set_weapon_skin(_skin_index: int) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
 func _rpc_lobby_set_character(_character_id: String) -> void:
 	pass
 
@@ -284,9 +310,9 @@ func _rpc_lobby_set_display_name(_display_name: String) -> void:
 	pass
 
 @rpc("authority", "reliable")
-func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
-	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [entries.size(), active_lobby_id])
-	lobby_list_received.emit(entries, active_lobby_id)
+func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
+	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [_entries.size(), _active_lobby_id])
+	lobby_list_received.emit(_entries, _active_lobby_id)
 
 @rpc("authority", "reliable")
 func _rpc_sync_player_character(_peer_id: int, _character_id: String) -> void:
@@ -301,14 +327,14 @@ func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void
 	pass
 
 @rpc("authority", "reliable")
-func _rpc_lobby_action_result(success: bool, message: String, active_lobby_id: int, map_id: String, _lobby_scene_mode: bool) -> void:
-	_log("rpc lobby_action_result success=%s active_lobby_id=%d map_id=%s message=%s" % [str(success), active_lobby_id, map_id, message])
-	lobby_action_result_received.emit(success, message, active_lobby_id, map_id)
+func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id: int, _map_id: String, _lobby_scene_mode: bool) -> void:
+	_log("rpc lobby_action_result success=%s active_lobby_id=%d map_id=%s message=%s" % [str(_success), _active_lobby_id, _map_id, _message])
+	lobby_action_result_received.emit(_success, _message, _active_lobby_id, _map_id)
 
 @rpc("authority", "reliable")
-func _rpc_scene_switch_to_map(map_id: String) -> void:
+func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	var tree := get_tree()
-	var normalized := str(map_id).strip_edges().to_lower()
+	var normalized := str(_map_id).strip_edges().to_lower()
 	if normalized.is_empty():
 		normalized = "classic"
 	var scene_path := _map_catalog.scene_path_for_id(normalized)

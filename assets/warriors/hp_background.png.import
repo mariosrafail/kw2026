@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ceidsgb66833f"
-path="res://.godot/imported/allHeads.png-994bfa4c5a6ffd0ee77df3331ccb83cf.ctex"
+uid="uid://dqistmjtgp7yc"
+path="res://.godot/imported/hp_background.png-2d27738b41f5f9e75c3a325b82ee001c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/warriors/allHeads.png"
-dest_files=["res://.godot/imported/allHeads.png-994bfa4c5a6ffd0ee77df3331ccb83cf.ctex"]
+source_file="res://assets/warriors/hp_background.png"
+dest_files=["res://.godot/imported/hp_background.png-2d27738b41f5f9e75c3a325b82ee001c.ctex"]
 
 [params]
 

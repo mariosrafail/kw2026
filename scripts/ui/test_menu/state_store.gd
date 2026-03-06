@@ -16,7 +16,20 @@ func load_state_or_defaults(path: String, defaults: Dictionary, required_weapon_
 
 	state["coins"] = maxi(0, int(d.get("coins", int(state.get("coins", 0)))))
 	state["clk"] = maxi(0, int(d.get("clk", int(state.get("clk", 0)))))
+	state["selected_warrior_id"] = str(d.get("selected_warrior_id", str(state.get("selected_warrior_id", "outrage")))).strip_edges().to_lower()
 	state["selected_warrior_skin"] = maxi(0, int(d.get("selected_warrior_skin", int(state.get("selected_warrior_skin", 0)))))
+
+	var warrior_owned_arr: Variant = d.get("owned_warriors", null)
+	if warrior_owned_arr is Array:
+		var tmp_owned: Array = []
+		for v in warrior_owned_arr:
+			var wid := str(v).strip_edges().to_lower()
+			if not wid.is_empty() and not tmp_owned.has(wid):
+				tmp_owned.append(wid)
+		if not tmp_owned.has("outrage"):
+			tmp_owned.append("outrage")
+		tmp_owned.sort()
+		state["owned_warriors"] = tmp_owned
 
 	var owned_arr: Variant = d.get("owned_warrior_skins", null)
 	if owned_arr is Array:
@@ -27,6 +40,30 @@ func load_state_or_defaults(path: String, defaults: Dictionary, required_weapon_
 			tmp.append(0)
 		tmp.sort()
 		state["owned_warrior_skins"] = tmp
+
+	var warrior_skins_dict: Variant = d.get("owned_warrior_skins_by_warrior", null)
+	if warrior_skins_dict is Dictionary:
+		var out_warrior_skins := {}
+		for key in warrior_skins_dict.keys():
+			var wid := str(key).strip_edges().to_lower()
+			var arrv: Variant = warrior_skins_dict.get(key)
+			var tmpw: Array = [0]
+			if arrv is Array:
+				for v in arrv:
+					var idx := maxi(0, int(v))
+					if not tmpw.has(idx):
+						tmpw.append(idx)
+			tmpw.sort()
+			out_warrior_skins[wid] = tmpw
+		state["owned_warrior_skins_by_warrior"] = out_warrior_skins
+
+	var equipped_warrior_skins: Variant = d.get("equipped_warrior_skin_by_warrior", null)
+	if equipped_warrior_skins is Dictionary:
+		var out_equipped := {}
+		for key in equipped_warrior_skins.keys():
+			var wid := str(key).strip_edges().to_lower()
+			out_equipped[wid] = maxi(0, int(equipped_warrior_skins.get(key, 0)))
+		state["equipped_warrior_skin_by_warrior"] = out_equipped
 
 	var w_owned: Variant = d.get("owned_weapons", null)
 	if w_owned is Array:
@@ -66,4 +103,3 @@ func save_state(path: String, state: Dictionary) -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:
 		f.store_string(json)
-

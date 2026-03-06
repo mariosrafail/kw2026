@@ -74,6 +74,7 @@ func _reset_runtime_state() -> void:
 	ammo_by_peer.clear()
 	reload_remaining_by_peer.clear()
 	peer_weapon_ids.clear()
+	peer_weapon_skin_indices_by_peer.clear()
 	peer_character_ids.clear()
 	peer_skin_indices_by_peer.clear()
 	_reset_spawn_request_state()
@@ -249,11 +250,11 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 		if existing != null:
 			if existing.has_method("set_display_name"):
 				existing.call("set_display_name", _ensure_player_display_name(peer_id))
-			existing.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
+			existing.set_weapon_visual(_weapon_visual_for_peer(peer_id))
 			if existing.has_method("set_character_visual"):
 				existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
 			if existing.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
-				existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 1)))
+				existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
 			existing.force_respawn(resolved_spawn)
 		return
 
@@ -266,11 +267,11 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if player.has_method("set_display_name"):
 		player.call("set_display_name", _ensure_player_display_name(peer_id))
 	player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
-	player.set_weapon_visual(_weapon_visual_for_id(_weapon_id_for_peer(peer_id)))
+	player.set_weapon_visual(_weapon_visual_for_peer(peer_id))
 	if player.has_method("set_character_visual"):
 		player.call("set_character_visual", _warrior_id_for_peer(peer_id))
 	if player.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
-		player.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 1)))
+		player.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
 	player.set_shot_audio_stream(_weapon_shot_sfx(_weapon_id_for_peer(peer_id)))
 	player.set_reload_audio_stream(_weapon_reload_sfx(_weapon_id_for_peer(peer_id)))
 	if ammo_by_peer.has(peer_id):
@@ -293,6 +294,7 @@ func _remove_player_local(peer_id: int) -> void:
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
+	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
 	_update_peer_labels()
 	_update_ui_visibility()
@@ -312,6 +314,7 @@ func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
+	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
 	spawn_slots.erase(peer_id)
 	_update_peer_labels()
@@ -567,8 +570,11 @@ func _send_spawn_player_rpc(target_peer_id: int, peer_id: int, spawn_position: V
 		skin_index = int(lobby_service.get_peer_skin(peer_id, 0))
 	if skin_index <= 0:
 		skin_index = int(peer_skin_indices_by_peer.get(peer_id, 0))
-	if skin_index <= 0 and warrior_id == CHARACTER_ID_OUTRAGE:
-		skin_index = 1
+	var weapon_skin_index: int = 0
+	if lobby_service != null:
+		weapon_skin_index = int(lobby_service.get_peer_weapon_skin(peer_id, 0))
+	if peer_weapon_skin_indices_by_peer.has(peer_id):
+		weapon_skin_index = int(peer_weapon_skin_indices_by_peer.get(peer_id, weapon_skin_index))
 	_rpc_spawn_player.rpc_id(
 		target_peer_id,
 		peer_id,
@@ -576,7 +582,8 @@ func _send_spawn_player_rpc(target_peer_id: int, peer_id: int, spawn_position: V
 		display_name,
 		_weapon_id_for_peer(peer_id),
 		warrior_id,
-		skin_index
+		skin_index,
+		weapon_skin_index
 	)
 
 func _broadcast_despawn_player_rpc(peer_id: int) -> void:
@@ -744,8 +751,29 @@ func _weapon_visual_for_id(weapon_id: String) -> Dictionary:
 		"gun_position": GUN_BASE_POSITION,
 		"muzzle_position": muzzle_position,
 		"reload_texture_frames": reload_texture_frames,
-		"reload_frame_duration_sec": reload_frame_duration_sec
+		"reload_frame_duration_sec": reload_frame_duration_sec,
+		"material": null
 	}
+
+func _weapon_skin_for_peer(peer_id: int, weapon_id: String) -> int:
+	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
+		if lobby_service != null:
+			return int(lobby_service.get_local_selected_weapon_skin(weapon_id, selected_weapon_skin))
+		return selected_weapon_skin
+	if peer_weapon_skin_indices_by_peer.has(peer_id):
+		return int(peer_weapon_skin_indices_by_peer.get(peer_id, 0))
+	if lobby_service != null:
+		return int(lobby_service.get_peer_weapon_skin(peer_id, 0))
+	return 0
+
+func _weapon_visual_for_peer(peer_id: int, weapon_id: String = "") -> Dictionary:
+	var resolved_weapon_id := _normalize_weapon_id(weapon_id if not weapon_id.strip_edges().is_empty() else _weapon_id_for_peer(peer_id))
+	var visual := _weapon_visual_for_id(resolved_weapon_id)
+	if weapon_ui == null or not weapon_ui.has_method("weapon_skin_material"):
+		return visual
+	var skin_index := _weapon_skin_for_peer(peer_id, resolved_weapon_id)
+	visual["material"] = weapon_ui.call("weapon_skin_material", resolved_weapon_id, skin_index)
+	return visual
 
 func _ensure_weapon_visual_texture_cache() -> void:
 	if not weapon_idle_texture_by_id.is_empty() and not weapon_reload_frames_by_id.is_empty():

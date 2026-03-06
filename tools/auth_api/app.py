@@ -1,4 +1,5 @@
 import os
+import json
 import re
 import secrets
 import uuid
@@ -139,6 +140,23 @@ def _init_schema() -> None:
                                 """
                         )
                         cur.execute("create index if not exists inventory_weapon_skins_account_idx on inventory_weapon_skins(account_id);")
+                        cur.execute(
+                                """
+                                create table if not exists account_loadouts (
+                                    account_id uuid primary key references accounts(id) on delete cascade,
+                                    owned_warriors jsonb not null default '["outrage"]'::jsonb,
+                                    owned_warrior_skins_by_warrior jsonb not null default '{"outrage":[0],"erebus":[0],"tasko":[0]}'::jsonb,
+                                    equipped_warrior_skin_by_warrior jsonb not null default '{"outrage":0,"erebus":0,"tasko":0}'::jsonb,
+                                    selected_warrior_id text not null default 'outrage',
+                                    selected_warrior_skin integer not null default 0,
+                                    equipped_weapon_skin_by_weapon jsonb not null default '{"uzi":0,"ak47":0,"shotgun":0,"grenade":0}'::jsonb,
+                                    selected_weapon_id text not null default 'uzi',
+                                    selected_weapon_skin integer not null default 0,
+                                    updated_at timestamptz not null default now()
+                                );
+                                """
+                        )
+                        cur.execute("create index if not exists account_loadouts_updated_at_idx on account_loadouts(updated_at);")
 
 
 @app.on_event("startup")
@@ -181,9 +199,17 @@ class ProfileResponse(BaseModel):
     email: str = ""
     coins: int
     clk: int
+    owned_warriors: list[str] = []
     owned_skins: list[OwnedSkin]
+    owned_warrior_skins_by_warrior: dict[str, list[int]] = {}
+    equipped_warrior_skin_by_warrior: dict[str, int] = {}
+    selected_warrior_id: str = "outrage"
+    selected_warrior_skin: int = 0
     owned_weapons: list[str] = []
     owned_weapon_skins_by_weapon: dict[str, list[int]] = {}
+    equipped_weapon_skin_by_weapon: dict[str, int] = {}
+    selected_weapon_id: str = DEFAULT_WEAPON_ID
+    selected_weapon_skin: int = 0
 
 
 class PurchaseSkinRequest(BaseModel):
@@ -194,9 +220,21 @@ class PurchaseSkinRequest(BaseModel):
 class WalletUpdateRequest(BaseModel):
     coins: Optional[int] = None
     clk: Optional[int] = None
+    owned_warriors: Optional[list[str]] = None
     owned_skins: Optional[list[OwnedSkin]] = None
+    owned_warrior_skins_by_warrior: Optional[dict[str, list[int]]] = None
+    equipped_warrior_skin_by_warrior: Optional[dict[str, int]] = None
+    selected_warrior_id: Optional[str] = None
+    selected_warrior_skin: Optional[int] = None
     owned_weapons: Optional[list[str]] = None
     owned_weapon_skins_by_weapon: Optional[dict[str, list[int]]] = None
+    equipped_weapon_skin_by_weapon: Optional[dict[str, int]] = None
+    selected_weapon_id: Optional[str] = None
+    selected_weapon_skin: Optional[int] = None
+
+
+DEFAULT_WARRIOR_ID = "outrage"
+ALLOWED_WARRIORS = ("outrage", "erebus", "tasko")
 
 
 def _normalize_username(raw: str) -> str:
@@ -302,6 +340,56 @@ def _normalize_weapon_id(raw: str) -> str:
     return (raw or "").strip().lower()
 
 
+def _normalize_warrior_id(raw: str) -> str:
+    normalized = (raw or "").strip().lower()
+    if normalized not in ALLOWED_WARRIORS:
+        return DEFAULT_WARRIOR_ID
+    return normalized
+
+
+def _normalize_owned_warriors(raw_warriors: list[str]) -> list[str]:
+    out: list[str] = []
+    for item in raw_warriors:
+        wid = _normalize_warrior_id(str(item))
+        if wid not in out:
+            out.append(wid)
+    if DEFAULT_WARRIOR_ID not in out:
+        out.append(DEFAULT_WARRIOR_ID)
+    return out
+
+
+def _normalize_owned_warrior_skins(raw_value: object, owned_warriors: list[str]) -> dict[str, list[int]]:
+    owned_set = set(_normalize_owned_warriors(owned_warriors))
+    out: dict[str, list[int]] = {wid: [0] for wid in ALLOWED_WARRIORS}
+    if isinstance(raw_value, dict):
+        for raw_key, raw_arr in raw_value.items():
+            wid = _normalize_warrior_id(str(raw_key))
+            arr = [0]
+            if isinstance(raw_arr, list):
+                for value in raw_arr:
+                    idx = max(0, int(value))
+                    if idx not in arr:
+                        arr.append(idx)
+            arr.sort()
+            out[wid] = arr
+    for wid in ALLOWED_WARRIORS:
+        if wid not in owned_set:
+            out[wid] = [0]
+        elif 0 not in out[wid]:
+            out[wid].insert(0, 0)
+            out[wid] = sorted(set(out[wid]))
+    return out
+
+
+def _normalize_equipped_warrior_skins(raw_value: object) -> dict[str, int]:
+    out: dict[str, int] = {wid: 0 for wid in ALLOWED_WARRIORS}
+    if isinstance(raw_value, dict):
+        for raw_key, raw_skin in raw_value.items():
+            wid = _normalize_warrior_id(str(raw_key))
+            out[wid] = max(0, int(raw_skin))
+    return out
+
+
 def _normalize_owned_weapons(raw_weapons: list[str]) -> list[str]:
     out: list[str] = []
     for item in raw_weapons:
@@ -310,6 +398,16 @@ def _normalize_owned_weapons(raw_weapons: list[str]) -> list[str]:
             out.append(wid)
     if DEFAULT_WEAPON_ID not in out:
         out.append(DEFAULT_WEAPON_ID)
+    return out
+
+
+def _normalize_equipped_weapon_skins(raw_value: object) -> dict[str, int]:
+    out: dict[str, int] = {wid: 0 for wid in ALLOWED_WEAPONS}
+    if isinstance(raw_value, dict):
+        for raw_key, raw_skin in raw_value.items():
+            wid = _normalize_weapon_id(str(raw_key))
+            if wid in ALLOWED_WEAPONS:
+                out[wid] = max(0, int(raw_skin))
     return out
 
 
@@ -383,19 +481,136 @@ def _owned_weapon_skins_for_account(account_uuid: uuid.UUID, owned_weapons: list
     return out
 
 
+def _ensure_account_loadout_defaults(account_uuid: uuid.UUID) -> None:
+    with _db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into account_loadouts (
+                    account_id,
+                    owned_warriors,
+                    owned_warrior_skins_by_warrior,
+                    equipped_warrior_skin_by_warrior,
+                    selected_warrior_id,
+                    selected_warrior_skin,
+                    equipped_weapon_skin_by_weapon,
+                    selected_weapon_id,
+                    selected_weapon_skin
+                )
+                values (%s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s::jsonb, %s, %s)
+                on conflict (account_id) do nothing
+                """,
+                (
+                    account_uuid,
+                    json.dumps([DEFAULT_WARRIOR_ID]),
+                    json.dumps(_normalize_owned_warrior_skins({}, [DEFAULT_WARRIOR_ID])),
+                    json.dumps(_normalize_equipped_warrior_skins({})),
+                    DEFAULT_WARRIOR_ID,
+                    0,
+                    json.dumps(_normalize_equipped_weapon_skins({})),
+                    DEFAULT_WEAPON_ID,
+                    0,
+                ),
+            )
+
+
+def _loadout_for_account(account_uuid: uuid.UUID) -> dict[str, object]:
+    _ensure_account_loadout_defaults(account_uuid)
+    with _db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select
+                    owned_warriors,
+                    owned_warrior_skins_by_warrior,
+                    equipped_warrior_skin_by_warrior,
+                    selected_warrior_id,
+                    selected_warrior_skin,
+                    equipped_weapon_skin_by_weapon,
+                    selected_weapon_id,
+                    selected_weapon_skin
+                from account_loadouts
+                where account_id = %s
+                """,
+                (account_uuid,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return {
+                    "owned_warriors": [DEFAULT_WARRIOR_ID],
+                    "owned_warrior_skins_by_warrior": _normalize_owned_warrior_skins({}, [DEFAULT_WARRIOR_ID]),
+                    "equipped_warrior_skin_by_warrior": _normalize_equipped_warrior_skins({}),
+                    "selected_warrior_id": DEFAULT_WARRIOR_ID,
+                    "selected_warrior_skin": 0,
+                    "equipped_weapon_skin_by_weapon": _normalize_equipped_weapon_skins({}),
+                    "selected_weapon_id": DEFAULT_WEAPON_ID,
+                    "selected_weapon_skin": 0,
+                }
+            owned_warriors = _normalize_owned_warriors(list(row[0] or [DEFAULT_WARRIOR_ID]))
+            return {
+                "owned_warriors": owned_warriors,
+                "owned_warrior_skins_by_warrior": _normalize_owned_warrior_skins(row[1] or {}, owned_warriors),
+                "equipped_warrior_skin_by_warrior": _normalize_equipped_warrior_skins(row[2] or {}),
+                "selected_warrior_id": _normalize_warrior_id(str(row[3] or DEFAULT_WARRIOR_ID)),
+                "selected_warrior_skin": max(0, int(row[4] or 0)),
+                "equipped_weapon_skin_by_weapon": _normalize_equipped_weapon_skins(row[5] or {}),
+                "selected_weapon_id": _normalize_weapon_id(str(row[6] or DEFAULT_WEAPON_ID)) or DEFAULT_WEAPON_ID,
+                "selected_weapon_skin": max(0, int(row[7] or 0)),
+            }
+
+
 def _profile_for_account(account_uuid: uuid.UUID, username: str, email: str) -> ProfileResponse:
     coins, clk = _wallet_for_account(account_uuid)
     owned_skins = _owned_skins_for_account(account_uuid)
+    loadout = _loadout_for_account(account_uuid)
     owned_weapons = _owned_weapons_for_account(account_uuid)
     owned_weapon_skins_by_weapon = _owned_weapon_skins_for_account(account_uuid, owned_weapons)
+    selected_weapon_id = str(loadout.get("selected_weapon_id", DEFAULT_WEAPON_ID))
+    if selected_weapon_id not in ALLOWED_WEAPONS:
+        selected_weapon_id = DEFAULT_WEAPON_ID
+    selected_weapon_skin = max(0, int(loadout.get("selected_weapon_skin", 0)))
+    if selected_weapon_skin not in owned_weapon_skins_by_weapon.get(selected_weapon_id, [0]):
+        selected_weapon_skin = 0
+    equipped_weapon_skin_by_weapon = _normalize_equipped_weapon_skins(loadout.get("equipped_weapon_skin_by_weapon", {}))
+    equipped_weapon_skin_by_weapon[selected_weapon_id] = selected_weapon_skin
+
+    owned_warriors = _normalize_owned_warriors(loadout.get("owned_warriors", [DEFAULT_WARRIOR_ID]))
+    owned_warrior_skins_by_warrior = _normalize_owned_warrior_skins(loadout.get("owned_warrior_skins_by_warrior", {}), owned_warriors)
+    for skin in owned_skins:
+        wid = _normalize_warrior_id(skin.character_id)
+        arr = owned_warrior_skins_by_warrior.get(wid, [0])
+        idx = max(0, int(skin.skin_index))
+        if idx not in arr:
+            arr.append(idx)
+            arr.sort()
+        owned_warrior_skins_by_warrior[wid] = arr
+        if wid not in owned_warriors:
+            owned_warriors.append(wid)
+    selected_warrior_id = _normalize_warrior_id(str(loadout.get("selected_warrior_id", DEFAULT_WARRIOR_ID)))
+    if selected_warrior_id not in owned_warriors:
+        selected_warrior_id = DEFAULT_WARRIOR_ID
+    selected_warrior_skin = max(0, int(loadout.get("selected_warrior_skin", 0)))
+    if selected_warrior_skin not in owned_warrior_skins_by_warrior.get(selected_warrior_id, [0]):
+        selected_warrior_skin = 0
+    equipped_warrior_skin_by_warrior = _normalize_equipped_warrior_skins(loadout.get("equipped_warrior_skin_by_warrior", {}))
+    equipped_warrior_skin_by_warrior[selected_warrior_id] = selected_warrior_skin
+
     return ProfileResponse(
         username=username,
         email=email,
         coins=coins,
         clk=clk,
+        owned_warriors=owned_warriors,
         owned_skins=owned_skins,
+        owned_warrior_skins_by_warrior=owned_warrior_skins_by_warrior,
+        equipped_warrior_skin_by_warrior=equipped_warrior_skin_by_warrior,
+        selected_warrior_id=selected_warrior_id,
+        selected_warrior_skin=selected_warrior_skin,
         owned_weapons=owned_weapons,
         owned_weapon_skins_by_weapon=owned_weapon_skins_by_weapon,
+        equipped_weapon_skin_by_weapon=equipped_weapon_skin_by_weapon,
+        selected_weapon_id=selected_weapon_id,
+        selected_weapon_skin=selected_weapon_skin,
     )
 
 
@@ -661,9 +876,17 @@ def wallet_update(req: WalletUpdateRequest, authorization: Optional[str] = Heade
     if (
         req.coins is None
         and req.clk is None
+        and req.owned_warriors is None
         and req.owned_skins is None
+        and req.owned_warrior_skins_by_warrior is None
+        and req.equipped_warrior_skin_by_warrior is None
+        and req.selected_warrior_id is None
+        and req.selected_warrior_skin is None
         and req.owned_weapons is None
         and req.owned_weapon_skins_by_weapon is None
+        and req.equipped_weapon_skin_by_weapon is None
+        and req.selected_weapon_id is None
+        and req.selected_weapon_skin is None
     ):
         raise HTTPException(status_code=400, detail="wallet or inventory fields required")
 
@@ -713,6 +936,29 @@ def wallet_update(req: WalletUpdateRequest, authorization: Optional[str] = Heade
                         (account_uuid, character_id, skin_index),
                     )
 
+            _ensure_account_loadout_defaults(account_uuid)
+            existing_loadout = _loadout_for_account(account_uuid)
+            next_owned_warriors = _normalize_owned_warriors(req.owned_warriors) if req.owned_warriors is not None else _normalize_owned_warriors(existing_loadout.get("owned_warriors", [DEFAULT_WARRIOR_ID]))
+            next_owned_warrior_skins_by_warrior = _normalize_owned_warrior_skins(
+                req.owned_warrior_skins_by_warrior if req.owned_warrior_skins_by_warrior is not None else existing_loadout.get("owned_warrior_skins_by_warrior", {}),
+                next_owned_warriors,
+            )
+            next_equipped_warrior_skin_by_warrior = _normalize_equipped_warrior_skins(
+                req.equipped_warrior_skin_by_warrior if req.equipped_warrior_skin_by_warrior is not None else existing_loadout.get("equipped_warrior_skin_by_warrior", {}),
+            )
+            next_selected_warrior_id = _normalize_warrior_id(
+                req.selected_warrior_id if req.selected_warrior_id is not None else str(existing_loadout.get("selected_warrior_id", DEFAULT_WARRIOR_ID))
+            )
+            if next_selected_warrior_id not in next_owned_warriors:
+                next_selected_warrior_id = DEFAULT_WARRIOR_ID
+            next_selected_warrior_skin = max(
+                0,
+                int(req.selected_warrior_skin if req.selected_warrior_skin is not None else int(existing_loadout.get("selected_warrior_skin", 0))),
+            )
+            if next_selected_warrior_skin not in next_owned_warrior_skins_by_warrior.get(next_selected_warrior_id, [0]):
+                next_selected_warrior_skin = 0
+            next_equipped_warrior_skin_by_warrior[next_selected_warrior_id] = next_selected_warrior_skin
+
             owned_weapons = None
             if req.owned_weapons is not None:
                 owned_weapons = _normalize_owned_weapons(req.owned_weapons)
@@ -755,6 +1001,65 @@ def wallet_update(req: WalletUpdateRequest, authorization: Optional[str] = Heade
                             """,
                             (account_uuid, wid, idx),
                         )
+
+            if owned_weapons is None:
+                cur.execute("select weapon_id from inventory_weapons where account_id = %s", (account_uuid,))
+                owned_weapons = _normalize_owned_weapons([str(r[0]) for r in cur.fetchall()])
+            next_equipped_weapon_skin_by_weapon = _normalize_equipped_weapon_skins(
+                req.equipped_weapon_skin_by_weapon if req.equipped_weapon_skin_by_weapon is not None else existing_loadout.get("equipped_weapon_skin_by_weapon", {}),
+            )
+            next_selected_weapon_id = _normalize_weapon_id(
+                req.selected_weapon_id if req.selected_weapon_id is not None else str(existing_loadout.get("selected_weapon_id", DEFAULT_WEAPON_ID))
+            )
+            if next_selected_weapon_id not in ALLOWED_WEAPONS or next_selected_weapon_id not in owned_weapons:
+                next_selected_weapon_id = DEFAULT_WEAPON_ID
+            owned_weapon_skins_by_weapon = _owned_weapon_skins_for_account(account_uuid, owned_weapons)
+            next_selected_weapon_skin = max(
+                0,
+                int(req.selected_weapon_skin if req.selected_weapon_skin is not None else int(existing_loadout.get("selected_weapon_skin", 0))),
+            )
+            if next_selected_weapon_skin not in owned_weapon_skins_by_weapon.get(next_selected_weapon_id, [0]):
+                next_selected_weapon_skin = 0
+            next_equipped_weapon_skin_by_weapon[next_selected_weapon_id] = next_selected_weapon_skin
+
+            cur.execute(
+                """
+                insert into account_loadouts (
+                    account_id,
+                    owned_warriors,
+                    owned_warrior_skins_by_warrior,
+                    equipped_warrior_skin_by_warrior,
+                    selected_warrior_id,
+                    selected_warrior_skin,
+                    equipped_weapon_skin_by_weapon,
+                    selected_weapon_id,
+                    selected_weapon_skin,
+                    updated_at
+                )
+                values (%s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s::jsonb, %s, %s, now())
+                on conflict (account_id) do update set
+                    owned_warriors = excluded.owned_warriors,
+                    owned_warrior_skins_by_warrior = excluded.owned_warrior_skins_by_warrior,
+                    equipped_warrior_skin_by_warrior = excluded.equipped_warrior_skin_by_warrior,
+                    selected_warrior_id = excluded.selected_warrior_id,
+                    selected_warrior_skin = excluded.selected_warrior_skin,
+                    equipped_weapon_skin_by_weapon = excluded.equipped_weapon_skin_by_weapon,
+                    selected_weapon_id = excluded.selected_weapon_id,
+                    selected_weapon_skin = excluded.selected_weapon_skin,
+                    updated_at = now()
+                """,
+                (
+                    account_uuid,
+                    json.dumps(next_owned_warriors),
+                    json.dumps(next_owned_warrior_skins_by_warrior),
+                    json.dumps(next_equipped_warrior_skin_by_warrior),
+                    next_selected_warrior_id,
+                    next_selected_warrior_skin,
+                    json.dumps(next_equipped_weapon_skin_by_weapon),
+                    next_selected_weapon_id,
+                    next_selected_weapon_skin,
+                ),
+            )
 
             conn.commit()
 

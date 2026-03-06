@@ -1,0 +1,42 @@
+{
+  "warrior_id": "tasko",
+  "display_name": "Tasko",
+  "warrior_cost": 3200,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/tasko/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/tasko/head.png",
+    "torso": "res://assets/warriors/tasko/torso.png",
+    "legs": "res://assets/warriors/tasko/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Default",
+      "unlock_type": "free",
+      "cost": 0
+    },
+    {
+      "id": "skin_01",
+      "index": 1,
+      "name": "Skin 01",
+      "unlock_type": "shop",
+      "cost": 420
+    },
+    {
+      "id": "skin_02",
+      "index": 2,
+      "name": "Skin 02",
+      "unlock_type": "shop",
+      "cost": 560
+    },
+    {
+      "id": "skin_03",
+      "index": 3,
+      "name": "Skin 03",
+      "unlock_type": "shop",
+      "cost": 720
+    }
+  ]
+}

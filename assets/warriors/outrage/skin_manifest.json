@@ -1,0 +1,77 @@
+{
+  "warrior_id": "outrage",
+  "display_name": "Outrage",
+  "warrior_cost": 0,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/outrage/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/outrage/head.png",
+    "torso": "res://assets/warriors/outrage/torso.png",
+    "legs": "res://assets/warriors/outrage/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Default",
+      "unlock_type": "free",
+      "cost": 0
+    },
+    {
+      "id": "skin_01",
+      "index": 1,
+      "name": "Skin 01",
+      "unlock_type": "shop",
+      "cost": 370
+    },
+    {
+      "id": "skin_02",
+      "index": 2,
+      "name": "Skin 02",
+      "unlock_type": "shop",
+      "cost": 490
+    },
+    {
+      "id": "skin_03",
+      "index": 3,
+      "name": "Skin 03",
+      "unlock_type": "shop",
+      "cost": 610
+    },
+    {
+      "id": "skin_04",
+      "index": 4,
+      "name": "Skin 04",
+      "unlock_type": "shop",
+      "cost": 730
+    },
+    {
+      "id": "skin_05",
+      "index": 5,
+      "name": "Skin 05",
+      "unlock_type": "shop",
+      "cost": 850
+    },
+    {
+      "id": "skin_06",
+      "index": 6,
+      "name": "Skin 06",
+      "unlock_type": "shop",
+      "cost": 970
+    },
+    {
+      "id": "skin_07",
+      "index": 7,
+      "name": "Skin 07",
+      "unlock_type": "shop",
+      "cost": 1090
+    },
+    {
+      "id": "skin_08",
+      "index": 8,
+      "name": "Skin 08",
+      "unlock_type": "shop",
+      "cost": 1210
+    }
+  ]
+}

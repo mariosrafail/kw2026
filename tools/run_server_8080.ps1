@@ -7,9 +7,47 @@ param(
 $ErrorActionPreference = "Stop"
 
 $project = Split-Path -Parent $PSScriptRoot
-$godot = "C:\Program Files\Godot_v4.3-stable_win64.exe\Godot_v4.3-stable_win64_console.exe"
-if (!(Test-Path $godot)) {
-    throw "Godot console exe not found at: $godot"
+$godotCandidates = @()
+if ($env:GODOT_CONSOLE_EXE) {
+    $godotCandidates += $env:GODOT_CONSOLE_EXE
+}
+$godotCandidates += @(
+    "C:\Users\Marios\Godot\Godot_v4.6.1-stable_win64_console.exe",
+    "C:\Users\Marios\Godot\Godot_v4.6.1-stable_win64.exe",
+    "C:\Program Files\Godot_v4.3-stable_win64.exe\Godot_v4.3-stable_win64_console.exe"
+)
+
+$godot = $null
+foreach ($candidate in $godotCandidates) {
+    if ($candidate -and (Test-Path $candidate)) {
+        $godot = $candidate
+        break
+    }
+}
+if ($null -eq $godot) {
+    throw "Godot console exe not found. Set GODOT_CONSOLE_EXE or install Godot in one of the expected paths: $($godotCandidates -join ', ')"
+}
+
+$python = Get-Command python -ErrorAction SilentlyContinue
+if ($null -eq $python) {
+    $python = Get-Command py -ErrorAction SilentlyContinue
+}
+if ($null -eq $python) {
+    throw "Python is required to run tools/check_rpc_surface.py before server start."
+}
+
+$rpcCheck = Join-Path $project "tools\check_rpc_surface.py"
+if (!(Test-Path $rpcCheck)) {
+    throw "RPC validation script not found at: $rpcCheck"
+}
+
+if ($python.Name -eq "py.exe" -or $python.Name -eq "py") {
+    & $python.Source -3 $rpcCheck
+} else {
+    & $python.Source $rpcCheck
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "RPC surface validation failed. Fix the reported mismatches before starting the server."
 }
 
 $udp = Get-NetUDPEndpoint -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1

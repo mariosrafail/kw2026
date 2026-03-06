@@ -52,9 +52,9 @@ func _make_pixel_texture() -> Texture2D:
 	img.set_pixel(0, 0, Color(1, 1, 1, 1))
 	return ImageTexture.create_from_image(img)
 
-func _make_square(name: String) -> Sprite2D:
+func _make_square(square_name: String) -> Sprite2D:
 	var s := Sprite2D.new()
-	s.name = name
+	s.name = square_name
 	s.centered = true
 	s.texture = _pixel_tex
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

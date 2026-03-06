@@ -5,8 +5,9 @@ services:
     working_dir: /game
     command: >
       bash -lc "apt-get update &&
-      apt-get install -y --no-install-recommends libfontconfig1 &&
+      apt-get install -y --no-install-recommends libfontconfig1 python3-minimal &&
       rm -rf /var/lib/apt/lists/* &&
+      python3 /game/tools/check_rpc_surface.py &&
       if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; else godot --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; fi"
     volumes:
       - ./:/game

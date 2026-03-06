@@ -1,12 +1,13 @@
-[gd_scene load_steps=12 format=3 uid="uid://dmx2f1xqqr411"]
+[gd_scene format=3 uid="uid://dmx2f1xqqr411"]
 
-[ext_resource type="Script" path="res://scripts/entities/player.gd" id="1_blu24"]
-[ext_resource type="Texture2D" uid="uid://ladjw5xjjhe4" path="res://assets/warriors/allWarriors.png" id="2_dpso1"]
-[ext_resource type="Texture2D" uid="uid://ceidsgb66833f" path="res://assets/warriors/allHeads.png" id="2_tfa38"]
-[ext_resource type="Texture2D" uid="uid://cuglxxbnc765x" path="res://assets/warriors/allTorso.png" id="3_5fh4r"]
+[ext_resource type="Script" uid="uid://dicfxn3ui4p06" path="res://scripts/entities/player.gd" id="1_blu24"]
+[ext_resource type="Texture2D" uid="uid://dqistmjtgp7yc" path="res://assets/warriors/hp_background.png" id="2_73kkf"]
+[ext_resource type="Texture2D" uid="uid://j2a275j2th8n" path="res://assets/warriors/outrage/head.png" id="2_b6tgf"]
+[ext_resource type="Texture2D" uid="uid://bb0ywf5oxwlt8" path="res://assets/warriors/tasko/torso.png" id="3_73kkf"]
+[ext_resource type="Texture2D" uid="uid://d2n5fw8sto5k" path="res://assets/warriors/hp_green.png" id="3_n5sgd"]
 [ext_resource type="Texture2D" uid="uid://bu5qjamiys787" path="res://assets/warriors/guns.png" id="3_tfnx5"]
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="3_u0ukb"]
-[ext_resource type="Texture2D" uid="uid://bplbglw4w4fel" path="res://assets/warriors/allLegs.png" id="4_m8oy2"]
+[ext_resource type="Texture2D" uid="uid://blr7dq2185kfm" path="res://assets/warriors/tasko/legs.png" id="4_n5sgd"]
 [ext_resource type="AudioStream" uid="uid://cgpcofbhh12qk" path="res://assets/sounds/sfx/guns/ak47/ak_shoot.wav" id="5_ifk0o"]
 [ext_resource type="AudioStream" uid="uid://bfw70vkoi8g3d" path="res://assets/sounds/sfx/general/death.wav" id="6_6oc35"]
 [ext_resource type="AudioStream" uid="uid://df6ui2tae54xb" path="res://assets/sounds/sfx/guns/ak47/ak_reload.wav" id="7_ak_reload"]
@@ -15,64 +16,74 @@
 radius = 6.0
 height = 32.0
 
-[node name="NetPlayer" type="CharacterBody2D"]
+[node name="NetPlayer" type="CharacterBody2D" unique_id=315814005]
 collision_layer = 2
 floor_block_on_wall = false
 safe_margin = 0.02
 script = ExtResource("1_blu24")
 
-[node name="VisualRoot" type="Node2D" parent="."]
+[node name="VisualRoot" type="Node2D" parent="." unique_id=2029833284]
 
-[node name="head" type="Sprite2D" parent="VisualRoot"]
+[node name="HpBackground" type="Sprite2D" parent="VisualRoot" unique_id=1175880730]
+position = Vector2(4, -31)
+texture = ExtResource("2_73kkf")
+
+[node name="HpGreen" type="Sprite2D" parent="VisualRoot/HpBackground" unique_id=1645360780]
+position = Vector2(-36.5, -5.5)
+texture = ExtResource("3_n5sgd")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 73, 11)
+
+[node name="head" type="Sprite2D" parent="VisualRoot" unique_id=975497308]
 texture_filter = 1
-position = Vector2(0, -9)
-texture = ExtResource("2_tfa38")
+position = Vector2(8, -14)
+scale = Vector2(1.8, 1.8)
+texture = ExtResource("2_b6tgf")
 region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
 
-[node name="torso" type="Sprite2D" parent="VisualRoot"]
+[node name="torso" type="Sprite2D" parent="VisualRoot" unique_id=1816633150]
 texture_filter = 1
-position = Vector2(-3, 3)
-texture = ExtResource("3_5fh4r")
+texture = ExtResource("3_73kkf")
 region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
 
-[node name="leg1" type="Sprite2D" parent="VisualRoot"]
+[node name="leg1" type="Sprite2D" parent="VisualRoot" unique_id=2059918017]
 texture_filter = 1
-position = Vector2(-8, 14)
-texture = ExtResource("4_m8oy2")
+position = Vector2(-8, 15)
+texture = ExtResource("4_n5sgd")
 region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
 
-[node name="leg2" type="Sprite2D" parent="VisualRoot"]
+[node name="leg2" type="Sprite2D" parent="VisualRoot" unique_id=298805812]
 texture_filter = 1
-position = Vector2(5, 14)
-texture = ExtResource("4_m8oy2")
+position = Vector2(7, 15)
+texture = ExtResource("4_n5sgd")
 region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
 
-[node name="Sprite2D" type="Sprite2D" parent="VisualRoot"]
+[node name="Sprite2D" type="Sprite2D" parent="VisualRoot" unique_id=1014815839]
 visible = false
 texture_filter = 1
-texture = ExtResource("2_dpso1")
 region_enabled = true
 region_rect = Rect2(114, 15, 20, 32)
 
-[node name="GunPivot" type="Node2D" parent="VisualRoot"]
+[node name="GunPivot" type="Node2D" parent="VisualRoot" unique_id=695375676]
 
-[node name="Muzzle" type="Marker2D" parent="VisualRoot/GunPivot"]
+[node name="Muzzle" type="Marker2D" parent="VisualRoot/GunPivot" unique_id=1176524407]
 
-[node name="ShotAudio" type="AudioStreamPlayer2D" parent="VisualRoot/GunPivot"]
+[node name="ShotAudio" type="AudioStreamPlayer2D" parent="VisualRoot/GunPivot" unique_id=726612795]
 stream = ExtResource("5_ifk0o")
 volume_db = -1.0
 max_polyphony = 6
 
-[node name="ReloadAudio" type="AudioStreamPlayer2D" parent="VisualRoot/GunPivot"]
+[node name="ReloadAudio" type="AudioStreamPlayer2D" parent="VisualRoot/GunPivot" unique_id=1976295601]
 stream = ExtResource("7_ak_reload")
 volume_db = -2.0
 max_polyphony = 3
 
-[node name="Gun" type="Sprite2D" parent="VisualRoot/GunPivot"]
+[node name="Gun" type="Sprite2D" parent="VisualRoot/GunPivot" unique_id=220643217]
 z_index = 1
 texture_filter = 1
 texture = ExtResource("3_tfnx5")
@@ -80,49 +91,59 @@ centered = false
 region_enabled = true
 region_rect = Rect2(150, 85, 36, 21)
 
-[node name="HealthLabel" type="Label" parent="VisualRoot"]
+[node name="HealthLabel" type="Label" parent="VisualRoot" unique_id=1351665532]
+visible = false
 z_index = 2
 texture_filter = 1
-offset_left = -26.0
-offset_top = -50.0
-offset_right = 26.0
-offset_bottom = -34.0
+offset_left = -89.0
+offset_top = -45.0
+offset_right = -37.0
+offset_bottom = -29.0
 theme_override_fonts/font = ExtResource("3_u0ukb")
 theme_override_font_sizes/font_size = 12
 text = "100"
 horizontal_alignment = 1
 
-[node name="AmmoLabel" type="Label" parent="VisualRoot"]
+[node name="AmmoLabel" type="Label" parent="VisualRoot" unique_id=922699695]
 z_index = 2
 texture_filter = 1
-offset_left = 28.0
-offset_top = -49.0
-offset_right = 70.0
-offset_bottom = -35.0
+offset_left = -43.0
+offset_top = -37.0
+offset_right = -1.0
+offset_bottom = -23.0
 theme_override_colors/font_color = Color(1, 0.87451, 0.176471, 1)
 theme_override_fonts/font = ExtResource("3_u0ukb")
 theme_override_font_sizes/font_size = 10
 text = "25"
 
-[node name="NameLabel" type="Label" parent="VisualRoot"]
+[node name="LevelLabel" type="Label" parent="VisualRoot" unique_id=339031901]
+offset_left = -30.0
+offset_top = -36.0
+offset_right = 10.0
+offset_bottom = -13.0
+theme_override_fonts/font = ExtResource("3_u0ukb")
+theme_override_font_sizes/font_size = 7
+text = "99"
+
+[node name="NameLabel" type="Label" parent="VisualRoot" unique_id=570939750]
 z_index = 2
 texture_filter = 1
-offset_left = -80.0
-offset_top = -66.0
-offset_right = 80.0
-offset_bottom = -50.0
+offset_left = -35.0
+offset_top = -46.0
+offset_right = 53.0
+offset_bottom = -34.0
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
-theme_override_constants/outline_size = 0
+theme_override_constants/outline_size = 1
 theme_override_fonts/font = ExtResource("3_u0ukb")
-theme_override_font_sizes/font_size = 12
-text = "P1"
+theme_override_font_sizes/font_size = 9
+text = "Marios"
 horizontal_alignment = 1
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2051969803]
 shape = SubResource("CapsuleShape2D_0vb8o")
 
-[node name="DeathAudio" type="AudioStreamPlayer2D" parent="."]
+[node name="DeathAudio" type="AudioStreamPlayer2D" parent="." unique_id=646972309]
 stream = ExtResource("6_6oc35")
 volume_db = 2.0
 max_polyphony = 2

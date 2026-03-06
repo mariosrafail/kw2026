@@ -49,6 +49,7 @@ const CLIENT_RPC_FLOW_SERVICE_SCRIPT := preload("res://scripts/network/client_rp
 const CLIENT_INPUT_CONTROLLER_SCRIPT := preload("res://scripts/input/client_input_controller.gd")
 const COMBAT_EFFECTS_SCRIPT := preload("res://scripts/effects/combat_effects.gd")
 const CAMERA_SHAKE_SCRIPT := preload("res://scripts/effects/camera_shake.gd")
+const WEAPON_UI_SCRIPT := preload("res://scripts/ui/test_menu/weapon_ui.gd")
 
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
@@ -154,6 +155,7 @@ var player_display_names: Dictionary = {}
 var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
 var peer_weapon_ids: Dictionary = {}
+var peer_weapon_skin_indices_by_peer: Dictionary = {}
 var peer_character_ids: Dictionary = {}
 var peer_skin_indices_by_peer: Dictionary = {}
 
@@ -163,6 +165,7 @@ var last_ping_ms := -1
 var spawn_request_sent := false
 
 var selected_weapon_id := WEAPON_ID_AK47
+var selected_weapon_skin := 0
 var selected_map_id := MAP_ID_CLASSIC
 var selected_character_id := CHARACTER_ID_OUTRAGE
 var client_target_map_id := MAP_ID_CLASSIC
@@ -195,127 +198,176 @@ var client_rpc_flow_service: ClientRpcFlowService
 var client_input_controller: ClientInputController
 var combat_effects: CombatEffects
 var camera_shake: CameraShake
+var weapon_ui: RefCounted
 
 var weapon_profiles: Dictionary = {}
 var weapon_shot_sfx_by_id: Dictionary = {}
 var weapon_reload_sfx_by_id: Dictionary = {}
 
+@rpc("any_peer", "reliable")
 func _rpc_request_spawn() -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_request_reload() -> void:
 	pass
 
-func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "", _skin_index: int = 0) -> void:
+@rpc("authority", "reliable")
+func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "", _skin_index: int = 0, _weapon_skin_index: int = 0) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_despawn_player(_peer_id: int) -> void:
 	pass
 
+@rpc("authority", "unreliable_ordered")
 func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity: Vector2, _aim_angle: float, _health: int) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 	pass
 
+@rpc("any_peer", "unreliable_ordered")
 func _rpc_submit_input(_axis: float, _jump_pressed: bool, _jump_held: bool, _aim_world: Vector2, _shoot_held: bool, _boost_damage: bool, _reported_rtt_ms: int) -> void:
 	pass
 
+@rpc("any_peer", "unreliable")
 func _rpc_ping_request(_client_sent_msec: int) -> void:
 	pass
 
+@rpc("authority", "unreliable")
 func _rpc_ping_response(_client_sent_msec: int) -> void:
 	pass
 
-func _rpc_spawn_projectile(_projectile_id: int, _owner_peer_id: int, _spawn_position: Vector2, _velocity: Vector2, _lag_comp_ms: int, _trail_origin: Vector2, _weapon_id: String) -> void:
+@rpc("authority", "reliable")
+func _rpc_spawn_projectile(_projectile_id: int, _owner_peer_id: int, _spawn_position: Vector2, _velocity: Vector2, _lag_comp_ms: int, _trail_origin: Vector2, _weapon_id: String = "") -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_despawn_projectile(_projectile_id: int) -> void:
 	pass
 
-func _rpc_projectile_impact(_projectile_id: int, _impact_position: Vector2) -> void:
+@rpc("authority", "reliable")
+func _rpc_projectile_impact(_projectile_id: int, _impact_position: Vector2, _legacy_trail_start_position: Vector2 = Vector2.ZERO) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: Vector2) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_surface_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _particle_color: Color) -> void:
 	pass
 
-func _rpc_play_reload_sfx(_peer_id: int, _weapon_id: String) -> void:
+@rpc("authority", "reliable")
+func _rpc_play_reload_sfx(_peer_or_payload: Variant, _weapon_id: String = "") -> void:
 	pass
 
-func _rpc_sync_player_ammo(_peer_id: int, _ammo: int, _is_reloading: bool) -> void:
+@rpc("authority", "reliable")
+func _rpc_sync_player_ammo(_peer_or_payload: Variant, _ammo: int = 0, _is_reloading: bool = false) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_sync_player_weapon(_peer_id: int, _weapon_id: String) -> void:
 	pass
 
+@rpc("authority", "reliable")
+func _rpc_sync_player_weapon_skin(_peer_id: int, _skin_index: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
 func _rpc_sync_player_character(_peer_id: int, _character_id: String) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_sync_player_skin(_peer_id: int, _skin_index: int) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_request_lobby_list() -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_lobby_create(_requested_name: String, _payload: String) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String = "") -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_lobby_leave(_legacy_a: Variant = null, _legacy_b: Variant = null) -> void:
 	pass
 
-func _rpc_lobby_set_weapon(_weapon_id: String) -> void:
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_weapon(_peer_or_weapon: Variant, _weapon_id: String = "") -> void:
 	pass
 
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_weapon_skin(_skin_index: int) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
 func _rpc_lobby_set_character(_character_id: String) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_lobby_set_skin(_skin_index: int) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_lobby_set_display_name(_display_name: String) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id: int, _map_id: String, _lobby_scene_mode: bool) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_cast_skill1(_target_world: Vector2) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
 func _rpc_cast_skill2(_target_world: Vector2) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_outrage_bomb(_caster_peer_id: int, _world_position: Vector2, _fuse_sec: float) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_outrage_boost(_caster_peer_id: int, _duration_sec: float) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_erebus_immunity(_caster_peer_id: int, _duration_sec: float) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_erebus_shield(_caster_peer_id: int, _duration_sec: float) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_tasko_invis_field(_caster_peer_id: int, _world_position: Vector2) -> void:
 	pass
 
+@rpc("authority", "reliable")
 func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> void:
 	pass

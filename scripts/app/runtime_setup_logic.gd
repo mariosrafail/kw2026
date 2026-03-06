@@ -18,6 +18,7 @@ func _init_services() -> void:
 	client_input_controller = CLIENT_INPUT_CONTROLLER_SCRIPT.new()
 	combat_effects = COMBAT_EFFECTS_SCRIPT.new()
 	camera_shake = CAMERA_SHAKE_SCRIPT.new()
+	weapon_ui = WEAPON_UI_SCRIPT.new()
 
 func _init_weapons() -> void:
 	weapon_profiles = {
@@ -38,9 +39,12 @@ func _init_weapons() -> void:
 		startup_weapon_id = lobby_service.get_local_selected_weapon(default_selected_weapon_id)
 		startup_character_id = lobby_service.get_local_selected_character(default_selected_character_id)
 	selected_weapon_id = _normalize_weapon_id(startup_weapon_id)
+	if lobby_service != null:
+		selected_weapon_skin = int(lobby_service.get_local_selected_weapon_skin(selected_weapon_id, 0))
 	selected_character_id = _normalize_character_id(startup_character_id)
 	if lobby_service != null:
 		lobby_service.set_local_selected_weapon(selected_weapon_id)
+		lobby_service.set_local_selected_weapon_skin(selected_weapon_id, selected_weapon_skin)
 		lobby_service.set_local_selected_character(selected_character_id)
 
 func _init_scene_map_context() -> void:
@@ -206,7 +210,8 @@ func _configure_services() -> void:
 			"weapon_profile_for_id": Callable(self, "_weapon_profile_for_id"),
 			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
 			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
-			"weapon_visual_for_id": Callable(self, "_weapon_visual_for_id")
+			"weapon_visual_for_id": Callable(self, "_weapon_visual_for_id"),
+			"weapon_visual_for_peer": Callable(self, "_weapon_visual_for_peer")
 		}
 	)
 

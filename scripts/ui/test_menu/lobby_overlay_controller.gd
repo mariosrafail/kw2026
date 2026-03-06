@@ -1,7 +1,7 @@
 extends RefCounted
 
 const LOBBY_RPC_BRIDGE_SCRIPT := preload("res://scripts/ui/test_menu/lobby_rpc_bridge.gd")
-const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
+const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 
 var _host: Control
 var _make_button: Callable
@@ -28,13 +28,14 @@ var _selected_room_index := -1
 var _joined_room_name := ""
 var _joined_lobby_id := 0
 var _rpc_bridge: Node
+var _lobby_list_ready := false
 var _action_inflight := false
 var _action_nonce := 0
 var _pending_create_request := {}
 var _connect_candidates: Array[Dictionary] = []
 var _connect_candidate_index := -1
 var _connect_nonce := 0
-var _map_catalog = MAP_CATALOG_SCRIPT.new()
+var _lobby_service = LOBBY_SERVICE_SCRIPT.new()
 
 func _log(message: String) -> void:
 	print("[lobby_overlay] %s" % message)
@@ -71,6 +72,8 @@ func open(play_button: Control) -> void:
 	_ensure_rpc_bridge()
 	if _overlay == null:
 		return
+	_lobby_list_ready = false
+	_pending_create_request = {}
 	_layout_overlay()
 
 	_overlay.visible = true
@@ -129,6 +132,7 @@ func _show_lobby_rooms() -> void:
 	if _overlay == null:
 		return
 	_log("show_lobby_rooms visible=%s" % str(_overlay.visible))
+	_lobby_list_ready = false
 	if _loading_box != null:
 		_loading_box.visible = false
 	if _rooms_box != null:
@@ -148,6 +152,52 @@ func _local_peer_id() -> int:
 				if peer_id > 0:
 					return peer_id
 	return 1
+
+func _selected_weapon_id() -> String:
+	var selected_weapon_id := "ak47"
+	if _host != null:
+		selected_weapon_id = str(_host.get("selected_weapon_id")).strip_edges().to_lower()
+	if selected_weapon_id.is_empty():
+		return "ak47"
+	return selected_weapon_id
+
+func _selected_warrior_id() -> String:
+	var selected_character_id := "outrage"
+	if _host != null:
+		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
+	if selected_character_id != "erebus" and selected_character_id != "tasko":
+		selected_character_id = "outrage"
+	return selected_character_id
+
+func _selected_warrior_skin() -> int:
+	if _host == null:
+		return 0
+	return maxi(0, int(_host.get("selected_warrior_skin")))
+
+func _selected_weapon_skin() -> int:
+	if _host == null:
+		return 0
+	return maxi(0, int(_host.get("selected_weapon_skin")))
+
+func _sync_selected_warrior_skin() -> void:
+	if _rpc_bridge == null:
+		return
+	_rpc_bridge.call("set_warrior_skin", _selected_warrior_skin())
+
+func _sync_selected_weapon_skin() -> void:
+	if _rpc_bridge == null:
+		return
+	_rpc_bridge.call("set_weapon_skin", _selected_weapon_skin())
+
+func _persist_local_loadout_selection() -> void:
+	if _lobby_service == null:
+		return
+	var weapon_id := _selected_weapon_id()
+	var warrior_id := _selected_warrior_id()
+	_lobby_service.set_local_selected_weapon(weapon_id)
+	_lobby_service.set_local_selected_weapon_skin(weapon_id, _selected_weapon_skin())
+	_lobby_service.set_local_selected_character(warrior_id)
+	_lobby_service.set_local_selected_skin(warrior_id, _selected_warrior_skin())
 
 func _resolve_server_host_port_from_args(host: String = "127.0.0.1", port: int = 8080) -> Dictionary:
 	var resolved_host := host.strip_edges()
@@ -311,9 +361,13 @@ func _try_next_connect_candidate() -> void:
 	if _connect_candidate_index >= _connect_candidates.size():
 		_pending_create_request = {}
 		_action_inflight = false
+		_lobby_list_ready = true
+		_room_entries = []
 		_log("all connect candidates exhausted")
 		if _status_label != null:
-			_status_label.text = "Connection failed. Check server/port."
+			_status_label.text = "Connection failed. You can still press Create or Refresh."
+		_populate_lobby_room_list()
+		_refresh_lobby_selection_summary()
 		_refresh_lobby_buttons_state()
 		return
 	_begin_connect_attempt(false, "Retrying")
@@ -360,6 +414,8 @@ func _on_rpc_connected() -> void:
 		var username := str(_host.get("player_username")).strip_edges()
 		if not username.is_empty():
 			_rpc_bridge.call("set_display_name", username)
+	_sync_selected_warrior_skin()
+	_sync_selected_weapon_skin()
 	if not _pending_create_request.is_empty():
 		_send_create_lobby_request(_pending_create_request)
 		return
@@ -372,6 +428,7 @@ func _on_rpc_failed() -> void:
 
 func _on_rpc_disconnected() -> void:
 	_connect_nonce += 1
+	_lobby_list_ready = false
 	_pending_create_request = {}
 	_action_inflight = false
 	_log("rpc disconnected signal")
@@ -381,6 +438,7 @@ func _on_rpc_disconnected() -> void:
 
 func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	_log("lobby_list received entries=%d active_lobby_id=%d" % [entries.size(), active_lobby_id])
+	_lobby_list_ready = true
 	_room_entries = entries
 	_joined_lobby_id = active_lobby_id
 	_joined_room_name = ""
@@ -524,13 +582,11 @@ func _join_selected_lobby_room() -> void:
 		_refresh_lobby_buttons_state()
 		return
 
-	var selected_weapon_id := "ak47"
-	var selected_character_id := "outrage"
-	if _host != null:
-		selected_weapon_id = str(_host.get("selected_weapon_id")).strip_edges().to_lower()
-		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko":
-		selected_character_id = "outrage"
+	var selected_weapon_id := _selected_weapon_id()
+	var selected_character_id := _selected_warrior_id()
+	_persist_local_loadout_selection()
+	_sync_selected_warrior_skin()
+	_sync_selected_weapon_skin()
 	_begin_lobby_action("Joining %s..." % room_name)
 	var sent_join := bool(_rpc_bridge.call("join_lobby", lobby_id, selected_weapon_id, selected_character_id))
 	if _status_label != null:
@@ -545,6 +601,12 @@ func _create_lobby_room() -> void:
 	if _rpc_bridge == null:
 		_log("create_lobby clicked but rpc_bridge=null")
 		return
+	if not _lobby_list_ready:
+		_log("create_lobby blocked lobby_list_ready=false")
+		if _status_label != null:
+			_status_label.text = "Wait for lobbies to finish loading"
+		_refresh_lobby_buttons_state()
+		return
 	if _joined_lobby_id > 0:
 		_log("create_lobby blocked already_in_lobby id=%d" % _joined_lobby_id)
 		if _status_label != null:
@@ -553,11 +615,11 @@ func _create_lobby_room() -> void:
 	var request := _build_create_lobby_request()
 	_log("create_lobby clicked request=%s can_send=%s" % [str(request), str(bool(_rpc_bridge.call("can_send_lobby_rpc")))])
 	if not bool(_rpc_bridge.call("can_send_lobby_rpc")):
-		_pending_create_request = request
-		_action_inflight = true
-		_action_nonce += 1
-		_begin_connect_attempt(true, "Connecting to create lobby")
-		_refresh_lobby_selection_summary()
+		_log("create_lobby queueing reconnect because can_send=false")
+		_pending_create_request = request.duplicate(true)
+		if _status_label != null:
+			_status_label.text = "Reconnecting to create lobby..."
+		_begin_connect_attempt(true, "Reconnecting")
 		_refresh_lobby_buttons_state()
 		return
 	_send_create_lobby_request(request)
@@ -580,13 +642,8 @@ func _leave_lobby_room() -> void:
 
 func _build_create_lobby_request() -> Dictionary:
 	var requested_name := "My Lobby %d" % (_room_entries.size() + 1)
-	var selected_weapon_id := "ak47"
-	var selected_character_id := "outrage"
-	if _host != null:
-		selected_weapon_id = str(_host.get("selected_weapon_id")).strip_edges().to_lower()
-		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko":
-		selected_character_id = "outrage"
+	var selected_weapon_id := _selected_weapon_id()
+	var selected_character_id := _selected_warrior_id()
 	return {
 		"name": requested_name,
 		"weapon_id": selected_weapon_id,
@@ -615,6 +672,9 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 		map_id,
 		str(bool(_rpc_bridge.call("can_send_lobby_rpc")))
 	])
+	_persist_local_loadout_selection()
+	_sync_selected_warrior_skin()
+	_sync_selected_weapon_skin()
 	_begin_lobby_action("Creating lobby...")
 	var sent_create := bool(_rpc_bridge.call("create_lobby", requested_name, selected_weapon_id, selected_character_id, map_id))
 	_log("create_lobby rpc sent=%s" % str(sent_create))
@@ -630,7 +690,7 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 func _refresh_lobby_buttons_state() -> void:
 	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
 	if _create_button != null:
-		_create_button.disabled = _joined_lobby_id > 0 or _action_inflight
+		_create_button.disabled = not _lobby_list_ready or _joined_lobby_id > 0 or _action_inflight
 	if _join_button != null:
 		_join_button.disabled = not can_send or _selected_room_index < 0 or _action_inflight
 	if _refresh_button != null:

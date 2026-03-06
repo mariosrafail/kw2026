@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bplbglw4w4fel"
-path="res://.godot/imported/allLegs.png-d86c2140fd82c9d033303bc0c7a2e4f3.ctex"
+uid="uid://j2a275j2th8n"
+path="res://.godot/imported/head.png-179ba2b16b53e7e9b6c07e21befd296f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/warriors/allLegs.png"
-dest_files=["res://.godot/imported/allLegs.png-d86c2140fd82c9d033303bc0c7a2e4f3.ctex"]
+source_file="res://assets/warriors/outrage/head.png"
+dest_files=["res://.godot/imported/head.png-179ba2b16b53e7e9b6c07e21befd296f.ctex"]
 
 [params]
 

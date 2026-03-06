@@ -98,8 +98,8 @@ func server_create_lobby(
 
 func server_join_lobby(peer_id: int, lobby_id: int) -> void:
 	if not lobby_service.has_lobby(lobby_id):
-		var current_lobby_id := _peer_lobby(peer_id)
-		_send_lobby_action_result(peer_id, false, "Lobby not found.", current_lobby_id, _lobby_map_id(current_lobby_id))
+		var peer_current_lobby_id := _peer_lobby(peer_id)
+		_send_lobby_action_result(peer_id, false, "Lobby not found.", peer_current_lobby_id, _lobby_map_id(peer_current_lobby_id))
 		_server_send_lobby_list_to_peer(peer_id)
 		return
 
@@ -146,7 +146,7 @@ func client_receive_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	if update_ui_visibility_cb.is_valid():
 		update_ui_visibility_cb.call()
 
-func client_lobby_action_result(success: bool, message: String, active_lobby_id: int, _lobby_scene_mode: bool) -> void:
+func client_lobby_action_result(_success: bool, message: String, active_lobby_id: int, _lobby_scene_mode: bool) -> void:
 	if set_client_lobby_id_cb.is_valid():
 		set_client_lobby_id_cb.call(active_lobby_id)
 	if set_lobby_auto_action_inflight_cb.is_valid():

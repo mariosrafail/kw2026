@@ -2,10 +2,6 @@ extends RefCounted
 
 const SHOP_STATE_PATH := "user://test_menu_shop_state.json"
 
-const HEADS_TEXTURE: Texture2D = preload("res://assets/warriors/allHeads.png")
-const TORSO_TEXTURE: Texture2D = preload("res://assets/warriors/allTorso.png")
-const LEGS_TEXTURE: Texture2D = preload("res://assets/warriors/allLegs.png")
-
 const UZI_UI_TEXTURE: Texture2D = preload("res://assets/UI/uziUI.png")
 const GRENADE_UI_TEXTURE: Texture2D = preload("res://assets/UI/grenadeUI.png")
 const AK_UI_TEXTURE: Texture2D = preload("res://assets/UI/akUI.png")
