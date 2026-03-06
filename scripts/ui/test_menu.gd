@@ -8,6 +8,7 @@ const STATE_STORE_SCRIPT := preload("res://scripts/ui/test_menu/state_store.gd")
 const INTRO_FX_CTRL_SCRIPT := preload("res://scripts/ui/test_menu/intro_fx_controller.gd")
 const CONFIRM_OVERLAY_SCRIPT := preload("res://scripts/ui/test_menu/confirm_overlay.gd")
 const LOBBY_OVERLAY_CTRL_SCRIPT := preload("res://scripts/ui/test_menu/lobby_overlay_controller.gd")
+const AUTH_FLOW_SCRIPT := preload("res://scripts/ui/test_menu/auth_flow.gd")
 const UI_ANIMATOR_SCRIPT := preload("res://scripts/ui/test_menu/ui_animator.gd")
 const MENU_TRANSITION_CTRL_SCRIPT := preload("res://scripts/ui/test_menu/menu_transition_controller.gd")
 const IDLE_ANIMATOR_SCRIPT := preload("res://scripts/ui/test_menu/idle_animator.gd")
@@ -33,6 +34,7 @@ var _weapon_ui := WEAPON_UI_SCRIPT.new()
 var _state_store := STATE_STORE_SCRIPT.new()
 var _intro_fx := INTRO_FX_CTRL_SCRIPT.new()
 var _lobby_overlay_ctrl := LOBBY_OVERLAY_CTRL_SCRIPT.new()
+var _auth_flow := AUTH_FLOW_SCRIPT.new()
 var _ui_anim := UI_ANIMATOR_SCRIPT.new()
 var _menu_transition_ctrl := MENU_TRANSITION_CTRL_SCRIPT.new()
 var _idle_anim := IDLE_ANIMATOR_SCRIPT.new()
@@ -289,69 +291,22 @@ func _ready() -> void:
 		_start_idle_loop()
 
 func _auth_url(path: String) -> String:
-	return "%s%s" % [_auth_api_base_url, path]
+	return _auth_flow.auth_url(self, path)
 
 func _auth_login_current_base_url() -> String:
-	if _auth_login_base_url_candidates.is_empty():
-		return _auth_api_base_url
-	return str(_auth_login_base_url_candidates[_auth_login_base_url_index])
+	return _auth_flow.auth_login_current_base_url(self)
 
 func _auth_build_base_url_with_port(base_url: String, port: int) -> String:
-	var trimmed := base_url.strip_edges()
-	var scheme_idx := trimmed.find("://")
-	if scheme_idx < 0:
-		return trimmed
-	var scheme := trimmed.substr(0, scheme_idx)
-	var rest := trimmed.substr(scheme_idx + 3)
-	var slash_idx := rest.find("/")
-	var host_port := rest
-	var suffix := ""
-	if slash_idx >= 0:
-		host_port = rest.substr(0, slash_idx)
-		suffix = rest.substr(slash_idx)
-	var host := host_port
-	if host_port.find("]") < 0:
-		var colon_idx := host_port.rfind(":")
-		if colon_idx >= 0:
-			host = host_port.substr(0, colon_idx)
-	return "%s://%s:%d%s" % [scheme, host, port, suffix]
+	return _auth_flow.auth_build_base_url_with_port(base_url, port)
 
 func _auth_trim_suffix(url: String, suffix: String) -> String:
-	var trimmed := url.strip_edges()
-	if trimmed.ends_with(suffix):
-		return trimmed.substr(0, trimmed.length() - suffix.length())
-	return trimmed
+	return _auth_flow.auth_trim_suffix(url, suffix)
 
 func _auth_rebuild_login_base_candidates() -> void:
-	_auth_login_base_url_candidates = PackedStringArray()
-	var base_variants := PackedStringArray([_auth_api_base_url])
-	var without_auth := _auth_trim_suffix(_auth_api_base_url, "/auth")
-	if without_auth != _auth_api_base_url:
-		base_variants.append(without_auth)
-
-	var candidates := PackedStringArray()
-	for base in base_variants:
-		candidates.append(base)
-		candidates.append(_auth_build_base_url_with_port(base, 8080))
-		candidates.append(_auth_build_base_url_with_port(base, 8081))
-		candidates.append(_auth_build_base_url_with_port(base, 8090))
-
-	for c in candidates:
-		var v := str(c).strip_edges()
-		if v.is_empty() or _auth_login_base_url_candidates.has(v):
-			continue
-		_auth_login_base_url_candidates.append(v)
-	_auth_login_base_url_index = 0
+	_auth_flow.auth_rebuild_login_base_candidates(self)
 
 func _auth_request_login_with_current_candidate() -> int:
-	var url := "%s/login" % _auth_login_current_base_url()
-	print("[AUTH][LOGIN] request url=%s user=%s" % [url, (_auth_user_input.text.strip_edges() if _auth_user_input != null else "")])
-	return _auth_http.request(
-		url,
-		PackedStringArray(["Content-Type: application/json"]),
-		HTTPClient.METHOD_POST,
-		_auth_login_payload
-	)
+	return _auth_flow.auth_request_login_with_current_candidate(self)
 
 func _setup_auth_gate() -> void:
 	_auth_api_base_url = str(ProjectSettings.get_setting("kw/auth_api_base_url", AUTH_API_BASE_URL_DEFAULT)).strip_edges()
@@ -490,22 +445,7 @@ func _auth_submit_login() -> void:
 			_auth_login_button.disabled = false
 
 func _auth_request_profile() -> void:
-	if _auth_http == null or _auth_token.is_empty():
-		return
-	_auth_pending_action = "profile"
-	if _auth_status_label != null:
-		_auth_status_label.text = "Loading profile..."
-	var err := _auth_http.request(
-		_auth_url("/profile"),
-		PackedStringArray(["Authorization: Bearer %s" % _auth_token]),
-		HTTPClient.METHOD_GET
-	)
-	if err != OK:
-		_auth_pending_action = ""
-		if _auth_status_label != null:
-			_auth_status_label.text = "Profile request failed (%s)" % str(err)
-		if _auth_login_button != null:
-			_auth_login_button.disabled = false
+	_auth_flow.auth_request_profile(self)
 
 func _auth_sync_wallet() -> void:
 	if _auth_http == null or _auth_token.is_empty() or not _auth_logged_in:
@@ -568,65 +508,13 @@ func _auth_sync_wallet() -> void:
 		_auth_schedule_wallet_retry()
 
 func _copy_weapon_skins_dict(src: Dictionary) -> Dictionary:
-	var out: Dictionary = {}
-	for key in src.keys():
-		var normalized := str(key).strip_edges().to_lower()
-		var arr := src.get(key, PackedInt32Array([0])) as PackedInt32Array
-		if arr == null:
-			out[normalized] = PackedInt32Array([0])
-			continue
-		var arr_copy := PackedInt32Array()
-		for v in arr:
-			arr_copy.append(int(v))
-		out[normalized] = arr_copy
-	return out
+	return _auth_flow.copy_weapon_skins_dict(src)
 
 func _auth_capture_wallet_sync_snapshot() -> void:
-	if not _auth_logged_in or _auth_token.is_empty():
-		return
-	_auth_wallet_sync_snapshot = {
-		"coins": wallet_coins,
-		"clk": wallet_clk,
-		"owned_warrior_skins": PackedInt32Array(owned_warrior_skins),
-		"owned_weapons": PackedStringArray(owned_weapons),
-		"owned_weapon_skins_by_weapon": _copy_weapon_skins_dict(owned_weapon_skins_by_weapon),
-		"equipped_weapon_skin_by_weapon": equipped_weapon_skin_by_weapon.duplicate(true),
-		"selected_warrior_skin": selected_warrior_skin,
-		"selected_weapon_id": selected_weapon_id,
-		"selected_weapon_skin": selected_weapon_skin,
-	}
-	_auth_wallet_sync_snapshot_active = true
+	_auth_flow.auth_capture_wallet_sync_snapshot(self)
 
 func _auth_restore_wallet_sync_snapshot() -> void:
-	if not _auth_wallet_sync_snapshot_active:
-		return
-	wallet_coins = int(_auth_wallet_sync_snapshot.get("coins", wallet_coins))
-	wallet_clk = int(_auth_wallet_sync_snapshot.get("clk", wallet_clk))
-	owned_warrior_skins = PackedInt32Array(_auth_wallet_sync_snapshot.get("owned_warrior_skins", [0]) as Array)
-	owned_weapons = PackedStringArray(_auth_wallet_sync_snapshot.get("owned_weapons", [WEAPON_UZI]) as Array)
-	owned_weapon_skins_by_weapon = _copy_weapon_skins_dict(_auth_wallet_sync_snapshot.get("owned_weapon_skins_by_weapon", {}) as Dictionary)
-	equipped_weapon_skin_by_weapon = (_auth_wallet_sync_snapshot.get("equipped_weapon_skin_by_weapon", {}) as Dictionary).duplicate(true)
-	selected_warrior_skin = maxi(0, int(_auth_wallet_sync_snapshot.get("selected_warrior_skin", selected_warrior_skin)))
-	selected_weapon_id = str(_auth_wallet_sync_snapshot.get("selected_weapon_id", selected_weapon_id)).strip_edges().to_lower()
-	selected_weapon_skin = maxi(0, int(_auth_wallet_sync_snapshot.get("selected_weapon_skin", selected_weapon_skin)))
-	_pending_warrior_skin = selected_warrior_skin
-	_pending_weapon_id = selected_weapon_id
-	_pending_weapon_skin = selected_weapon_skin
-	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_skin)
-	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_skin)
-	_set_weapon_icon_sprite(main_weapon_icon, selected_weapon_id, 1.0, selected_weapon_skin)
-	_apply_weapon_skin_visual(main_weapon_icon, selected_weapon_id, selected_weapon_skin)
-	_set_weapon_icon_sprite(weapon_shop_preview, _pending_weapon_id, 1.0, _pending_weapon_skin)
-	_apply_weapon_skin_visual(weapon_shop_preview, _pending_weapon_id, _pending_weapon_skin)
-	_update_wallet_labels(true)
-	_refresh_warrior_grid_texts()
-	_refresh_warrior_action()
-	_refresh_weapon_grid_texts()
-	_refresh_weapon_action()
-	_save_state()
-	_auth_wallet_sync_snapshot_active = false
-	_auth_wallet_sync_snapshot = {}
-	print("[AUTH][WALLET_SYNC] rollback applied (server rejected wallet update)")
+	_auth_flow.auth_restore_wallet_sync_snapshot(self)
 
 func _auth_purchase_warrior_skin(skin_index: int) -> void:
 	if _auth_http == null or _auth_token.is_empty() or not _auth_logged_in:

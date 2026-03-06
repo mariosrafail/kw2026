@@ -13,6 +13,9 @@ var _last_host := "127.0.0.1"
 var _last_port := 8080
 var _map_catalog = MAP_CATALOG_SCRIPT.new()
 
+func _log(message: String) -> void:
+	print("[lobby_rpc_bridge] %s" % message)
+
 func ensure_attached(tree: SceneTree) -> void:
 	if tree == null:
 		return
@@ -24,6 +27,7 @@ func ensure_attached(tree: SceneTree) -> void:
 			get_parent().remove_child(self)
 		name = "Main3"
 		root.add_child(self)
+	_log("ensure_attached parent=%s" % str(get_parent()))
 	_bind_multiplayer_signals()
 
 func connect_to_server(host: String = "127.0.0.1", port: int = 8080) -> void:
@@ -31,17 +35,21 @@ func connect_to_server(host: String = "127.0.0.1", port: int = 8080) -> void:
 	if _last_host.is_empty():
 		_last_host = "127.0.0.1"
 	_last_port = clampi(port, 1, 65535)
+	_log("connect_to_server host=%s port=%d" % [_last_host, _last_port])
 
 	var mp := multiplayer
 	if mp == null:
+		_log("connect_to_server failed multiplayer=null")
 		lobby_connection_failed.emit()
 		return
 
 	if mp.multiplayer_peer != null:
 		var status := mp.multiplayer_peer.get_connection_status()
 		var local_peer_id := mp.get_unique_id()
+		_log("existing peer status=%d local_peer_id=%d" % [status, local_peer_id])
 		if status == MultiplayerPeer.CONNECTION_CONNECTED and local_peer_id > 1:
 			_is_connected = true
+			_log("already connected; emitting connected")
 			connected_to_lobby_server.emit()
 			return
 		mp.multiplayer_peer.close()
@@ -49,17 +57,21 @@ func connect_to_server(host: String = "127.0.0.1", port: int = 8080) -> void:
 
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(_last_host, _last_port)
+	_log("create_client err=%d" % err)
 	if err != OK:
+		_log("create_client failed immediately")
 		lobby_connection_failed.emit()
 		return
 	mp.multiplayer_peer = peer
+	_log("multiplayer peer assigned")
 
 func disconnect_from_server() -> void:
 	var mp := multiplayer
 	if mp != null and mp.multiplayer_peer != null:
+		_log("disconnect_from_server closing current peer")
 		mp.multiplayer_peer.close()
 		mp.multiplayer_peer = null
-	_is_connected = false
+		_is_connected = false
 
 func is_connected_to_server() -> bool:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
@@ -68,12 +80,15 @@ func is_connected_to_server() -> bool:
 
 func request_lobby_list() -> bool:
 	if not _can_send_server_rpc():
+		_log("request_lobby_list blocked can_send=false")
 		return false
+	_log("request_lobby_list rpc_id(1)")
 	_rpc_request_lobby_list.rpc_id(1)
 	return true
 
 func create_lobby(lobby_name: String, weapon_id: String, character_id: String, map_id: String = "classic") -> bool:
 	if not _can_send_server_rpc():
+		_log("create_lobby blocked can_send=false")
 		return false
 	var normalized_weapon := weapon_id.strip_edges().to_lower()
 	if normalized_weapon.is_empty():
@@ -85,11 +100,13 @@ func create_lobby(lobby_name: String, weapon_id: String, character_id: String, m
 	if normalized_map.is_empty():
 		normalized_map = "classic"
 	var payload := "%s|%s|%s" % [normalized_weapon, normalized_character, normalized_map]
+	_log("create_lobby rpc_id(1) lobby_name=%s payload=%s" % [lobby_name.strip_edges(), payload])
 	_rpc_lobby_create.rpc_id(1, lobby_name.strip_edges(), payload)
 	return true
 
 func join_lobby(lobby_id: int, weapon_id: String, character_id: String) -> bool:
 	if not _can_send_server_rpc():
+		_log("join_lobby blocked can_send=false")
 		return false
 	var normalized_weapon := weapon_id.strip_edges().to_lower()
 	if normalized_weapon.is_empty():
@@ -98,20 +115,25 @@ func join_lobby(lobby_id: int, weapon_id: String, character_id: String) -> bool:
 	if normalized_character != "erebus" and normalized_character != "tasko":
 		normalized_character = "outrage"
 	_rpc_lobby_join.rpc_id(1, lobby_id, normalized_weapon, normalized_character)
+	_log("join_lobby rpc_id(1) lobby_id=%d weapon=%s character=%s" % [lobby_id, normalized_weapon, normalized_character])
 	return true
 
 func leave_lobby() -> bool:
 	if not _can_send_server_rpc():
+		_log("leave_lobby blocked can_send=false")
 		return false
+	_log("leave_lobby rpc_id(1)")
 	_rpc_lobby_leave.rpc_id(1)
 	return true
 
 func set_display_name(display_name: String) -> bool:
 	if not _can_send_server_rpc():
+		_log("set_display_name blocked can_send=false")
 		return false
 	var trimmed := display_name.strip_edges()
 	if trimmed.is_empty():
 		return false
+	_log("set_display_name rpc_id(1) name=%s" % trimmed)
 	_rpc_lobby_set_display_name.rpc_id(1, trimmed)
 	return true
 
@@ -144,14 +166,17 @@ func _bind_multiplayer_signals() -> void:
 
 func _on_connected_to_server() -> void:
 	_is_connected = true
+	_log("signal connected_to_server local_peer_id=%d host=%s port=%d" % [multiplayer.get_unique_id(), _last_host, _last_port])
 	connected_to_lobby_server.emit()
 
 func _on_connection_failed() -> void:
 	_is_connected = false
+	_log("signal connection_failed host=%s port=%d" % [_last_host, _last_port])
 	lobby_connection_failed.emit()
 
 func _on_server_disconnected() -> void:
 	_is_connected = false
+	_log("signal server_disconnected host=%s port=%d" % [_last_host, _last_port])
 	lobby_server_disconnected.emit()
 
 @rpc("any_peer", "reliable")
@@ -260,6 +285,7 @@ func _rpc_lobby_set_display_name(_display_name: String) -> void:
 
 @rpc("authority", "reliable")
 func _rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
+	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [entries.size(), active_lobby_id])
 	lobby_list_received.emit(entries, active_lobby_id)
 
 @rpc("authority", "reliable")
@@ -276,19 +302,23 @@ func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void
 
 @rpc("authority", "reliable")
 func _rpc_lobby_action_result(success: bool, message: String, active_lobby_id: int, map_id: String, _lobby_scene_mode: bool) -> void:
+	_log("rpc lobby_action_result success=%s active_lobby_id=%d map_id=%s message=%s" % [str(success), active_lobby_id, map_id, message])
 	lobby_action_result_received.emit(success, message, active_lobby_id, map_id)
 
 @rpc("authority", "reliable")
 func _rpc_scene_switch_to_map(map_id: String) -> void:
+	var tree := get_tree()
 	var normalized := str(map_id).strip_edges().to_lower()
 	if normalized.is_empty():
 		normalized = "classic"
 	var scene_path := _map_catalog.scene_path_for_id(normalized)
 	if scene_path.is_empty():
 		scene_path = "res://scenes/main.tscn"
+	var root := tree.root if tree != null else null
 	if name == "Main3":
 		name = "LobbyRpcBridge"
-	var tree := get_tree()
+	if root != null and get_parent() == root:
+		root.remove_child(self)
 	if tree != null:
 		tree.call_deferred("change_scene_to_file", scene_path)
 	call_deferred("queue_free")

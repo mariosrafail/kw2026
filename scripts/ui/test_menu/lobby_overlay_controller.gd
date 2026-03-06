@@ -30,7 +30,14 @@ var _joined_lobby_id := 0
 var _rpc_bridge: Node
 var _action_inflight := false
 var _action_nonce := 0
+var _pending_create_request := {}
+var _connect_candidates: Array[Dictionary] = []
+var _connect_candidate_index := -1
+var _connect_nonce := 0
 var _map_catalog = MAP_CATALOG_SCRIPT.new()
+
+func _log(message: String) -> void:
+	print("[lobby_overlay] %s" % message)
 
 func configure(
 	host: Control,
@@ -121,6 +128,7 @@ func _layout_overlay() -> void:
 func _show_lobby_rooms() -> void:
 	if _overlay == null:
 		return
+	_log("show_lobby_rooms visible=%s" % str(_overlay.visible))
 	if _loading_box != null:
 		_loading_box.visible = false
 	if _rooms_box != null:
@@ -141,37 +149,186 @@ func _local_peer_id() -> int:
 					return peer_id
 	return 1
 
-func _resolve_server_host_port_from_args() -> Dictionary:
-	var host := "127.0.0.1"
-	var port := 8080
+func _resolve_server_host_port_from_args(host: String = "127.0.0.1", port: int = 8080) -> Dictionary:
+	var resolved_host := host.strip_edges()
+	var resolved_port := clampi(port, 1, 65535)
+	if resolved_host.is_empty():
+		resolved_host = "127.0.0.1"
 	if _host != null:
 		var args := OS.get_cmdline_user_args()
 		for arg in args:
 			if arg.begins_with("--host="):
-				host = arg.substr("--host=".length()).strip_edges()
+				resolved_host = arg.substr("--host=".length()).strip_edges()
 			elif arg.begins_with("--port="):
 				var parsed := int(arg.substr("--port=".length()))
 				if parsed >= 1 and parsed <= 65535:
-					port = parsed
-	if host.is_empty():
-		host = "127.0.0.1"
-	return {"host": host, "port": port}
+					resolved_port = parsed
+	if resolved_host.is_empty():
+		resolved_host = "127.0.0.1"
+	return {"host": resolved_host, "port": resolved_port}
+
+func _read_launcher_config_defaults() -> Dictionary:
+	var candidate_paths := PackedStringArray()
+	var executable_config := OS.get_executable_path().get_base_dir().path_join("launcher_config.json")
+	candidate_paths.append(executable_config)
+	candidate_paths.append("res://launcher/launcher_config.json")
+	candidate_paths.append("res://build/release/launcher_config.json")
+	candidate_paths.append("res://build/launcher/launcher_config.json")
+
+	for path in candidate_paths:
+		if not FileAccess.file_exists(path):
+			continue
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			continue
+		var parsed: Variant = JSON.parse_string(file.get_as_text())
+		if not (parsed is Dictionary):
+			continue
+		var payload := parsed as Dictionary
+		return {
+			"found": true,
+			"host": str(payload.get("default_host", "")).strip_edges(),
+			"port": int(payload.get("default_port", 8080))
+		}
+
+	return {"found": false}
 
 func _resolve_server_host_port() -> Dictionary:
-	return _resolve_server_host_port_from_args()
+	var host := "127.0.0.1"
+	var port := 8080
+	var config := _read_launcher_config_defaults()
+	if bool(config.get("found", false)):
+		var config_host := str(config.get("host", "")).strip_edges()
+		var config_port := int(config.get("port", 8080))
+		if not config_host.is_empty():
+			host = config_host
+		if config_port >= 1 and config_port <= 65535:
+			port = config_port
+	var resolved := _resolve_server_host_port_from_args(host, port)
+	_log("resolved primary server endpoint=%s:%d config_found=%s" % [
+		str(resolved.get("host", "")),
+		int(resolved.get("port", 0)),
+		str(bool(config.get("found", false)))
+	])
+	return resolved
+
+func _resolve_auth_api_host_port() -> Dictionary:
+	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://127.0.0.1:8090")).strip_edges()
+	if configured.is_empty():
+		return {"host": "", "port": 8080}
+	var scheme_idx := configured.find("://")
+	if scheme_idx >= 0:
+		configured = configured.substr(scheme_idx + 3)
+	var slash_idx := configured.find("/")
+	if slash_idx >= 0:
+		configured = configured.substr(0, slash_idx)
+	var host := configured
+	var port := 8080
+	var colon_idx := configured.rfind(":")
+	if colon_idx > 0:
+		host = configured.substr(0, colon_idx)
+		var parsed_port := int(configured.substr(colon_idx + 1))
+		if parsed_port >= 1 and parsed_port <= 65535:
+			port = parsed_port
+	return {"host": host.strip_edges(), "port": port}
+
+func _build_connect_candidates() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var seen := {}
+	for endpoint in [
+		_resolve_server_host_port(),
+		_resolve_server_host_port_from_args("127.0.0.1", 8080),
+		_resolve_server_host_port_from_args("localhost", 8080),
+		_resolve_auth_api_host_port(),
+	]:
+		var host := str(endpoint.get("host", "")).strip_edges()
+		var port := int(endpoint.get("port", 8080))
+		if host.is_empty() or port < 1 or port > 65535:
+			continue
+		var key := "%s:%d" % [host, port]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		out.append({"host": host, "port": port})
+	_log("connect candidates=%s" % str(out))
+	return out
+
+func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...") -> void:
+	if _rpc_bridge == null:
+		_log("begin_connect_attempt aborted rpc_bridge=null")
+		return
+	if force_restart or _connect_candidates.is_empty():
+		_connect_candidates = _build_connect_candidates()
+		_connect_candidate_index = 0
+	if _connect_candidate_index < 0 or _connect_candidate_index >= _connect_candidates.size():
+		_connect_candidates = _build_connect_candidates()
+		_connect_candidate_index = 0
+	if _connect_candidates.is_empty():
+		_log("begin_connect_attempt failed no candidates")
+		if _status_label != null:
+			_status_label.text = "No lobby server host configured"
+		_action_inflight = false
+		_refresh_lobby_buttons_state()
+		return
+	var endpoint := _connect_candidates[_connect_candidate_index] as Dictionary
+	var host := str(endpoint.get("host", "127.0.0.1"))
+	var port := int(endpoint.get("port", 8080))
+	_log("begin_connect_attempt force_restart=%s reason=%s candidate_index=%d target=%s:%d pending_create=%s" % [
+		str(force_restart),
+		reason,
+		_connect_candidate_index,
+		host,
+		port,
+		str(not _pending_create_request.is_empty())
+	])
+	if _status_label != null:
+		_status_label.text = "%s %s:%d..." % [reason, host, port]
+	_rpc_bridge.call("disconnect_from_server")
+	_rpc_bridge.call("connect_to_server", host, port)
+	_start_connect_watchdog()
+	_refresh_lobby_buttons_state()
+
+func _start_connect_watchdog() -> void:
+	if _host == null or _host.get_tree() == null:
+		return
+	_connect_nonce += 1
+	var nonce := _connect_nonce
+	_log("start_connect_watchdog nonce=%d" % nonce)
+	var timer := _host.get_tree().create_timer(2.5)
+	timer.timeout.connect(func() -> void:
+		if nonce != _connect_nonce:
+			return
+		if _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc")):
+			_log("watchdog nonce=%d sees connected rpc bridge" % nonce)
+			return
+		_log("watchdog timeout nonce=%d advancing candidate" % nonce)
+		_try_next_connect_candidate()
+	)
+
+func _try_next_connect_candidate() -> void:
+	_connect_candidate_index += 1
+	_log("try_next_connect_candidate next_index=%d total=%d" % [_connect_candidate_index, _connect_candidates.size()])
+	if _connect_candidate_index >= _connect_candidates.size():
+		_pending_create_request = {}
+		_action_inflight = false
+		_log("all connect candidates exhausted")
+		if _status_label != null:
+			_status_label.text = "Connection failed. Check server/port."
+		_refresh_lobby_buttons_state()
+		return
+	_begin_connect_attempt(false, "Retrying")
 
 func _request_lobby_list_from_server() -> void:
 	if _rpc_bridge == null:
+		_log("request_lobby_list aborted rpc_bridge=null")
 		return
 	if _rpc_bridge.call("can_send_lobby_rpc"):
+		_log("request_lobby_list sending immediately")
 		_rpc_bridge.call("request_lobby_list")
 		_refresh_lobby_buttons_state()
 		return
-	var endpoint := _resolve_server_host_port()
-	if _status_label != null:
-		_status_label.text = "Connecting..."
-	_rpc_bridge.call("connect_to_server", str(endpoint.get("host", "127.0.0.1")), int(endpoint.get("port", 8080)))
-	_refresh_lobby_buttons_state()
+	_log("request_lobby_list triggering connect first")
+	_begin_connect_attempt(false)
 
 func _ensure_rpc_bridge() -> void:
 	if _rpc_bridge != null and is_instance_valid(_rpc_bridge):
@@ -192,26 +349,38 @@ func _ensure_rpc_bridge() -> void:
 		_rpc_bridge.lobby_action_result_received.connect(_on_rpc_action_result)
 
 func _on_rpc_connected() -> void:
+	_connect_nonce += 1
+	_log("rpc connected peer_id=%s pending_create=%s" % [
+		str(_host.get_tree().get_multiplayer().get_unique_id() if _host != null and _host.get_tree() != null else -1),
+		str(not _pending_create_request.is_empty())
+	])
 	if _status_label != null:
 		_status_label.text = "Connected. Fetching lobbies..."
 	if _host != null:
 		var username := str(_host.get("player_username")).strip_edges()
 		if not username.is_empty():
 			_rpc_bridge.call("set_display_name", username)
+	if not _pending_create_request.is_empty():
+		_send_create_lobby_request(_pending_create_request)
+		return
 	_rpc_bridge.call("request_lobby_list")
 	_refresh_lobby_buttons_state()
 
 func _on_rpc_failed() -> void:
-	if _status_label != null:
-		_status_label.text = "Connection failed"
-	_refresh_lobby_buttons_state()
+	_log("rpc connection_failed signal")
+	_try_next_connect_candidate()
 
 func _on_rpc_disconnected() -> void:
+	_connect_nonce += 1
+	_pending_create_request = {}
+	_action_inflight = false
+	_log("rpc disconnected signal")
 	if _status_label != null:
 		_status_label.text = "Disconnected from server"
 	_refresh_lobby_buttons_state()
 
 func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
+	_log("lobby_list received entries=%d active_lobby_id=%d" % [entries.size(), active_lobby_id])
 	_room_entries = entries
 	_joined_lobby_id = active_lobby_id
 	_joined_room_name = ""
@@ -227,11 +396,23 @@ func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	_refresh_lobby_buttons_state()
 
 func _on_rpc_action_result(success: bool, message: String, active_lobby_id: int, _map_id: String) -> void:
+	_log("action_result success=%s active_lobby_id=%d message=%s" % [str(success), active_lobby_id, message])
 	_joined_lobby_id = active_lobby_id
 	_action_inflight = false
 	_action_nonce += 1
 	if _status_label != null:
 		_status_label.text = message if success else "Failed: %s" % message
+	if success and active_lobby_id > 0:
+		# A successful create/join immediately transitions into the match.
+		# Do not start a fresh lobby-list reconnect here or it will stomp the active gameplay peer.
+		_pending_create_request = {}
+		_connect_nonce += 1
+		if _overlay != null:
+			_overlay.visible = false
+		if _on_closed.is_valid():
+			_on_closed.call()
+		_refresh_lobby_buttons_state()
+		return
 	_request_lobby_list_from_server()
 	_refresh_lobby_buttons_state()
 
@@ -362,29 +543,24 @@ func _join_selected_lobby_room() -> void:
 
 func _create_lobby_room() -> void:
 	if _rpc_bridge == null:
+		_log("create_lobby clicked but rpc_bridge=null")
 		return
 	if _joined_lobby_id > 0:
+		_log("create_lobby blocked already_in_lobby id=%d" % _joined_lobby_id)
 		if _status_label != null:
 			_status_label.text = "Leave current lobby first"
 		return
-
-	var requested_name := "My Lobby %d" % (_room_entries.size() + 1)
-	var selected_weapon_id := "ak47"
-	var selected_character_id := "outrage"
-	if _host != null:
-		selected_weapon_id = str(_host.get("selected_weapon_id")).strip_edges().to_lower()
-		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko":
-		selected_character_id = "outrage"
-	_begin_lobby_action("Creating lobby...")
-	var sent_create := bool(_rpc_bridge.call("create_lobby", requested_name, selected_weapon_id, selected_character_id, "classic"))
-	if _status_label != null:
-		_status_label.text = "Creating lobby..." if sent_create else "Still connecting..."
-	if not sent_create:
-		_action_inflight = false
-		_request_lobby_list_from_server()
-	_refresh_lobby_selection_summary()
-	_refresh_lobby_buttons_state()
+	var request := _build_create_lobby_request()
+	_log("create_lobby clicked request=%s can_send=%s" % [str(request), str(bool(_rpc_bridge.call("can_send_lobby_rpc")))])
+	if not bool(_rpc_bridge.call("can_send_lobby_rpc")):
+		_pending_create_request = request
+		_action_inflight = true
+		_action_nonce += 1
+		_begin_connect_attempt(true, "Connecting to create lobby")
+		_refresh_lobby_selection_summary()
+		_refresh_lobby_buttons_state()
+		return
+	_send_create_lobby_request(request)
 
 func _leave_lobby_room() -> void:
 	if _joined_lobby_id <= 0 and _joined_room_name.is_empty():
@@ -402,14 +578,63 @@ func _leave_lobby_room() -> void:
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
+func _build_create_lobby_request() -> Dictionary:
+	var requested_name := "My Lobby %d" % (_room_entries.size() + 1)
+	var selected_weapon_id := "ak47"
+	var selected_character_id := "outrage"
+	if _host != null:
+		selected_weapon_id = str(_host.get("selected_weapon_id")).strip_edges().to_lower()
+		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
+	if selected_character_id != "erebus" and selected_character_id != "tasko":
+		selected_character_id = "outrage"
+	return {
+		"name": requested_name,
+		"weapon_id": selected_weapon_id,
+		"character_id": selected_character_id,
+		"map_id": "classic",
+	}
+
+func _send_create_lobby_request(request: Dictionary) -> void:
+	_pending_create_request = {}
+	var requested_name := str(request.get("name", "")).strip_edges()
+	var selected_weapon_id := str(request.get("weapon_id", "ak47")).strip_edges().to_lower()
+	var selected_character_id := str(request.get("character_id", "outrage")).strip_edges().to_lower()
+	var map_id := str(request.get("map_id", "classic")).strip_edges().to_lower()
+	if requested_name.is_empty():
+		requested_name = "My Lobby %d" % (_room_entries.size() + 1)
+	if selected_weapon_id.is_empty():
+		selected_weapon_id = "ak47"
+	if selected_character_id != "erebus" and selected_character_id != "tasko":
+		selected_character_id = "outrage"
+	if map_id.is_empty():
+		map_id = "classic"
+	_log("send_create_lobby_request name=%s weapon=%s character=%s map=%s can_send=%s" % [
+		requested_name,
+		selected_weapon_id,
+		selected_character_id,
+		map_id,
+		str(bool(_rpc_bridge.call("can_send_lobby_rpc")))
+	])
+	_begin_lobby_action("Creating lobby...")
+	var sent_create := bool(_rpc_bridge.call("create_lobby", requested_name, selected_weapon_id, selected_character_id, map_id))
+	_log("create_lobby rpc sent=%s" % str(sent_create))
+	if _status_label != null:
+		_status_label.text = "Creating lobby..." if sent_create else "Still connecting..."
+	if not sent_create:
+		_action_inflight = false
+		_pending_create_request = request.duplicate(true)
+		_request_lobby_list_from_server()
+	_refresh_lobby_selection_summary()
+	_refresh_lobby_buttons_state()
+
 func _refresh_lobby_buttons_state() -> void:
 	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
 	if _create_button != null:
-		_create_button.disabled = not can_send or _joined_lobby_id > 0 or _action_inflight
+		_create_button.disabled = _joined_lobby_id > 0 or _action_inflight
 	if _join_button != null:
 		_join_button.disabled = not can_send or _selected_room_index < 0 or _action_inflight
 	if _refresh_button != null:
-		_refresh_button.disabled = not can_send or _action_inflight
+		_refresh_button.disabled = _action_inflight
 	if _leave_button != null:
 		_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
 

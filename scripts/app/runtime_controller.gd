@@ -9,6 +9,11 @@ var _client_skill_cd_e_max := 0.0
 
 const RPC_ROOT_NODE_NAME := "Main3"
 
+func _allows_scene_network_bootstrap() -> bool:
+	if _uses_lobby_scene_flow():
+		return true
+	return OS.has_feature("editor") and dev_auto_login_on_autostart
+
 func _ready() -> void:
 	_ensure_rpc_root_node_name()
 	_ensure_cursor_manager()
@@ -26,19 +31,28 @@ func _ready() -> void:
 	port_spin.value = int(startup_defaults.get("port", DEFAULT_PORT))
 	host_input.text = str(startup_defaults.get("host", DEFAULT_HOST))
 	session_controller.set_connection_defaults(host_input.text.strip_edges())
+	var dev_remote_autostart := _should_dev_auto_create_lobby_on_autostart()
+	session_controller.disable_editor_localhost_override = dev_remote_autostart
+	session_controller.disable_editor_retry_fallback = dev_remote_autostart
 	var startup_autostart := true
 	if _uses_lobby_scene_flow():
 		startup_mode = Role.CLIENT
 		startup_autostart = true
 	else:
-		startup_mode = Role.SERVER if OS.has_feature("editor") else Role.CLIENT
+		if OS.has_feature("editor") and dev_auto_login_on_autostart:
+			startup_mode = Role.CLIENT
+			startup_autostart = true
+		else:
+			startup_mode = Role.SERVER if OS.has_feature("editor") else Role.NONE
+			startup_autostart = false
 	session_controller.set_startup(startup_mode, startup_autostart)
 	session_controller.apply_startup_overrides()
 	session_controller.set_connection_defaults(host_input.text.strip_edges())
 	startup_mode = session_controller.get_startup_mode()
-	if not _uses_lobby_scene_flow():
+	if not _uses_lobby_scene_flow() and _allows_scene_network_bootstrap():
 		session_controller.apply_editor_localhost_override()
-	session_controller.configure_retry_hosts()
+	if _allows_scene_network_bootstrap():
+		session_controller.configure_retry_hosts()
 
 	_show_local_ip()
 	_append_log("Scene: %s | node=%s | lobby_mode=%s" % [scene_file_path, name, str(enable_lobby_scene_flow)])
@@ -69,7 +83,12 @@ func _ready() -> void:
 	session_controller.set_idle_state()
 	_append_log("Ready.")
 	_append_log("Boot config: mode=%s host=%s port=%d" % [_role_name(startup_mode), host_input.text, int(port_spin.value)])
-	session_controller.auto_boot_from_environment()
+	if _allows_scene_network_bootstrap():
+		session_controller.auto_boot_from_environment()
+	else:
+		_append_log("Gameplay scene network bootstrap disabled. Using existing session only.")
+	if role == Role.SERVER and not _uses_lobby_scene_flow() and multiplayer.is_server() and _should_spawn_local_server_player():
+		_server_spawn_peer_if_needed(multiplayer.get_unique_id(), 1)
 
 func _ensure_cursor_manager() -> void:
 	var tree := get_tree()
@@ -109,7 +128,8 @@ func _ensure_rpc_root_node_name() -> void:
 	print("[RPC ROOT] Renamed scene root %s -> %s (self_path=%s root_children=%s)" % [before, name, str(get_path()), str(child_names)])
 
 func _physics_process(delta: float) -> void:
-	session_controller.client_connect_watchdog_tick(delta)
+	if _allows_scene_network_bootstrap():
+		session_controller.client_connect_watchdog_tick(delta)
 
 	if role == Role.SERVER and multiplayer.multiplayer_peer != null:
 		snapshot_accumulator = combat_flow_service.server_simulate(delta, snapshot_accumulator)

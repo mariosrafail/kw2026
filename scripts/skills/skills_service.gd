@@ -6,7 +6,7 @@ const WARRIOR_EREBUS := "erebus"
 
 const OUTRAGE_BOMB_SKILL_SCRIPT := preload("res://scripts/skills/outrage_bomb_skill.gd")
 const EREBUS_IMMUNITY_SKILL_SCRIPT := preload("res://scripts/skills/erebus_immunity_skill.gd")
-const EREBUS_SHIELD_SKILL_SCRIPT := preload("res://scripts/skills/erebus_shield_skill.gd")
+const EREBUS_SHIELD_SKILL_SCRIPT := preload("res://scripts/warriors/skills/erebus_shield_skill.gd")
 
 var players: Dictionary = {}
 var multiplayer: MultiplayerAPI

@@ -25,6 +25,12 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_of5si")
+auth_require_login_on_startup = false
+dev_auto_login_on_autostart = true
+dev_auto_login_username = "mario"
+dev_auto_login_password = "1234"
+dev_auto_create_lobby_on_autostart = true
+dev_auto_create_lobby_name = "mario"
 
 [node name="Background" type="ColorRect" parent="."]
 visible = false

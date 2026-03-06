@@ -1,4 +1,4 @@
-﻿extends "res://scripts/app/runtime_shared.gd"
+extends "res://scripts/app/runtime_shared.gd"
 
 const GUN_BASE_POSITION := Vector2(6.0, 2.0)
 const AK47_GUN_FALLBACK_REGION := Rect2(31, 12, 50, 12)
@@ -344,6 +344,20 @@ func _return_to_lobby_scene(disconnect_session: bool = true) -> void:
 				session_controller.set_idle_state()
 	_request_lobby_scene_switch()
 
+func _return_to_menu_scene(disconnect_session: bool = true) -> void:
+	escape_return_pending = false
+	escape_return_nonce += 1
+	if disconnect_session and session_controller != null:
+		match role:
+			Role.SERVER:
+				session_controller.stop_server()
+			Role.CLIENT:
+				session_controller.disconnect_client()
+			_:
+				session_controller.close_peer()
+				session_controller.set_idle_state()
+	_request_menu_scene_switch()
+
 func _begin_escape_return_to_lobby_menu() -> void:
 	if escape_return_pending:
 		return
@@ -381,12 +395,19 @@ func _on_escape_leave_timeout(nonce: int) -> void:
 func _complete_escape_return_to_lobby_menu(nonce: int) -> void:
 	if not escape_return_pending or nonce != escape_return_nonce:
 		return
-	if _uses_lobby_scene_flow():
-		# In lobby scene flow we keep the network session alive and return to the lobby room scene.
-		escape_return_pending = false
-		_request_lobby_scene_switch()
+	if role == Role.CLIENT:
+		_return_to_menu_scene(true)
 		return
 	_return_to_lobby_scene(true)
+
+func _request_menu_scene_switch() -> void:
+	var menu_scene_path := _menu_scene_path()
+	if scene_file_path == menu_scene_path:
+		return
+	if pending_scene_switch == menu_scene_path:
+		return
+	pending_scene_switch = menu_scene_path
+	call_deferred("_deferred_scene_switch")
 
 func _request_lobby_scene_switch() -> void:
 	var lobby_scene_path := _lobby_scene_path()
@@ -398,10 +419,19 @@ func _request_lobby_scene_switch() -> void:
 	call_deferred("_deferred_scene_switch")
 
 func _lobby_scene_path() -> String:
-	var lobby_scene_path := str(ProjectSettings.get_setting("application/run/main_scene", "res://scenes/lobby.tscn")).strip_edges()
+	var explicit_lobby_scene := "res://scenes/lobby.tscn"
+	if ResourceLoader.exists(explicit_lobby_scene):
+		return explicit_lobby_scene
+	var lobby_scene_path := str(ProjectSettings.get_setting("application/run/main_scene", explicit_lobby_scene)).strip_edges()
 	if lobby_scene_path.is_empty():
-		lobby_scene_path = "res://scenes/lobby.tscn"
+		lobby_scene_path = explicit_lobby_scene
 	return lobby_scene_path
+
+func _menu_scene_path() -> String:
+	var configured := str(ProjectSettings.get_setting("application/run/main_scene", "res://scenes/ui/test_menu.tscn")).strip_edges()
+	if configured.is_empty():
+		configured = "res://scenes/ui/test_menu.tscn"
+	return configured
 
 func _server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 	_restore_peer_weapon_from_lobby_service(peer_id)
@@ -463,9 +493,10 @@ func _server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 func _server_send_lobby_list_to_peer(peer_id: int) -> void:
 	var entries := lobby_service.pack_lobby_list()
 	var packed_entries := map_flow_service.server_pack_lobby_entries(entries, map_catalog)
-	_rpc_lobby_list.rpc_id(peer_id, packed_entries, _peer_lobby(peer_id))
 	if peer_id == multiplayer.get_unique_id():
 		_rpc_lobby_list(packed_entries, _peer_lobby(peer_id))
+		return
+	_rpc_lobby_list.rpc_id(peer_id, packed_entries, _peer_lobby(peer_id))
 
 func _server_broadcast_lobby_list() -> void:
 	for peer_id in multiplayer.get_peers():
@@ -474,15 +505,17 @@ func _server_broadcast_lobby_list() -> void:
 		_server_send_lobby_list_to_peer(multiplayer.get_unique_id())
 
 func _server_send_lobby_action_result(peer_id: int, success: bool, message: String, active_lobby_id: int, map_id: String = "") -> void:
-	_rpc_lobby_action_result.rpc_id(peer_id, success, message, active_lobby_id, map_id, _uses_lobby_scene_flow())
 	if peer_id == multiplayer.get_unique_id():
 		_rpc_lobby_action_result(success, message, active_lobby_id, map_id, _uses_lobby_scene_flow())
+		return
+	_rpc_lobby_action_result.rpc_id(peer_id, success, message, active_lobby_id, map_id, _uses_lobby_scene_flow())
 
 func _send_scene_switch_rpc(peer_id: int, map_id: String) -> void:
 	var normalized_map := map_flow_service.normalize_map_id(map_catalog, map_id)
-	_rpc_scene_switch_to_map.rpc_id(peer_id, normalized_map)
 	if peer_id == multiplayer.get_unique_id():
 		_rpc_scene_switch_to_map(normalized_map)
+		return
+	_rpc_scene_switch_to_map.rpc_id(peer_id, normalized_map)
 
 func _try_switch_to_target_map_scene() -> void:
 	if not _uses_lobby_scene_flow():
@@ -525,6 +558,8 @@ func _deferred_scene_switch() -> void:
 		_append_log("Scene switch failed: %s" % error_string(err))
 
 func _send_spawn_player_rpc(target_peer_id: int, peer_id: int, spawn_position: Vector2, display_name: String) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	var warrior_id = _warrior_id_for_peer(peer_id)
 	print("[DBG SPAWN] Sending spawn RPC to peer %d for peer_id %d with warrior_id=%s (from peer_character_ids[%d]=%s)" % [target_peer_id, peer_id, warrior_id, peer_id, peer_character_ids.get(peer_id, "NOT SET")])
 	var skin_index: int = 0
@@ -551,15 +586,21 @@ func _send_despawn_player_rpc_to_peer(target_peer_id: int, peer_id: int) -> void
 	_rpc_despawn_player.rpc_id(target_peer_id, peer_id)
 
 func _send_sync_player_state_rpc(target_peer_id: int, peer_id: int, new_position: Vector2, new_velocity: Vector2, aim_angle: float, health: int) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_sync_player_state.rpc_id(target_peer_id, peer_id, new_position, new_velocity, aim_angle, health)
 
 func _send_sync_player_stats_rpc(target_peer_id: int, peer_id: int, kills: int, deaths: int) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_sync_player_stats.rpc_id(target_peer_id, peer_id, kills, deaths)
 
 func _send_input_rpc(axis: float, jump_pressed: bool, jump_held: bool, aim_world: Vector2, shoot_held: bool, boost_damage: bool, reported_rtt_ms: int) -> void:
 	_rpc_submit_input.rpc_id(1, axis, jump_pressed, jump_held, aim_world, shoot_held, boost_damage, reported_rtt_ms)
 
 func _send_player_ammo_rpc(target_peer_id: int, peer_id: int, ammo: int, is_reloading: bool) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_sync_player_ammo.rpc_id(target_peer_id, peer_id, ammo, is_reloading)
 
 func _send_reload_sfx_rpc(target_peer_id: int, peer_id: int, weapon_id: String) -> void:
@@ -886,3 +927,5 @@ func _role_name(value: int) -> String:
 			return "client"
 		_:
 			return "manual"
+
+

@@ -17,6 +17,8 @@ var auto_start_enabled := true
 var is_editor := false
 var first_private_ipv4 := ""
 var lobby_scene_mode_for_boot := false
+var disable_editor_localhost_override := false
+var disable_editor_retry_fallback := false
 
 var arg_mode_prefix := "--mode="
 var arg_host_prefix := "--host="
@@ -119,6 +121,8 @@ func apply_startup_overrides() -> void:
 func apply_editor_localhost_override() -> void:
 	if not is_editor:
 		return
+	if disable_editor_localhost_override:
+		return
 	if host_input == null:
 		return
 	if startup_mode == role_server:
@@ -132,27 +136,57 @@ func configure_retry_hosts() -> void:
 	if connect_retry == null or host_input == null:
 		return
 	# In editor, allow automatic fallback to localhost/private IP if the chosen host hangs (common when using a public IP on the same LAN).
-	var include_editor_fallback := is_editor
+	var include_editor_fallback := is_editor and not disable_editor_retry_fallback
 	connect_retry.configure(host_input.text, include_editor_fallback, first_private_ipv4, default_host)
 
 func start_server(port: int) -> void:
 	close_peer()
 	if multiplayer == null:
 		return
+	if port < 1 or port > 65535:
+		port = 8080
 
+	var target_port := port
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(port, max_clients)
+	var err := FAILED
+	var attempted_ports: Dictionary = {}
+	for step in range(0, 24):
+		var candidate_port := port + step
+		if candidate_port < 1 or candidate_port > 65535:
+			continue
+		attempted_ports[candidate_port] = true
+		var candidate_peer := ENetMultiplayerPeer.new()
+		err = candidate_peer.create_server(candidate_port, max_clients)
+		if err == OK:
+			peer = candidate_peer
+			target_port = candidate_port
+			break
 	if err != OK:
-		_append_log("Server error: %s" % error_string(err))
+		for fallback_port in [7777, 8000, 8080, 8090, 9000, 10000]:
+			var candidate_port := int(fallback_port)
+			if attempted_ports.has(candidate_port):
+				continue
+			var candidate_peer := ENetMultiplayerPeer.new()
+			err = candidate_peer.create_server(candidate_port, max_clients)
+			if err == OK:
+				peer = candidate_peer
+				target_port = candidate_port
+				break
+	if err != OK:
+		_append_log("Server error: %s (code=%d)" % [error_string(err), err])
 		_append_log("Tip: port %d may already be in use (for example by Docker server)." % port)
 		return
+	if target_port != port:
+		_append_log("Port %d unavailable. Server auto-switched to port %d." % [port, target_port])
+		if port_spin != null:
+			port_spin.value = target_port
 
 	multiplayer.multiplayer_peer = peer
 	_set_role(role_server)
 	_reset_runtime_state()
 	if status_label != null:
-		status_label.text = "Status: Server running on port %d" % port
-	_append_log("Server started on port %d." % port)
+		status_label.text = "Status: Server running on port %d" % target_port
+	_append_log("Server started on port %d." % target_port)
 	_refresh_ui()
 
 func start_client(host: String, port: int, reset_attempt_chain: bool = true, lobby_scene_mode: bool = false) -> void:
@@ -162,7 +196,7 @@ func start_client(host: String, port: int, reset_attempt_chain: bool = true, lob
 	if host.is_empty():
 		host = default_host
 	if connect_retry != null:
-		var include_editor_fallback := is_editor and not lobby_scene_mode
+		var include_editor_fallback := is_editor and not lobby_scene_mode and not disable_editor_retry_fallback
 		if reset_attempt_chain:
 			connect_retry.configure(host, include_editor_fallback, first_private_ipv4, default_host)
 		else:

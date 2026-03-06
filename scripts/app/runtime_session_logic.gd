@@ -2,16 +2,13 @@ extends "res://scripts/app/runtime_world_logic.gd"
 
 
 const PIXEL_FONT := preload("res://assets/fonts/kwfont.ttf")
+const RUNTIME_AUTH_FLOW_SCRIPT := preload("res://scripts/app/runtime_auth_flow.gd")
 
 var _pixel_popup_panel_stylebox: StyleBoxFlat = null
 var _pixel_popup_hover_stylebox: StyleBoxFlat = null
 var _pixel_popup_separator_stylebox: StyleBoxFlat = null
 var _pixel_empty_icon_texture: Texture2D = null
-
-const AUTH_SESSION_PATH := "user://auth_session.json"
-const AUTH_API_BASE_URL_SETTING := "kw/auth_api_base_url"
-const AUTH_PROFILE_SETTING := "kw/auth_profile"
-const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
+var _runtime_auth_flow = RUNTIME_AUTH_FLOW_SCRIPT.new()
 
 var _auth_inflight := false
 var _auth_pending_action := ""
@@ -20,11 +17,15 @@ var _auth_profile := "default"
 @export var auth_require_login_on_startup := true
 
 @export var dev_auto_login_on_autostart := false
+@export var dev_auto_login_username := ""
 @export var dev_auto_login_password := "test"
 @export var dev_auto_login_max_attempts := 3
+@export var dev_auto_create_lobby_on_autostart := false
+@export var dev_auto_create_lobby_name := ""
 
 var _dev_auto_login_active := false
 var _dev_auto_login_attempts := 0
+var _dev_auto_lobby_create_attempted := false
 
 var wallet_coins := 0
 var wallet_clk := 0
@@ -103,77 +104,46 @@ func _setup_ui_defaults() -> void:
 	_update_score_labels()
 
 func _setup_auth_flow() -> void:
-	if auth_panel == null:
-		return
-	_configure_auth_ui_for_login_only()
-	_resolve_auth_profile()
-
-	var session_path := _auth_session_path()
-	_append_log("[AUTH] profile=%s session file: %s (exists=%s)" % [_auth_profile, ProjectSettings.globalize_path(session_path), str(FileAccess.file_exists(session_path))])
-	_load_auth_session()
-	if auth_username_input != null and auth_username_input.text.strip_edges().is_empty() and not auth_username.strip_edges().is_empty():
-		auth_username_input.text = auth_username
-
-	if auth_require_login_on_startup:
-		if not auth_token.strip_edges().is_empty():
-			_append_log("[AUTH] Startup requires login. Ignoring stored session token.")
-		auth_token = ""
-		_show_auth_panel(true)
-		_set_auth_status("Auth: login required")
-		_set_auth_buttons_enabled(true)
-		return
-
-	if auth_token.strip_edges().is_empty():
-		if _try_dev_auto_login_if_needed():
-			return
-		_show_auth_panel(true)
-		_set_auth_status("Auth: login required")
-		_set_auth_buttons_enabled(true)
-		return
-	_auth_me()
+	_runtime_auth_flow.setup_auth_flow(self)
 
 func _configure_auth_ui_for_login_only() -> void:
-	if auth_register_button != null:
-		auth_register_button.visible = false
-		auth_register_button.disabled = true
-	if auth_login_button != null:
-		auth_login_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_runtime_auth_flow.configure_auth_ui_for_login_only(self)
 
 func _try_dev_auto_login_if_needed() -> bool:
 	if not dev_auto_login_on_autostart:
 		return false
-	if session_controller == null or not session_controller.is_auto_start_enabled():
-		return false
-	if auth_request == null or auth_username_input == null or auth_password_input == null:
+	if auth_request == null:
 		return false
 	if _auth_inflight:
 		return false
 	if _dev_auto_login_attempts >= maxi(1, dev_auto_login_max_attempts):
 		return false
 
-	var startup_mode := session_controller.get_startup_mode()
-	if startup_mode == Role.NONE:
-		return false
-
 	_dev_auto_login_active = true
 	_dev_auto_login_attempts += 1
-	var suffix := "%06d" % int(randi() % 1000000)
-	var username := ("auto_%s" % suffix).strip_edges()
+	var username := dev_auto_login_username.strip_edges()
+	if username.is_empty():
+		var suffix := "%06d" % int(randi() % 1000000)
+		username = ("auto_%s" % suffix).strip_edges()
 	var password := str(dev_auto_login_password)
 	if password.length() < 4:
 		password = "test"
 
-	auth_username_input.text = username
-	auth_password_input.text = password
+	if auth_username_input != null:
+		auth_username_input.text = username
+	if auth_password_input != null:
+		auth_password_input.text = password
 	_show_auth_panel(true)
-	_set_auth_status("Auth: auto-registering %s..." % username)
+	_set_auth_status("Auth: auto-login %s..." % username)
 	_set_auth_buttons_enabled(false)
-	call_deferred("_auth_submit", "register")
+	call_deferred("_auth_submit_credentials", "login", username, password)
 	return true
 
+func _ensure_auth_request_node() -> void:
+	_runtime_auth_flow.ensure_auth_request_node(self)
+
 func _show_auth_panel(show: bool) -> void:
-	if auth_panel != null:
-		auth_panel.visible = show
+	_runtime_auth_flow.show_auth_panel(self, show)
 	if lobby_panel != null:
 		lobby_panel.visible = not show
 	_show_esc_menu(false)
@@ -182,14 +152,10 @@ func _show_auth_panel(show: bool) -> void:
 		_set_loading(false)
 
 func _set_auth_status(text: String) -> void:
-	if auth_status_label != null:
-		auth_status_label.text = text
+	_runtime_auth_flow.set_auth_status(self, text)
 
 func _set_auth_buttons_enabled(enabled: bool) -> void:
-	if auth_login_button != null:
-		auth_login_button.disabled = not enabled
-	if auth_register_button != null:
-		auth_register_button.disabled = true
+	_runtime_auth_flow.set_auth_buttons_enabled(self, enabled)
 
 func _on_logout_pressed() -> void:
 	_logout_to_login()
@@ -265,143 +231,44 @@ func _toggle_escape_menu() -> void:
 	_show_esc_menu(not showing)
 
 func _auth_logout_best_effort() -> void:
-	if auth_request == null:
-		return
-	var token := auth_token.strip_edges()
-	if token.is_empty():
-		return
-	if _auth_inflight:
-		return
-	_auth_inflight = true
-	_auth_pending_action = "logout"
-	_auth_logout_token = token
-	var url := "%s/logout" % _auth_api_base_url()
-	var headers := PackedStringArray(["Authorization: Bearer %s" % token])
-	var err := auth_request.request(url, headers, HTTPClient.METHOD_POST, "")
-	if err != OK:
-		_auth_inflight = false
-		_auth_pending_action = ""
-		_auth_logout_token = ""
+	_runtime_auth_flow.auth_logout_best_effort(self)
 
 func _auth_api_base_url() -> String:
-	var configured := str(ProjectSettings.get_setting(AUTH_API_BASE_URL_SETTING, "http://127.0.0.1:8090")).strip_edges()
-	if configured.is_empty():
-		return "http://127.0.0.1:8090"
-	return configured.trim_suffix("/")
+	return _runtime_auth_flow.auth_api_base_url(self)
 
 func _load_auth_session() -> void:
-	var session_path := _auth_session_path()
-	if not FileAccess.file_exists(session_path):
-		auth_token = ""
-		auth_username = ""
-		return
-	var f := FileAccess.open(session_path, FileAccess.READ)
-	if f == null:
-		return
-	var parsed: Variant = JSON.parse_string(f.get_as_text())
-	if not (parsed is Dictionary):
-		return
-	var payload := parsed as Dictionary
-	auth_token = str(payload.get("token", "")).strip_edges()
-	auth_username = str(payload.get("username", "")).strip_edges()
+	_runtime_auth_flow.load_auth_session(self)
 
 func _save_auth_session() -> void:
-	var payload := {
-		"token": auth_token,
-		"username": auth_username
-	}
-	var f := FileAccess.open(_auth_session_path(), FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_string(JSON.stringify(payload))
+	_runtime_auth_flow.save_auth_session(self)
 
 func _clear_auth_session() -> void:
-	auth_token = ""
-	auth_username = ""
-	var session_path := _auth_session_path()
-	if FileAccess.file_exists(session_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(session_path))
+	_runtime_auth_flow.clear_auth_session(self)
 
 func _resolve_auth_profile() -> void:
-	var configured := str(ProjectSettings.get_setting(AUTH_PROFILE_SETTING, "default")).strip_edges()
-	if not configured.is_empty():
-		_auth_profile = configured
-	for raw_arg in OS.get_cmdline_args():
-		var arg := str(raw_arg)
-		if arg.begins_with(AUTH_PROFILE_ARG_PREFIX):
-			var value := arg.substr(AUTH_PROFILE_ARG_PREFIX.length()).strip_edges()
-			if not value.is_empty():
-				_auth_profile = value
-				break
-	_auth_profile = _auth_profile.strip_edges()
-	if _auth_profile.is_empty():
-		_auth_profile = "default"
+	_runtime_auth_flow.resolve_auth_profile(self)
 
 func _auth_session_path() -> String:
-	if _auth_profile == "default":
-		return AUTH_SESSION_PATH
-	return "user://auth_session_%s.json" % _auth_profile
+	return _runtime_auth_flow.session_path(self)
 
 
 func _auth_me() -> void:
-	if _auth_inflight:
-		return
-	if auth_request == null:
-		_show_auth_panel(true)
-		_set_auth_status("Auth error: missing HTTPRequest")
-		return
-	_auth_inflight = true
-	_auth_pending_action = "me"
-	_set_auth_status("Auth: checking session...")
-	_set_loading(true, "LOADING...")
-	var url := "%s/me" % _auth_api_base_url()
-	var headers := PackedStringArray()
-	if not auth_token.strip_edges().is_empty():
-		headers.append("Authorization: Bearer %s" % auth_token)
-	var err := auth_request.request(url, headers, HTTPClient.METHOD_GET)
-	if err != OK:
-		_auth_inflight = false
-		_auth_pending_action = ""
-		_show_auth_panel(true)
-		_set_auth_status("Auth error: request failed (%s)" % error_string(err))
-		_set_loading(false)
+	_runtime_auth_flow.auth_me(self)
 
 func _on_auth_login_pressed() -> void:
-	_auth_submit("login")
+	_runtime_auth_flow.auth_submit(self, "login")
 
 func _on_auth_register_pressed() -> void:
 	_set_auth_status("Auth: register disabled")
 
 func _auth_submit(action: String) -> void:
-	if _auth_inflight:
-		return
-	if auth_request == null:
-		_set_auth_status("Auth error: missing HTTPRequest")
-		return
-	if auth_username_input == null or auth_password_input == null:
-		_set_auth_status("Auth error: missing UI")
-		return
+	_runtime_auth_flow.auth_submit(self, action)
 
-	var username := auth_username_input.text.strip_edges()
-	var password := auth_password_input.text
-	if username.is_empty() or password.is_empty():
-		_set_auth_status("Auth: enter username + password")
-		return
+func _auth_submit_credentials(action: String, username: String, password: String) -> void:
+	_runtime_auth_flow.auth_submit_credentials(self, action, username, password)
 
-	_auth_inflight = true
-	_auth_pending_action = action
-	_set_auth_status("Auth: %s..." % action)
-	_set_loading(true, "LOADING...")
-
-	var url := "%s/%s" % [_auth_api_base_url(), action]
-	var headers := PackedStringArray(["Content-Type: application/json"])
-	var body := JSON.stringify({"username": username, "password": password})
-	var err := auth_request.request(url, headers, HTTPClient.METHOD_POST, body)
-	if err != OK:
-		_auth_inflight = false
-		_auth_pending_action = ""
-		_set_auth_status("Auth error: request failed (%s)" % error_string(err))
-		_set_loading(false)
+func _auth_input_username() -> String:
+	return _runtime_auth_flow.auth_input_username(self)
 
 func _on_auth_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	var action := _auth_pending_action
@@ -434,6 +301,16 @@ func _on_auth_request_completed(result: int, response_code: int, _headers: Packe
 		return
 
 	if response_code < 200 or response_code >= 300:
+		if _dev_auto_login_active and action == "login" and (response_code == 401 or response_code == 404):
+			var login_username := _auth_input_username()
+			_append_log("[AUTH] Auto-login failed, trying auto-register for %s" % login_username)
+			_auth_submit_credentials("register", login_username, str(dev_auto_login_password))
+			return
+		if _dev_auto_login_active and action == "register" and response_code == 409 and not dev_auto_login_username.strip_edges().is_empty():
+			var fixed_username := _auth_input_username()
+			_append_log("[AUTH] Auto-register conflict, retrying login for %s" % fixed_username)
+			_auth_submit_credentials("login", fixed_username, str(dev_auto_login_password))
+			return
 		if _dev_auto_login_active and action == "register" and response_code == 409 and _dev_auto_login_attempts < maxi(1, dev_auto_login_max_attempts):
 			_append_log("[AUTH] Auto-register conflict, retrying with a different username.")
 			_dev_auto_login_active = false
@@ -520,7 +397,83 @@ func _after_auth_success() -> void:
 	_refresh_lobby_buttons()
 	_update_ui_visibility()
 	_update_peer_labels()
+	_ensure_lobby_connection_after_auth()
+	if not _has_active_runtime_peer():
+		_maybe_dev_auto_create_lobby()
 	_api_profile()
+
+func _ensure_lobby_connection_after_auth() -> void:
+	if not _uses_lobby_scene_flow():
+		if _has_active_runtime_peer():
+			return
+		if _should_dev_auto_create_lobby_on_autostart():
+			session_controller.start_client(host_input.text.strip_edges(), int(port_spin.value), true, false)
+		return
+	if session_controller == null:
+		return
+	if multiplayer != null and multiplayer.multiplayer_peer != null and role == Role.CLIENT:
+		var status := multiplayer.multiplayer_peer.get_connection_status()
+		if status == MultiplayerPeer.CONNECTION_CONNECTED:
+			if not auth_username.strip_edges().is_empty():
+				_rpc_lobby_set_display_name.rpc_id(1, auth_username)
+			_request_lobby_list()
+			return
+		if status == MultiplayerPeer.CONNECTION_CONNECTING:
+			_set_lobby_status("Connecting to server...")
+			return
+	session_controller.start_client(host_input.text.strip_edges(), int(port_spin.value), true, true)
+
+func _has_active_runtime_peer() -> bool:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return false
+	return multiplayer.is_server() or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_DISCONNECTED
+
+func _should_dev_auto_create_lobby_on_autostart() -> bool:
+	return OS.has_feature("editor") and dev_auto_login_on_autostart and dev_auto_create_lobby_on_autostart and not _uses_lobby_scene_flow()
+
+func _maybe_dev_auto_create_lobby() -> void:
+	if not _should_dev_auto_create_lobby_on_autostart():
+		return
+	if _dev_auto_lobby_create_attempted:
+		return
+	if not _is_client_connected():
+		return
+	if client_lobby_id > 0:
+		_dev_auto_lobby_create_attempted = true
+		return
+	call_deferred("_dev_auto_create_lobby_if_ready")
+
+func _dev_auto_create_lobby_if_ready() -> void:
+	if not _should_dev_auto_create_lobby_on_autostart():
+		return
+	if _dev_auto_lobby_create_attempted:
+		return
+	if not _is_client_connected():
+		return
+	if lobby_auto_action_inflight or client_lobby_id > 0:
+		return
+	selected_map_id = MAP_ID_CLASSIC
+	client_target_map_id = MAP_ID_CLASSIC
+	_persist_local_weapon_selection()
+	_persist_local_character_selection()
+	_persist_local_outage_skin_if_needed()
+	if not auth_username.strip_edges().is_empty():
+		_rpc_lobby_set_display_name.rpc_id(1, auth_username)
+	var lobby_name := dev_auto_create_lobby_name.strip_edges()
+	if lobby_name.is_empty():
+		lobby_name = "%s lobby" % (auth_username if not auth_username.strip_edges().is_empty() else "mario")
+	lobby_auto_action_inflight = true
+	_dev_auto_lobby_create_attempted = true
+	_refresh_lobby_buttons()
+	_set_lobby_status("Creating dev lobby...")
+	var payload := map_flow_service.encode_create_lobby_payload(
+		map_catalog,
+		Callable(self, "_normalize_weapon_id"),
+		selected_weapon_id,
+		selected_map_id,
+		selected_character_id
+	)
+	_rpc_lobby_create.rpc_id(1, lobby_name, payload)
 
 func _api_profile() -> void:
 	if _auth_inflight:
@@ -775,7 +728,11 @@ func _on_connected_to_server() -> void:
 	if _uses_lobby_scene_flow() and not auth_username.strip_edges().is_empty():
 		_rpc_lobby_set_display_name.rpc_id(1, auth_username)
 	if not _uses_lobby_scene_flow():
-		_request_spawn_from_server()
+		if _should_dev_auto_create_lobby_on_autostart():
+			_maybe_dev_auto_create_lobby()
+		else:
+			_request_spawn_from_server()
+	_maybe_dev_auto_create_lobby()
 
 func _on_connection_failed() -> void:
 	session_controller.on_connection_failed(get_tree(), _uses_lobby_scene_flow())
@@ -1082,3 +1039,4 @@ func _pixel_empty_icon() -> Texture2D:
 	img.fill(Color(0, 0, 0, 0))
 	_pixel_empty_icon_texture = ImageTexture.create_from_image(img)
 	return _pixel_empty_icon_texture
+
