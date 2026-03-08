@@ -3,6 +3,10 @@ extends Control
 var _make_button: Callable
 var _set_weapon_icon: Callable
 var _apply_weapon_skin: Callable
+var _center_pivot_cb: Callable
+var _hover_pop_cb: Callable
+var _press_anim_cb: Callable
+var _release_to_hover_cb: Callable
 
 var _panel: Control
 var _title_label: Label
@@ -14,10 +18,72 @@ var _cancel_button: Button
 
 var _on_confirm: Callable = Callable()
 
-func configure(make_button: Callable, set_weapon_icon: Callable, apply_weapon_skin: Callable) -> void:
+func _make_menu_panel_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.content_margin_left = 14.0
+	sb.content_margin_top = 12.0
+	sb.content_margin_right = 14.0
+	sb.content_margin_bottom = 12.0
+	sb.bg_color = Color(0.12, 0.11, 0.16, 0.98)
+	sb.border_width_left = 4
+	sb.border_width_top = 4
+	sb.border_width_right = 4
+	sb.border_width_bottom = 4
+	sb.border_color = Color(0.06, 0.05, 0.08, 1)
+	sb.shadow_color = Color(0, 0, 0, 0.45)
+	sb.shadow_size = 6
+	return sb
+
+func _make_menu_button_hover_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.content_margin_left = 12.0
+	sb.content_margin_top = 7.0
+	sb.content_margin_right = 12.0
+	sb.content_margin_bottom = 7.0
+	sb.bg_color = Color(0.28, 0.24, 0.38, 1)
+	sb.border_width_left = 3
+	sb.border_width_top = 3
+	sb.border_width_right = 3
+	sb.border_width_bottom = 3
+	sb.border_color = Color(0.9, 0.74, 0.27, 1)
+	sb.shadow_color = Color(0, 0, 0, 0.45)
+	sb.shadow_size = 3
+	return sb
+
+func _normalize_confirm_button_theme(btn: Button) -> void:
+	if btn == null:
+		return
+	btn.add_theme_color_override("font_color", Color(0.92, 0.95, 0.98, 1))
+	btn.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
+	btn.add_theme_constant_override("outline_size", 0)
+	var hover_style := _make_menu_button_hover_style()
+	btn.add_theme_stylebox_override("hover", hover_style)
+	btn.add_theme_stylebox_override("focus", hover_style.duplicate())
+
+func _install_button_anim(btn: Button) -> void:
+	if btn == null:
+		return
+	if _center_pivot_cb.is_valid():
+		_center_pivot_cb.call(btn)
+	if _hover_pop_cb.is_valid():
+		_hover_pop_cb.call(btn)
+	btn.button_down.connect(func() -> void:
+		if _press_anim_cb.is_valid():
+			_press_anim_cb.call(btn, 0.06)
+	)
+	btn.button_up.connect(func() -> void:
+		if _release_to_hover_cb.is_valid():
+			_release_to_hover_cb.call(btn, btn)
+	)
+
+func configure(make_button: Callable, set_weapon_icon: Callable, apply_weapon_skin: Callable, center_pivot: Callable = Callable(), hover_pop: Callable = Callable(), press_anim: Callable = Callable(), release_to_hover: Callable = Callable()) -> void:
 	_make_button = make_button
 	_set_weapon_icon = set_weapon_icon
 	_apply_weapon_skin = apply_weapon_skin
+	_center_pivot_cb = center_pivot
+	_hover_pop_cb = hover_pop
+	_press_anim_cb = press_anim
+	_release_to_hover_cb = release_to_hover
 
 func _ready() -> void:
 	visible = false
@@ -43,50 +109,44 @@ func _ready() -> void:
 
 	var panel := PanelContainer.new()
 	panel.name = "Panel"
-	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size = Vector2.ZERO
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -270.0
+	panel.offset_top = -82.0
+	panel.offset_right = 270.0
+	panel.offset_bottom = 82.0
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel = panel
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.08, 0.1, 0.98)
-	sb.border_color = Color(0.22, 0.24, 0.28, 1)
-	sb.border_width_left = 3
-	sb.border_width_right = 3
-	sb.border_width_top = 3
-	sb.border_width_bottom = 3
-	sb.corner_radius_top_left = 10
-	sb.corner_radius_top_right = 10
-	sb.corner_radius_bottom_left = 10
-	sb.corner_radius_bottom_right = 10
-	panel.add_theme_stylebox_override("panel", sb)
+	panel.add_theme_stylebox_override("panel", _make_menu_panel_style())
 	add_child(panel)
 
 	var margin := MarginContainer.new()
 	margin.name = "Margin"
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_bottom", 16)
+	margin.add_theme_constant_override("margin_left", 14)
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
 	panel.add_child(margin)
 
 	var vbox := VBoxContainer.new()
 	vbox.name = "VBox"
-	vbox.add_theme_constant_override("separation", 10)
+	vbox.add_theme_constant_override("separation", 8)
 	margin.add_child(vbox)
 
 	_title_label = Label.new()
 	_title_label.name = "Title"
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_label.add_theme_font_size_override("font_size", 20)
+	_title_label.add_theme_font_size_override("font_size", 16)
 	_title_label.text = "Confirm"
 	vbox.add_child(_title_label)
 
 	_weapon_slot = Control.new()
 	_weapon_slot.name = "WeaponSlot"
-	_weapon_slot.custom_minimum_size = Vector2(0, 140)
+	_weapon_slot.visible = false
+	_weapon_slot.custom_minimum_size = Vector2(0, 0)
 	_weapon_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_weapon_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(_weapon_slot)
@@ -123,7 +183,7 @@ func _ready() -> void:
 	_text_label.name = "Text"
 	_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_text_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_text_label.add_theme_font_size_override("font_size", 14)
+	_text_label.add_theme_font_size_override("font_size", 12)
 	_text_label.text = ""
 	vbox.add_child(_text_label)
 
@@ -138,7 +198,9 @@ func _ready() -> void:
 	_ok_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ok_button.text = "OK"
 	_ok_button.add_theme_font_size_override("font_size", 14)
-	_ok_button.custom_minimum_size = Vector2(0, 42)
+	_ok_button.custom_minimum_size = Vector2(0, 36)
+	_normalize_confirm_button_theme(_ok_button)
+	_install_button_anim(_ok_button)
 	_ok_button.pressed.connect(_confirm)
 	row.add_child(_ok_button)
 
@@ -147,7 +209,9 @@ func _ready() -> void:
 	_cancel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cancel_button.text = "CANCEL"
 	_cancel_button.add_theme_font_size_override("font_size", 14)
-	_cancel_button.custom_minimum_size = Vector2(0, 42)
+	_cancel_button.custom_minimum_size = Vector2(0, 36)
+	_normalize_confirm_button_theme(_cancel_button)
+	_install_button_anim(_cancel_button)
 	_cancel_button.pressed.connect(_cancel)
 	row.add_child(_cancel_button)
 

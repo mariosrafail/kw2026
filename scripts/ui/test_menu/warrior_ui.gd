@@ -300,16 +300,17 @@ func apply_warrior_menu_preview(player: Node, warrior_id: String, skin_index: in
 	var visual_root := player.get_node_or_null("VisualRoot") as Node
 	if visual_root == null:
 		return
+	for child in visual_root.get_children():
+		if not (child is CanvasItem):
+			continue
+		var canvas_item := child as CanvasItem
+		canvas_item.visible = false
 	var legacy_body := visual_root.get_node_or_null("Sprite2D") as Sprite2D
 	if legacy_body != null:
 		legacy_body.visible = true
 		legacy_body.texture = preview_tex
 		legacy_body.region_enabled = false
 		legacy_body.modulate = Color(1, 1, 1, 1)
-	for node_name in ["head", "torso", "leg1", "leg2"]:
-		var sprite := visual_root.get_node_or_null(node_name) as CanvasItem
-		if sprite != null:
-			sprite.visible = false
 
 func apply_warrior_game_visual(player: Node, warrior_id: String, skin_index: int, fallback_heads: Texture2D = null, fallback_torso: Texture2D = null, fallback_legs: Texture2D = null) -> void:
 	if player == null:

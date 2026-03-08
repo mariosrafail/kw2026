@@ -746,6 +746,8 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 				from_api.append(wid)
 		if not from_api.has(WEAPON_UZI):
 			from_api.append(WEAPON_UZI)
+		if not from_api.has(WEAPON_GRENADE):
+			from_api.append(WEAPON_GRENADE)
 		owned_weapons = from_api
 
 	if profile.has("owned_weapon_skins_by_weapon"):
@@ -1511,7 +1513,15 @@ func _init_confirm_dialog() -> void:
 	var overlay := CONFIRM_OVERLAY_SCRIPT.new()
 	overlay.name = "ConfirmOverlay"
 	add_child(overlay)
-	overlay.configure(Callable(self, "_make_shop_button"), Callable(self, "_set_weapon_icon_sprite"), Callable(self, "_apply_weapon_skin_visual"))
+	overlay.configure(
+		Callable(self, "_make_shop_button"),
+		Callable(self, "_set_weapon_icon_sprite"),
+		Callable(self, "_apply_weapon_skin_visual"),
+		Callable(self, "_center_pivot"),
+		Callable(self, "_add_hover_pop"),
+		Callable(self, "_button_press_anim"),
+		Callable(self, "_release_to_hover")
+	)
 	_confirm_overlay_ui = overlay
 
 func _ask_confirm(title: String, text: String, on_confirm: Callable, weapon_id: String = "", skin_index: int = 0) -> void:
@@ -2212,7 +2222,7 @@ func _load_state_or_defaults() -> void:
 		"equipped_warrior_skin_by_warrior": default_equipped_warrior_skins,
 		"selected_warrior_id": default_warrior,
 		"selected_warrior_skin": 0,
-		"owned_weapons": [WEAPON_UZI],
+		"owned_weapons": [WEAPON_UZI, WEAPON_GRENADE],
 		"owned_weapon_skins_by_weapon": {WEAPON_UZI: [0], WEAPON_GRENADE: [0], WEAPON_AK47: [0], WEAPON_SHOTGUN: [0]},
 		"equipped_weapon_skin_by_weapon": {WEAPON_UZI: 0, WEAPON_GRENADE: 0, WEAPON_AK47: 0, WEAPON_SHOTGUN: 0},
 		"selected_weapon_id": WEAPON_UZI,
@@ -2254,6 +2264,8 @@ func _load_state_or_defaults() -> void:
 	owned_weapons = filtered_owned
 	if not owned_weapons.has(WEAPON_UZI):
 		owned_weapons.append(WEAPON_UZI)
+	if not owned_weapons.has(WEAPON_GRENADE):
+		owned_weapons.append(WEAPON_GRENADE)
 	if not owned_warriors.has(default_warrior):
 		owned_warriors.append(default_warrior)
 

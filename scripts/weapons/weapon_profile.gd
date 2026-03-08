@@ -1,6 +1,9 @@
 extends RefCounted
 class_name WeaponProfile
 
+func weapon_id() -> String:
+	return weapon_name().to_lower()
+
 func weapon_name() -> String:
 	return "Weapon"
 
@@ -27,6 +30,9 @@ func projectile_hit_radius() -> float:
 
 func projectile_lifetime() -> float:
 	return 2.0
+
+func explosion_radius() -> float:
+	return 0.0
 
 func projectile_visual_config() -> Dictionary:
 	return {
@@ -63,3 +69,20 @@ func build_server_shot(
 		"trail_origin": player.global_position,
 		"shot_damage": base_damage()
 	}
+
+func build_server_shots(
+	player: NetPlayer,
+	input_state: Dictionary,
+	next_projectile_id: int,
+	max_reported_rtt_ms: int,
+	world_2d: World2D
+) -> Array:
+	return [
+		build_server_shot(
+			player,
+			input_state,
+			next_projectile_id,
+			max_reported_rtt_ms,
+			world_2d
+		)
+	]

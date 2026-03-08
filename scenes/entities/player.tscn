@@ -11,6 +11,25 @@
 [ext_resource type="AudioStream" uid="uid://cgpcofbhh12qk" path="res://assets/sounds/sfx/guns/ak47/ak_shoot.wav" id="5_ifk0o"]
 [ext_resource type="AudioStream" uid="uid://bfw70vkoi8g3d" path="res://assets/sounds/sfx/general/death.wav" id="6_6oc35"]
 [ext_resource type="AudioStream" uid="uid://df6ui2tae54xb" path="res://assets/sounds/sfx/guns/ak47/ak_reload.wav" id="7_ak_reload"]
+[ext_resource type="Shader" uid="uid://buliy1pdbhcfq" path="res://assets/shaders/skill_cooldown_radial.gdshader" id="8_skill_radial"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_q_skill"]
+shader = ExtResource("8_skill_radial")
+shader_parameter/progress = 1.0
+shader_parameter/fill_color = Color(0.95, 0.76, 0.2, 0.95)
+shader_parameter/bg_color = Color(0.06, 0.08, 0.12, 0.85)
+shader_parameter/inner_radius = 0.52
+shader_parameter/outer_radius = 0.95
+shader_parameter/start_angle_deg = 270.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_e_skill"]
+shader = ExtResource("8_skill_radial")
+shader_parameter/progress = 1.0
+shader_parameter/fill_color = Color(0.24, 0.8, 0.94, 0.95)
+shader_parameter/bg_color = Color(0.06, 0.08, 0.12, 0.85)
+shader_parameter/inner_radius = 0.52
+shader_parameter/outer_radius = 0.95
+shader_parameter/start_angle_deg = 270.0
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_0vb8o"]
 radius = 6.0
@@ -25,7 +44,7 @@ script = ExtResource("1_blu24")
 [node name="VisualRoot" type="Node2D" parent="." unique_id=2029833284]
 
 [node name="HpBackground" type="Sprite2D" parent="VisualRoot" unique_id=1175880730]
-position = Vector2(4, -31)
+position = Vector2(4, -41)
 texture = ExtResource("2_73kkf")
 
 [node name="HpGreen" type="Sprite2D" parent="VisualRoot/HpBackground" unique_id=1645360780]
@@ -38,7 +57,7 @@ region_rect = Rect2(0, 0, 73, 11)
 [node name="head" type="Sprite2D" parent="VisualRoot" unique_id=975497308]
 texture_filter = 1
 position = Vector2(8, -14)
-scale = Vector2(1.8, 1.8)
+scale = Vector2(1.5, 1.5)
 texture = ExtResource("2_b6tgf")
 region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
@@ -108,19 +127,36 @@ horizontal_alignment = 1
 z_index = 2
 texture_filter = 1
 offset_left = -43.0
-offset_top = -37.0
+offset_top = -47.0
 offset_right = -1.0
-offset_bottom = -23.0
+offset_bottom = -33.0
 theme_override_colors/font_color = Color(1, 0.87451, 0.176471, 1)
 theme_override_fonts/font = ExtResource("3_u0ukb")
 theme_override_font_sizes/font_size = 10
 text = "25"
 
+[node name="SkillBars" type="Node2D" parent="VisualRoot" unique_id=115049432]
+z_index = 3
+position = Vector2(-21, -66)
+
+[node name="QDial" type="ColorRect" parent="VisualRoot/SkillBars" unique_id=268126179]
+material = SubResource("ShaderMaterial_q_skill")
+offset_top = 15.0
+offset_right = 6.0
+offset_bottom = 21.0
+
+[node name="EDial" type="ColorRect" parent="VisualRoot/SkillBars" unique_id=1181482973]
+material = SubResource("ShaderMaterial_e_skill")
+offset_left = 55.0
+offset_top = 15.0
+offset_right = 61.0
+offset_bottom = 21.0
+
 [node name="LevelLabel" type="Label" parent="VisualRoot" unique_id=339031901]
 offset_left = -30.0
-offset_top = -36.0
+offset_top = -46.0
 offset_right = 10.0
-offset_bottom = -13.0
+offset_bottom = -23.0
 theme_override_fonts/font = ExtResource("3_u0ukb")
 theme_override_font_sizes/font_size = 7
 text = "99"
@@ -128,13 +164,12 @@ text = "99"
 [node name="NameLabel" type="Label" parent="VisualRoot" unique_id=570939750]
 z_index = 2
 texture_filter = 1
-offset_left = -35.0
-offset_top = -46.0
-offset_right = 53.0
-offset_bottom = -34.0
+offset_left = -14.0
+offset_top = -53.0
+offset_right = 34.0
+offset_bottom = -42.0
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
-theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
-theme_override_constants/outline_size = 1
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_fonts/font = ExtResource("3_u0ukb")
 theme_override_font_sizes/font_size = 9
 text = "Marios"

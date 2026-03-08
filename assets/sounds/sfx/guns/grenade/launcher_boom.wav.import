@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://cfc4r6ivdsnb4"
-path="res://.godot/imported/launcher_boom.wav-f86e96a63c319a8f4ce04466e3dadd70.sample"
+path="res://.godot/imported/launcher_boom.wav-2ab4a1cfc3d58bb992b840f5d1e92957.sample"
 
 [deps]
 
-source_file="res://assets/sounds/sfx/guns/launcher/launcher_boom.wav"
-dest_files=["res://.godot/imported/launcher_boom.wav-f86e96a63c319a8f4ce04466e3dadd70.sample"]
+source_file="res://assets/sounds/sfx/guns/grenade/launcher_boom.wav"
+dest_files=["res://.godot/imported/launcher_boom.wav-2ab4a1cfc3d58bb992b840f5d1e92957.sample"]
 
 [params]
 

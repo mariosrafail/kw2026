@@ -14,6 +14,8 @@ var get_projectile_cb: Callable = Callable()
 var get_projectile_damage_cb: Callable = Callable()
 var play_death_sfx_local_cb: Callable = Callable()
 var send_play_death_sfx_cb: Callable = Callable()
+var spawn_blood_particles_local_cb: Callable = Callable()
+var send_spawn_blood_particles_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -28,6 +30,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	get_projectile_damage_cb = callbacks.get("get_projectile_damage", Callable()) as Callable
 	play_death_sfx_local_cb = callbacks.get("play_death_sfx_local", Callable()) as Callable
 	send_play_death_sfx_cb = callbacks.get("send_play_death_sfx", Callable()) as Callable
+	spawn_blood_particles_local_cb = callbacks.get("spawn_blood_particles_local", Callable()) as Callable
+	send_spawn_blood_particles_cb = callbacks.get("send_spawn_blood_particles", Callable()) as Callable
 
 	player_history_ms = int(config.get("player_history_ms", player_history_ms))
 
@@ -140,9 +144,9 @@ func record_player_history(peer_id: int, position: Vector2) -> void:
 		history.remove_at(0)
 	player_history[peer_id] = history
 
-func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, base_damage: int) -> void:
+func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, base_damage: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
 	if target_player == null:
-		return
+		return 0
 
 	var attacker_peer_id := -1
 	var projectile: NetProjectile = null
@@ -155,12 +159,21 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 	if get_projectile_damage_cb.is_valid():
 		shot_damage = int(get_projectile_damage_cb.call(projectile_id, base_damage))
 
-	var remaining_health := target_player.apply_damage(shot_damage)
+	var remaining_health := target_player.apply_damage(shot_damage, incoming_velocity)
 	var target_lobby_id := _peer_lobby(target_peer_id)
 	if remaining_health <= 0:
 		if register_kill_death_cb.is_valid():
 			register_kill_death_cb.call(attacker_peer_id, target_peer_id)
 		var death_position := target_player.global_position
+		var death_blood_color := _target_blood_color(target_player)
+		var death_blood_velocity := incoming_velocity
+		if death_blood_velocity.length_squared() <= 0.0001:
+			death_blood_velocity = Vector2.UP * -120.0
+		if spawn_blood_particles_local_cb.is_valid():
+			spawn_blood_particles_local_cb.call(death_position, death_blood_velocity, death_blood_color, 10.0)
+		if send_spawn_blood_particles_cb.is_valid():
+			for member_value in _lobby_members(target_lobby_id):
+				send_spawn_blood_particles_cb.call(int(member_value), death_position, death_blood_velocity, death_blood_color, 10.0)
 		if play_death_sfx_local_cb.is_valid():
 			play_death_sfx_local_cb.call(death_position)
 		if send_play_death_sfx_cb.is_valid():
@@ -171,17 +184,32 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 
 	if server_broadcast_player_state_cb.is_valid():
 		server_broadcast_player_state_cb.call(target_peer_id, target_player)
+	return remaining_health
 
-func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, target_player: NetPlayer, damage: int) -> void:
+func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, target_player: NetPlayer, damage: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
 	if target_player == null:
-		return
+		return 0
 	var applied_damage := maxi(0, damage)
-	var remaining_health := target_player.apply_damage(applied_damage)
+	var resolved_incoming_velocity := incoming_velocity
+	if resolved_incoming_velocity.length_squared() <= 0.0001 and attacker_peer_id > 0:
+		var attacker_player := players.get(attacker_peer_id, null) as NetPlayer
+		if attacker_player != null:
+			resolved_incoming_velocity = target_player.global_position - attacker_player.global_position
+	var remaining_health := target_player.apply_damage(applied_damage, resolved_incoming_velocity)
 	var target_lobby_id := _peer_lobby(target_peer_id)
 	if remaining_health <= 0:
 		if register_kill_death_cb.is_valid():
 			register_kill_death_cb.call(attacker_peer_id, target_peer_id)
 		var death_position := target_player.global_position
+		var death_blood_color := _target_blood_color(target_player)
+		var death_blood_velocity := resolved_incoming_velocity
+		if death_blood_velocity.length_squared() <= 0.0001:
+			death_blood_velocity = Vector2.UP * -120.0
+		if spawn_blood_particles_local_cb.is_valid():
+			spawn_blood_particles_local_cb.call(death_position, death_blood_velocity, death_blood_color, 10.0)
+		if send_spawn_blood_particles_cb.is_valid():
+			for member_value in _lobby_members(target_lobby_id):
+				send_spawn_blood_particles_cb.call(int(member_value), death_position, death_blood_velocity, death_blood_color, 10.0)
 		if play_death_sfx_local_cb.is_valid():
 			play_death_sfx_local_cb.call(death_position)
 		if send_play_death_sfx_cb.is_valid():
@@ -191,6 +219,7 @@ func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, targ
 			server_respawn_player_cb.call(target_peer_id, target_player)
 	if server_broadcast_player_state_cb.is_valid():
 		server_broadcast_player_state_cb.call(target_peer_id, target_player)
+	return remaining_health
 
 func _peer_lobby(peer_id: int) -> int:
 	if get_peer_lobby_cb.is_valid():
@@ -201,3 +230,10 @@ func _lobby_members(lobby_id: int) -> Array:
 	if get_lobby_members_cb.is_valid():
 		return get_lobby_members_cb.call(lobby_id) as Array
 	return []
+
+func _target_blood_color(target_player: NetPlayer) -> Color:
+	if target_player != null and target_player.has_method("get_torso_dominant_color"):
+		var color_value: Variant = target_player.call("get_torso_dominant_color")
+		if color_value is Color:
+			return color_value as Color
+	return Color(0.98, 0.02, 0.07, 1.0)

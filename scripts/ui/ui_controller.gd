@@ -127,8 +127,10 @@ func set_status_text(text: String) -> void:
 
 func update_skill_cooldowns(q_text: String, e_text: String) -> void:
 	if cooldown_q_label != null:
+		cooldown_q_label.visible = false
 		cooldown_q_label.text = q_text
 	if cooldown_e_label != null:
+		cooldown_e_label.visible = false
 		cooldown_e_label.text = e_text
 
 func update_scoreboard_label(player_stats: Dictionary, player_display_names: Dictionary) -> void:

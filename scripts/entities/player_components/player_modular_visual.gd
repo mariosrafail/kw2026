@@ -14,6 +14,7 @@ const OUTRAGE_WARRIOR_COLUMN := 1
 const EREBUS_WARRIOR_COLUMN := 2
 const TASKO_WARRIOR_COLUMN := 3
 const WARRIOR_FRAME_OFFSET_X := 64
+const SYNC_POSE_LERP_SPEED := 18.0
 
 const PART_TEXTURE_PATHS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -50,17 +51,20 @@ var _base_positions: Dictionary = {}
 var _walk_phase := 0.0
 var _goofy_seed := 0.0
 var _facing_sign := 1.0
+var _leg_facing_sign := 1.0
 var _anim_time := 0.0
 var _air_blend := 0.0
 var _move_blend := 0.0
-var _landing_impulse := 0.0
-var _stop_impulse := 0.0
 var _was_on_floor := true
 var _previous_horizontal_speed := 0.0
 var _pose_blend_speed := 16.0
 var _pose_blend_weight := 1.0
 var _walk_cycle_sign := 1.0
 var _head_aim_angle := 0.0
+var _smoothed_velocity := Vector2.ZERO
+var _velocity_impulse := Vector2.ZERO
+var _shot_jolt_offset := Vector2.ZERO
+var _shot_jolt_rotation := 0.0
 
 func configure(player: CharacterBody2D, player_sprite: Node2D, legs_sprite: Sprite2D, legs_sprite_2: Sprite2D = null, torso_sprite: Sprite2D = null, head_sprite: Sprite2D = null) -> void:
 	_player = player
@@ -81,14 +85,35 @@ func configure(player: CharacterBody2D, player_sprite: Node2D, legs_sprite: Spri
 		var seed_source := float(int(_player.get_instance_id()) % 997)
 		_goofy_seed = seed_source / 997.0
 
+func build_pose_snapshot() -> Dictionary:
+	return {
+		"leg1": _snapshot_for_sprite(_legs_sprite),
+		"leg2": _snapshot_for_sprite(_legs_sprite_2),
+		"torso": _snapshot_for_sprite(_torso_sprite),
+		"head": _snapshot_for_sprite(_head_sprite)
+	}
+
+func apply_pose_snapshot(state: Dictionary, delta: float) -> void:
+	var weight := clampf(delta * SYNC_POSE_LERP_SPEED, 0.0, 1.0)
+	_apply_snapshot_to_sprite(_legs_sprite, state.get("leg1", {}), weight)
+	_apply_snapshot_to_sprite(_legs_sprite_2, state.get("leg2", {}), weight)
+	_apply_snapshot_to_sprite(_torso_sprite, state.get("torso", {}), weight)
+	_apply_snapshot_to_sprite(_head_sprite, state.get("head", {}), weight)
+
 func apply_player_facing_from_angle(angle: float) -> void:
 	_head_aim_angle = angle
 	var looking_left := cos(angle) < 0.0
 	_facing_sign = -1.0 if looking_left else 1.0
 	_apply_facing_to_sprite(_head_sprite, "head", looking_left)
 	_apply_facing_to_sprite(_torso_sprite, "torso", looking_left)
-	_apply_facing_to_sprite(_legs_sprite, "leg1", looking_left)
-	_apply_facing_to_sprite(_legs_sprite_2, "leg2", looking_left)
+
+func _apply_leg_facing_from_sign(sign_value: float) -> void:
+	if absf(sign_value) <= 0.0:
+		return
+	_leg_facing_sign = -1.0 if sign_value < 0.0 else 1.0
+	var legs_looking_left := _leg_facing_sign < 0.0
+	_apply_facing_to_sprite(_legs_sprite, "leg1", legs_looking_left)
+	_apply_facing_to_sprite(_legs_sprite_2, "leg2", legs_looking_left)
 
 func _apply_facing_to_sprite(sprite: Sprite2D, key: String, looking_left: bool) -> void:
 	if sprite == null:
@@ -102,39 +127,44 @@ func _apply_facing_to_sprite(sprite: Sprite2D, key: String, looking_left: bool) 
 
 func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool) -> void:
 	_anim_time += delta
+	var previous_smoothed_velocity: Vector2 = _smoothed_velocity
+	var velocity_tracking: float = minf(1.0, delta * (16.0 if on_floor else 9.0))
+	var impulse_tracking: float = minf(1.0, delta * 12.0)
+	_smoothed_velocity = _smoothed_velocity.lerp(velocity, velocity_tracking)
+	_velocity_impulse = _velocity_impulse.lerp(_smoothed_velocity - previous_smoothed_velocity, impulse_tracking)
+	_shot_jolt_offset = _shot_jolt_offset.lerp(Vector2.ZERO, minf(1.0, delta * 18.0))
+	_shot_jolt_rotation = lerpf(_shot_jolt_rotation, 0.0, minf(1.0, delta * 20.0))
 	var horizontal_speed := absf(velocity.x)
 	var movement_sign := signf(velocity.x)
 	var speed_ratio := clampf(horizontal_speed / 245.0, 0.0, 1.8)
 	var grounded := on_floor and horizontal_speed > 8.0
 	var idle_grounded := on_floor and not grounded
 	_pose_blend_speed = 42.0 if grounded else 28.0 if on_floor else 20.0
-	_pose_blend_weight = 0.55 if grounded else 0.4 if on_floor else clampf(delta * _pose_blend_speed, 0.0, 0.32)
+	_pose_blend_weight = 1.0 if not on_floor else 0.55 if grounded else 0.4
 	if absf(movement_sign) > 0.0:
-		_walk_cycle_sign = 1.0 if movement_sign == _facing_sign else -1.0
+		_apply_leg_facing_from_sign(movement_sign)
+		_walk_cycle_sign = 1.0
+	else:
+		_apply_leg_facing_from_sign(_facing_sign)
 	var phase_speed := lerpf(5.0, 17.5, clampf(speed_ratio, 0.0, 1.0))
-	if on_floor and not _was_on_floor:
-		_landing_impulse = min(1.0, 0.45 + clampf(absf(velocity.y) / 900.0, 0.0, 0.55))
-	if on_floor and _previous_horizontal_speed > 55.0 and horizontal_speed < 8.0:
-		_stop_impulse = min(1.0, 0.35 + clampf(_previous_horizontal_speed / 245.0, 0.0, 0.45))
 	_was_on_floor = on_floor
 	_previous_horizontal_speed = horizontal_speed
-	_air_blend = move_toward(_air_blend, 1.0 if not on_floor else 0.0, delta * (10.0 if not on_floor else 14.0))
+	_air_blend = 1.0 if not on_floor else move_toward(_air_blend, 0.0, delta * 14.0)
 	_move_blend = move_toward(_move_blend, 1.0 if grounded else 0.0, delta * (9.0 if grounded else 7.0))
-	_landing_impulse = move_toward(_landing_impulse, 0.0, delta * 4.4)
-	_stop_impulse = move_toward(_stop_impulse, 0.0, delta * 5.2)
 	if grounded:
 		_walk_phase = wrapf(_walk_phase + delta * phase_speed, 0.0, TAU)
 	else:
-		_walk_phase = wrapf(lerpf(_walk_phase, 0.0, min(1.0, delta * 7.0)), 0.0, TAU)
+		var air_phase_decay: float = minf(1.0, delta * 7.0)
+		_walk_phase = wrapf(lerpf(_walk_phase, 0.0, air_phase_decay), 0.0, TAU)
 
+	if not on_floor:
+		_apply_air_pose(velocity, _air_blend)
+		return
 	if _air_blend > 0.001:
 		_apply_air_pose(velocity, _air_blend)
-		if _air_blend >= 0.98:
-			return
 	elif idle_grounded:
 		_apply_idle_pose()
-		if _landing_impulse <= 0.001 and _stop_impulse <= 0.001:
-			return
+		return
 
 	if not grounded and not idle_grounded and _air_blend <= 0.001:
 		_apply_idle_pose()
@@ -160,8 +190,8 @@ func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool) -> v
 	var leg_y_amp := lerpf(0.0, 9.2, clampf(speed_ratio, 0.0, 1.0)) * move_weight
 	var body_bob_amp := lerpf(0.0, 4.0, clampf(speed_ratio, 0.0, 1.0)) * move_weight
 	var head_bob_amp := lerpf(0.0, 5.0, clampf(speed_ratio, 0.0, 1.0)) * move_weight
-	var landing_offset := _landing_impulse * 5.0
-	var stop_sway := _stop_impulse * 3.0
+	var landing_offset := 0.0
+	var stop_sway := 0.0
 
 	_apply_walk_to_leg(_legs_sprite, "leg1", lead_phase, stomp, leg_x_amp, leg_y_amp, landing_offset, stop_sway)
 	_apply_walk_to_leg(_legs_sprite_2, "leg2", trail_phase, stomp, leg_x_amp, leg_y_amp, landing_offset, stop_sway)
@@ -171,7 +201,6 @@ func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool) -> v
 func _apply_air_pose(velocity: Vector2, blend: float) -> void:
 	var horizontal_ratio := clampf(absf(velocity.x) / 245.0, 0.0, 1.0)
 	var vertical_ratio := clampf(absf(velocity.y) / 700.0, 0.0, 1.0)
-	var rising := velocity.y < 0.0
 	var travel_tilt := clampf(velocity.x / 245.0, -1.0, 1.0)
 	var flutter := sin(_anim_time * 11.0 + _goofy_seed * TAU) * 0.45
 	var torso_lift := lerpf(5.5, 10.5, vertical_ratio) * blend
@@ -180,10 +209,10 @@ func _apply_air_pose(velocity: Vector2, blend: float) -> void:
 	var forward_splay := lerpf(4.5, 10.0, horizontal_ratio) * blend
 	var back_splay := lerpf(2.5, 6.0, horizontal_ratio) * blend
 
-	_apply_air_leg(_legs_sprite, "leg1", 1.0, torso_lift, leg_tuck, forward_splay, back_splay, rising, flutter)
-	_apply_air_leg(_legs_sprite_2, "leg2", -1.0, torso_lift, leg_tuck, forward_splay, back_splay, rising, flutter)
-	_apply_air_torso(torso_lift, travel_tilt, vertical_ratio, rising, flutter, blend)
-	_apply_air_head(head_lift, travel_tilt, vertical_ratio, rising, flutter, blend)
+	_apply_air_leg(_legs_sprite, "leg1", 1.0, torso_lift, leg_tuck, forward_splay, back_splay, flutter)
+	_apply_air_leg(_legs_sprite_2, "leg2", -1.0, torso_lift, leg_tuck, forward_splay, back_splay, flutter)
+	_apply_air_torso(torso_lift, travel_tilt, vertical_ratio, flutter, blend)
+	_apply_air_head(head_lift, travel_tilt, vertical_ratio, flutter, blend)
 
 func _apply_idle_pose() -> void:
 	var breath := sin(_anim_time * 2.3 + _goofy_seed * 3.4)
@@ -192,27 +221,27 @@ func _apply_idle_pose() -> void:
 	if _legs_sprite != null:
 		var leg1_base := _base_positions.get("leg1", _legs_sprite.position) as Vector2
 		_apply_pose(_legs_sprite, Vector2(
-			leg1_base.x * _facing_sign - sway * 0.35 * _facing_sign - _stop_impulse * 1.2 * _facing_sign,
-			leg1_base.y + _landing_impulse * 1.4
-		), -0.02 - _stop_impulse * 0.05)
+			leg1_base.x * _leg_facing_sign - sway * 0.35 * _leg_facing_sign,
+			leg1_base.y
+		) + _secondary_drag(0.003, 0.002) + _shot_jolt(0.18), -0.02 + _secondary_tilt(0.035) + _shot_jolt_rot(0.35))
 	if _legs_sprite_2 != null:
 		var leg2_base := _base_positions.get("leg2", _legs_sprite_2.position) as Vector2
 		_apply_pose(_legs_sprite_2, Vector2(
-			leg2_base.x * _facing_sign + sway * 0.35 * _facing_sign + _stop_impulse * 1.2 * _facing_sign,
-			leg2_base.y + _landing_impulse * 1.4
-		), 0.02 + _stop_impulse * 0.05)
+			leg2_base.x * _leg_facing_sign + sway * 0.35 * _leg_facing_sign,
+			leg2_base.y
+		) + _secondary_drag(0.003, 0.002) + _shot_jolt(0.18), 0.02 + _secondary_tilt(0.035) + _shot_jolt_rot(0.35))
 	if _torso_sprite != null:
 		var torso_base := _base_positions.get("torso", _torso_sprite.position) as Vector2
 		_apply_pose(_torso_sprite, Vector2(
 			(torso_base.x * _facing_sign) + sway * 0.55 * _facing_sign,
-			torso_base.y + breath * 0.7 + _landing_impulse * 2.2 + _stop_impulse * 0.9
-		), sway * 0.02 - _stop_impulse * 0.025)
+			torso_base.y + breath * 0.7
+		) + _secondary_drag(0.008, 0.006) + _shot_jolt(0.7), sway * 0.02 + _secondary_tilt(0.08) + _shot_jolt_rot(0.9))
 	if _head_sprite != null:
 		var head_base := _base_positions.get("head", _head_sprite.position) as Vector2
 		_apply_pose(_head_sprite, Vector2(
 			(head_base.x * _facing_sign) + sway * 0.65 * _facing_sign + _head_aim_offset_x() * 0.55,
-			head_base.y + breath * 1.2 + head_nod * 0.3 + _landing_impulse * 3.0 + _stop_impulse * 1.1
-		), sway * 0.035 + head_nod * 0.025 - _stop_impulse * 0.04 + _head_aim_rotation(0.22))
+			head_base.y + breath * 1.2 + head_nod * 0.3
+		) + _secondary_drag(0.013, 0.01) + _shot_jolt(1.0), sway * 0.035 + head_nod * 0.025 + _head_aim_rotation(0.22) + _secondary_tilt(0.12) + _shot_jolt_rot(1.1))
 
 func _apply_walk_to_leg(sprite: Sprite2D, key: String, phase: float, stomp: float, x_amp: float, y_amp: float, landing_offset: float, stop_sway: float) -> void:
 	if sprite == null:
@@ -223,9 +252,9 @@ func _apply_walk_to_leg(sprite: Sprite2D, key: String, phase: float, stomp: floa
 	var lift := maxf(0.0, cycle_y)
 	var drop := maxf(0.0, -cycle_y)
 	_apply_pose(sprite, Vector2(
-		(base_position.x * _facing_sign) + (cycle_x * x_amp * _facing_sign) - (stop_sway * 0.35 * signf(cycle_x) * _facing_sign),
+		(base_position.x * _leg_facing_sign) + (cycle_x * x_amp * _leg_facing_sign) - (stop_sway * 0.35 * signf(cycle_x) * _leg_facing_sign),
 		base_position.y - (lift * y_amp) + (drop * 1.9) + (stomp * 0.45) + landing_offset
-	), cycle_x * 0.23 + cycle_y * 0.075 - stop_sway * 0.012 * signf(cycle_x))
+	) + _secondary_drag(0.0035, 0.0025) + _shot_jolt(0.24), cycle_x * 0.23 + cycle_y * 0.075 - stop_sway * 0.012 * signf(cycle_x) + _secondary_tilt(0.045) + _shot_jolt_rot(0.45))
 
 func _apply_walk_to_torso(bounce: float, sway: float, goofy_wobble: float, bob_amp: float, grounded: bool, landing_offset: float, stop_sway: float) -> void:
 	if _torso_sprite == null:
@@ -234,8 +263,8 @@ func _apply_walk_to_torso(bounce: float, sway: float, goofy_wobble: float, bob_a
 	var idle_breath := sin(_walk_phase * 0.45 + _goofy_seed * 3.1) * 0.35
 	_apply_pose(_torso_sprite, Vector2(
 		(base_position.x * _facing_sign) + sway * 1.4 * _facing_sign - stop_sway * 0.45 * _facing_sign,
-		base_position.y - bounce * bob_amp + idle_breath + landing_offset * 0.55 + _stop_impulse * 0.8
-	), sway * 0.06 + goofy_wobble * 0.015 - stop_sway * 0.016)
+		base_position.y - bounce * bob_amp + idle_breath + landing_offset * 0.55
+	) + _secondary_drag(0.007, 0.005) + _shot_jolt(0.75), sway * 0.06 + goofy_wobble * 0.015 - stop_sway * 0.016 + _secondary_tilt(0.09) + _shot_jolt_rot(0.95))
 	if not grounded:
 		_torso_sprite.rotation *= 0.35
 
@@ -245,10 +274,11 @@ func _apply_walk_to_head(bounce: float, wobble: float, goofy_wobble: float, bob_
 	var base_position := _base_positions.get("head", _head_sprite.position) as Vector2
 	var idle_float := sin(_walk_phase * 0.55 + 0.8 + _goofy_seed * 4.7) * 0.6
 	var random_rot := sin(_walk_phase * 2.1 + _goofy_seed * 7.1) * 0.055
+	var head_drag_x := -_smoothed_velocity.x * 0.02
 	_apply_pose(_head_sprite, Vector2(
-		(base_position.x * _facing_sign) + wobble * 1.2 * _facing_sign - stop_sway * 0.6 * _facing_sign + _head_aim_offset_x(),
-		base_position.y - bounce * bob_amp + idle_float + landing_offset * 0.82 + _stop_impulse * 1.2
-	), wobble * 0.11 + goofy_wobble * 0.04 + random_rot - stop_sway * 0.02 + _head_aim_rotation(0.26))
+		(base_position.x * _facing_sign) + head_drag_x + _head_aim_offset_x(),
+		base_position.y - bounce * bob_amp + idle_float + landing_offset * 0.82
+	) + _secondary_drag(0.012, 0.009) + _shot_jolt(1.0), wobble * 0.11 + goofy_wobble * 0.04 + random_rot - stop_sway * 0.02 + _head_aim_rotation(0.26) + _secondary_tilt(0.13) + _shot_jolt_rot(1.15))
 	if not grounded:
 		_head_sprite.rotation *= 0.55
 
@@ -260,7 +290,6 @@ func _apply_air_leg(
 	leg_tuck: float,
 	forward_splay: float,
 	back_splay: float,
-	rising: bool,
 	flutter: float
 ) -> void:
 	if sprite == null:
@@ -269,27 +298,30 @@ func _apply_air_leg(
 	var front_leg := side_sign > 0.0
 	var x_shift := 0.0
 	var y_shift := torso_lift - leg_tuck + absf(flutter) * 0.8
-	if rising:
-		x_shift = forward_splay if front_leg else -back_splay
-		y_shift += 3.2 if front_leg else -2.0
+	var target_rotation := 0.0
+	if front_leg:
+		x_shift = -base_position.x + 17.5
+		y_shift += 13.0
+		target_rotation = -1.45 * _leg_facing_sign + flutter * 0.06
 	else:
-		x_shift = back_splay * 0.7 if front_leg else -back_splay
-		y_shift += 1.0 if front_leg else -1.0
+		x_shift = -back_splay - 15.0
+		y_shift += 8.0
+		target_rotation = 1.05 * _leg_facing_sign + flutter * 0.07
 	_apply_pose(sprite, Vector2(
-		(base_position.x * _facing_sign) + (x_shift * _facing_sign),
+		(base_position.x * _leg_facing_sign) + (x_shift * _leg_facing_sign),
 		base_position.y - y_shift
-	), ((0.52 if rising and front_leg else 0.2 if rising else -0.12 if front_leg else -0.28) * _facing_sign) + flutter * 0.06)
+	) + _secondary_drag(0.004, 0.003) + _shot_jolt(0.26), target_rotation + _secondary_tilt(0.055) + _shot_jolt_rot(0.5))
 
-func _apply_air_torso(torso_lift: float, travel_tilt: float, vertical_ratio: float, rising: bool, flutter: float, blend: float) -> void:
+func _apply_air_torso(torso_lift: float, travel_tilt: float, vertical_ratio: float, flutter: float, blend: float) -> void:
 	if _torso_sprite == null:
 		return
 	var base_position := _base_positions.get("torso", _torso_sprite.position) as Vector2
 	_apply_pose(_torso_sprite, Vector2(
 		(base_position.x * _facing_sign) + travel_tilt * 2.8 * blend,
 		base_position.y - torso_lift - vertical_ratio * 2.4 * blend + flutter * 0.35 * blend
-	), ((0.16 if rising else -0.08) * _facing_sign + travel_tilt * 0.075 + flutter * 0.02) * blend)
+	) + _secondary_drag(0.01, 0.009) + _shot_jolt(0.8), (0.16 * _facing_sign + travel_tilt * 0.075 + flutter * 0.02) * blend + _secondary_tilt(0.12) + _shot_jolt_rot(1.0))
 
-func _apply_air_head(head_lift: float, travel_tilt: float, vertical_ratio: float, rising: bool, flutter: float, blend: float) -> void:
+func _apply_air_head(head_lift: float, travel_tilt: float, vertical_ratio: float, flutter: float, blend: float) -> void:
 	if _head_sprite == null:
 		return
 	var base_position := _base_positions.get("head", _head_sprite.position) as Vector2
@@ -297,13 +329,49 @@ func _apply_air_head(head_lift: float, travel_tilt: float, vertical_ratio: float
 	_apply_pose(_head_sprite, Vector2(
 		(base_position.x * _facing_sign) + (travel_tilt * 2.1 + flutter * 0.55) * blend + _head_aim_offset_x() * 0.7,
 		base_position.y - head_lift - vertical_ratio * 3.1 * blend + float_wobble * 0.35 * blend
-	), ((0.24 if rising else -0.1) * _facing_sign + travel_tilt * 0.08 + flutter * 0.035 + float_wobble * 0.03) * blend + _head_aim_rotation(0.32))
+	) + _secondary_drag(0.016, 0.013) + _shot_jolt(1.1), (0.24 * _facing_sign + travel_tilt * 0.08 + flutter * 0.035 + float_wobble * 0.03) * blend + _head_aim_rotation(0.32) + _secondary_tilt(0.16) + _shot_jolt_rot(1.2))
 
 func _apply_pose(sprite: Sprite2D, target_position: Vector2, target_rotation: float) -> void:
 	if sprite == null:
 		return
-	sprite.position = sprite.position.lerp(target_position, _pose_blend_weight)
-	sprite.rotation = lerp_angle(sprite.rotation, target_rotation, _pose_blend_weight)
+	var follow_weight := _pose_follow_weight(sprite)
+	sprite.position = sprite.position.lerp(target_position, follow_weight)
+	sprite.rotation = lerp_angle(sprite.rotation, target_rotation, follow_weight)
+
+func _secondary_drag(x_scale: float, y_scale: float) -> Vector2:
+	return Vector2(
+		-_smoothed_velocity.x * x_scale - _velocity_impulse.x * x_scale * 8.0,
+		-_smoothed_velocity.y * y_scale - _velocity_impulse.y * y_scale * 7.0
+	)
+
+func _secondary_tilt(max_rotation: float) -> float:
+	return clampf(
+		-_smoothed_velocity.x * 0.0008 - _velocity_impulse.x * 0.01,
+		-max_rotation,
+		max_rotation
+	)
+
+func _shot_jolt(weight: float) -> Vector2:
+	return _shot_jolt_offset * weight
+
+func _shot_jolt_rot(weight: float) -> float:
+	return _shot_jolt_rotation * weight
+
+func _pose_follow_weight(sprite: Sprite2D) -> float:
+	var follow_weight := _pose_blend_weight
+	if sprite == _head_sprite:
+		follow_weight *= 0.72
+	elif sprite == _torso_sprite:
+		follow_weight *= 0.82
+	else:
+		follow_weight *= 0.9
+	return clampf(follow_weight, 0.08, 1.0)
+
+func trigger_shot_jolt(aim_angle: float) -> void:
+	var recoil_dir := Vector2.LEFT.rotated(aim_angle)
+	_shot_jolt_offset += recoil_dir * 2.4
+	_shot_jolt_offset += Vector2(randf_range(-0.7, 0.7), randf_range(-0.9, 0.5))
+	_shot_jolt_rotation += randf_range(-0.09, 0.09)
 
 func _head_aim_rotation(max_rotation: float) -> float:
 	var local_angle := wrapf(_head_aim_angle, -PI, PI)
@@ -399,3 +467,26 @@ func _part_texture(warrior_id: String, part_name: String, fallback: Texture2D) -
 	var loaded := load(path) as Texture2D
 	_part_texture_cache[path] = loaded
 	return loaded if loaded != null else fallback
+
+func _snapshot_for_sprite(sprite: Sprite2D) -> Dictionary:
+	if sprite == null:
+		return {}
+	return {
+		"position": sprite.position,
+		"rotation": sprite.rotation,
+		"scale": sprite.scale
+	}
+
+func _apply_snapshot_to_sprite(sprite: Sprite2D, snapshot: Variant, weight: float) -> void:
+	if sprite == null or not (snapshot is Dictionary):
+		return
+	var pose := snapshot as Dictionary
+	var position_value = pose.get("position", sprite.position)
+	if position_value is Vector2:
+		sprite.position = sprite.position.lerp(position_value, weight)
+	var rotation_value = pose.get("rotation", sprite.rotation)
+	if rotation_value is float:
+		sprite.rotation = lerp_angle(sprite.rotation, rotation_value, weight)
+	var scale_value = pose.get("scale", sprite.scale)
+	if scale_value is Vector2:
+		sprite.scale = sprite.scale.lerp(scale_value, weight)

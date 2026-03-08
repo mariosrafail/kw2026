@@ -66,7 +66,7 @@ func _rpc_despawn_player(_peer_id: int) -> void:
 	_remove_player_local(_peer_id)
 	_update_score_labels()
 
-func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity: Vector2, _aim_angle: float, _health: int) -> void:
+func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity: Vector2, _aim_angle: float, _health: int, _part_animation_state: Dictionary = {}) -> void:
 	if multiplayer.is_server():
 		return
 	player_replication.client_apply_state_snapshot(
@@ -75,6 +75,7 @@ func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity
 		_new_velocity,
 		_aim_angle,
 		_health,
+		_part_animation_state,
 		multiplayer.get_unique_id()
 	)
 
@@ -141,10 +142,10 @@ func _rpc_projectile_impact(_projectile_id: int, _impact_position: Vector2, _leg
 		return
 	client_rpc_flow_service.rpc_projectile_impact(_projectile_id, _impact_position)
 
-func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: Vector2) -> void:
+func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), _count_multiplier: float = 1.0) -> void:
 	if multiplayer.is_server():
 		return
-	client_rpc_flow_service.rpc_spawn_blood_particles(_impact_position, _incoming_velocity)
+	client_rpc_flow_service.rpc_spawn_blood_particles(_impact_position, _incoming_velocity, _blood_color, _count_multiplier)
 
 func _rpc_spawn_surface_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _particle_color: Color) -> void:
 	if multiplayer.is_server():

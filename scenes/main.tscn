@@ -165,6 +165,7 @@ position = Vector2(640, 360)
 texture = ExtResource("6_hhigd")
 
 [node name="AtmosphereOverlay" type="ColorRect" parent="." unique_id=587373272]
+visible = false
 material = SubResource("ShaderMaterial_atmosphere")
 layout_mode = 1
 anchors_preset = 15
@@ -175,6 +176,7 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="VignetteOverlay" type="ColorRect" parent="." unique_id=1354695864]
+visible = false
 material = SubResource("ShaderMaterial_vignette")
 layout_mode = 1
 anchors_preset = 15

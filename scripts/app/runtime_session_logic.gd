@@ -80,8 +80,10 @@ func _connect_local_signals() -> void:
 
 	if purchase_buy_button != null:
 		purchase_buy_button.pressed.connect(_on_purchase_buy_pressed)
+		_install_purchase_button_anim(purchase_buy_button)
 	if purchase_cancel_button != null:
 		purchase_cancel_button.pressed.connect(_on_purchase_cancel_pressed)
+		_install_purchase_button_anim(purchase_cancel_button)
 
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
@@ -205,6 +207,10 @@ func _show_purchase_menu(show: bool) -> void:
 		purchase_menu.visible = show
 	if show:
 		_show_esc_menu(false)
+		if purchase_buy_button != null:
+			_animate_purchase_button_state(purchase_buy_button, "idle")
+		if purchase_cancel_button != null:
+			_animate_purchase_button_state(purchase_cancel_button, "idle")
 		if purchase_cancel_button != null:
 			purchase_cancel_button.grab_focus()
 
@@ -250,6 +256,85 @@ func _resolve_auth_profile() -> void:
 
 func _auth_session_path() -> String:
 	return _runtime_auth_flow.session_path(self)
+
+func _kill_purchase_button_tween(btn: Button, meta_key: String) -> void:
+	if btn == null or not btn.has_meta(meta_key):
+		return
+	var tween_variant: Variant = btn.get_meta(meta_key)
+	if tween_variant is Tween:
+		var tween := tween_variant as Tween
+		if tween != null:
+			tween.kill()
+	btn.remove_meta(meta_key)
+
+func _start_purchase_button_idle_anim(btn: Button) -> void:
+	if btn == null:
+		return
+	_kill_purchase_button_tween(btn, "_purchase_idle_tween")
+	_kill_purchase_button_tween(btn, "_purchase_fx_tween")
+
+	var tw := btn.create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(btn, "rotation", deg_to_rad(-0.4), 0.55)
+	tw.parallel().tween_property(btn, "scale", Vector2.ONE * 1.01, 0.55)
+	tw.tween_property(btn, "rotation", deg_to_rad(0.4), 0.72)
+	tw.parallel().tween_property(btn, "scale", Vector2.ONE * 0.99, 0.72)
+	btn.set_meta("_purchase_idle_tween", tw)
+
+func _animate_purchase_button_state(btn: Button, state: String) -> void:
+	if btn == null:
+		return
+	_kill_purchase_button_tween(btn, "_purchase_fx_tween")
+	if state != "idle":
+		_kill_purchase_button_tween(btn, "_purchase_idle_tween")
+
+	var target_scale := Vector2.ONE
+	var target_rot := 0.0
+	var dur := 0.08
+	if state == "hover":
+		target_scale = Vector2.ONE * 1.035
+	elif state == "press":
+		target_scale = Vector2.ONE * 0.97
+		target_rot = deg_to_rad(-0.65)
+		dur = 0.05
+
+	var tw := btn.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(btn, "scale", target_scale, dur)
+	tw.parallel().tween_property(btn, "rotation", target_rot, dur)
+	if state == "press":
+		tw.tween_property(btn, "scale", Vector2.ONE * 1.035, 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(btn, "rotation", 0.0, 0.1)
+	btn.set_meta("_purchase_fx_tween", tw)
+	if state == "idle":
+		_start_purchase_button_idle_anim(btn)
+
+func _install_purchase_button_anim(btn: Button) -> void:
+	if btn == null or btn.has_meta("_purchase_anim_installed"):
+		return
+	btn.set_meta("_purchase_anim_installed", true)
+	_start_purchase_button_idle_anim(btn)
+
+	btn.mouse_entered.connect(func() -> void:
+		_animate_purchase_button_state(btn, "hover")
+	)
+	btn.focus_entered.connect(func() -> void:
+		_animate_purchase_button_state(btn, "hover")
+	)
+	btn.mouse_exited.connect(func() -> void:
+		_animate_purchase_button_state(btn, "idle")
+	)
+	btn.focus_exited.connect(func() -> void:
+		_animate_purchase_button_state(btn, "idle")
+	)
+	btn.button_down.connect(func() -> void:
+		_animate_purchase_button_state(btn, "press")
+	)
+	btn.button_up.connect(func() -> void:
+		var local_pos := btn.get_local_mouse_position()
+		if Rect2(Vector2.ZERO, btn.size).has_point(local_pos):
+			_animate_purchase_button_state(btn, "hover")
+		else:
+			_animate_purchase_button_state(btn, "idle")
+	)
 
 
 func _auth_me() -> void:
@@ -621,8 +706,12 @@ func _setup_weapon_picker() -> void:
 	lobby_weapon_option.clear()
 	lobby_weapon_option.add_item("AK47")
 	lobby_weapon_option.set_item_metadata(0, WEAPON_ID_AK47)
+	lobby_weapon_option.add_item("Grenade")
+	lobby_weapon_option.set_item_metadata(1, WEAPON_ID_GRENADE)
+	lobby_weapon_option.add_item("Shotgun")
+	lobby_weapon_option.set_item_metadata(2, WEAPON_ID_SHOTGUN)
 	lobby_weapon_option.add_item("Uzi")
-	lobby_weapon_option.set_item_metadata(1, WEAPON_ID_UZI)
+	lobby_weapon_option.set_item_metadata(3, WEAPON_ID_UZI)
 	var target_weapon := _normalize_weapon_id(selected_weapon_id)
 	for index in range(lobby_weapon_option.item_count):
 		if _normalize_weapon_id(str(lobby_weapon_option.get_item_metadata(index))) == target_weapon:

@@ -23,15 +23,27 @@ func _init_services() -> void:
 func _init_weapons() -> void:
 	weapon_profiles = {
 		WEAPON_ID_AK47: AK47_SCRIPT.new(),
+		WEAPON_ID_GRENADE: GRENADE_SCRIPT.new(),
+		WEAPON_ID_SHOTGUN: SHOTGUN_SCRIPT.new(),
 		WEAPON_ID_UZI: UZI_SCRIPT.new()
 	}
 	weapon_shot_sfx_by_id = {
 		WEAPON_ID_AK47: AK47_SHOT_SFX,
+		WEAPON_ID_GRENADE: GRENADE_SHOT_SFX,
+		WEAPON_ID_SHOTGUN: SHOTGUN_SHOT_SFX,
 		WEAPON_ID_UZI: UZI_SHOT_SFX
 	}
 	weapon_reload_sfx_by_id = {
 		WEAPON_ID_AK47: AK47_RELOAD_SFX,
+		WEAPON_ID_GRENADE: GRENADE_RELOAD_SFX,
+		WEAPON_ID_SHOTGUN: SHOTGUN_RELOAD_SFX,
 		WEAPON_ID_UZI: UZI_RELOAD_SFX
+	}
+	weapon_impact_sfx_by_id = {
+		WEAPON_ID_AK47: BULLET_TOUCH_SFX,
+		WEAPON_ID_GRENADE: GRENADE_IMPACT_SFX,
+		WEAPON_ID_SHOTGUN: BULLET_TOUCH_SFX,
+		WEAPON_ID_UZI: BULLET_TOUCH_SFX
 	}
 	var startup_weapon_id := default_selected_weapon_id
 	var startup_character_id := default_selected_character_id
@@ -78,8 +90,8 @@ func _refresh_spawn_points() -> void:
 	spawn_identity.spawn_points = spawn_points.duplicate()
 
 func _configure_services() -> void:
-	projectile_system.configure(projectiles_root, PROJECTILE_SCENE, Callable(self, "_player_color"))
-	combat_effects.configure(projectiles_root, map_front_sprite, SPLASH_HIT_SFX, DEATH_HIT_SFX, BULLET_TOUCH_SFX)
+	projectile_system.configure(projectiles_root, PROJECTILE_SCENE, Callable(self, "_projectile_color"))
+	combat_effects.configure(projectiles_root, map_front_sprite, SPLASH_HIT_SFX, DEATH_HIT_SFX, BULLET_TOUCH_SFX, EXPLOSION_EFFECT_TEXTURE, HIT_EFFECT_TEXTURE)
 
 	spawn_identity.configure(
 		{
@@ -146,7 +158,9 @@ func _configure_services() -> void:
 			"get_projectile": Callable(projectile_system, "get_projectile"),
 			"get_projectile_damage": Callable(projectile_system, "get_projectile_damage"),
 			"play_death_sfx_local": Callable(self, "_play_death_sfx_local"),
-			"send_play_death_sfx": Callable(self, "_send_play_death_sfx_rpc")
+			"send_play_death_sfx": Callable(self, "_send_play_death_sfx_rpc"),
+			"spawn_blood_particles_local": Callable(combat_effects, "spawn_blood_particles"),
+			"send_spawn_blood_particles": Callable(self, "_send_spawn_blood_particles_rpc")
 		},
 		{
 			"player_history_ms": PLAYER_HISTORY_MS
@@ -210,6 +224,7 @@ func _configure_services() -> void:
 			"weapon_profile_for_id": Callable(self, "_weapon_profile_for_id"),
 			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
 			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
+			"weapon_impact_sfx": Callable(self, "_weapon_impact_sfx"),
 			"weapon_visual_for_id": Callable(self, "_weapon_visual_for_id"),
 			"weapon_visual_for_peer": Callable(self, "_weapon_visual_for_peer")
 		}
@@ -341,7 +356,7 @@ func _ensure_action_with_keys(action: StringName, keys: Array[int]) -> void:
 		event.physical_keycode = keycode
 		InputMap.action_add_event(action, event)
 
-func _ensure_action_with_mouse_button(action: StringName, button: int) -> void:
+func _ensure_action_with_mouse_button(action: StringName, button: MouseButton) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
 	for existing_event in InputMap.action_get_events(action):

@@ -214,7 +214,7 @@ func _rpc_despawn_player(_peer_id: int) -> void:
 	pass
 
 @rpc("authority", "unreliable_ordered")
-func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity: Vector2, _aim_angle: float, _health: int) -> void:
+func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity: Vector2, _aim_angle: float, _health: int, _part_animation_state: Dictionary = {}) -> void:
 	pass
 
 @rpc("authority", "reliable")
@@ -246,7 +246,7 @@ func _rpc_projectile_impact(_projectile_id: int, _impact_position: Vector2, _leg
 	pass
 
 @rpc("authority", "reliable")
-func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: Vector2) -> void:
+func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), _count_multiplier: float = 1.0) -> void:
 	pass
 
 @rpc("authority", "reliable")

@@ -8,12 +8,14 @@ var combat_effects: CombatEffects
 var camera_shake: CameraShake
 var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
+var shotgun_feedback_msec_by_peer: Dictionary = {}
 
 var weapon_profile_for_id_cb: Callable = Callable()
 var weapon_shot_sfx_cb: Callable = Callable()
 var weapon_reload_sfx_cb: Callable = Callable()
 var weapon_visual_for_id_cb: Callable = Callable()
 var weapon_visual_for_peer_cb: Callable = Callable()
+var weapon_impact_sfx_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -29,6 +31,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	weapon_reload_sfx_cb = callbacks.get("weapon_reload_sfx", Callable()) as Callable
 	weapon_visual_for_id_cb = callbacks.get("weapon_visual_for_id", Callable()) as Callable
 	weapon_visual_for_peer_cb = callbacks.get("weapon_visual_for_peer", Callable()) as Callable
+	weapon_impact_sfx_cb = callbacks.get("weapon_impact_sfx", Callable()) as Callable
 
 func rpc_play_death_sfx(impact_position: Vector2) -> void:
 	if combat_effects == null:
@@ -75,11 +78,24 @@ func rpc_spawn_projectile(
 	if projectile == null:
 		return
 	var owner_player := players.get(owner_peer_id, null) as NetPlayer
+	var should_play_owner_feedback := true
+	if weapon_id == "shotgun":
+		var now_msec := Time.get_ticks_msec()
+		var last_feedback_msec := int(shotgun_feedback_msec_by_peer.get(owner_peer_id, 0))
+		if now_msec - last_feedback_msec < 90:
+			should_play_owner_feedback = false
+		else:
+			shotgun_feedback_msec_by_peer[owner_peer_id] = now_msec
 	if owner_player != null:
-		owner_player.set_weapon_visual(_weapon_visual_for_peer(owner_peer_id, weapon_id))
-		owner_player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
-		owner_player.set_reload_audio_stream(_weapon_reload_sfx(weapon_id))
-		owner_player.play_shot_recoil()
+		var current_visual_id := ""
+		if owner_player.has_method("get_current_weapon_visual_id"):
+			current_visual_id = str(owner_player.call("get_current_weapon_visual_id")).strip_edges().to_lower()
+		if current_visual_id != weapon_id:
+			owner_player.set_weapon_visual(_weapon_visual_for_peer(owner_peer_id, weapon_id))
+		if should_play_owner_feedback:
+			owner_player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
+			owner_player.set_reload_audio_stream(_weapon_reload_sfx(weapon_id))
+			owner_player.play_shot_recoil()
 
 	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null else 0
 	var local_visual_advance_ms := projectile_weapon.visual_advance_ms(
@@ -87,7 +103,7 @@ func rpc_spawn_projectile(
 		lag_comp_ms,
 		owner_peer_id == local_peer_id
 	)
-	if owner_peer_id == local_peer_id and camera_shake != null:
+	if should_play_owner_feedback and owner_peer_id == local_peer_id and camera_shake != null:
 		camera_shake.add_shake(projectile_weapon.camera_shake_per_shot())
 	if local_visual_advance_ms > 0:
 		projectile.step(float(local_visual_advance_ms) / 1000.0)
@@ -100,15 +116,29 @@ func rpc_despawn_projectile(projectile_id: int) -> void:
 func rpc_projectile_impact(projectile_id: int, impact_position: Vector2) -> void:
 	if projectile_system == null or combat_effects == null:
 		return
+	var weapon_id := projectile_system.get_projectile_weapon_id(projectile_id, "")
+	if weapon_id == "grenade":
+		combat_effects.spawn_explosion_effect(impact_position)
+		var grenade_impact_sfx := _weapon_impact_sfx(weapon_id)
+		if grenade_impact_sfx != null:
+			combat_effects.play_weapon_impact_sfx(grenade_impact_sfx, impact_position, 3.0, randf_range(0.97, 1.03), 2)
+		if camera_shake != null:
+			camera_shake.add_explosion_shake(0.95, 1.0, 26.0, 0.12, 2.0)
 	var impact_data := projectile_system.mark_impact(projectile_id, impact_position)
 	if impact_data.is_empty():
 		return
+	if weapon_id == "grenade":
+		return
+	var impact_sfx := _weapon_impact_sfx(weapon_id)
+	if impact_sfx != null:
+		combat_effects.play_weapon_impact_sfx(impact_sfx, impact_position, -2.0, randf_range(0.95, 1.05), 6)
+		return
 	combat_effects.play_bullet_touch_sfx(impact_position)
 
-func rpc_spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2) -> void:
+func rpc_spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2, blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), count_multiplier: float = 1.0) -> void:
 	if combat_effects == null:
 		return
-	combat_effects.spawn_blood_particles(impact_position, incoming_velocity)
+	combat_effects.spawn_blood_particles(impact_position, incoming_velocity, blood_color, count_multiplier)
 
 func rpc_spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
 	if combat_effects == null:
@@ -139,3 +169,8 @@ func _weapon_visual_for_peer(peer_id: int, weapon_id: String) -> Dictionary:
 	if weapon_visual_for_peer_cb.is_valid():
 		return weapon_visual_for_peer_cb.call(peer_id, weapon_id) as Dictionary
 	return _weapon_visual_for_id(weapon_id)
+
+func _weapon_impact_sfx(weapon_id: String) -> AudioStream:
+	if weapon_impact_sfx_cb.is_valid():
+		return weapon_impact_sfx_cb.call(weapon_id) as AudioStream
+	return null

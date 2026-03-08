@@ -13,6 +13,9 @@ const DEFAULT_MUZZLE_POSITION := Vector2(27.0, -1.0)
 const DEFAULT_SHOT_FRAME_DURATION_SEC := 0.03
 const DEFAULT_RELOAD_FRAME_DURATION_SEC := 0.065
 const MIN_FRAME_DURATION_SEC := 0.01
+const GUN_RELOAD_SCALE_MULTIPLIER := 1.12
+const GUN_RELOAD_SCALE_UP_TIME := 0.08
+const GUN_RELOAD_SCALE_DOWN_TIME := 0.1
 
 var _player: Node2D
 var _gun_pivot: Node2D
@@ -22,7 +25,9 @@ var _shot_audio: AudioStreamPlayer2D
 var _reload_audio: AudioStreamPlayer2D
 
 var _gun_recoil_tween: Tween
+var _gun_reload_scale_tween: Tween
 var _gun_base_scale_abs := Vector2.ONE
+var _gun_reload_scale_multiplier := 1.0
 var _configured_gun_position := DEFAULT_GUN_POSITION
 var _configured_muzzle_position := DEFAULT_MUZZLE_POSITION
 
@@ -167,7 +172,7 @@ func play_shot_recoil(aim_angle: float) -> void:
 
 	var sign_x := 1.0
 	var sign_y := -1.0 if _gun.scale.y < 0.0 else 1.0
-	var base_scale := _gun_base_scale_abs
+	var base_scale := _get_current_base_scale_abs()
 	var recoil_scale := Vector2(base_scale.x, base_scale.y * GUN_RECOIL_SCALE_Y)
 
 	_gun_recoil_tween = _player.create_tween()
@@ -208,9 +213,10 @@ func _apply_gun_horizontal_flip_from_angle(angle: float) -> void:
 	if _gun == null:
 		return
 	var looking_left := cos(angle) < 0.0
+	var base_scale := _get_current_base_scale_abs()
 	_gun.scale = Vector2(
-		absf(_gun_base_scale_abs.x),
-		-absf(_gun_base_scale_abs.y) if looking_left else absf(_gun_base_scale_abs.y)
+		absf(base_scale.x),
+		-absf(base_scale.y) if looking_left else absf(base_scale.y)
 	)
 	_apply_weapon_mount_offsets_from_angle(angle)
 
@@ -230,6 +236,10 @@ func _reset_gun_scale(aim_angle: float) -> void:
 	if _gun_recoil_tween != null:
 		_gun_recoil_tween.kill()
 		_gun_recoil_tween = null
+	if _gun_reload_scale_tween != null:
+		_gun_reload_scale_tween.kill()
+		_gun_reload_scale_tween = null
+	_gun_reload_scale_multiplier = 1.0
 	_apply_gun_horizontal_flip_from_angle(aim_angle)
 
 func _play_gun_shot_animation() -> void:
@@ -301,6 +311,7 @@ func _play_gun_reload_animation() -> void:
 	var nonce := _gun_reload_animation_nonce
 	if _gun_reload_animation_tween != null:
 		_gun_reload_animation_tween.kill()
+	_start_gun_reload_scale_animation()
 
 	_gun_reload_animation_tween = _player.create_tween()
 	for frame_value in _gun_reload_texture_frames:
@@ -316,6 +327,7 @@ func _reset_gun_reload_animation() -> void:
 	if _gun_reload_animation_tween != null:
 		_gun_reload_animation_tween.kill()
 		_gun_reload_animation_tween = null
+	_reset_gun_reload_scale_animation()
 	_apply_gun_idle_frame()
 
 func _apply_gun_reload_frame(nonce: int, frame_texture: Texture2D) -> void:
@@ -330,6 +342,53 @@ func _apply_gun_reload_frame(nonce: int, frame_texture: Texture2D) -> void:
 func _finish_gun_reload_animation(nonce: int) -> void:
 	if nonce != _gun_reload_animation_nonce:
 		return
+	_reset_gun_reload_scale_animation()
 	_apply_gun_idle_frame()
 	_gun_reload_animation_tween = null
 
+func _get_current_base_scale_abs() -> Vector2:
+	return _gun_base_scale_abs * _gun_reload_scale_multiplier
+
+func _start_gun_reload_scale_animation() -> void:
+	if _gun == null or _player == null:
+		return
+	if _gun_reload_scale_tween != null:
+		_gun_reload_scale_tween.kill()
+	_gun_reload_scale_tween = _player.create_tween()
+	_gun_reload_scale_tween.tween_method(
+		Callable(self, "_set_gun_reload_scale_multiplier"),
+		_gun_reload_scale_multiplier,
+		GUN_RELOAD_SCALE_MULTIPLIER,
+		GUN_RELOAD_SCALE_UP_TIME
+	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func _reset_gun_reload_scale_animation() -> void:
+	if _gun == null or _player == null:
+		_gun_reload_scale_multiplier = 1.0
+		return
+	if is_equal_approx(_gun_reload_scale_multiplier, 1.0):
+		if _gun_reload_scale_tween != null:
+			_gun_reload_scale_tween.kill()
+			_gun_reload_scale_tween = null
+		return
+	if _gun_reload_scale_tween != null:
+		_gun_reload_scale_tween.kill()
+	_gun_reload_scale_tween = _player.create_tween()
+	_gun_reload_scale_tween.tween_method(
+		Callable(self, "_set_gun_reload_scale_multiplier"),
+		_gun_reload_scale_multiplier,
+		1.0,
+		GUN_RELOAD_SCALE_DOWN_TIME
+	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_gun_reload_scale_tween.finished.connect(_clear_gun_reload_scale_tween)
+
+func _set_gun_reload_scale_multiplier(value: float) -> void:
+	_gun_reload_scale_multiplier = value
+	if _gun == null:
+		return
+	var sign_y := -1.0 if _gun.scale.y < 0.0 else 1.0
+	var base_scale := _get_current_base_scale_abs()
+	_gun.scale = Vector2(base_scale.x, sign_y * base_scale.y)
+
+func _clear_gun_reload_scale_tween() -> void:
+	_gun_reload_scale_tween = null

@@ -13,6 +13,9 @@ var owner_peer_id := 0
 var lag_comp_ms := 0
 var trail_origin: Vector2 = Vector2.ZERO
 var velocity: Vector2 = Vector2.ZERO
+var gravity: Vector2 = Vector2.ZERO
+var gravity_activation_speed := 0.0
+var exponential_drag := 0.0
 var life_time := 2.0
 var hit_radius := 8.0
 var life_remaining := 2.0
@@ -21,6 +24,8 @@ var has_impacted := false
 var trail_world_points: Array[Vector2] = []
 var trail_sample_accumulator := 0.0
 var force_impact_segment_visual := false
+var rotate_to_velocity := false
+var preserve_impact_segment := true
 
 func configure(
 	color: Color,
@@ -38,6 +43,12 @@ func configure(
 	lag_comp_ms = max(0, new_lag_comp_ms)
 	trail_origin = new_trail_origin
 	velocity = start_velocity
+	var gravity_value: Variant = visual_config.get("gravity", Vector2.ZERO)
+	gravity = Vector2.ZERO
+	if gravity_value is Vector2:
+		gravity = gravity_value as Vector2
+	gravity_activation_speed = maxf(0.0, float(visual_config.get("gravity_activation_speed", 0.0)))
+	exponential_drag = maxf(0.0, float(visual_config.get("exponential_drag", 0.0)))
 	life_time = maxf(0.15, new_life_time)
 	hit_radius = maxf(1.0, new_hit_radius)
 	life_remaining = life_time
@@ -45,17 +56,24 @@ func configure(
 	has_impacted = false
 	trail_sample_accumulator = 0.0
 	force_impact_segment_visual = false
-	rotation = velocity.angle()
+	rotate_to_velocity = bool(visual_config.get("rotate_to_velocity", false))
+	preserve_impact_segment = bool(visual_config.get("preserve_impact_segment", true))
+	rotation = velocity.angle() if rotate_to_velocity and velocity.length_squared() > 0.0001 else 0.0
 
 	var head_scale := maxf(0.2, float(visual_config.get("head_scale", 0.85)))
+	var head_alpha := clampf(float(visual_config.get("head_alpha", 1.0)), 0.0, 1.0)
 	var trail_width := maxf(0.5, float(visual_config.get("trail_width", 3.6)))
 	var trail_alpha := clampf(float(visual_config.get("trail_alpha", 0.52)), 0.0, 1.0)
-	var effective_trail_alpha := trail_alpha * 0.35
+	var effective_trail_alpha := trail_alpha * 0.6
+	var projectile_texture := visual_config.get("texture", null) as Texture2D
+	var show_visual := bool(visual_config.get("show_visual", false))
 
 	if visual != null:
-		visual.visible = false
+		if projectile_texture != null:
+			visual.texture = projectile_texture
+		visual.visible = show_visual
 		visual.scale = Vector2.ONE * head_scale
-		visual.modulate = Color(color.r, color.g, color.b, 0.0)
+		visual.modulate = Color(color.r, color.g, color.b, head_alpha if show_visual else 0.0)
 	if trail != null:
 		trail.default_color = Color(color.r, color.g, color.b, effective_trail_alpha)
 		trail.width = trail_width
@@ -63,16 +81,7 @@ func configure(
 		trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		trail.end_cap_mode = Line2D.LINE_CAP_ROUND
 		trail.joint_mode = Line2D.LINE_JOINT_ROUND
-		var light_r := lerpf(color.r, 1.0, 0.55)
-		var light_g := lerpf(color.g, 1.0, 0.55)
-		var light_b := lerpf(color.b, 1.0, 0.55)
-		var fade_gradient := Gradient.new()
-		# 0.0 is near the weapon (lighter); 1.0 is toward impact (darker).
-		fade_gradient.add_point(0.0, Color(light_r, light_g, light_b, effective_trail_alpha * 0.10))
-		fade_gradient.add_point(0.48, Color(light_r, light_g, light_b, effective_trail_alpha * 0.06))
-		fade_gradient.add_point(0.82, Color(color.r * 0.72, color.g * 0.72, color.b * 0.72, effective_trail_alpha * 0.30))
-		fade_gradient.add_point(1.0, Color(color.r * 0.45, color.g * 0.45, color.b * 0.45, effective_trail_alpha * 0.75))
-		trail.gradient = fade_gradient
+		trail.gradient = null
 		var taper := Curve.new()
 		taper.add_point(Vector2(0.0, 0.04))
 		taper.add_point(Vector2(0.65, 0.42))
@@ -87,7 +96,16 @@ func step(delta: float) -> void:
 		impact_time_remaining -= delta
 		return
 
-	global_position += velocity * delta
+	if exponential_drag > 0.0:
+		velocity *= exp(-exponential_drag * delta)
+	var active_gravity := Vector2.ZERO
+	if gravity.length_squared() > 0.0001:
+		if gravity_activation_speed <= 0.0 or velocity.length() <= gravity_activation_speed:
+			active_gravity = gravity
+	global_position += velocity * delta + active_gravity * (0.5 * delta * delta)
+	velocity += active_gravity * delta
+	if rotate_to_velocity and velocity.length_squared() > 0.0001:
+		rotation = velocity.angle()
 	life_remaining -= delta
 	_update_trail(delta)
 
@@ -112,7 +130,7 @@ func mark_impact(impact_position: Vector2, trail_start_position: Vector2 = Vecto
 	impact_time_remaining = IMPACT_LINGER_TIME
 	velocity = Vector2.ZERO
 	global_position = impact_position
-	if trail_start_position.is_finite():
+	if preserve_impact_segment and trail_start_position.is_finite():
 		force_impact_segment_visual = true
 		trail_world_points.clear()
 		trail_world_points.append(trail_start_position)

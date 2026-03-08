@@ -1,11 +1,21 @@
 extends RefCounted
 class_name CombatEffects
 
-const BLOOD_PARTICLES_AMOUNT := 46
-const BLOOD_PARTICLES_LIFETIME := 0.42
+const BLOOD_PARTICLES_AMOUNT := 22
+const BLOOD_PARTICLES_LIFETIME := 0.36
 const BLOOD_PARTICLES_CLEANUP_DELAY := 1.2
 const BLOOD_PARTICLES_GRAVITY := Vector2(0.0, 860.0)
 const BLOOD_PARTICLES_COLOR := Color(0.98, 0.02, 0.07, 1.0)
+const BLOOD_CHUNK_MIN_SIZE := 2.0
+const BLOOD_CHUNK_MAX_SIZE := 5.0
+const BLOOD_CHUNK_SPEED_MIN := 42.0
+const BLOOD_CHUNK_SPEED_MAX := 145.0
+const BLOOD_CHUNK_GRAVITY_SCALE := 1.1
+const BLOOD_CHUNK_LINEAR_DAMP := 2.6
+const BLOOD_CHUNK_ANGULAR_DAMP := 1.4
+const BLOOD_CHUNK_BOUNCE := 0.02
+const BLOOD_CHUNK_FRICTION := 0.92
+const BLOOD_CHUNK_SPREAD_RADIANS := 0.95
 const SURFACE_PARTICLES_AMOUNT := 18
 const SURFACE_PARTICLES_LIFETIME := 0.58
 const SURFACE_PARTICLES_CLEANUP_DELAY := 1.45
@@ -23,51 +33,83 @@ const SURFACE_CHUNK_FRICTION := 0.9
 const SURFACE_CHUNK_COLLISION_LAYER := 32
 const SURFACE_CHUNK_COLLISION_MASK := 1
 const SPLASH_HIT_VOLUME_DB := 4.0
+const EXPLOSION_FRAME_SIZE := Vector2(120.0, 120.0)
+const EXPLOSION_FRAME_COUNT := 8
+const EXPLOSION_FRAME_SEC := 0.035
+const EXPLOSION_Y_OFFSET := 10.0
+const HIT_FLASH_LIFETIME := 0.08
+const BLOOD_EFFECTS_Z_INDEX := 1000
 
 var projectiles_root: Node2D
 var map_front_sprite: Sprite2D
 var splash_hit_sfx: AudioStream
 var death_hit_sfx: AudioStream
 var bullet_touch_sfx: AudioStream
+var explosion_texture: Texture2D
+var hit_texture: Texture2D
 var map_front_image: Image = null
+var explosion_frames: SpriteFrames = null
 
-func configure(root: Node2D, front_sprite: Sprite2D, splash_sfx: AudioStream, death_sfx: AudioStream, bullet_touch: AudioStream = null) -> void:
+func configure(root: Node2D, front_sprite: Sprite2D, splash_sfx: AudioStream, death_sfx: AudioStream, bullet_touch: AudioStream = null, explosion_fx: Texture2D = null, hit_fx: Texture2D = null) -> void:
 	projectiles_root = root
 	map_front_sprite = front_sprite
 	splash_hit_sfx = splash_sfx
 	death_hit_sfx = death_sfx
 	bullet_touch_sfx = bullet_touch
+	explosion_texture = explosion_fx
+	hit_texture = hit_fx
+	explosion_frames = null
 
-func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2) -> void:
+func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2, blood_color: Color = BLOOD_PARTICLES_COLOR, count_multiplier: float = 1.0) -> void:
 	if projectiles_root == null:
 		return
 	play_splash_hit_sfx(impact_position)
-
-	var particles := CPUParticles2D.new()
-	particles.z_index = 40
-	particles.global_position = impact_position
-	particles.amount = BLOOD_PARTICLES_AMOUNT
-	particles.one_shot = true
-	particles.explosiveness = 1.0
-	particles.lifetime = BLOOD_PARTICLES_LIFETIME
-	particles.local_coords = false
-	particles.gravity = BLOOD_PARTICLES_GRAVITY
-	particles.initial_velocity_min = 220.0
-	particles.initial_velocity_max = 520.0
-	particles.angular_velocity_min = -1100.0
-	particles.angular_velocity_max = 1100.0
-	particles.scale_amount_min = 1.15
-	particles.scale_amount_max = 2.25
-	particles.color = BLOOD_PARTICLES_COLOR
+	spawn_hit_flash(impact_position)
+	var chunk_count := maxi(1, int(round(float(BLOOD_PARTICLES_AMOUNT) * maxf(0.1, count_multiplier))))
 	var spray_direction := Vector2.UP
 	if incoming_velocity.length_squared() > 0.0001:
 		spray_direction = (-incoming_velocity).normalized()
-	particles.direction = spray_direction
-	particles.spread = 145.0
-	projectiles_root.add_child(particles)
-	particles.emitting = true
+	for i in range(chunk_count):
+		var chunk := RigidBody2D.new()
+		chunk.z_as_relative = false
+		chunk.z_index = BLOOD_EFFECTS_Z_INDEX
+		chunk.global_position = impact_position + Vector2(randf_range(-2.0, 2.0), randf_range(-2.0, 2.0))
+		chunk.gravity_scale = BLOOD_CHUNK_GRAVITY_SCALE
+		chunk.linear_damp = BLOOD_CHUNK_LINEAR_DAMP
+		chunk.angular_damp = BLOOD_CHUNK_ANGULAR_DAMP
+		chunk.continuous_cd = RigidBody2D.CCD_MODE_CAST_SHAPE
+		chunk.collision_layer = SURFACE_CHUNK_COLLISION_LAYER
+		chunk.collision_mask = SURFACE_CHUNK_COLLISION_MASK
 
-	_queue_free_with_delay(particles, BLOOD_PARTICLES_CLEANUP_DELAY)
+		var size := randf_range(BLOOD_CHUNK_MIN_SIZE, BLOOD_CHUNK_MAX_SIZE)
+		var half := size * 0.5
+		var visual := Polygon2D.new()
+		visual.color = _blood_chunk_color(blood_color)
+		visual.polygon = PackedVector2Array([
+			Vector2(-half, -half),
+			Vector2(half, -half),
+			Vector2(half, half),
+			Vector2(-half, half)
+		])
+		chunk.add_child(visual)
+
+		var collider := CollisionShape2D.new()
+		var shape := RectangleShape2D.new()
+		shape.size = Vector2(size, size)
+		collider.shape = shape
+		chunk.add_child(collider)
+
+		var material := PhysicsMaterial.new()
+		material.bounce = BLOOD_CHUNK_BOUNCE
+		material.friction = BLOOD_CHUNK_FRICTION
+		chunk.physics_material_override = material
+
+		var dir := spray_direction.rotated(randf_range(-BLOOD_CHUNK_SPREAD_RADIANS, BLOOD_CHUNK_SPREAD_RADIANS))
+		var speed := randf_range(BLOOD_CHUNK_SPEED_MIN, BLOOD_CHUNK_SPEED_MAX)
+		chunk.linear_velocity = dir * speed + Vector2(randf_range(-12.0, 12.0), randf_range(-10.0, 22.0))
+		chunk.angular_velocity = randf_range(-13.0, 13.0)
+		projectiles_root.add_child(chunk)
+		_queue_free_with_delay(chunk, BLOOD_PARTICLES_CLEANUP_DELAY + randf_range(0.0, 0.35))
 
 func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
 	if projectiles_root == null:
@@ -80,7 +122,8 @@ func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector
 		spray_direction = (-incoming_velocity).normalized()
 	for i in range(SURFACE_PARTICLES_AMOUNT):
 		var chunk := RigidBody2D.new()
-		chunk.z_index = 36
+		chunk.z_as_relative = false
+		chunk.z_index = BLOOD_EFFECTS_Z_INDEX - 4
 		chunk.global_position = impact_position + Vector2(randf_range(-2.5, 2.5), randf_range(-2.0, 2.0))
 		chunk.gravity_scale = SURFACE_CHUNK_GRAVITY_SCALE
 		chunk.linear_damp = SURFACE_CHUNK_LINEAR_DAMP
@@ -122,7 +165,8 @@ func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector
 		_queue_free_with_delay(chunk, SURFACE_PARTICLES_CLEANUP_DELAY + randf_range(0.0, 0.55))
 
 	var dust := CPUParticles2D.new()
-	dust.z_index = 35
+	dust.z_as_relative = false
+	dust.z_index = BLOOD_EFFECTS_Z_INDEX - 5
 	dust.global_position = impact_position
 	dust.amount = 8
 	dust.one_shot = true
@@ -141,6 +185,12 @@ func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector
 	dust.emitting = true
 
 	_queue_free_with_delay(dust, 0.85)
+
+func _blood_chunk_color(base_color: Color) -> Color:
+	var hsv_h := base_color.h
+	var hsv_s := clampf(maxf(0.72, base_color.s), 0.0, 1.0)
+	var hsv_v := clampf(base_color.v * randf_range(0.72, 1.08), 0.0, 1.0)
+	return Color.from_hsv(hsv_h, hsv_s, hsv_v, 1.0)
 
 func sample_map_front_color(world_position: Vector2) -> Color:
 	if map_front_sprite == null or map_front_sprite.texture == null:
@@ -207,13 +257,58 @@ func play_death_sfx(impact_position: Vector2) -> void:
 func play_bullet_touch_sfx(impact_position: Vector2) -> void:
 	if projectiles_root == null or bullet_touch_sfx == null:
 		return
+	_play_positional_sfx(bullet_touch_sfx, impact_position, -2.0, randf_range(0.95, 1.05), 6)
 
+func play_weapon_impact_sfx(stream: AudioStream, impact_position: Vector2, volume_db: float = 0.0, pitch_scale: float = 1.0, max_polyphony: int = 2) -> void:
+	if projectiles_root == null or stream == null:
+		return
+	_play_positional_sfx(stream, impact_position, volume_db, pitch_scale, max_polyphony)
+
+func spawn_explosion_effect(world_position: Vector2) -> void:
+	if projectiles_root == null or explosion_texture == null:
+		return
+	var sprite := AnimatedSprite2D.new()
+	sprite.centered = true
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.global_position = world_position + Vector2(0.0, EXPLOSION_Y_OFFSET)
+	sprite.z_as_relative = false
+	sprite.z_index = 1000
+	sprite.scale = Vector2.ONE * 1.85
+	sprite.sprite_frames = _explosion_sprite_frames()
+	sprite.animation = "default"
+	sprite.speed_scale = 1.0
+	projectiles_root.add_child(sprite)
+	sprite.animation_finished.connect(Callable(self, "_queue_free_from_weak_ref").bind(weakref(sprite)))
+	sprite.play("default")
+
+func spawn_hit_flash(world_position: Vector2) -> void:
+	if projectiles_root == null or hit_texture == null:
+		return
+	var sprite := Sprite2D.new()
+	sprite.texture = hit_texture
+	sprite.centered = true
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.global_position = world_position
+	sprite.rotation = randf_range(0.0, TAU)
+	sprite.z_as_relative = false
+	sprite.z_index = 1000
+	sprite.scale = Vector2.ONE * 0.85
+	projectiles_root.add_child(sprite)
+
+	var tw := sprite.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(sprite, "scale", Vector2.ONE * 1.2, HIT_FLASH_LIFETIME)
+	tw.parallel().tween_property(sprite, "modulate:a", 0.0, HIT_FLASH_LIFETIME)
+	tw.tween_callback(Callable(self, "_queue_free_from_weak_ref").bind(weakref(sprite)))
+
+func _play_positional_sfx(stream: AudioStream, world_position: Vector2, volume_db: float, pitch_scale: float, max_polyphony: int) -> void:
+	if projectiles_root == null or stream == null:
+		return
 	var player := AudioStreamPlayer2D.new()
-	player.stream = bullet_touch_sfx
-	player.global_position = impact_position
-	player.volume_db = -2.0
-	player.pitch_scale = randf_range(0.95, 1.05)
-	player.max_polyphony = 6
+	player.stream = stream
+	player.global_position = world_position
+	player.volume_db = volume_db
+	player.pitch_scale = pitch_scale
+	player.max_polyphony = max_polyphony
 	projectiles_root.add_child(player)
 	player.finished.connect(Callable(self, "_queue_free_from_weak_ref").bind(weakref(player)))
 	player.play()
@@ -233,3 +328,19 @@ func _queue_free_from_weak_ref(target_ref: WeakRef) -> void:
 	var target := target_ref.get_ref() as Node
 	if target != null and is_instance_valid(target):
 		target.queue_free()
+
+func _explosion_sprite_frames() -> SpriteFrames:
+	if explosion_frames != null:
+		return explosion_frames
+	var frames := SpriteFrames.new()
+	if not frames.has_animation("default"):
+		frames.add_animation("default")
+	frames.set_animation_loop("default", false)
+	frames.set_animation_speed("default", 1.0 / maxf(0.001, EXPLOSION_FRAME_SEC))
+	for frame_index in range(EXPLOSION_FRAME_COUNT):
+		var atlas := AtlasTexture.new()
+		atlas.atlas = explosion_texture
+		atlas.region = Rect2(EXPLOSION_FRAME_SIZE.x * float(frame_index), 0.0, EXPLOSION_FRAME_SIZE.x, EXPLOSION_FRAME_SIZE.y)
+		frames.add_frame("default", atlas)
+	explosion_frames = frames
+	return explosion_frames

@@ -172,20 +172,27 @@ func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: Wea
 	)
 	if shot_data.is_empty():
 		return
+	var shots: Variant = shot_data.get("shots", [])
+	if not (shots is Array) or shots.is_empty():
+		return
 	var weapon_id := _weapon_id_for_peer(peer_id)
-	var projectile_id := int(shot_data.get("projectile_id", 0))
-	var spawn_position := shot_data.get("spawn_position", player.global_position) as Vector2
-	# Temporarily disabled server-side offset override.
-	# Use weapon-provided spawn data as-is to avoid left/right offset drift.
-	var velocity := shot_data.get("velocity", Vector2.ZERO) as Vector2
-	var lag_comp_ms := int(shot_data.get("lag_comp_ms", 0))
-	var trail_origin := shot_data.get("trail_origin", spawn_position) as Vector2
 	player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
 	player.play_shot_recoil()
 	for member_value in _lobby_members(lobby_id):
-		if send_spawn_projectile_cb.is_valid():
+		if not send_spawn_projectile_cb.is_valid():
+			continue
+		var member_id := int(member_value)
+		for shot_value in shots:
+			if not (shot_value is Dictionary):
+				continue
+			var pellet := shot_value as Dictionary
+			var projectile_id := int(pellet.get("projectile_id", 0))
+			var spawn_position := pellet.get("spawn_position", player.global_position) as Vector2
+			var velocity := pellet.get("velocity", Vector2.ZERO) as Vector2
+			var lag_comp_ms := int(pellet.get("lag_comp_ms", 0))
+			var trail_origin := pellet.get("trail_origin", spawn_position) as Vector2
 			send_spawn_projectile_cb.call(
-				int(member_value),
+				member_id,
 				projectile_id,
 				peer_id,
 				spawn_position,
@@ -222,14 +229,26 @@ func _on_server_projectile_player_hit(
 	impact_velocity: Vector2,
 	projectile_lobby_id: int
 ) -> void:
+	var projectile_weapon_id := ""
+	if projectile_system != null:
+		projectile_weapon_id = projectile_system.get_projectile_weapon_id(projectile_id, "")
+	if projectile_weapon_id == "grenade":
+		_apply_explosive_projectile_impact(projectile_id, hit_position, projectile_lobby_id)
+		return
 	var target_player := players.get(target_peer_id, null) as NetPlayer
+	var target_blood_position := hit_position
+	var blood_color := Color(0.98, 0.02, 0.07, 1.0)
 	if target_player != null:
-		server_apply_projectile_damage(projectile_id, target_peer_id, target_player)
+		target_blood_position = target_player.global_position
+	if target_player != null and target_player.has_method("get_torso_dominant_color"):
+		blood_color = target_player.call("get_torso_dominant_color") as Color
+	if target_player != null:
+		server_apply_projectile_damage(projectile_id, target_peer_id, target_player, impact_velocity)
 	if combat_effects != null:
-		combat_effects.spawn_blood_particles(hit_position, impact_velocity)
+		combat_effects.spawn_blood_particles(target_blood_position, impact_velocity, blood_color, 1.0)
 	for member_value in _lobby_members(projectile_lobby_id):
 		if send_spawn_blood_particles_cb.is_valid():
-			send_spawn_blood_particles_cb.call(int(member_value), hit_position, impact_velocity)
+			send_spawn_blood_particles_cb.call(int(member_value), target_blood_position, impact_velocity, blood_color, 1.0)
 
 func _on_server_projectile_wall_hit(
 	_projectile_id: int,
@@ -237,6 +256,8 @@ func _on_server_projectile_wall_hit(
 	wall_impact_velocity: Vector2,
 	projectile_lobby_id: int
 ) -> void:
+	if projectile_system != null and projectile_system.get_projectile_weapon_id(_projectile_id, "") == "grenade":
+		_apply_explosive_projectile_impact(_projectile_id, wall_position, projectile_lobby_id)
 	if combat_effects == null:
 		return
 	var impact_color := combat_effects.sample_map_front_color(wall_position)
@@ -294,17 +315,65 @@ func record_player_history(peer_id: int, position: Vector2) -> void:
 		return
 	hit_damage_resolver.record_player_history(peer_id, position)
 
-func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer) -> void:
+func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
 	if hit_damage_resolver == null:
-		return
+		return 0
 	var fallback_weapon := _weapon_profile_for_id(weapon_id_ak47)
 	var base_damage := fallback_weapon.base_damage() if fallback_weapon != null else 25
-	hit_damage_resolver.server_apply_projectile_damage(
+	return hit_damage_resolver.server_apply_projectile_damage(
 		projectile_id,
 		target_peer_id,
 		target_player,
-		base_damage
+		base_damage,
+		incoming_velocity
 	)
+
+func _apply_explosive_projectile_impact(projectile_id: int, impact_position: Vector2, projectile_lobby_id: int) -> void:
+	if hit_damage_resolver == null or projectile_system == null:
+		return
+	var weapon_id := projectile_system.get_projectile_weapon_id(projectile_id, "")
+	var weapon_profile := _weapon_profile_for_id(weapon_id)
+	if weapon_profile == null:
+		return
+	var radius := weapon_profile.explosion_radius()
+	if radius <= 0.0:
+		return
+	if combat_effects != null:
+		combat_effects.spawn_explosion_effect(impact_position)
+	if camera_shake != null:
+		camera_shake.add_explosion_shake(0.95, 1.0, 26.0, 0.12, 2.0)
+	var projectile := projectile_system.get_projectile(projectile_id)
+	var attacker_peer_id := projectile.owner_peer_id if projectile != null else -1
+	var base_damage := projectile_system.get_projectile_damage(projectile_id, weapon_profile.base_damage())
+	var radius_sq := radius * radius
+
+	for key in players.keys():
+		var target_peer_id := int(key)
+		if target_peer_id == attacker_peer_id:
+			continue
+		if projectile_lobby_id > 0 and _peer_lobby(target_peer_id) != projectile_lobby_id:
+			continue
+		var target_player := players.get(target_peer_id, null) as NetPlayer
+		if target_player == null:
+			continue
+		var to_target := target_player.global_position - impact_position
+		var dist_sq := to_target.length_squared()
+		if dist_sq > radius_sq:
+			continue
+		var dist := sqrt(dist_sq)
+		var scale := clampf(1.0 - (dist / radius) * 0.65, 0.35, 1.0)
+		var applied_damage := maxi(1, int(round(float(base_damage) * scale)))
+		var target_blood_position := target_player.global_position
+		hit_damage_resolver.server_apply_direct_damage(attacker_peer_id, target_peer_id, target_player, applied_damage, to_target)
+		var blood_velocity := to_target.normalized() * 180.0 if to_target.length_squared() > 0.0001 else Vector2.UP * -120.0
+		var blood_color := Color(0.98, 0.02, 0.07, 1.0)
+		if target_player.has_method("get_torso_dominant_color"):
+			blood_color = target_player.call("get_torso_dominant_color") as Color
+		if combat_effects != null:
+			combat_effects.spawn_blood_particles(target_blood_position, blood_velocity, blood_color, 1.0)
+		for member_value in _lobby_members(projectile_lobby_id):
+			if send_spawn_blood_particles_cb.is_valid():
+				send_spawn_blood_particles_cb.call(int(member_value), target_blood_position, blood_velocity, blood_color, 1.0)
 
 func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	if player_replication != null:

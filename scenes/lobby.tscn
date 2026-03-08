@@ -97,6 +97,76 @@ border_color = Color(0.06, 0.05, 0.08, 1)
 shadow_color = Color(0, 0, 0, 0.35)
 shadow_size = 3
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_buy_info"]
+content_margin_left = 14.0
+content_margin_top = 12.0
+content_margin_right = 14.0
+content_margin_bottom = 12.0
+bg_color = Color(0.24, 0.2, 0.33, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.06, 0.05, 0.08, 1)
+shadow_color = Color(0, 0, 0, 0.35)
+shadow_size = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_purchase_btn_normal"]
+content_margin_left = 14.0
+content_margin_top = 8.0
+content_margin_right = 14.0
+content_margin_bottom = 8.0
+bg_color = Color(0.22, 0.19, 0.3, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.9, 0.74, 0.27, 1)
+shadow_color = Color(0, 0, 0, 0.35)
+shadow_size = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_purchase_btn_hover"]
+content_margin_left = 14.0
+content_margin_top = 8.0
+content_margin_right = 14.0
+content_margin_bottom = 8.0
+bg_color = Color(0.28, 0.24, 0.38, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.98, 0.83, 0.36, 1)
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_purchase_btn_pressed"]
+content_margin_left = 14.0
+content_margin_top = 8.0
+content_margin_right = 14.0
+content_margin_bottom = 8.0
+bg_color = Color(0.14, 0.12, 0.2, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.82, 0.66, 0.21, 1)
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_purchase_btn_disabled"]
+content_margin_left = 14.0
+content_margin_top = 8.0
+content_margin_right = 14.0
+content_margin_bottom = 8.0
+bg_color = Color(0.14, 0.13, 0.17, 0.65)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.6, 0.5, 0.24, 0.8)
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 3
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_list_panel"]
 content_margin_left = 10.0
 content_margin_top = 10.0
@@ -723,7 +793,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.4)
+color = Color(0.02, 0.01, 0.05, 0.72)
 
 [node name="PurchaseMenu" type="PanelContainer" parent="ModalUi"]
 unique_name_in_owner = true
@@ -734,24 +804,24 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -210.0
-offset_top = -70.0
-offset_right = 210.0
-offset_bottom = 70.0
+offset_left = -165.0
+offset_top = -74.0
+offset_right = 165.0
+offset_bottom = 74.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_panel")
 
 [node name="Margin" type="MarginContainer" parent="ModalUi/PurchaseMenu"]
 layout_mode = 2
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 10
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 10
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
 
 [node name="VBox" type="VBoxContainer" parent="ModalUi/PurchaseMenu/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 8
 
 [node name="PurchaseTitle" type="Label" parent="ModalUi/PurchaseMenu/Margin/VBox"]
 layout_mode = 2
@@ -763,7 +833,18 @@ theme_override_font_sizes/font_size = 16
 text = "BUY SKIN?"
 horizontal_alignment = 1
 
-[node name="PurchaseText" type="Label" parent="ModalUi/PurchaseMenu/Margin/VBox"]
+[node name="PurchaseInfoCard" type="PanelContainer" parent="ModalUi/PurchaseMenu/Margin/VBox"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_lobby_buy_info")
+
+[node name="PurchaseInfoMargin" type="MarginContainer" parent="ModalUi/PurchaseMenu/Margin/VBox/PurchaseInfoCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 4
+
+[node name="PurchaseText" type="Label" parent="ModalUi/PurchaseMenu/Margin/VBox/PurchaseInfoCard/PurchaseInfoMargin"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.93, 0.95, 0.98, 1)
@@ -773,43 +854,57 @@ theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 12
 text = "Skin: -
 Cost: - Coins"
+autowrap_mode = 3
 horizontal_alignment = 1
 
 [node name="PurchaseButtonsRow" type="HBoxContainer" parent="ModalUi/PurchaseMenu/Margin/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 8
 
 [node name="PurchaseBuyButton" type="Button" parent="ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow"]
 unique_name_in_owner = true
 layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
 size_flags_horizontal = 3
 theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
 theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
 theme_override_fonts/font = ExtResource("2_font")
-theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
-theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
-theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
-theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
-text = "Buy"
+theme_override_font_sizes/font_size = 13
+theme_override_styles/focus = SubResource("StyleBoxFlat_purchase_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_purchase_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_purchase_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_purchase_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_purchase_btn_normal")
+text = "BUY"
 
 [node name="PurchaseCancelButton" type="Button" parent="ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow"]
 unique_name_in_owner = true
 layout_mode = 2
+custom_minimum_size = Vector2(0, 34)
 size_flags_horizontal = 3
 theme_override_colors/font_disabled_color = Color(0.65, 0.7, 0.75, 0.9)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
 theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
 theme_override_fonts/font = ExtResource("2_font")
-theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
-theme_override_styles/disabled = SubResource("StyleBoxFlat_lobby_btn_disabled")
-theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
-theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_btn_normal")
-text = "Cancel"
+theme_override_font_sizes/font_size = 13
+theme_override_styles/focus = SubResource("StyleBoxFlat_purchase_btn_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_purchase_btn_disabled")
+theme_override_styles/hover = SubResource("StyleBoxFlat_purchase_btn_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_purchase_btn_pressed")
+theme_override_styles/normal = SubResource("StyleBoxFlat_purchase_btn_normal")
+text = "CANCEL"
+
+[node name="PurchaseHint" type="Label" parent="ModalUi/PurchaseMenu/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.74, 0.79, 0.86, 0.9)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 10
+text = "Unlocked skins stay on your account."
+horizontal_alignment = 1
+visible = false
 
 [node name="LoadingOverlay" type="ColorRect" parent="ModalUi"]
 unique_name_in_owner = true

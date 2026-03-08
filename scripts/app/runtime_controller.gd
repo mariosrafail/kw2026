@@ -155,6 +155,15 @@ func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	_client_skill_cd_q_remaining = maxf(0.0, _client_skill_cd_q_remaining - delta)
 	_client_skill_cd_e_remaining = maxf(0.0, _client_skill_cd_e_remaining - delta)
 	_update_skill_cooldowns_hud(_client_skill_cd_q_remaining, _client_skill_cd_e_remaining)
+	var local_player := players.get(local_peer_id, null) as NetPlayer
+	if local_player != null and local_player.has_method("set_skill_cooldown_bars"):
+		var q_ratio := 1.0
+		var e_ratio := 1.0
+		if _client_skill_cd_q_max > 0.0:
+			q_ratio = 1.0 - clampf(_client_skill_cd_q_remaining / _client_skill_cd_q_max, 0.0, 1.0)
+		if _client_skill_cd_e_max > 0.0:
+			e_ratio = 1.0 - clampf(_client_skill_cd_e_remaining / _client_skill_cd_e_max, 0.0, 1.0)
+		local_player.call("set_skill_cooldown_bars", q_ratio, e_ratio, true)
 
 func _begin_client_skill_cooldown(skill_number: int) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:

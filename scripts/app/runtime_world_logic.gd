@@ -2,16 +2,28 @@ extends "res://scripts/app/runtime_shared.gd"
 
 const GUN_BASE_POSITION := Vector2(6.0, 2.0)
 const AK47_GUN_FALLBACK_REGION := Rect2(31, 12, 50, 12)
+const GRENADE_GUN_FALLBACK_REGION := Rect2(0, 0, 96, 71)
+const SHOTGUN_GUN_FALLBACK_REGION := Rect2(0, 0, 42, 37)
 const UZI_GUN_FALLBACK_REGION := Rect2(161, 85, 25, 21)
 const AK47_MUZZLE_POSITION := Vector2(33.0, 2.5)
+const GRENADE_MUZZLE_POSITION := Vector2(34.0, 0.0)
+const SHOTGUN_MUZZLE_POSITION := Vector2(42.0, 2.0)
 const UZI_MUZZLE_POSITION := Vector2(35.0, 2.5)
 const AK47_RELOAD_STRIP := preload("res://assets/textures/guns/akReload.png")
+const GRENADE_RELOAD_STRIP := preload("res://assets/textures/guns/grenadeReload.png")
+const SHOTGUN_RELOAD_STRIP := preload("res://assets/textures/guns/shotgunReload.png")
 const UZI_RELOAD_STRIP := preload("res://assets/textures/guns/uziReload.png")
 const AK47_RELOAD_FRAME_SIZE := Vector2i(89, 39)
+const GRENADE_RELOAD_FRAME_SIZE := Vector2i(96, 71)
+const SHOTGUN_RELOAD_FRAME_SIZE := Vector2i(108, 37)
 const UZI_RELOAD_FRAME_SIZE := Vector2i(64, 64)
 const AK47_RELOAD_FRAME_COUNT := 15
+const GRENADE_RELOAD_FRAME_COUNT := 18
+const SHOTGUN_RELOAD_FRAME_COUNT := 7
 const UZI_RELOAD_FRAME_COUNT := 13
 const AK47_RELOAD_FRAME_DURATION_SEC := 1.0 / 15.0
+const GRENADE_RELOAD_FRAME_DURATION_SEC := 1.5 / 18.0
+const SHOTGUN_RELOAD_FRAME_DURATION_SEC := 1.2 / 7.0
 const UZI_RELOAD_FRAME_DURATION_SEC := 1.0 / 13.0
 const ESCAPE_LEAVE_TIMEOUT_SEC := 1.25
 
@@ -592,10 +604,10 @@ func _broadcast_despawn_player_rpc(peer_id: int) -> void:
 func _send_despawn_player_rpc_to_peer(target_peer_id: int, peer_id: int) -> void:
 	_rpc_despawn_player.rpc_id(target_peer_id, peer_id)
 
-func _send_sync_player_state_rpc(target_peer_id: int, peer_id: int, new_position: Vector2, new_velocity: Vector2, aim_angle: float, health: int) -> void:
+func _send_sync_player_state_rpc(target_peer_id: int, peer_id: int, new_position: Vector2, new_velocity: Vector2, aim_angle: float, health: int, part_animation_state: Dictionary = {}) -> void:
 	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
 		return
-	_rpc_sync_player_state.rpc_id(target_peer_id, peer_id, new_position, new_velocity, aim_angle, health)
+	_rpc_sync_player_state.rpc_id(target_peer_id, peer_id, new_position, new_velocity, aim_angle, health, part_animation_state)
 
 func _send_sync_player_stats_rpc(target_peer_id: int, peer_id: int, kills: int, deaths: int) -> void:
 	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
@@ -616,8 +628,8 @@ func _send_reload_sfx_rpc(target_peer_id: int, peer_id: int, weapon_id: String) 
 func _send_spawn_projectile_rpc(target_peer_id: int, projectile_id: int, owner_peer_id: int, spawn_position: Vector2, velocity: Vector2, lag_comp_ms: int, trail_origin: Vector2, weapon_id: String) -> void:
 	_rpc_spawn_projectile.rpc_id(target_peer_id, projectile_id, owner_peer_id, spawn_position, velocity, lag_comp_ms, trail_origin, weapon_id)
 
-func _send_spawn_blood_particles_rpc(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2) -> void:
-	_rpc_spawn_blood_particles.rpc_id(target_peer_id, impact_position, incoming_velocity)
+func _send_spawn_blood_particles_rpc(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2, blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), count_multiplier: float = 1.0) -> void:
+	_rpc_spawn_blood_particles.rpc_id(target_peer_id, impact_position, incoming_velocity, blood_color, count_multiplier)
 
 func _send_spawn_surface_particles_rpc(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
 	_rpc_spawn_surface_particles.rpc_id(target_peer_id, impact_position, incoming_velocity, particle_color)
@@ -724,6 +736,15 @@ func _ensure_player_display_name(peer_id: int) -> String:
 func _player_color(peer_id: int) -> Color:
 	return spawn_identity.player_color(peer_id)
 
+func _projectile_color(peer_id: int, weapon_id: String = "") -> Color:
+	var resolved_weapon_id := _normalize_weapon_id(weapon_id if not weapon_id.strip_edges().is_empty() else _weapon_id_for_peer(peer_id))
+	var skin_index := _weapon_skin_for_peer(peer_id, resolved_weapon_id)
+	if weapon_ui != null and weapon_ui.has_method("weapon_skin_dominant_color"):
+		var color_value = weapon_ui.call("weapon_skin_dominant_color", resolved_weapon_id, skin_index)
+		if color_value is Color:
+			return color_value as Color
+	return _player_color(peer_id)
+
 func _weapon_profile_for_peer(peer_id: int) -> WeaponProfile:
 	return _weapon_profile_for_id(_weapon_id_for_peer(peer_id))
 
@@ -740,12 +761,69 @@ func _weapon_visual_for_id(weapon_id: String) -> Dictionary:
 	var reload_texture_frames = weapon_reload_frames_by_id.get(WEAPON_ID_AK47, [])
 	var muzzle_position := AK47_MUZZLE_POSITION
 	var reload_frame_duration_sec := AK47_RELOAD_FRAME_DURATION_SEC
-	if normalized == WEAPON_ID_UZI:
+	if normalized == WEAPON_ID_GRENADE:
+		idle_texture = weapon_idle_texture_by_id.get(WEAPON_ID_GRENADE, idle_texture)
+		reload_texture_frames = weapon_reload_frames_by_id.get(WEAPON_ID_GRENADE, reload_texture_frames)
+		muzzle_position = GRENADE_MUZZLE_POSITION
+		reload_frame_duration_sec = GRENADE_RELOAD_FRAME_DURATION_SEC
+		var grenade_shot_texture_frames: Array = []
+		for frame_index in range(mini(3, reload_texture_frames.size())):
+			var frame_value = reload_texture_frames[frame_index]
+			if frame_value is Texture2D:
+				grenade_shot_texture_frames.append(frame_value)
+		return {
+			"weapon_id": normalized,
+			"texture": idle_texture,
+			"region_enabled": false,
+			"gun_position": GUN_BASE_POSITION,
+			"muzzle_position": muzzle_position,
+			"shot_texture_frames": grenade_shot_texture_frames,
+			"shot_frame_duration_sec": 0.03,
+			"reload_texture_frames": reload_texture_frames,
+			"reload_frame_duration_sec": reload_frame_duration_sec,
+			"recoil_scale_x": 0.8,
+			"recoil_scale_y": 1.28,
+			"recoil_distance": 12.8,
+			"recoil_out_time": 0.02,
+			"recoil_back_time": 0.2,
+			"recoil_rotation": 0.24,
+			"material": null
+		}
+	elif normalized == WEAPON_ID_SHOTGUN:
+		idle_texture = weapon_idle_texture_by_id.get(WEAPON_ID_SHOTGUN, idle_texture)
+		reload_texture_frames = weapon_reload_frames_by_id.get(WEAPON_ID_SHOTGUN, reload_texture_frames)
+		muzzle_position = SHOTGUN_MUZZLE_POSITION
+		reload_frame_duration_sec = SHOTGUN_RELOAD_FRAME_DURATION_SEC
+		var shot_texture_frames: Array = []
+		for frame_index in range(mini(3, reload_texture_frames.size())):
+			var frame_value = reload_texture_frames[frame_index]
+			if frame_value is Texture2D:
+				shot_texture_frames.append(frame_value)
+		return {
+			"weapon_id": normalized,
+			"texture": idle_texture,
+			"region_enabled": false,
+			"gun_position": GUN_BASE_POSITION,
+			"muzzle_position": muzzle_position,
+			"shot_texture_frames": shot_texture_frames,
+			"shot_frame_duration_sec": 0.024,
+			"reload_texture_frames": reload_texture_frames,
+			"reload_frame_duration_sec": reload_frame_duration_sec,
+			"recoil_scale_x": 0.78,
+			"recoil_scale_y": 1.3,
+			"recoil_distance": 14.0,
+			"recoil_out_time": 0.018,
+			"recoil_back_time": 0.2,
+			"recoil_rotation": 0.28,
+			"material": null
+		}
+	elif normalized == WEAPON_ID_UZI:
 		idle_texture = weapon_idle_texture_by_id.get(WEAPON_ID_UZI, idle_texture)
 		reload_texture_frames = weapon_reload_frames_by_id.get(WEAPON_ID_UZI, reload_texture_frames)
 		muzzle_position = UZI_MUZZLE_POSITION
 		reload_frame_duration_sec = UZI_RELOAD_FRAME_DURATION_SEC
 	return {
+		"weapon_id": normalized,
 		"texture": idle_texture,
 		"region_enabled": false,
 		"gun_position": GUN_BASE_POSITION,
@@ -779,10 +857,16 @@ func _ensure_weapon_visual_texture_cache() -> void:
 	if not weapon_idle_texture_by_id.is_empty() and not weapon_reload_frames_by_id.is_empty():
 		return
 	var ak_frames := _slice_strip_frames(AK47_RELOAD_STRIP, AK47_RELOAD_FRAME_SIZE, AK47_RELOAD_FRAME_COUNT)
+	var grenade_frames := _slice_strip_frames(GRENADE_RELOAD_STRIP, GRENADE_RELOAD_FRAME_SIZE, GRENADE_RELOAD_FRAME_COUNT)
+	var shotgun_frames := _slice_strip_frames(SHOTGUN_RELOAD_STRIP, SHOTGUN_RELOAD_FRAME_SIZE, SHOTGUN_RELOAD_FRAME_COUNT)
 	var uzi_frames := _slice_strip_frames(UZI_RELOAD_STRIP, UZI_RELOAD_FRAME_SIZE, UZI_RELOAD_FRAME_COUNT)
 	weapon_reload_frames_by_id[WEAPON_ID_AK47] = ak_frames
+	weapon_reload_frames_by_id[WEAPON_ID_GRENADE] = grenade_frames
+	weapon_reload_frames_by_id[WEAPON_ID_SHOTGUN] = shotgun_frames
 	weapon_reload_frames_by_id[WEAPON_ID_UZI] = uzi_frames
 	weapon_idle_texture_by_id[WEAPON_ID_AK47] = _first_texture_or_fallback(ak_frames, AK47_GUN_FALLBACK_REGION)
+	weapon_idle_texture_by_id[WEAPON_ID_GRENADE] = _first_texture_or_fallback(grenade_frames, GRENADE_GUN_FALLBACK_REGION)
+	weapon_idle_texture_by_id[WEAPON_ID_SHOTGUN] = _first_texture_or_fallback(shotgun_frames, SHOTGUN_GUN_FALLBACK_REGION)
 	weapon_idle_texture_by_id[WEAPON_ID_UZI] = _first_texture_or_fallback(uzi_frames, UZI_GUN_FALLBACK_REGION)
 
 func _slice_strip_frames(strip_texture: Texture2D, frame_size: Vector2i, frame_count: int) -> Array:
@@ -858,8 +942,18 @@ func _weapon_reload_sfx(weapon_id: String) -> AudioStream:
 		return weapon_reload_sfx_by_id[normalized] as AudioStream
 	return weapon_reload_sfx_by_id[WEAPON_ID_AK47] as AudioStream
 
+func _weapon_impact_sfx(weapon_id: String) -> AudioStream:
+	var normalized := _normalize_weapon_id(weapon_id)
+	if weapon_impact_sfx_by_id.has(normalized):
+		return weapon_impact_sfx_by_id[normalized] as AudioStream
+	return BULLET_TOUCH_SFX
+
 func _normalize_weapon_id(weapon_id: String) -> String:
 	var normalized := weapon_id.strip_edges().to_lower()
+	if normalized == WEAPON_ID_GRENADE:
+		return WEAPON_ID_GRENADE
+	if normalized == WEAPON_ID_SHOTGUN:
+		return WEAPON_ID_SHOTGUN
 	if normalized == WEAPON_ID_UZI:
 		return WEAPON_ID_UZI
 	return WEAPON_ID_AK47
@@ -955,5 +1049,3 @@ func _role_name(value: int) -> String:
 			return "client"
 		_:
 			return "manual"
-
-

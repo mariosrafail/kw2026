@@ -8,6 +8,7 @@ var projectiles: Dictionary = {}
 var projectile_lobby_by_id: Dictionary = {}
 var projectile_damage_by_id: Dictionary = {}
 var projectile_weapon_name_by_id: Dictionary = {}
+var projectile_weapon_id_by_id: Dictionary = {}
 var next_projectile_id: int = 1
 
 func configure(root: Node2D, scene: PackedScene, color_callback: Callable) -> void:
@@ -28,6 +29,7 @@ func clear() -> void:
 	projectile_lobby_by_id.clear()
 	projectile_damage_by_id.clear()
 	projectile_weapon_name_by_id.clear()
+	projectile_weapon_id_by_id.clear()
 
 func fire_from_weapon(
 	owner_peer_id: int,
@@ -40,43 +42,57 @@ func fire_from_weapon(
 ) -> Dictionary:
 	if weapon == null:
 		return {}
-	var shot_data := weapon.build_server_shot(
+	var shot_data_list := weapon.build_server_shots(
 		player,
 		input_state,
 		next_projectile_id,
 		max_reported_rtt_ms,
 		world_2d
 	)
-	var projectile_id := int(shot_data.get("projectile_id", next_projectile_id))
-	next_projectile_id = maxi(next_projectile_id, projectile_id + 1)
-	var spawn_position := shot_data.get("spawn_position", player.global_position) as Vector2
-	var velocity := shot_data.get("velocity", Vector2.ZERO) as Vector2
-	var lag_comp_ms := int(shot_data.get("lag_comp_ms", 0))
-	var trail_origin := shot_data.get("trail_origin", spawn_position) as Vector2
-	var shot_damage := int(shot_data.get("shot_damage", weapon.base_damage()))
-
-	var projectile := spawn_projectile(
-		projectile_id,
-		owner_peer_id,
-		spawn_position,
-		velocity,
-		lag_comp_ms,
-		trail_origin,
-		weapon
-	)
-	if projectile == null:
+	if shot_data_list.is_empty():
 		return {}
+	var spawned_shots: Array = []
+	var max_projectile_id := next_projectile_id
+	for shot_data_value in shot_data_list:
+		if not (shot_data_value is Dictionary):
+			continue
+		var shot_data := shot_data_value as Dictionary
+		var projectile_id := int(shot_data.get("projectile_id", max_projectile_id))
+		max_projectile_id = maxi(max_projectile_id, projectile_id + 1)
+		var spawn_position := shot_data.get("spawn_position", player.global_position) as Vector2
+		var velocity := shot_data.get("velocity", Vector2.ZERO) as Vector2
+		var lag_comp_ms := int(shot_data.get("lag_comp_ms", 0))
+		var trail_origin := shot_data.get("trail_origin", spawn_position) as Vector2
+		var shot_damage := int(shot_data.get("shot_damage", weapon.base_damage()))
 
-	projectile_lobby_by_id[projectile_id] = lobby_id
-	projectile_damage_by_id[projectile_id] = shot_damage
-	projectile_weapon_name_by_id[projectile_id] = weapon.weapon_name()
+		var projectile := spawn_projectile(
+			projectile_id,
+			owner_peer_id,
+			spawn_position,
+			velocity,
+			lag_comp_ms,
+			trail_origin,
+			weapon
+		)
+		if projectile == null:
+			continue
+		projectile_lobby_by_id[projectile_id] = lobby_id
+		projectile_damage_by_id[projectile_id] = shot_damage
+		projectile_weapon_name_by_id[projectile_id] = weapon.weapon_name()
+		projectile_weapon_id_by_id[projectile_id] = weapon.weapon_id()
+		spawned_shots.append({
+			"projectile_id": projectile_id,
+			"spawn_position": spawn_position,
+			"velocity": velocity,
+			"lag_comp_ms": lag_comp_ms,
+			"trail_origin": trail_origin,
+			"shot_damage": shot_damage
+		})
+	next_projectile_id = max_projectile_id
+	if spawned_shots.is_empty():
+		return {}
 	return {
-		"projectile_id": projectile_id,
-		"spawn_position": spawn_position,
-		"velocity": velocity,
-		"lag_comp_ms": lag_comp_ms,
-		"trail_origin": trail_origin,
-		"shot_damage": shot_damage
+		"shots": spawned_shots
 	}
 
 func spawn_projectile(
@@ -107,7 +123,7 @@ func spawn_projectile(
 		hit_radius = weapon.projectile_hit_radius()
 		life_time = weapon.projectile_lifetime()
 	projectile.configure(
-		_owner_color(owner_peer_id),
+		_owner_color(owner_peer_id, weapon),
 		velocity,
 		projectile_id,
 		owner_peer_id,
@@ -118,6 +134,9 @@ func spawn_projectile(
 		life_time
 	)
 	projectiles[projectile_id] = projectile
+	if weapon != null:
+		projectile_weapon_name_by_id[projectile_id] = weapon.weapon_name()
+		projectile_weapon_id_by_id[projectile_id] = weapon.weapon_id()
 	return projectile
 
 func get_projectile(projectile_id: int) -> NetProjectile:
@@ -128,6 +147,9 @@ func get_projectile_lobby(projectile_id: int, fallback_lobby_id: int = 0) -> int
 
 func get_projectile_damage(projectile_id: int, fallback_damage: int) -> int:
 	return int(projectile_damage_by_id.get(projectile_id, fallback_damage))
+
+func get_projectile_weapon_id(projectile_id: int, fallback_weapon_id: String = "") -> String:
+	return str(projectile_weapon_id_by_id.get(projectile_id, fallback_weapon_id))
 
 func mark_impact(projectile_id: int, impact_position: Vector2) -> Dictionary:
 	var projectile := get_projectile(projectile_id)
@@ -149,6 +171,7 @@ func despawn_local(projectile_id: int) -> void:
 		projectile_lobby_by_id.erase(projectile_id)
 		projectile_damage_by_id.erase(projectile_id)
 		projectile_weapon_name_by_id.erase(projectile_id)
+		projectile_weapon_id_by_id.erase(projectile_id)
 		return
 	var projectile := projectiles[projectile_id] as NetProjectile
 	if is_instance_valid(projectile):
@@ -157,6 +180,7 @@ func despawn_local(projectile_id: int) -> void:
 	projectile_lobby_by_id.erase(projectile_id)
 	projectile_damage_by_id.erase(projectile_id)
 	projectile_weapon_name_by_id.erase(projectile_id)
+	projectile_weapon_id_by_id.erase(projectile_id)
 
 func request_despawn(projectile_id: int, on_despawn: Callable = Callable()) -> void:
 	var lobby_id := get_projectile_lobby(projectile_id, 0)
@@ -255,7 +279,9 @@ func _mark_impact_and_emit(projectile_id: int, lobby_id: int, impact_position: V
 			impact_data.get("trail_start_position", impact_position) as Vector2
 		)
 
-func _owner_color(owner_peer_id: int) -> Color:
+func _owner_color(owner_peer_id: int, weapon: WeaponProfile = null) -> Color:
 	if resolve_owner_color.is_valid():
-		return resolve_owner_color.call(owner_peer_id) as Color
+		if weapon != null:
+			return resolve_owner_color.call(owner_peer_id, weapon.weapon_id()) as Color
+		return resolve_owner_color.call(owner_peer_id, "") as Color
 	return Color.WHITE

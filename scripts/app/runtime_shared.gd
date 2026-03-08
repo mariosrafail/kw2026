@@ -22,6 +22,8 @@ const ARG_NO_AUTOSTART := "--no-autostart"
 
 const MAP_ID_CLASSIC := "classic"
 const WEAPON_ID_AK47 := "ak47"
+const WEAPON_ID_GRENADE := "grenade"
+const WEAPON_ID_SHOTGUN := "shotgun"
 const WEAPON_ID_UZI := "uzi"
 const CHARACTER_ID_OUTRAGE := "outrage"
 const CHARACTER_ID_EREBUS := "erebus"
@@ -30,6 +32,8 @@ const CHARACTER_ID_TASKO := "tasko"
 const PLAYER_SCENE := preload("res://scenes/entities/player.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/entities/bullet.tscn")
 const AK47_SCRIPT := preload("res://scripts/weapons/ak47.gd")
+const GRENADE_SCRIPT := preload("res://scripts/weapons/grenade.gd")
+const SHOTGUN_SCRIPT := preload("res://scripts/weapons/shotgun.gd")
 const UZI_SCRIPT := preload("res://scripts/weapons/uzi.gd")
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
@@ -53,11 +57,18 @@ const WEAPON_UI_SCRIPT := preload("res://scripts/ui/test_menu/weapon_ui.gd")
 
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
+const GRENADE_SHOT_SFX := preload("res://assets/sounds/sfx/guns/grenade/launcher_shoot.wav")
+const GRENADE_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/grenade/launcher_reload.wav")
+const GRENADE_IMPACT_SFX := preload("res://assets/sounds/sfx/guns/grenade/launcher_boom.wav")
+const SHOTGUN_SHOT_SFX := preload("res://assets/sounds/sfx/guns/smith/smith_shoot.wav")
+const SHOTGUN_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/smith/smith_reload.wav")
 const UZI_SHOT_SFX := preload("res://assets/sounds/sfx/guns/uzi/uzi_shoot.wav")
 const UZI_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/uzi/uzi_reload.wav")
 const SPLASH_HIT_SFX := preload("res://assets/sounds/sfx/splash.MP3")
 const DEATH_HIT_SFX := preload("res://assets/sounds/sfx/general/death.wav")
 const BULLET_TOUCH_SFX := preload("res://assets/sounds/sfx/guns/shared/bullet_touch.wav")
+const EXPLOSION_EFFECT_TEXTURE := preload("res://assets/textures/effects/explosion.png")
+const HIT_EFFECT_TEXTURE := preload("res://assets/textures/effects/hit.png")
 const GUNS_SPRITESHEET := preload("res://assets/warriors/guns.png")
 
 enum Role { NONE, SERVER, CLIENT }
@@ -132,7 +143,7 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var esc_cancel_button: Button = get_node_or_null("ModalUi/EscMenu/Margin/VBox/EscCancelButton") as Button
 @onready var purchase_overlay: ColorRect = get_node_or_null("ModalUi/PurchaseOverlay") as ColorRect
 @onready var purchase_menu: PanelContainer = get_node_or_null("ModalUi/PurchaseMenu") as PanelContainer
-@onready var purchase_text: Label = get_node_or_null("ModalUi/PurchaseMenu/Margin/VBox/PurchaseText") as Label
+@onready var purchase_text: Label = get_node_or_null("ModalUi/PurchaseMenu/Margin/VBox/PurchaseInfoCard/PurchaseInfoMargin/PurchaseText") as Label
 @onready var purchase_buy_button: Button = get_node_or_null("ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow/PurchaseBuyButton") as Button
 @onready var purchase_cancel_button: Button = get_node_or_null("ModalUi/PurchaseMenu/Margin/VBox/PurchaseButtonsRow/PurchaseCancelButton") as Button
 @onready var loading_overlay: ColorRect = get_node_or_null("ModalUi/LoadingOverlay") as ColorRect
@@ -203,6 +214,7 @@ var weapon_ui: RefCounted
 var weapon_profiles: Dictionary = {}
 var weapon_shot_sfx_by_id: Dictionary = {}
 var weapon_reload_sfx_by_id: Dictionary = {}
+var weapon_impact_sfx_by_id: Dictionary = {}
 
 @rpc("any_peer", "reliable")
 func _rpc_request_spawn() -> void:
@@ -221,7 +233,7 @@ func _rpc_despawn_player(_peer_id: int) -> void:
 	pass
 
 @rpc("authority", "unreliable_ordered")
-func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity: Vector2, _aim_angle: float, _health: int) -> void:
+func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity: Vector2, _aim_angle: float, _health: int, _part_animation_state: Dictionary = {}) -> void:
 	pass
 
 @rpc("authority", "reliable")
@@ -253,7 +265,7 @@ func _rpc_projectile_impact(_projectile_id: int, _impact_position: Vector2, _leg
 	pass
 
 @rpc("authority", "reliable")
-func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: Vector2) -> void:
+func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), _count_multiplier: float = 1.0) -> void:
 	pass
 
 @rpc("authority", "reliable")

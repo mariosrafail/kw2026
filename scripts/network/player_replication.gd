@@ -113,7 +113,8 @@ func server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 			player.global_position,
 			player.velocity,
 			player.get_aim_angle(),
-			player.get_health()
+			player.get_health(),
+			player.get_part_animation_state()
 		)
 
 func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
@@ -275,6 +276,7 @@ func client_apply_state_snapshot(
 	new_velocity: Vector2,
 	aim_angle: float,
 	health: int,
+	part_animation_state: Dictionary,
 	local_peer_id: int
 ) -> void:
 	var player := players.get(peer_id, null) as NetPlayer
@@ -313,7 +315,7 @@ func client_apply_state_snapshot(
 			player.apply_visual_correction(-applied_delta)
 		return
 
-	player.apply_snapshot(new_position, new_velocity, aim_angle, health)
+	player.apply_snapshot(new_position, new_velocity, aim_angle, health, part_animation_state)
 
 func _default_input_state() -> Dictionary:
 	if default_input_state_cb.is_valid():

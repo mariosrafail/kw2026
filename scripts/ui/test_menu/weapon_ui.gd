@@ -10,6 +10,7 @@ var rainbow_skin_cost := 5000
 
 var _weapon_skin_material_cache: Dictionary = {}
 var _weapon_ui_texture_cache: Dictionary = {}
+var _weapon_skin_color_cache: Dictionary = {}
 
 func weapon_display_name(weapon_id: String) -> String:
 	var normalized := weapon_id.strip_edges().to_lower()
@@ -253,6 +254,72 @@ func weapon_skin_material(weapon_id: String, skin_index: int) -> Material:
 		mat.set_shader_parameter("tint_color", tint)
 	_weapon_skin_material_cache[key] = mat
 	return mat
+
+func weapon_skin_dominant_color(weapon_id: String, skin_index: int) -> Color:
+	var normalized := weapon_id.strip_edges().to_lower()
+	var idx := maxi(0, skin_index)
+	var key := "%s:%d" % [normalized, idx]
+	var entry := weapon_skin_entry(normalized, idx)
+	if bool(entry.get("rainbow", false)):
+		return Color.from_hsv(randf(), 0.95, 1.0, 1.0)
+	if _weapon_skin_color_cache.has(key):
+		return _weapon_skin_color_cache[key] as Color
+
+	if not entry.is_empty():
+		if entry.has("tint") and entry.get("tint") is Color:
+			var tint := entry.get("tint") as Color
+			_weapon_skin_color_cache[key] = tint
+			return tint
+		if entry.has("ui_texture") and entry.get("ui_texture") is Texture2D:
+			var ui_tex := entry.get("ui_texture") as Texture2D
+			var texture_color := _dominant_texture_color(ui_tex)
+			_weapon_skin_color_cache[key] = texture_color
+			return texture_color
+
+	var fallback_texture := weapon_ui_texture_for(normalized, idx)
+	var fallback_color := _dominant_texture_color(fallback_texture)
+	_weapon_skin_color_cache[key] = fallback_color
+	return fallback_color
+
+func _dominant_texture_color(tex: Texture2D) -> Color:
+	if tex == null:
+		return Color.WHITE
+	var image := tex.get_image()
+	if image == null or image.is_empty():
+		return Color.WHITE
+
+	var buckets: Dictionary = {}
+	var best_key := ""
+	var best_weight := -1.0
+	var width := image.get_width()
+	var height := image.get_height()
+	for y in range(height):
+		for x in range(width):
+			var pixel := image.get_pixel(x, y)
+			var alpha := float(pixel.a)
+			if alpha <= 0.1:
+				continue
+			var r := int(round(clampf(pixel.r, 0.0, 1.0) * 7.0))
+			var g := int(round(clampf(pixel.g, 0.0, 1.0) * 7.0))
+			var b := int(round(clampf(pixel.b, 0.0, 1.0) * 7.0))
+			var bucket_key := "%d:%d:%d" % [r, g, b]
+			var weight := float(buckets.get(bucket_key, 0.0)) + alpha
+			buckets[bucket_key] = weight
+			if weight > best_weight:
+				best_weight = weight
+				best_key = bucket_key
+
+	if best_key.is_empty():
+		return Color.WHITE
+	var parts := best_key.split(":")
+	if parts.size() != 3:
+		return Color.WHITE
+	return Color(
+		float(parts[0].to_int()) / 7.0,
+		float(parts[1].to_int()) / 7.0,
+		float(parts[2].to_int()) / 7.0,
+		1.0
+	)
 
 func apply_weapon_skin_visual(target: CanvasItem, weapon_id: String, skin_index: int) -> void:
 	if target == null:
