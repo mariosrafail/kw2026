@@ -8,6 +8,9 @@ const BLOOD_SCREEN_TEXTURES := [
 	preload("res://assets/textures/effects/blood4.png"),
 	preload("res://assets/textures/effects/blood5.png"),
 ]
+const DAMAGE_FLASH_WHITE_SHADER := preload("res://assets/shaders/damage_flash_white.gdshader")
+const DAMAGE_FLASH_MIX_SHADER := preload("res://assets/shaders/damage_flash_mix.gdshader")
+const OUTRAGE_BOOST_FIRE_SHADER := preload("res://assets/shaders/outrage_boost_fire.gdshader")
 
 const SPEED := 245.0
 const JUMP_VELOCITY := -650.0
@@ -49,12 +52,12 @@ const FLOOR_SLOPE_TOLERANCE_DEGREES := 0.5
 const FLOOR_SNAP_LENGTH := 14.0
 const PLAYER_SAFE_MARGIN := 0.08
 const PLAYER_MAX_SLIDES := 8
-const HEALTH_BAR_MAX_WIDTH := 73.0
-const HEALTH_BAR_HEIGHT := 11.0
-const DAMAGE_FLASH_DURATION_SEC := 0.3
+const HEALTH_BAR_MAX_WIDTH := 61.0
+const HEALTH_BAR_HEIGHT := 2.0
+const DAMAGE_FLASH_DURATION_SEC := 0.38
 const DAMAGE_FLASH_ALPHA := 1.0
 const DAMAGE_FLASH_POP_IN_SEC := 0.015
-const DAMAGE_FLASH_HOLD_SEC := 0.11
+const DAMAGE_FLASH_HOLD_SEC := 0.16
 const DAMAGE_SCREEN_BLOOD_MAX_ALPHA := 0.2
 const DAMAGE_SCREEN_BLOOD_FADE_IN_SEC := 0.03
 const DAMAGE_SCREEN_BLOOD_HOLD_SEC := 0.04
@@ -133,6 +136,9 @@ var sfx_suppressed := false
 var damage_flash_tween: Tween
 var gun_base_modulate := Color.WHITE
 var damage_flash_overlay_pairs: Array = []
+var damage_flash_part_materials: Array = []
+var damage_flash_source_materials: Dictionary = {}
+var outrage_boost_overlay_pairs: Array = []
 var target_animation_on_floor := true
 var damage_push_direction := Vector2.ZERO
 var target_damage_push_direction := Vector2.ZERO
@@ -142,6 +148,9 @@ var damage_part_scramble_rotations: Dictionary = {}
 var damage_screen_blood_layer: CanvasLayer
 var damage_screen_blood_rect: TextureRect
 var damage_screen_blood_tween: Tween
+var outrage_boost_remaining_sec := 0.0
+var outrage_boost_materials: Dictionary = {}
+var outrage_boost_base_modulates: Dictionary = {}
 
 func _ready() -> void:
 	_configure_floor_movement()
@@ -153,6 +162,7 @@ func _ready() -> void:
 		visual_root.position = Vector2.ZERO
 	_init_modular_visual()
 	_init_damage_flash_overlays()
+	_init_outrage_boost_overlays()
 	_normalize_gun_sprite_anchor()
 	if gun != null:
 		gun_base_scale_abs = Vector2(absf(gun.scale.x), absf(gun.scale.y))
@@ -199,6 +209,90 @@ func _init_modular_visual() -> void:
 		player_sprite.visible = false
 	modular_visual.set_character_visual("outrage")
 
+func _part_sprites() -> Array:
+	return [head_sprite, torso_sprite, leg1_sprite, leg2_sprite]
+
+func _ensure_outrage_boost_materials() -> void:
+	if not outrage_boost_materials.is_empty():
+		return
+	for sprite_value in _part_sprites():
+		var sprite := sprite_value as Sprite2D
+		if sprite == null:
+			continue
+		var material := ShaderMaterial.new()
+		material.shader = OUTRAGE_BOOST_FIRE_SHADER
+		material.set_shader_parameter("fire_strength", 0.48)
+		outrage_boost_materials[sprite] = material
+
+func _part_base_material(sprite: Sprite2D) -> Material:
+	if sprite == null:
+		return null
+	if outrage_boost_remaining_sec > 0.0:
+		return outrage_boost_materials.get(sprite, null) as Material
+	return null
+
+func _apply_part_base_materials() -> void:
+	if not damage_flash_part_materials.is_empty():
+		return
+	for sprite_value in _part_sprites():
+		var sprite := sprite_value as Sprite2D
+		if sprite == null:
+			continue
+		sprite.material = _part_base_material(sprite)
+
+func _capture_outrage_boost_base_modulates() -> void:
+	outrage_boost_base_modulates.clear()
+	for sprite_value in _part_sprites():
+		var sprite := sprite_value as Sprite2D
+		if sprite == null:
+			continue
+		outrage_boost_base_modulates[sprite] = sprite.modulate
+
+func _restore_outrage_boost_base_modulates() -> void:
+	for sprite_value in _part_sprites():
+		var sprite := sprite_value as Sprite2D
+		if sprite == null:
+			continue
+		var base_modulate_value: Variant = outrage_boost_base_modulates.get(sprite, Color.WHITE)
+		if base_modulate_value is Color:
+			sprite.modulate = base_modulate_value as Color
+
+func _tick_outrage_boost_part_colors() -> void:
+	var time_sec := float(Time.get_ticks_msec()) / 1000.0
+	for index in range(_part_sprites().size()):
+		var sprite := _part_sprites()[index] as Sprite2D
+		if sprite == null:
+			continue
+		var base_modulate_value: Variant = outrage_boost_base_modulates.get(sprite, Color.WHITE)
+		var base_modulate: Color = base_modulate_value as Color if base_modulate_value is Color else Color.WHITE
+		var phase := time_sec * (9.5 + float(index) * 1.35) + randf_range(-0.35, 0.35)
+		var mix_amount := 0.5 + 0.5 * sin(phase)
+		var fire_color := Color(1.0, 0.94, 0.24, 1.0).lerp(Color(0.95, 0.16, 0.02, 1.0), mix_amount)
+		var boosted: Color = base_modulate.lerp(fire_color, 0.34)
+		sprite.modulate = Color(boosted.r, boosted.g, boosted.b, base_modulate.a)
+
+func set_outrage_boost_visual(duration_sec: float) -> void:
+	var was_inactive := outrage_boost_remaining_sec <= 0.0
+	outrage_boost_remaining_sec = maxf(outrage_boost_remaining_sec, maxf(0.0, duration_sec))
+	if outrage_boost_remaining_sec <= 0.0:
+		_apply_part_base_materials()
+		_set_outrage_boost_overlay_alpha(0.0)
+		_restore_outrage_boost_base_modulates()
+		return
+	if was_inactive:
+		_capture_outrage_boost_base_modulates()
+	_ensure_outrage_boost_materials()
+	_apply_part_base_materials()
+	_sync_outrage_boost_overlays()
+	_set_outrage_boost_overlay_alpha(0.52)
+	_tick_outrage_boost_part_colors()
+
+func clear_outrage_boost_visual() -> void:
+	outrage_boost_remaining_sec = 0.0
+	_apply_part_base_materials()
+	_set_outrage_boost_overlay_alpha(0.0)
+	_restore_outrage_boost_base_modulates()
+
 func _init_damage_flash_overlays() -> void:
 	damage_flash_overlay_pairs.clear()
 	for source in [head_sprite, torso_sprite, leg1_sprite, leg2_sprite]:
@@ -217,8 +311,8 @@ func _init_damage_flash_overlays() -> void:
 		overlay.frame = source_sprite.frame
 		overlay.frame_coords = source_sprite.frame_coords
 		overlay.z_index = source_sprite.z_index + 20
-		var overlay_material := CanvasItemMaterial.new()
-		overlay_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		var overlay_material := ShaderMaterial.new()
+		overlay_material.shader = DAMAGE_FLASH_WHITE_SHADER
 		overlay.material = overlay_material
 		overlay.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
 		overlay.visible = false
@@ -228,6 +322,63 @@ func _init_damage_flash_overlays() -> void:
 			"overlay": overlay,
 		})
 	_sync_damage_flash_overlays()
+
+func _init_outrage_boost_overlays() -> void:
+	outrage_boost_overlay_pairs.clear()
+	for source in [head_sprite, torso_sprite, leg1_sprite, leg2_sprite]:
+		if not (source is Sprite2D):
+			continue
+		var source_sprite := source as Sprite2D
+		var overlay := Sprite2D.new()
+		overlay.texture_filter = source_sprite.texture_filter
+		overlay.centered = source_sprite.centered
+		overlay.offset = source_sprite.offset
+		overlay.texture = source_sprite.texture
+		overlay.region_enabled = source_sprite.region_enabled
+		overlay.region_rect = source_sprite.region_rect
+		overlay.hframes = source_sprite.hframes
+		overlay.vframes = source_sprite.vframes
+		overlay.frame = source_sprite.frame
+		overlay.frame_coords = source_sprite.frame_coords
+		overlay.z_index = source_sprite.z_index + 5
+		var overlay_material := ShaderMaterial.new()
+		overlay_material.shader = OUTRAGE_BOOST_FIRE_SHADER
+		overlay_material.set_shader_parameter("fire_strength", 1.0)
+		overlay.material = overlay_material
+		overlay.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+		overlay.visible = false
+		source_sprite.get_parent().add_child(overlay)
+		outrage_boost_overlay_pairs.append({
+			"source": source_sprite,
+			"overlay": overlay,
+		})
+	_sync_outrage_boost_overlays()
+
+func _init_damage_flash_materials() -> void:
+	damage_flash_part_materials.clear()
+	damage_flash_source_materials.clear()
+	for sprite in [head_sprite, torso_sprite, leg1_sprite, leg2_sprite]:
+		if sprite == null:
+			continue
+		damage_flash_source_materials[sprite] = sprite.material
+		var material := ShaderMaterial.new()
+		material.shader = DAMAGE_FLASH_MIX_SHADER
+		material.set_shader_parameter("flash_strength", 0.0)
+		sprite.material = material
+		damage_flash_part_materials.append({
+			"sprite": sprite,
+			"material": material,
+		})
+
+func _set_damage_flash_strength(value: float) -> void:
+	for material_value in damage_flash_part_materials:
+		if not (material_value is Dictionary):
+			continue
+		var material_entry := material_value as Dictionary
+		var material := material_entry.get("material", null) as ShaderMaterial
+		if material == null:
+			continue
+		material.set_shader_parameter("flash_strength", clampf(value, 0.0, 1.0))
 
 func _sync_damage_flash_overlays() -> void:
 	for pair_value in damage_flash_overlay_pairs:
@@ -251,6 +402,40 @@ func _sync_damage_flash_overlays() -> void:
 		overlay.vframes = source.vframes
 		overlay.frame = source.frame
 		overlay.frame_coords = source.frame_coords
+
+func _sync_outrage_boost_overlays() -> void:
+	for pair_value in outrage_boost_overlay_pairs:
+		if not (pair_value is Dictionary):
+			continue
+		var pair := pair_value as Dictionary
+		var source := pair.get("source", null) as Sprite2D
+		var overlay := pair.get("overlay", null) as Sprite2D
+		if source == null or overlay == null:
+			continue
+		overlay.position = source.position
+		overlay.rotation = source.rotation
+		overlay.scale = source.scale
+		overlay.skew = source.skew
+		overlay.flip_h = source.flip_h
+		overlay.flip_v = source.flip_v
+		overlay.texture = source.texture
+		overlay.region_enabled = source.region_enabled
+		overlay.region_rect = source.region_rect
+		overlay.hframes = source.hframes
+		overlay.vframes = source.vframes
+		overlay.frame = source.frame
+		overlay.frame_coords = source.frame_coords
+
+func _set_outrage_boost_overlay_alpha(alpha: float) -> void:
+	for pair_value in outrage_boost_overlay_pairs:
+		if not (pair_value is Dictionary):
+			continue
+		var pair := pair_value as Dictionary
+		var overlay := pair.get("overlay", null) as Sprite2D
+		if overlay == null:
+			continue
+		overlay.visible = alpha > 0.001
+		overlay.self_modulate = Color(1.0, 1.0, 1.0, clampf(alpha, 0.0, 1.0))
 
 func configure(new_peer_id: int, color: Color) -> void:
 	peer_id = new_peer_id
@@ -548,10 +733,16 @@ func _play_damage_flash() -> void:
 	if damage_flash_tween != null:
 		damage_flash_tween.kill()
 		_hide_damage_flash_overlays()
+	_init_damage_flash_materials()
 	if damage_flash_overlay_pairs.is_empty():
-		return
+		_set_damage_flash_strength(0.0)
+	else:
+		_sync_damage_flash_overlays()
 	_sync_damage_flash_overlays()
+	_set_damage_flash_strength(0.0)
 	damage_flash_tween = create_tween()
+	var shader_pop := damage_flash_tween.parallel().tween_method(Callable(self, "_set_damage_flash_strength"), 0.0, DAMAGE_FLASH_ALPHA, DAMAGE_FLASH_POP_IN_SEC)
+	shader_pop.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_OUT)
 	for pair_value in damage_flash_overlay_pairs:
 		if not (pair_value is Dictionary):
 			continue
@@ -564,6 +755,9 @@ func _play_damage_flash() -> void:
 		var pop_track := damage_flash_tween.parallel().tween_property(overlay, "self_modulate:a", DAMAGE_FLASH_ALPHA, DAMAGE_FLASH_POP_IN_SEC)
 		pop_track.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_OUT)
 	damage_flash_tween.tween_interval(DAMAGE_FLASH_HOLD_SEC)
+	var shader_fade_duration := maxf(0.01, DAMAGE_FLASH_DURATION_SEC - DAMAGE_FLASH_POP_IN_SEC - DAMAGE_FLASH_HOLD_SEC)
+	var shader_fade := damage_flash_tween.parallel().tween_method(Callable(self, "_set_damage_flash_strength"), DAMAGE_FLASH_ALPHA, 0.0, shader_fade_duration)
+	shader_fade.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN)
 	for pair_value in damage_flash_overlay_pairs:
 		if not (pair_value is Dictionary):
 			continue
@@ -571,11 +765,22 @@ func _play_damage_flash() -> void:
 		var overlay := pair.get("overlay", null) as Sprite2D
 		if overlay == null:
 			continue
-		var fade_track := damage_flash_tween.parallel().tween_property(overlay, "self_modulate:a", 0.0, 0.01)
+		var fade_track := damage_flash_tween.parallel().tween_property(overlay, "self_modulate:a", 0.0, shader_fade_duration)
 		fade_track.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN)
 	damage_flash_tween.tween_callback(Callable(self, "_clear_damage_flash_tween"))
 
 func _hide_damage_flash_overlays() -> void:
+	_set_damage_flash_strength(0.0)
+	for material_value in damage_flash_part_materials:
+		if not (material_value is Dictionary):
+			continue
+		var material_entry := material_value as Dictionary
+		var sprite := material_entry.get("sprite", null) as Sprite2D
+		if sprite == null:
+			continue
+		sprite.material = _part_base_material(sprite)
+	damage_flash_part_materials.clear()
+	damage_flash_source_materials.clear()
 	for pair_value in damage_flash_overlay_pairs:
 		if not (pair_value is Dictionary):
 			continue
@@ -713,8 +918,12 @@ func _update_health_label() -> void:
 		health_label.visible = false
 	if health_bar_green == null:
 		return
-	var health_ratio := clampf(float(health) / float(MAX_HEALTH), 0.0, 1.0)
-	var width := HEALTH_BAR_MAX_WIDTH * health_ratio
+	var width := 0.0
+	if health > 0:
+		if health >= MAX_HEALTH:
+			width = HEALTH_BAR_MAX_WIDTH
+		else:
+			width = floor(((float(health - 1) / float(MAX_HEALTH - 1)) * (HEALTH_BAR_MAX_WIDTH - 1.0)) + 1.0)
 	health_bar_green.visible = width > 0.0
 	health_bar_green.region_enabled = true
 	health_bar_green.region_rect = Rect2(0.0, 0.0, width, HEALTH_BAR_HEIGHT)
@@ -733,6 +942,7 @@ func force_respawn(spawn_position: Vector2) -> void:
 	target_damage_push_direction = Vector2.ZERO
 	coyote_time_left = 0.0
 	jump_buffer_time_left = 0.0
+	clear_outrage_boost_visual()
 	_reset_gun_scale()
 	_reset_gun_shot_animation()
 	_reset_gun_reload_animation()
@@ -1119,6 +1329,12 @@ func get_part_animation_state() -> Dictionary:
 func _physics_process(delta: float) -> void:
 	if damage_immune_remaining_sec > 0.0:
 		damage_immune_remaining_sec = maxf(0.0, damage_immune_remaining_sec - delta)
+	if outrage_boost_remaining_sec > 0.0:
+		outrage_boost_remaining_sec = maxf(0.0, outrage_boost_remaining_sec - delta)
+		_tick_outrage_boost_part_colors()
+		if outrage_boost_remaining_sec <= 0.0:
+			_apply_part_base_materials()
+			_restore_outrage_boost_base_modulates()
 	if shield_remaining_sec > 0.0:
 		shield_remaining_sec = maxf(0.0, shield_remaining_sec - delta)
 		if shield_remaining_sec <= 0.0:
@@ -1133,6 +1349,8 @@ func _physics_process(delta: float) -> void:
 	_apply_damage_part_scramble(delta)
 	if not damage_flash_overlay_pairs.is_empty():
 		_sync_damage_flash_overlays()
+	if not outrage_boost_overlay_pairs.is_empty():
+		_sync_outrage_boost_overlays()
 	if not use_network_smoothing:
 		return
 

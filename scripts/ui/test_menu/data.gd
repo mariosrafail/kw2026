@@ -5,6 +5,7 @@ const SHOP_STATE_PATH := "user://test_menu_shop_state.json"
 const UZI_UI_TEXTURE: Texture2D = preload("res://assets/UI/uziUI.png")
 const GRENADE_UI_TEXTURE: Texture2D = preload("res://assets/UI/grenadeUI.png")
 const AK_UI_TEXTURE: Texture2D = preload("res://assets/UI/akUI.png")
+const KAR_UI_TEXTURE: Texture2D = preload("res://assets/UI/karUI.png")
 const SHOTGUN_UI_TEXTURE: Texture2D = preload("res://assets/UI/shotgunUI.png")
 
 const AK_SKIN1_UI_TEXTURE: Texture2D = preload("res://assets/UI/akSkin1UI.png")
@@ -14,14 +15,16 @@ const BULLET_TEXTURE: Texture2D = preload("res://assets/textures/bullet.png")
 const WEAPON_UZI := "uzi"
 const WEAPON_GRENADE := "grenade"
 const WEAPON_AK47 := "ak47"
+const WEAPON_KAR := "kar"
 const WEAPON_SHOTGUN := "shotgun"
 
-const WEAPON_IDS := [WEAPON_UZI, WEAPON_GRENADE, WEAPON_AK47, WEAPON_SHOTGUN]
+const WEAPON_IDS := [WEAPON_UZI, WEAPON_GRENADE, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN]
 
 const WEAPON_UI_TEXTURE_BY_ID := {
 	WEAPON_UZI: UZI_UI_TEXTURE,
 	WEAPON_GRENADE: GRENADE_UI_TEXTURE,
 	WEAPON_AK47: AK_UI_TEXTURE,
+	WEAPON_KAR: KAR_UI_TEXTURE,
 	WEAPON_SHOTGUN: SHOTGUN_UI_TEXTURE,
 }
 
@@ -30,6 +33,7 @@ const WEAPON_UI_REGION_BY_ID := {
 	WEAPON_UZI: Rect2(21, 24, 25, 21),
 	WEAPON_GRENADE: Rect2(12, 26, 39, 14),
 	WEAPON_AK47: Rect2(8, 27, 50, 12),
+	WEAPON_KAR: Rect2(5, 34, 76, 16),
 	WEAPON_SHOTGUN: Rect2(6, 28, 54, 12),
 }
 
@@ -39,6 +43,7 @@ const WEAPON_UI_OFFSET_BY_ID := {
 	WEAPON_UZI: Vector2(2.30, 3.84),
 	WEAPON_GRENADE: Vector2(0.68, 2.35),
 	WEAPON_AK47: Vector2(2.83, 2.75),
+	WEAPON_KAR: Vector2(7.88, 0.60),
 	WEAPON_SHOTGUN: Vector2(2.32, 2.40),
 }
 
@@ -46,6 +51,7 @@ const WEAPON_BASE_COST_BY_ID := {
 	WEAPON_UZI: 1800,
 	WEAPON_GRENADE: 1600,
 	WEAPON_AK47: 2200,
+	WEAPON_KAR: 2600,
 	WEAPON_SHOTGUN: 2000,
 }
 
@@ -77,6 +83,7 @@ const WEAPON_SKINS_BY_ID := {
 	WEAPON_UZI: COMMON_WEAPON_SKINS,
 	WEAPON_GRENADE: COMMON_WEAPON_SKINS,
 	WEAPON_AK47: COMMON_WEAPON_SKINS,
+	WEAPON_KAR: COMMON_WEAPON_SKINS,
 	WEAPON_SHOTGUN: COMMON_WEAPON_SKINS,
 }
 

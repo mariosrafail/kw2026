@@ -34,6 +34,7 @@ const LOCAL_RECONCILE_VEL_BLEND := 0.12          # Velocity smoothing factor
 
 const WEAPON_ID_AK47 := "ak47"
 const WEAPON_ID_GRENADE := "grenade"
+const WEAPON_ID_KAR := "kar"
 const WEAPON_ID_UZI := "uzi"
 
 const WEAPONS := {
@@ -60,6 +61,18 @@ const WEAPONS := {
 		"max_aim_distance": 1800.0,
 		"max_spread_degrees": 0.0,
 		"camera_shake": 12.0
+	},
+	WEAPON_ID_KAR: {
+		"name": "KAR",
+		"projectile_speed": 6500,
+		"base_damage": 55,
+		"boost_damage": 140,
+		"fire_interval": 0.95,
+		"magazine_size": 1,
+		"reload_duration": 1.4,
+		"max_aim_distance": 3400.0,
+		"max_spread_degrees": 0.35,
+		"camera_shake": 110.0
 	},
 	WEAPON_ID_UZI: {
 		"name": "Uzi",

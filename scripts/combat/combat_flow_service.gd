@@ -8,6 +8,7 @@ var input_states: Dictionary = {}
 var fire_cooldowns: Dictionary = {}
 var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
+var pending_reload_delay_by_peer: Dictionary = {}
 var peer_weapon_ids: Dictionary = {}
 var peer_warrior_ids: Dictionary = {}  # Track warrior per player
 var warriors_by_id: Dictionary = {}  # WarriorProfile instances by warrior_id
@@ -49,6 +50,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	fire_cooldowns = state_refs.get("fire_cooldowns", {}) as Dictionary
 	ammo_by_peer = state_refs.get("ammo_by_peer", {}) as Dictionary
 	reload_remaining_by_peer = state_refs.get("reload_remaining_by_peer", {}) as Dictionary
+	pending_reload_delay_by_peer = state_refs.get("pending_reload_delay_by_peer", {}) as Dictionary
 	peer_weapon_ids = state_refs.get("peer_weapon_ids", {}) as Dictionary
 	multiplayer = state_refs.get("multiplayer", null) as MultiplayerAPI
 	projectile_system = state_refs.get("projectile_system", null) as ProjectileSystem
@@ -144,6 +146,7 @@ func server_begin_reload(peer_id: int, weapon_profile: WeaponProfile) -> void:
 	var existing := float(reload_remaining_by_peer.get(peer_id, 0.0))
 	if existing > 0.0:
 		return
+	pending_reload_delay_by_peer[peer_id] = 0.0
 	reload_remaining_by_peer[peer_id] = maxf(0.05, weapon_profile.reload_duration())
 	var weapon_id := _weapon_id_for_peer(peer_id)
 	var player := players.get(peer_id, null) as NetPlayer
@@ -238,8 +241,6 @@ func _on_server_projectile_player_hit(
 	var target_player := players.get(target_peer_id, null) as NetPlayer
 	var target_blood_position := hit_position
 	var blood_color := Color(0.98, 0.02, 0.07, 1.0)
-	if target_player != null:
-		target_blood_position = target_player.global_position
 	if target_player != null and target_player.has_method("get_torso_dominant_color"):
 		blood_color = target_player.call("get_torso_dominant_color") as Color
 	if target_player != null:
@@ -382,6 +383,7 @@ func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	var ammo := weapon_profile.magazine_size() if weapon_profile != null else 0
 	ammo_by_peer[peer_id] = ammo
 	reload_remaining_by_peer[peer_id] = 0.0
+	pending_reload_delay_by_peer[peer_id] = 0.0
 	player.set_ammo(ammo, false)
 	server_sync_player_ammo(peer_id)
 
@@ -395,6 +397,8 @@ func server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 		ammo_by_peer[peer_id] = weapon_profile.magazine_size() if weapon_profile != null else 0
 	if not reload_remaining_by_peer.has(peer_id):
 		reload_remaining_by_peer[peer_id] = 0.0
+	if not pending_reload_delay_by_peer.has(peer_id):
+		pending_reload_delay_by_peer[peer_id] = 0.0
 	server_sync_player_ammo(peer_id)
 	if lobby_id > 0:
 		for member_value in _lobby_members(lobby_id):
@@ -434,6 +438,13 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 			continue
 		var ammo := int(ammo_by_peer.get(peer_id, weapon_profile.magazine_size()))
 		var reload_remaining := float(reload_remaining_by_peer.get(peer_id, 0.0))
+		var pending_reload_delay := float(pending_reload_delay_by_peer.get(peer_id, 0.0))
+		if pending_reload_delay > 0.0:
+			pending_reload_delay = maxf(pending_reload_delay - delta, 0.0)
+			pending_reload_delay_by_peer[peer_id] = pending_reload_delay
+			if pending_reload_delay <= 0.0 and ammo <= 0 and reload_remaining <= 0.0:
+				server_begin_reload(peer_id, weapon_profile)
+				reload_remaining = float(reload_remaining_by_peer.get(peer_id, 0.0))
 		if reload_remaining > 0.0:
 			reload_remaining = maxf(reload_remaining - delta, 0.0)
 			reload_remaining_by_peer[peer_id] = reload_remaining
@@ -450,7 +461,7 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				server_sync_player_ammo(peer_id)
 				cooldown = weapon_profile.fire_interval()
 				if ammo <= 0:
-					server_begin_reload(peer_id, weapon_profile)
+					pending_reload_delay_by_peer[peer_id] = _post_shot_reload_delay(weapon_profile)
 			else:
 				server_begin_reload(peer_id, weapon_profile)
 		fire_cooldowns[peer_id] = cooldown
@@ -471,6 +482,11 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				broadcast_player_state_cb.call(peer_id, player)
 
 	return snapshot_accumulator
+
+func _post_shot_reload_delay(weapon_profile: WeaponProfile) -> float:
+	if weapon_profile == null:
+		return 0.12
+	return maxf(0.01, maxf(weapon_profile.fire_interval(), 0.12))
 
 func _world_2d() -> World2D:
 	if get_world_2d_cb.is_valid():

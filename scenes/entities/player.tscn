@@ -48,11 +48,11 @@ position = Vector2(4, -41)
 texture = ExtResource("2_73kkf")
 
 [node name="HpGreen" type="Sprite2D" parent="VisualRoot/HpBackground" unique_id=1645360780]
-position = Vector2(-36.5, -5.5)
+position = Vector2(-25.5, -2.5)
 texture = ExtResource("3_n5sgd")
 centered = false
 region_enabled = true
-region_rect = Rect2(0, 0, 73, 11)
+region_rect = Rect2(0, 0, 61, 2)
 
 [node name="head" type="Sprite2D" parent="VisualRoot" unique_id=975497308]
 texture_filter = 1

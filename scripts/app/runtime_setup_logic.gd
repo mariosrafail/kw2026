@@ -24,24 +24,28 @@ func _init_weapons() -> void:
 	weapon_profiles = {
 		WEAPON_ID_AK47: AK47_SCRIPT.new(),
 		WEAPON_ID_GRENADE: GRENADE_SCRIPT.new(),
+		WEAPON_ID_KAR: KAR_SCRIPT.new(),
 		WEAPON_ID_SHOTGUN: SHOTGUN_SCRIPT.new(),
 		WEAPON_ID_UZI: UZI_SCRIPT.new()
 	}
 	weapon_shot_sfx_by_id = {
 		WEAPON_ID_AK47: AK47_SHOT_SFX,
 		WEAPON_ID_GRENADE: GRENADE_SHOT_SFX,
+		WEAPON_ID_KAR: KAR_SHOT_SFX,
 		WEAPON_ID_SHOTGUN: SHOTGUN_SHOT_SFX,
 		WEAPON_ID_UZI: UZI_SHOT_SFX
 	}
 	weapon_reload_sfx_by_id = {
 		WEAPON_ID_AK47: AK47_RELOAD_SFX,
 		WEAPON_ID_GRENADE: GRENADE_RELOAD_SFX,
+		WEAPON_ID_KAR: KAR_RELOAD_SFX,
 		WEAPON_ID_SHOTGUN: SHOTGUN_RELOAD_SFX,
 		WEAPON_ID_UZI: UZI_RELOAD_SFX
 	}
 	weapon_impact_sfx_by_id = {
 		WEAPON_ID_AK47: BULLET_TOUCH_SFX,
 		WEAPON_ID_GRENADE: GRENADE_IMPACT_SFX,
+		WEAPON_ID_KAR: BULLET_TOUCH_SFX,
 		WEAPON_ID_SHOTGUN: BULLET_TOUCH_SFX,
 		WEAPON_ID_UZI: BULLET_TOUCH_SFX
 	}
@@ -174,6 +178,7 @@ func _configure_services() -> void:
 			"fire_cooldowns": fire_cooldowns,
 			"ammo_by_peer": ammo_by_peer,
 			"reload_remaining_by_peer": reload_remaining_by_peer,
+			"pending_reload_delay_by_peer": pending_reload_delay_by_peer,
 			"peer_weapon_ids": peer_weapon_ids,
 			"multiplayer": multiplayer,
 			"projectile_system": projectile_system,

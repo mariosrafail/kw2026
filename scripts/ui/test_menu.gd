@@ -18,6 +18,7 @@ const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8090"
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
 const WEAPON_AK47 := DATA.WEAPON_AK47
+const WEAPON_KAR := DATA.WEAPON_KAR
 const WEAPON_SHOTGUN := DATA.WEAPON_SHOTGUN
 
 @export var enable_intro_animation := true
@@ -106,11 +107,13 @@ var owned_weapon_skins_by_weapon: Dictionary = {
 	WEAPON_UZI: PackedInt32Array([0]),
 	WEAPON_GRENADE: PackedInt32Array([0]),
 	WEAPON_AK47: PackedInt32Array([0]),
+	WEAPON_KAR: PackedInt32Array([0]),
 	WEAPON_SHOTGUN: PackedInt32Array([0]),
 }
 var equipped_weapon_skin_by_weapon: Dictionary = {
 	WEAPON_UZI: 0,
 	WEAPON_AK47: 0,
+	WEAPON_KAR: 0,
 	WEAPON_SHOTGUN: 0,
 	WEAPON_GRENADE: 0,
 }
@@ -738,7 +741,7 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
 
 	if profile.has("owned_weapons"):
-		var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE])
+		var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
 		var from_api := PackedStringArray()
 		for w in profile.get("owned_weapons", []) as Array:
 			var wid := str(w).strip_edges().to_lower()
@@ -751,7 +754,7 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 		owned_weapons = from_api
 
 	if profile.has("owned_weapon_skins_by_weapon"):
-		var allowed_skins := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE])
+		var allowed_skins := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
 		var incoming := profile.get("owned_weapon_skins_by_weapon", {}) as Dictionary
 		var out: Dictionary = {}
 		for wid in allowed_skins:
@@ -769,7 +772,7 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 		owned_weapon_skins_by_weapon = out
 	if profile.has("equipped_weapon_skin_by_weapon"):
 		var incoming_equipped_weapon := profile.get("equipped_weapon_skin_by_weapon", {}) as Dictionary
-		for wid in PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE]):
+		for wid in PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE]):
 			equipped_weapon_skin_by_weapon[wid] = maxi(0, int(incoming_equipped_weapon.get(wid, equipped_weapon_skin_by_weapon.get(wid, 0))))
 	var next_selected_weapon_id := selected_weapon_id
 	if profile.has("selected_weapon_id"):
@@ -1370,6 +1373,7 @@ func _ensure_weapon_filter_ui() -> void:
 		{"label": "ALL", "id": ""},
 		{"label": "UZI", "id": WEAPON_UZI},
 		{"label": "AK47", "id": WEAPON_AK47},
+		{"label": "KAR", "id": WEAPON_KAR},
 		{"label": "SHOTGUN", "id": WEAPON_SHOTGUN},
 		{"label": "GRENADE", "id": WEAPON_GRENADE},
 	]
@@ -1455,7 +1459,7 @@ func _build_warrior_shop_grid() -> void:
 
 func _build_weapon_shop_grid() -> void:
 	_clear_children(weapon_grid)
-	var weapon_list := [WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE]
+	var weapon_list := [WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE]
 	if not _weapon_filter_weapon_id.is_empty():
 		weapon_list = [_weapon_filter_weapon_id]
 	for weapon_id in weapon_list:
@@ -2223,8 +2227,8 @@ func _load_state_or_defaults() -> void:
 		"selected_warrior_id": default_warrior,
 		"selected_warrior_skin": 0,
 		"owned_weapons": [WEAPON_UZI, WEAPON_GRENADE],
-		"owned_weapon_skins_by_weapon": {WEAPON_UZI: [0], WEAPON_GRENADE: [0], WEAPON_AK47: [0], WEAPON_SHOTGUN: [0]},
-		"equipped_weapon_skin_by_weapon": {WEAPON_UZI: 0, WEAPON_GRENADE: 0, WEAPON_AK47: 0, WEAPON_SHOTGUN: 0},
+		"owned_weapon_skins_by_weapon": {WEAPON_UZI: [0], WEAPON_GRENADE: [0], WEAPON_AK47: [0], WEAPON_KAR: [0], WEAPON_SHOTGUN: [0]},
+		"equipped_weapon_skin_by_weapon": {WEAPON_UZI: 0, WEAPON_GRENADE: 0, WEAPON_AK47: 0, WEAPON_KAR: 0, WEAPON_SHOTGUN: 0},
 		"selected_weapon_id": WEAPON_UZI,
 		"selected_weapon_skin": 0,
 	}
@@ -2255,7 +2259,7 @@ func _load_state_or_defaults() -> void:
 	selected_weapon_skin = maxi(0, int(st.get("selected_weapon_skin", 0)))
 
 	# Sanitize weapon ids (remove weapons that no longer exist in this menu).
-	var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_SHOTGUN, WEAPON_GRENADE])
+	var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
 	var filtered_owned := PackedStringArray()
 	for wid in owned_weapons:
 		var w := str(wid).strip_edges().to_lower()

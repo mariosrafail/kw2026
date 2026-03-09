@@ -20,6 +20,8 @@ func weapon_display_name(weapon_id: String) -> String:
 		return "GRENADE"
 	if normalized == DATA.WEAPON_AK47:
 		return "AK"
+	if normalized == DATA.WEAPON_KAR:
+		return "KAR"
 	if normalized == DATA.WEAPON_SHOTGUN:
 		return "SHOTGUN"
 	return normalized.to_upper()

@@ -3,26 +3,32 @@ extends "res://scripts/app/runtime_shared.gd"
 const GUN_BASE_POSITION := Vector2(6.0, 2.0)
 const AK47_GUN_FALLBACK_REGION := Rect2(31, 12, 50, 12)
 const GRENADE_GUN_FALLBACK_REGION := Rect2(0, 0, 96, 71)
+const KAR_GUN_FALLBACK_REGION := Rect2(31, 12, 50, 12)
 const SHOTGUN_GUN_FALLBACK_REGION := Rect2(0, 0, 42, 37)
 const UZI_GUN_FALLBACK_REGION := Rect2(161, 85, 25, 21)
 const AK47_MUZZLE_POSITION := Vector2(33.0, 2.5)
 const GRENADE_MUZZLE_POSITION := Vector2(34.0, 0.0)
+const KAR_MUZZLE_POSITION := Vector2(37.0, 2.0)
 const SHOTGUN_MUZZLE_POSITION := Vector2(42.0, 2.0)
 const UZI_MUZZLE_POSITION := Vector2(35.0, 2.5)
 const AK47_RELOAD_STRIP := preload("res://assets/textures/guns/akReload.png")
 const GRENADE_RELOAD_STRIP := preload("res://assets/textures/guns/grenadeReload.png")
+const KAR_RELOAD_STRIP := preload("res://assets/textures/guns/karReload.png")
 const SHOTGUN_RELOAD_STRIP := preload("res://assets/textures/guns/shotgunReload.png")
 const UZI_RELOAD_STRIP := preload("res://assets/textures/guns/uziReload.png")
 const AK47_RELOAD_FRAME_SIZE := Vector2i(89, 39)
 const GRENADE_RELOAD_FRAME_SIZE := Vector2i(96, 71)
+const KAR_RELOAD_FRAME_SIZE := Vector2i(123, 60)
 const SHOTGUN_RELOAD_FRAME_SIZE := Vector2i(108, 37)
 const UZI_RELOAD_FRAME_SIZE := Vector2i(64, 64)
 const AK47_RELOAD_FRAME_COUNT := 15
 const GRENADE_RELOAD_FRAME_COUNT := 18
+const KAR_RELOAD_FRAME_COUNT := 16
 const SHOTGUN_RELOAD_FRAME_COUNT := 7
 const UZI_RELOAD_FRAME_COUNT := 13
 const AK47_RELOAD_FRAME_DURATION_SEC := 1.0 / 15.0
 const GRENADE_RELOAD_FRAME_DURATION_SEC := 1.5 / 18.0
+const KAR_RELOAD_FRAME_DURATION_SEC := 1.4 / 15.0
 const SHOTGUN_RELOAD_FRAME_DURATION_SEC := 1.2 / 7.0
 const UZI_RELOAD_FRAME_DURATION_SEC := 1.0 / 13.0
 const ESCAPE_LEAVE_TIMEOUT_SEC := 1.25
@@ -85,6 +91,7 @@ func _reset_runtime_state() -> void:
 	player_display_names.clear()
 	ammo_by_peer.clear()
 	reload_remaining_by_peer.clear()
+	pending_reload_delay_by_peer.clear()
 	peer_weapon_ids.clear()
 	peer_weapon_skin_indices_by_peer.clear()
 	peer_character_ids.clear()
@@ -305,6 +312,7 @@ func _remove_player_local(peer_id: int) -> void:
 	players.erase(peer_id)
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
+	pending_reload_delay_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
 	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
@@ -325,6 +333,7 @@ func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
 	)
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
+	pending_reload_delay_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
 	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
@@ -789,6 +798,35 @@ func _weapon_visual_for_id(weapon_id: String) -> Dictionary:
 			"recoil_rotation": 0.24,
 			"material": null
 		}
+	elif normalized == WEAPON_ID_KAR:
+		idle_texture = weapon_idle_texture_by_id.get(WEAPON_ID_KAR, idle_texture)
+		var kar_all_frames = weapon_reload_frames_by_id.get(WEAPON_ID_KAR, reload_texture_frames)
+		var kar_reload_texture_frames: Array = []
+		for frame_index in range(1, kar_all_frames.size()):
+			var frame_value = kar_all_frames[frame_index]
+			if frame_value is Texture2D:
+				kar_reload_texture_frames.append(frame_value)
+		reload_texture_frames = kar_reload_texture_frames
+		muzzle_position = KAR_MUZZLE_POSITION
+		reload_frame_duration_sec = KAR_RELOAD_FRAME_DURATION_SEC
+		return {
+			"weapon_id": normalized,
+			"texture": idle_texture,
+			"region_enabled": false,
+			"gun_position": GUN_BASE_POSITION,
+			"muzzle_position": muzzle_position,
+			"shot_texture_frames": [],
+			"shot_frame_duration_sec": 0.03,
+			"reload_texture_frames": reload_texture_frames,
+			"reload_frame_duration_sec": reload_frame_duration_sec,
+			"recoil_scale_x": 0.7,
+			"recoil_scale_y": 1.34,
+			"recoil_distance": 18.0,
+			"recoil_out_time": 0.014,
+			"recoil_back_time": 0.18,
+			"recoil_rotation": -0.22,
+			"material": null
+		}
 	elif normalized == WEAPON_ID_SHOTGUN:
 		idle_texture = weapon_idle_texture_by_id.get(WEAPON_ID_SHOTGUN, idle_texture)
 		reload_texture_frames = weapon_reload_frames_by_id.get(WEAPON_ID_SHOTGUN, reload_texture_frames)
@@ -813,8 +851,8 @@ func _weapon_visual_for_id(weapon_id: String) -> Dictionary:
 			"recoil_scale_y": 1.3,
 			"recoil_distance": 14.0,
 			"recoil_out_time": 0.018,
-			"recoil_back_time": 0.2,
-			"recoil_rotation": 0.28,
+			"recoil_back_time": 0.09,
+			"recoil_rotation": -0.28,
 			"material": null
 		}
 	elif normalized == WEAPON_ID_UZI:
@@ -858,14 +896,17 @@ func _ensure_weapon_visual_texture_cache() -> void:
 		return
 	var ak_frames := _slice_strip_frames(AK47_RELOAD_STRIP, AK47_RELOAD_FRAME_SIZE, AK47_RELOAD_FRAME_COUNT)
 	var grenade_frames := _slice_strip_frames(GRENADE_RELOAD_STRIP, GRENADE_RELOAD_FRAME_SIZE, GRENADE_RELOAD_FRAME_COUNT)
+	var kar_frames := _slice_strip_frames(KAR_RELOAD_STRIP, KAR_RELOAD_FRAME_SIZE, KAR_RELOAD_FRAME_COUNT)
 	var shotgun_frames := _slice_strip_frames(SHOTGUN_RELOAD_STRIP, SHOTGUN_RELOAD_FRAME_SIZE, SHOTGUN_RELOAD_FRAME_COUNT)
 	var uzi_frames := _slice_strip_frames(UZI_RELOAD_STRIP, UZI_RELOAD_FRAME_SIZE, UZI_RELOAD_FRAME_COUNT)
 	weapon_reload_frames_by_id[WEAPON_ID_AK47] = ak_frames
 	weapon_reload_frames_by_id[WEAPON_ID_GRENADE] = grenade_frames
+	weapon_reload_frames_by_id[WEAPON_ID_KAR] = kar_frames
 	weapon_reload_frames_by_id[WEAPON_ID_SHOTGUN] = shotgun_frames
 	weapon_reload_frames_by_id[WEAPON_ID_UZI] = uzi_frames
 	weapon_idle_texture_by_id[WEAPON_ID_AK47] = _first_texture_or_fallback(ak_frames, AK47_GUN_FALLBACK_REGION)
 	weapon_idle_texture_by_id[WEAPON_ID_GRENADE] = _first_texture_or_fallback(grenade_frames, GRENADE_GUN_FALLBACK_REGION)
+	weapon_idle_texture_by_id[WEAPON_ID_KAR] = _first_texture_or_fallback(kar_frames, KAR_GUN_FALLBACK_REGION)
 	weapon_idle_texture_by_id[WEAPON_ID_SHOTGUN] = _first_texture_or_fallback(shotgun_frames, SHOTGUN_GUN_FALLBACK_REGION)
 	weapon_idle_texture_by_id[WEAPON_ID_UZI] = _first_texture_or_fallback(uzi_frames, UZI_GUN_FALLBACK_REGION)
 
@@ -952,6 +993,8 @@ func _normalize_weapon_id(weapon_id: String) -> String:
 	var normalized := weapon_id.strip_edges().to_lower()
 	if normalized == WEAPON_ID_GRENADE:
 		return WEAPON_ID_GRENADE
+	if normalized == WEAPON_ID_KAR:
+		return WEAPON_ID_KAR
 	if normalized == WEAPON_ID_SHOTGUN:
 		return WEAPON_ID_SHOTGUN
 	if normalized == WEAPON_ID_UZI:

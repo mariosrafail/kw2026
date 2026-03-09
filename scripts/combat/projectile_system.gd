@@ -245,6 +245,11 @@ func server_tick(
 		if not wall_hit.is_empty():
 			var wall_position: Vector2 = wall_hit.get("position", to_position) as Vector2
 			var wall_impact_velocity := projectile.velocity
+			var wall_normal: Variant = wall_hit.get("normal", Vector2.ZERO)
+			if wall_normal is Vector2:
+				var impact_normal := wall_normal as Vector2
+				if impact_normal.length_squared() > 0.0001:
+					wall_impact_velocity = impact_normal.normalized() * maxf(projectile.velocity.length(), 1.0)
 			projectile.global_position = wall_position
 			if on_wall_hit_cb.is_valid():
 				on_wall_hit_cb.call(projectile_id, wall_position, wall_impact_velocity, projectile_lobby_id)

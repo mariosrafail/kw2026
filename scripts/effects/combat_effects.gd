@@ -32,6 +32,8 @@ const SURFACE_CHUNK_BOUNCE := 0.04
 const SURFACE_CHUNK_FRICTION := 0.9
 const SURFACE_CHUNK_COLLISION_LAYER := 32
 const SURFACE_CHUNK_COLLISION_MASK := 1
+const SURFACE_IMPACT_SAMPLE_RADIUS := 10
+const SURFACE_SPAWN_OFFSET := 1.5
 const SPLASH_HIT_VOLUME_DB := 4.0
 const EXPLOSION_FRAME_SIZE := Vector2(120.0, 120.0)
 const EXPLOSION_FRAME_COUNT := 8
@@ -114,21 +116,32 @@ func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2,
 func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
 	if projectiles_root == null:
 		return
-	if particle_color.a < SURFACE_COLOR_ALPHA_MIN:
-		return
 
 	var spray_direction := Vector2.UP
 	if incoming_velocity.length_squared() > 0.0001:
-		spray_direction = (-incoming_velocity).normalized()
+		spray_direction = incoming_velocity.normalized()
+	var sample_position := impact_position - spray_direction * 2.0
+	var chunk_spawn_position := impact_position + spray_direction * SURFACE_SPAWN_OFFSET
+	var palette := sample_map_front_palette(sample_position, 6)
+	if palette.is_empty():
+		palette = sample_map_front_palette(impact_position, 6)
+	if palette.is_empty():
+		if particle_color.a < SURFACE_COLOR_ALPHA_MIN:
+			return
+		palette.append(Color(particle_color.r, particle_color.g, particle_color.b, 1.0))
+	if palette.is_empty():
+		return
 	for i in range(SURFACE_PARTICLES_AMOUNT):
 		var chunk := RigidBody2D.new()
 		chunk.z_as_relative = false
 		chunk.z_index = BLOOD_EFFECTS_Z_INDEX - 4
-		chunk.global_position = impact_position + Vector2(randf_range(-2.5, 2.5), randf_range(-2.0, 2.0))
+		chunk.global_position = chunk_spawn_position
 		chunk.gravity_scale = SURFACE_CHUNK_GRAVITY_SCALE
 		chunk.linear_damp = SURFACE_CHUNK_LINEAR_DAMP
 		chunk.angular_damp = SURFACE_CHUNK_ANGULAR_DAMP
-		chunk.continuous_cd = RigidBody2D.CCD_MODE_CAST_SHAPE
+		chunk.continuous_cd = RigidBody2D.CCD_MODE_CAST_RAY
+		chunk.contact_monitor = true
+		chunk.max_contacts_reported = 4
 		chunk.collision_layer = SURFACE_CHUNK_COLLISION_LAYER
 		chunk.collision_mask = SURFACE_CHUNK_COLLISION_MASK
 
@@ -136,7 +149,8 @@ func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector
 		var half := size * 0.5
 
 		var visual := Polygon2D.new()
-		visual.color = Color(particle_color.r, particle_color.g, particle_color.b, 1.0)
+		var palette_color: Color = palette[i % palette.size()] as Color
+		visual.color = Color(palette_color.r, palette_color.g, palette_color.b, 1.0)
 		visual.polygon = PackedVector2Array([
 			Vector2(-half, -half),
 			Vector2(half, -half),
@@ -156,9 +170,9 @@ func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector
 		material.friction = SURFACE_CHUNK_FRICTION
 		chunk.physics_material_override = material
 
-		var dir := spray_direction.rotated(randf_range(-1.6, 1.6))
+		var dir := spray_direction.rotated(randf_range(-0.42, 0.42))
 		var speed := randf_range(SURFACE_CHUNK_SPEED_MIN, SURFACE_CHUNK_SPEED_MAX)
-		chunk.linear_velocity = dir * speed + Vector2(randf_range(-24.0, 24.0), randf_range(-18.0, 42.0))
+		chunk.linear_velocity = dir * speed
 		chunk.angular_velocity = randf_range(-16.0, 16.0)
 		projectiles_root.add_child(chunk)
 
@@ -178,9 +192,10 @@ func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector
 	dust.initial_velocity_max = 44.0
 	dust.scale_amount_min = 0.7
 	dust.scale_amount_max = 1.2
-	dust.color = Color(particle_color.r, particle_color.g, particle_color.b, 0.55)
+	var dust_color: Color = palette[0] as Color
+	dust.color = Color(dust_color.r, dust_color.g, dust_color.b, 0.55)
 	dust.direction = spray_direction
-	dust.spread = 160.0
+	dust.spread = 40.0
 	projectiles_root.add_child(dust)
 	dust.emitting = true
 
@@ -193,13 +208,19 @@ func _blood_chunk_color(base_color: Color) -> Color:
 	return Color.from_hsv(hsv_h, hsv_s, hsv_v, 1.0)
 
 func sample_map_front_color(world_position: Vector2) -> Color:
-	if map_front_sprite == null or map_front_sprite.texture == null:
+	var palette := sample_map_front_palette(world_position, 1)
+	if palette.is_empty():
 		return Color(0.0, 0.0, 0.0, 0.0)
+	return palette[0] as Color
+
+func sample_map_front_palette(world_position: Vector2, max_colors: int = 6) -> Array:
+	if map_front_sprite == null or map_front_sprite.texture == null:
+		return []
 
 	if map_front_image == null:
 		map_front_image = map_front_sprite.texture.get_image()
 	if map_front_image == null or map_front_image.is_empty():
-		return Color(0.0, 0.0, 0.0, 0.0)
+		return []
 
 	var region_origin := Vector2.ZERO
 	var draw_size := map_front_sprite.texture.get_size()
@@ -207,24 +228,18 @@ func sample_map_front_color(world_position: Vector2) -> Color:
 		region_origin = map_front_sprite.region_rect.position
 		draw_size = map_front_sprite.region_rect.size
 	if draw_size.x <= 0.0 or draw_size.y <= 0.0:
-		return Color(0.0, 0.0, 0.0, 0.0)
+		return []
 
 	var local_hit := map_front_sprite.to_local(world_position)
 	local_hit -= map_front_sprite.offset
 	if map_front_sprite.centered:
 		local_hit += draw_size * 0.5
 	if local_hit.x < 0.0 or local_hit.y < 0.0 or local_hit.x >= draw_size.x or local_hit.y >= draw_size.y:
-		return Color(0.0, 0.0, 0.0, 0.0)
+		return []
 
 	var sample_x := int(round(local_hit.x)) + int(region_origin.x)
 	var sample_y := int(round(local_hit.y)) + int(region_origin.y)
-	if sample_x < 0 or sample_y < 0 or sample_x >= map_front_image.get_width() or sample_y >= map_front_image.get_height():
-		return Color(0.0, 0.0, 0.0, 0.0)
-
-	var color := map_front_image.get_pixel(sample_x, sample_y)
-	if color.a < SURFACE_COLOR_ALPHA_MIN:
-		return Color(0.0, 0.0, 0.0, 0.0)
-	return Color(color.r, color.g, color.b, color.a)
+	return _sample_surface_palette_near(sample_x, sample_y, max_colors)
 
 func play_splash_hit_sfx(impact_position: Vector2) -> void:
 	if projectiles_root == null or splash_hit_sfx == null:
@@ -328,6 +343,49 @@ func _queue_free_from_weak_ref(target_ref: WeakRef) -> void:
 	var target := target_ref.get_ref() as Node
 	if target != null and is_instance_valid(target):
 		target.queue_free()
+
+func _sample_surface_color_near(sample_x: int, sample_y: int) -> Color:
+	var palette := _sample_surface_palette_near(sample_x, sample_y, 1)
+	if palette.is_empty():
+		return Color(0.0, 0.0, 0.0, 0.0)
+	return palette[0] as Color
+
+func _sample_surface_palette_near(sample_x: int, sample_y: int, max_colors: int) -> Array:
+	if map_front_image == null:
+		return []
+	var width := map_front_image.get_width()
+	var height := map_front_image.get_height()
+	if sample_x < 0 or sample_y < 0 or sample_x >= width or sample_y >= height:
+		return []
+	var result: Array = []
+	var candidates: Array = []
+	var desired_count := maxi(1, max_colors)
+
+	for radius in range(0, SURFACE_IMPACT_SAMPLE_RADIUS + 1):
+		for y in range(sample_y - radius, sample_y + radius + 1):
+			for x in range(sample_x - radius, sample_x + radius + 1):
+				if x < 0 or y < 0 or x >= width or y >= height:
+					continue
+				if radius > 0 and abs(x - sample_x) != radius and abs(y - sample_y) != radius:
+					continue
+				var color := map_front_image.get_pixel(x, y)
+				if color.a >= SURFACE_COLOR_ALPHA_MIN:
+					candidates.append({
+						"dist_sq": float((x - sample_x) * (x - sample_x) + (y - sample_y) * (y - sample_y)),
+						"color": Color(color.r, color.g, color.b, 1.0)
+					})
+	if candidates.is_empty():
+		return result
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("dist_sq", 0.0)) < float(b.get("dist_sq", 0.0))
+	)
+	for candidate_value in candidates:
+		if result.size() >= desired_count:
+			break
+		var candidate := candidate_value as Dictionary
+		var color := candidate.get("color", Color(0.0, 0.0, 0.0, 0.0)) as Color
+		result.append(color)
+	return result
 
 func _explosion_sprite_frames() -> SpriteFrames:
 	if explosion_frames != null:
