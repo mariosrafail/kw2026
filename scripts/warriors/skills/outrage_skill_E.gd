@@ -195,10 +195,18 @@ func client_spawn_boost(peer_id: int, duration_sec: float) -> void:
 	var visible_duration := maxf(0.05, duration_sec)
 	var fade_out_delay := maxf(0.0, visible_duration - BOOST_VFX_FADE_OUT_SEC)
 	var begin_fade_out := func() -> void:
-		flame_particles.emitting = false
-		flame_core_particles.emitting = false
-		ember_particles.emitting = false
-		smoke_particles.emitting = false
+		if flame_particles != null and is_instance_valid(flame_particles):
+			flame_particles.emitting = false
+		if flame_core_particles != null and is_instance_valid(flame_core_particles):
+			flame_core_particles.emitting = false
+		if ember_particles != null and is_instance_valid(ember_particles):
+			ember_particles.emitting = false
+		if smoke_particles != null and is_instance_valid(smoke_particles):
+			smoke_particles.emitting = false
+		if vfx == null or not is_instance_valid(vfx):
+			if player != null and is_instance_valid(player) and player.has_method("clear_outrage_boost_visual"):
+				player.call("clear_outrage_boost_visual")
+			return
 		var fade_out := vfx.create_tween()
 		fade_out.tween_property(vfx, "modulate:a", 0.0, BOOST_VFX_FADE_OUT_SEC).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		fade_out.finished.connect(func() -> void:

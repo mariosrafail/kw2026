@@ -1,13 +1,17 @@
 extends RefCounted
 class_name MainMenuAuthFlow
 
+const AUTH_REQUEST_TIMEOUT_SEC := 8.0
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
+const AUTH_PROFILE_SETTING := "kw/auth_profile"
+const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
 
 static var _runtime_session_token := ""
 static var _runtime_session_username := ""
 static var _runtime_session_api_base_url := ""
 
 func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
+	resolve_auth_profile(host)
 	host.set("_auth_api_base_url", str(ProjectSettings.get_setting("kw/auth_api_base_url", api_base_url_default)).strip_edges())
 	if str(host.get("_auth_api_base_url")).is_empty():
 		host.set("_auth_api_base_url", api_base_url_default)
@@ -16,11 +20,7 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 		host.set("_auth_api_base_url", trimmed.substr(0, trimmed.length() - 1))
 	auth_rebuild_login_base_candidates(host)
 
-	var auth_http := HTTPRequest.new()
-	auth_http.name = "AuthHttp"
-	host.add_child(auth_http)
-	auth_http.request_completed.connect(Callable(host, "_on_auth_http_completed"))
-	host.set("_auth_http", auth_http)
+	auth_recreate_http_request(host)
 
 	var retry_timer := Timer.new()
 	retry_timer.name = "AuthWalletRetryTimer"
@@ -29,6 +29,14 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	host.add_child(retry_timer)
 	retry_timer.timeout.connect(Callable(host, "_on_auth_wallet_retry_timeout"))
 	host.set("_auth_wallet_retry_timer", retry_timer)
+
+	var watchdog_timer := Timer.new()
+	watchdog_timer.name = "AuthRequestWatchdogTimer"
+	watchdog_timer.one_shot = true
+	watchdog_timer.wait_time = AUTH_REQUEST_TIMEOUT_SEC
+	host.add_child(watchdog_timer)
+	watchdog_timer.timeout.connect(Callable(host, "_on_auth_request_watchdog_timeout"))
+	host.set("_auth_request_watchdog_timer", watchdog_timer)
 
 	var overlay := Control.new()
 	overlay.name = "AuthOverlay"
@@ -155,6 +163,7 @@ func auth_submit_login(host: Control) -> void:
 	var err := auth_request_login_with_current_candidate(host)
 	if err != OK:
 		host.set("_auth_pending_action", "")
+		auth_stop_request_watchdog(host)
 		if auth_status_label != null:
 			auth_status_label.text = "Login request failed (%s)" % str(err)
 		if auth_login_button != null:
@@ -242,8 +251,11 @@ func auth_sync_wallet(host: Control) -> void:
 	if err != OK:
 		print("[AUTH][WALLET_SYNC] request failed err=%s" % str(err))
 		host.set("_auth_pending_action", "")
+		auth_stop_request_watchdog(host)
 		host.set("_auth_wallet_sync_queued", true)
 		auth_schedule_wallet_retry(host)
+		return
+	auth_start_request_watchdog(host)
 
 func auth_purchase_warrior_skin(host: Control, skin_index: int) -> void:
 	var auth_http := host.get("_auth_http") as HTTPRequest
@@ -275,10 +287,13 @@ func auth_purchase_warrior_skin(host: Control, skin_index: int) -> void:
 	if err != OK:
 		print("[AUTH][BUY_SKIN] request failed err=%s" % str(err))
 		host.set("_auth_pending_action", "")
+		auth_stop_request_watchdog(host)
 		host.set("_auth_pending_purchase_skin_index", -1)
 		var auth_status_label := host.get("_auth_status_label") as Label
 		if auth_status_label != null:
 			auth_status_label.text = "Buy request failed (%s)" % str(err)
+		return
+	auth_start_request_watchdog(host)
 
 func auth_schedule_wallet_retry(host: Control) -> void:
 	var auth_wallet_retry_timer := host.get("_auth_wallet_retry_timer") as Timer
@@ -298,6 +313,7 @@ func auth_maybe_flush_wallet_sync(host: Control) -> void:
 
 func auth_handle_http_completed(host: Control, response_code: int, body: PackedByteArray) -> void:
 	var action := str(host.get("_auth_pending_action"))
+	auth_stop_request_watchdog(host)
 	var text := body.get_string_from_utf8()
 	var parsed: Variant = null
 	var trimmed := text.strip_edges()
@@ -346,7 +362,8 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 			host.set("_auth_pending_action", "")
 			return
 		host.set("_auth_pending_action", "")
-		auth_request_profile(host)
+		auth_recreate_http_request(host)
+		host.call_deferred("_auth_request_profile")
 		return
 
 	if action == "profile":
@@ -362,18 +379,15 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 					auth_login_button.disabled = false
 				host.set("_auth_pending_action", "")
 				return
+			var fallback_reason := "Logged in without remote profile. Shop sync unavailable."
+			if response_code == 404:
+				fallback_reason = "Server has no /profile endpoint yet. Shop sync unavailable."
 			if had_runtime_session:
-				if auth_status_label != null:
-					auth_status_label.text = ""
-				if auth_login_button != null:
-					auth_login_button.disabled = false
 				host.set("_auth_pending_action", "")
+				host.call("_auth_finalize_without_remote_profile", fallback_reason)
 				return
-			if auth_status_label != null:
-				auth_status_label.text = "Profile load failed (%d)" % response_code
-			if auth_login_button != null:
-				auth_login_button.disabled = false
 			host.set("_auth_pending_action", "")
+			host.call("_auth_finalize_without_remote_profile", fallback_reason)
 			return
 		var profile := parsed as Dictionary
 		print("[AUTH][PROFILE] ok user=%s coins=%d clk=%d" % [str(profile.get("username", "")), int(profile.get("coins", host.get("wallet_coins"))), int(profile.get("clk", host.get("wallet_clk")))])
@@ -461,6 +475,7 @@ func auth_on_logout_pressed(host: Control) -> void:
 	var auth_http := host.get("_auth_http") as HTTPRequest
 	if auth_http != null:
 		auth_http.cancel_request()
+	auth_stop_request_watchdog(host)
 	auth_clear_persisted_session(host)
 	host.set("_auth_pending_action", "")
 	host.set("_auth_pending_purchase_skin_index", -1)
@@ -533,12 +548,15 @@ func auth_request_login_with_current_candidate(host: Control) -> int:
 	var auth_user_input := host.get("_auth_user_input") as LineEdit
 	var url := "%s/login" % auth_login_current_base_url(host)
 	print("[AUTH][LOGIN] request url=%s user=%s" % [url, (auth_user_input.text.strip_edges() if auth_user_input != null else "")])
-	return auth_http.request(
+	var err := auth_http.request(
 		url,
 		PackedStringArray(["Content-Type: application/json"]),
 		HTTPClient.METHOD_POST,
 		str(host.get("_auth_login_payload"))
 	)
+	if err == OK:
+		auth_start_request_watchdog(host)
+	return err
 
 func auth_request_profile(host: Control) -> void:
 	var auth_http := host.get("_auth_http") as HTTPRequest
@@ -556,11 +574,63 @@ func auth_request_profile(host: Control) -> void:
 	)
 	if err != OK:
 		host.set("_auth_pending_action", "")
+		auth_stop_request_watchdog(host)
 		if auth_status_label != null:
 			auth_status_label.text = "Profile request failed (%s)" % str(err)
 		var auth_login_button := host.get("_auth_login_button") as Button
 		if auth_login_button != null:
 			auth_login_button.disabled = false
+		return
+	auth_start_request_watchdog(host)
+
+func auth_recreate_http_request(host: Control) -> void:
+	var old_http := host.get("_auth_http") as HTTPRequest
+	if old_http != null:
+		old_http.cancel_request()
+		old_http.queue_free()
+	var auth_http := HTTPRequest.new()
+	auth_http.name = "AuthHttp"
+	host.add_child(auth_http)
+	auth_http.request_completed.connect(Callable(host, "_on_auth_http_completed"))
+	host.set("_auth_http", auth_http)
+
+func auth_start_request_watchdog(host: Control) -> void:
+	var watchdog_timer := host.get("_auth_request_watchdog_timer") as Timer
+	if watchdog_timer == null:
+		return
+	watchdog_timer.stop()
+	watchdog_timer.wait_time = AUTH_REQUEST_TIMEOUT_SEC
+	watchdog_timer.start()
+
+func auth_stop_request_watchdog(host: Control) -> void:
+	var watchdog_timer := host.get("_auth_request_watchdog_timer") as Timer
+	if watchdog_timer == null:
+		return
+	watchdog_timer.stop()
+
+func auth_on_request_watchdog_timeout(host: Control) -> void:
+	var action := str(host.get("_auth_pending_action")).strip_edges()
+	if action.is_empty():
+		return
+	var auth_token := str(host.get("_auth_token")).strip_edges()
+	var auth_http := host.get("_auth_http") as HTTPRequest
+	if auth_http != null:
+		auth_http.cancel_request()
+	host.set("_auth_pending_action", "")
+	host.set("_auth_pending_purchase_skin_index", -1)
+	var auth_login_button := host.get("_auth_login_button") as Button
+	if auth_login_button != null:
+		auth_login_button.disabled = false
+	var auth_status_label := host.get("_auth_status_label") as Label
+	if auth_status_label != null:
+		auth_status_label.text = "%s timeout. Check server/IP and try again." % action.capitalize()
+	if action == "profile" and not auth_token.is_empty():
+		host.call("_auth_finalize_without_remote_profile", "Profile timeout. Logged in with local profile only.")
+		return
+	if action == "wallet_sync":
+		host.set("_auth_wallet_sync_queued", true)
+		auth_schedule_wallet_retry(host)
+	print("[AUTH][TIMEOUT] action=%s base_url=%s" % [action, str(host.get("_auth_api_base_url"))])
 
 func auth_restore_runtime_session(host: Control) -> bool:
 	var token := str(_runtime_session_token).strip_edges()
@@ -585,12 +655,34 @@ func auth_save_runtime_session(host: Control) -> void:
 	_runtime_session_username = str(host.get("player_username")).strip_edges()
 	_runtime_session_api_base_url = str(host.get("_auth_api_base_url")).strip_edges()
 
+func resolve_auth_profile(host: Control) -> void:
+	var configured := str(ProjectSettings.get_setting(AUTH_PROFILE_SETTING, "default")).strip_edges()
+	if not configured.is_empty():
+		host.set("_auth_profile", configured)
+	for raw_arg in OS.get_cmdline_args():
+		var arg := str(raw_arg)
+		if arg.begins_with(AUTH_PROFILE_ARG_PREFIX):
+			var value := arg.substr(AUTH_PROFILE_ARG_PREFIX.length()).strip_edges()
+			if not value.is_empty():
+				host.set("_auth_profile", value)
+				break
+	var profile := str(host.get("_auth_profile")).strip_edges()
+	if profile.is_empty():
+		profile = "default"
+	host.set("_auth_profile", profile)
+
+func session_path(host: Control) -> String:
+	if str(host.get("_auth_profile")).strip_edges() == "default":
+		return AUTH_SESSION_PATH
+	return "user://main_menu_auth_session_%s.json" % str(host.get("_auth_profile")).strip_edges()
+
 func auth_restore_persisted_session(host: Control) -> bool:
 	if auth_restore_runtime_session(host):
 		return true
-	if not FileAccess.file_exists(AUTH_SESSION_PATH):
+	var path := session_path(host)
+	if not FileAccess.file_exists(path):
 		return false
-	var file := FileAccess.open(AUTH_SESSION_PATH, FileAccess.READ)
+	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return false
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
@@ -616,7 +708,7 @@ func auth_save_persisted_session(host: Control) -> void:
 		"username": str(host.get("player_username")).strip_edges(),
 		"api_base_url": str(host.get("_auth_api_base_url")).strip_edges(),
 	}
-	var file := FileAccess.open(AUTH_SESSION_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(session_path(host), FileAccess.WRITE)
 	if file == null:
 		return
 	file.store_string(JSON.stringify(payload))
@@ -630,8 +722,9 @@ func auth_clear_runtime_session(host: Control) -> void:
 
 func auth_clear_persisted_session(host: Control) -> void:
 	auth_clear_runtime_session(host)
-	if FileAccess.file_exists(AUTH_SESSION_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(AUTH_SESSION_PATH))
+	var path := session_path(host)
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func copy_weapon_skins_dict(src: Dictionary) -> Dictionary:
 	var out: Dictionary = {}

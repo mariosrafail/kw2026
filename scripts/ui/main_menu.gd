@@ -156,6 +156,7 @@ var _scroll_grabber_hi: StyleBoxFlat = null
 var _scroll_grabber_pressed: StyleBoxFlat = null
 
 var _auth_api_base_url := AUTH_API_BASE_URL_DEFAULT
+var _auth_profile := "default"
 var _auth_login_base_url_candidates := PackedStringArray()
 var _auth_login_base_url_index := 0
 var _auth_login_payload := ""
@@ -170,6 +171,7 @@ var _auth_wallet_sync_supported := true
 var _auth_wallet_sync_snapshot_active := false
 var _auth_wallet_sync_snapshot: Dictionary = {}
 var _auth_wallet_retry_timer: Timer
+var _auth_request_watchdog_timer: Timer
 var _auth_http: HTTPRequest
 var _auth_overlay: Control
 var _auth_status_label: Label
@@ -383,6 +385,9 @@ func _auth_schedule_wallet_retry() -> void:
 func _on_auth_wallet_retry_timeout() -> void:
 	_auth_maybe_flush_wallet_sync()
 
+func _on_auth_request_watchdog_timeout() -> void:
+	_auth_flow.auth_on_request_watchdog_timeout(self)
+
 func _auth_maybe_flush_wallet_sync() -> void:
 	_auth_flow.auth_maybe_flush_wallet_sync(self)
 
@@ -562,6 +567,27 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 	_refresh_warrior_action()
 	_refresh_weapon_grid_texts()
 	_refresh_weapon_action()
+	_save_state()
+
+func _auth_finalize_without_remote_profile(reason: String = "") -> void:
+	if player_username.is_empty():
+		player_username = "Player"
+	_auth_logged_in = true
+	_auth_wallet_sync_supported = false
+	_update_wallet_labels(true)
+	_refresh_warrior_username_label()
+	_refresh_warrior_grid_texts()
+	_refresh_warrior_action()
+	_refresh_weapon_grid_texts()
+	_refresh_weapon_action()
+	_auth_save_runtime_session()
+	_auth_save_persisted_session()
+	_auth_set_ui_locked(false)
+	if _auth_status_label != null:
+		_auth_status_label.text = reason
+	if _auth_login_button != null:
+		_auth_login_button.disabled = false
+	_start_idle_loop()
 	_save_state()
 
 func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:

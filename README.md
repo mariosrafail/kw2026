@@ -430,4 +430,4 @@ Map info: `godot --headless -s tools/diag_map_catalog.gd`
 
 **Last Updated:** February 2026  
 **Engine:** Godot 4.3  
-**Latest Version:** alpha-0.1.24
+**Latest Version:** alpha-0.1.28

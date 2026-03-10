@@ -297,43 +297,193 @@ def _create_session(account_id: str) -> str:
 def _ensure_wallet(account_uuid: uuid.UUID) -> None:
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                insert into wallets (account_id, coins, clk)
-                values (%s, %s, %s)
-                on conflict (account_id) do nothing
-                """,
-                (account_uuid, 9999, 9999),
-            )
+            _ensure_wallet_cur(cur, account_uuid)
+
+
+def _ensure_wallet_cur(cur, account_uuid: uuid.UUID) -> None:
+    cur.execute(
+        """
+        insert into wallets (account_id, coins, clk)
+        values (%s, %s, %s)
+        on conflict (account_id) do nothing
+        """,
+        (account_uuid, 9999, 9999),
+    )
+
+
+def _wallet_for_account_cur(cur, account_uuid: uuid.UUID) -> tuple[int, int]:
+    _ensure_wallet_cur(cur, account_uuid)
+    cur.execute("select coins, clk from wallets where account_id = %s", (account_uuid,))
+    row = cur.fetchone()
+    if not row:
+        return 0, 0
+    return int(row[0]), int(row[1])
+
+
+def _owned_skins_for_account_cur(cur, account_uuid: uuid.UUID) -> list[OwnedSkin]:
+    cur.execute(
+        """
+        select character_id, skin_index
+        from inventory_skins
+        where account_id = %s
+        order by character_id, skin_index
+        """,
+        (account_uuid,),
+    )
+    out: list[OwnedSkin] = []
+    for character_id, skin_index in cur.fetchall():
+        out.append(OwnedSkin(character_id=str(character_id), skin_index=int(skin_index)))
+    return out
+
+
+def _ensure_weapon_inventory_defaults_cur(cur, account_uuid: uuid.UUID) -> None:
+    cur.execute(
+        """
+        insert into inventory_weapons (account_id, weapon_id)
+        values (%s, %s)
+        on conflict (account_id, weapon_id) do nothing
+        """,
+        (account_uuid, DEFAULT_WEAPON_ID),
+    )
+    cur.execute(
+        """
+        insert into inventory_weapon_skins (account_id, weapon_id, skin_index)
+        values (%s, %s, %s)
+        on conflict (account_id, weapon_id, skin_index) do nothing
+        """,
+        (account_uuid, DEFAULT_WEAPON_ID, 0),
+    )
+
+
+def _owned_weapons_for_account_cur(cur, account_uuid: uuid.UUID) -> list[str]:
+    _ensure_weapon_inventory_defaults_cur(cur, account_uuid)
+    cur.execute(
+        """
+        select weapon_id
+        from inventory_weapons
+        where account_id = %s
+        order by weapon_id
+        """,
+        (account_uuid,),
+    )
+    raw = [str(row[0]) for row in cur.fetchall()]
+    return _normalize_owned_weapons(raw)
+
+
+def _owned_weapon_skins_for_account_cur(cur, account_uuid: uuid.UUID, owned_weapons: list[str]) -> dict[str, list[int]]:
+    owned_set = set(_normalize_owned_weapons(owned_weapons))
+    out: dict[str, list[int]] = {wid: [0] for wid in ALLOWED_WEAPONS}
+    cur.execute(
+        """
+        select weapon_id, skin_index
+        from inventory_weapon_skins
+        where account_id = %s
+        order by weapon_id, skin_index
+        """,
+        (account_uuid,),
+    )
+    for weapon_id, skin_index in cur.fetchall():
+        wid = _normalize_weapon_id(str(weapon_id))
+        if wid not in ALLOWED_WEAPONS or wid not in owned_set:
+            continue
+        idx = max(0, int(skin_index))
+        arr = out.get(wid, [0])
+        if idx not in arr:
+            arr.append(idx)
+        out[wid] = sorted(arr)
+
+    for wid in ALLOWED_WEAPONS:
+        if wid not in owned_set:
+            out[wid] = [0]
+        elif 0 not in out[wid]:
+            out[wid].insert(0, 0)
+    return out
+
+
+def _ensure_account_loadout_defaults_cur(cur, account_uuid: uuid.UUID) -> None:
+    cur.execute(
+        """
+        insert into account_loadouts (
+            account_id,
+            owned_warriors,
+            owned_warrior_skins_by_warrior,
+            equipped_warrior_skin_by_warrior,
+            selected_warrior_id,
+            selected_warrior_skin,
+            equipped_weapon_skin_by_weapon,
+            selected_weapon_id,
+            selected_weapon_skin
+        )
+        values (%s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s::jsonb, %s, %s)
+        on conflict (account_id) do nothing
+        """,
+        (
+            account_uuid,
+            json.dumps([DEFAULT_WARRIOR_ID]),
+            json.dumps(_normalize_owned_warrior_skins({}, [DEFAULT_WARRIOR_ID])),
+            json.dumps(_normalize_equipped_warrior_skins({})),
+            DEFAULT_WARRIOR_ID,
+            0,
+            json.dumps(_normalize_equipped_weapon_skins({})),
+            DEFAULT_WEAPON_ID,
+            0,
+        ),
+    )
+
+
+def _loadout_for_account_cur(cur, account_uuid: uuid.UUID) -> dict[str, object]:
+    _ensure_account_loadout_defaults_cur(cur, account_uuid)
+    cur.execute(
+        """
+        select
+            owned_warriors,
+            owned_warrior_skins_by_warrior,
+            equipped_warrior_skin_by_warrior,
+            selected_warrior_id,
+            selected_warrior_skin,
+            equipped_weapon_skin_by_weapon,
+            selected_weapon_id,
+            selected_weapon_skin
+        from account_loadouts
+        where account_id = %s
+        """,
+        (account_uuid,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {
+            "owned_warriors": [DEFAULT_WARRIOR_ID],
+            "owned_warrior_skins_by_warrior": _normalize_owned_warrior_skins({}, [DEFAULT_WARRIOR_ID]),
+            "equipped_warrior_skin_by_warrior": _normalize_equipped_warrior_skins({}),
+            "selected_warrior_id": DEFAULT_WARRIOR_ID,
+            "selected_warrior_skin": 0,
+            "equipped_weapon_skin_by_weapon": _normalize_equipped_weapon_skins({}),
+            "selected_weapon_id": DEFAULT_WEAPON_ID,
+            "selected_weapon_skin": 0,
+        }
+    owned_warriors = _normalize_owned_warriors(list(row[0] or [DEFAULT_WARRIOR_ID]))
+    return {
+        "owned_warriors": owned_warriors,
+        "owned_warrior_skins_by_warrior": _normalize_owned_warrior_skins(row[1] or {}, owned_warriors),
+        "equipped_warrior_skin_by_warrior": _normalize_equipped_warrior_skins(row[2] or {}),
+        "selected_warrior_id": _normalize_warrior_id(str(row[3] or DEFAULT_WARRIOR_ID)),
+        "selected_warrior_skin": max(0, int(row[4] or 0)),
+        "equipped_weapon_skin_by_weapon": _normalize_equipped_weapon_skins(row[5] or {}),
+        "selected_weapon_id": _normalize_weapon_id(str(row[6] or DEFAULT_WEAPON_ID)) or DEFAULT_WEAPON_ID,
+        "selected_weapon_skin": max(0, int(row[7] or 0)),
+    }
 
 
 def _wallet_for_account(account_uuid: uuid.UUID) -> tuple[int, int]:
-    _ensure_wallet(account_uuid)
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute("select coins, clk from wallets where account_id = %s", (account_uuid,))
-            row = cur.fetchone()
-            if not row:
-                return 0, 0
-            return int(row[0]), int(row[1])
+            return _wallet_for_account_cur(cur, account_uuid)
 
 
 def _owned_skins_for_account(account_uuid: uuid.UUID) -> list[OwnedSkin]:
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                select character_id, skin_index
-                from inventory_skins
-                where account_id = %s
-                order by character_id, skin_index
-                """,
-                (account_uuid,),
-            )
-            out: list[OwnedSkin] = []
-            for character_id, skin_index in cur.fetchall():
-                out.append(OwnedSkin(character_id=str(character_id), skin_index=int(skin_index)))
-            return out
+            return _owned_skins_for_account_cur(cur, account_uuid)
 
 
 def _normalize_weapon_id(raw: str) -> str:
@@ -414,157 +564,41 @@ def _normalize_equipped_weapon_skins(raw_value: object) -> dict[str, int]:
 def _ensure_weapon_inventory_defaults(account_uuid: uuid.UUID) -> None:
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                insert into inventory_weapons (account_id, weapon_id)
-                values (%s, %s)
-                on conflict (account_id, weapon_id) do nothing
-                """,
-                (account_uuid, DEFAULT_WEAPON_ID),
-            )
-            cur.execute(
-                """
-                insert into inventory_weapon_skins (account_id, weapon_id, skin_index)
-                values (%s, %s, %s)
-                on conflict (account_id, weapon_id, skin_index) do nothing
-                """,
-                (account_uuid, DEFAULT_WEAPON_ID, 0),
-            )
+            _ensure_weapon_inventory_defaults_cur(cur, account_uuid)
 
 
 def _owned_weapons_for_account(account_uuid: uuid.UUID) -> list[str]:
-    _ensure_weapon_inventory_defaults(account_uuid)
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                select weapon_id
-                from inventory_weapons
-                where account_id = %s
-                order by weapon_id
-                """,
-                (account_uuid,),
-            )
-            raw = [str(row[0]) for row in cur.fetchall()]
-    return _normalize_owned_weapons(raw)
+            return _owned_weapons_for_account_cur(cur, account_uuid)
 
 
 def _owned_weapon_skins_for_account(account_uuid: uuid.UUID, owned_weapons: list[str]) -> dict[str, list[int]]:
-    owned_set = set(_normalize_owned_weapons(owned_weapons))
-    out: dict[str, list[int]] = {wid: [0] for wid in ALLOWED_WEAPONS}
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                select weapon_id, skin_index
-                from inventory_weapon_skins
-                where account_id = %s
-                order by weapon_id, skin_index
-                """,
-                (account_uuid,),
-            )
-            for weapon_id, skin_index in cur.fetchall():
-                wid = _normalize_weapon_id(str(weapon_id))
-                if wid not in ALLOWED_WEAPONS or wid not in owned_set:
-                    continue
-                idx = max(0, int(skin_index))
-                arr = out.get(wid, [0])
-                if idx not in arr:
-                    arr.append(idx)
-                out[wid] = sorted(arr)
-
-    for wid in ALLOWED_WEAPONS:
-        if wid not in owned_set:
-            out[wid] = [0]
-        elif 0 not in out[wid]:
-            out[wid].insert(0, 0)
-    return out
+            return _owned_weapon_skins_for_account_cur(cur, account_uuid, owned_weapons)
 
 
 def _ensure_account_loadout_defaults(account_uuid: uuid.UUID) -> None:
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                insert into account_loadouts (
-                    account_id,
-                    owned_warriors,
-                    owned_warrior_skins_by_warrior,
-                    equipped_warrior_skin_by_warrior,
-                    selected_warrior_id,
-                    selected_warrior_skin,
-                    equipped_weapon_skin_by_weapon,
-                    selected_weapon_id,
-                    selected_weapon_skin
-                )
-                values (%s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s::jsonb, %s, %s)
-                on conflict (account_id) do nothing
-                """,
-                (
-                    account_uuid,
-                    json.dumps([DEFAULT_WARRIOR_ID]),
-                    json.dumps(_normalize_owned_warrior_skins({}, [DEFAULT_WARRIOR_ID])),
-                    json.dumps(_normalize_equipped_warrior_skins({})),
-                    DEFAULT_WARRIOR_ID,
-                    0,
-                    json.dumps(_normalize_equipped_weapon_skins({})),
-                    DEFAULT_WEAPON_ID,
-                    0,
-                ),
-            )
+            _ensure_account_loadout_defaults_cur(cur, account_uuid)
 
 
 def _loadout_for_account(account_uuid: uuid.UUID) -> dict[str, object]:
-    _ensure_account_loadout_defaults(account_uuid)
     with _db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                select
-                    owned_warriors,
-                    owned_warrior_skins_by_warrior,
-                    equipped_warrior_skin_by_warrior,
-                    selected_warrior_id,
-                    selected_warrior_skin,
-                    equipped_weapon_skin_by_weapon,
-                    selected_weapon_id,
-                    selected_weapon_skin
-                from account_loadouts
-                where account_id = %s
-                """,
-                (account_uuid,),
-            )
-            row = cur.fetchone()
-            if not row:
-                return {
-                    "owned_warriors": [DEFAULT_WARRIOR_ID],
-                    "owned_warrior_skins_by_warrior": _normalize_owned_warrior_skins({}, [DEFAULT_WARRIOR_ID]),
-                    "equipped_warrior_skin_by_warrior": _normalize_equipped_warrior_skins({}),
-                    "selected_warrior_id": DEFAULT_WARRIOR_ID,
-                    "selected_warrior_skin": 0,
-                    "equipped_weapon_skin_by_weapon": _normalize_equipped_weapon_skins({}),
-                    "selected_weapon_id": DEFAULT_WEAPON_ID,
-                    "selected_weapon_skin": 0,
-                }
-            owned_warriors = _normalize_owned_warriors(list(row[0] or [DEFAULT_WARRIOR_ID]))
-            return {
-                "owned_warriors": owned_warriors,
-                "owned_warrior_skins_by_warrior": _normalize_owned_warrior_skins(row[1] or {}, owned_warriors),
-                "equipped_warrior_skin_by_warrior": _normalize_equipped_warrior_skins(row[2] or {}),
-                "selected_warrior_id": _normalize_warrior_id(str(row[3] or DEFAULT_WARRIOR_ID)),
-                "selected_warrior_skin": max(0, int(row[4] or 0)),
-                "equipped_weapon_skin_by_weapon": _normalize_equipped_weapon_skins(row[5] or {}),
-                "selected_weapon_id": _normalize_weapon_id(str(row[6] or DEFAULT_WEAPON_ID)) or DEFAULT_WEAPON_ID,
-                "selected_weapon_skin": max(0, int(row[7] or 0)),
-            }
+            return _loadout_for_account_cur(cur, account_uuid)
 
 
 def _profile_for_account(account_uuid: uuid.UUID, username: str, email: str) -> ProfileResponse:
-    coins, clk = _wallet_for_account(account_uuid)
-    owned_skins = _owned_skins_for_account(account_uuid)
-    loadout = _loadout_for_account(account_uuid)
-    owned_weapons = _owned_weapons_for_account(account_uuid)
-    owned_weapon_skins_by_weapon = _owned_weapon_skins_for_account(account_uuid, owned_weapons)
+    with _db() as conn:
+        with conn.cursor() as cur:
+            coins, clk = _wallet_for_account_cur(cur, account_uuid)
+            owned_skins = _owned_skins_for_account_cur(cur, account_uuid)
+            loadout = _loadout_for_account_cur(cur, account_uuid)
+            owned_weapons = _owned_weapons_for_account_cur(cur, account_uuid)
+            owned_weapon_skins_by_weapon = _owned_weapon_skins_for_account_cur(cur, account_uuid, owned_weapons)
     selected_weapon_id = str(loadout.get("selected_weapon_id", DEFAULT_WEAPON_ID))
     if selected_weapon_id not in ALLOWED_WEAPONS:
         selected_weapon_id = DEFAULT_WEAPON_ID

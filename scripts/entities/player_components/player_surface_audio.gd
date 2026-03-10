@@ -11,6 +11,9 @@ const STEP_INTERVAL_MAX := 0.34
 const STEP_SPEED_REFERENCE := 245.0
 const JUMP_TRIGGER_VELOCITY := -120.0
 const LAND_TRIGGER_VELOCITY := 180.0
+const STEP_VOLUME_DB := -5.5
+const JUMP_VOLUME_DB := -8.5
+const LAND_VOLUME_DB := -7.0
 
 const STEP_STREAMS := {
 	SURFACE_GRASS: [
@@ -127,13 +130,13 @@ func _step_interval_for_speed(horizontal_speed: float) -> float:
 	return lerpf(STEP_INTERVAL_MAX, STEP_INTERVAL_MIN, speed_t)
 
 func _play_step() -> void:
-	_play_surface_stream(STEP_STREAMS.get(_current_surface, STEP_STREAMS[DEFAULT_SURFACE]), -10.5, 0.96, 1.05)
+	_play_surface_stream(STEP_STREAMS.get(_current_surface, STEP_STREAMS[DEFAULT_SURFACE]), STEP_VOLUME_DB, 0.96, 1.05)
 
 func _play_jump() -> void:
-	_play_surface_stream(JUMP_STREAMS.get(_current_surface, JUMP_STREAMS[DEFAULT_SURFACE]), -8.5, 0.98, 1.03)
+	_play_surface_stream(JUMP_STREAMS.get(_current_surface, JUMP_STREAMS[DEFAULT_SURFACE]), JUMP_VOLUME_DB, 0.98, 1.03)
 
 func _play_land() -> void:
-	_play_surface_stream(LAND_STREAMS.get(_current_surface, LAND_STREAMS[DEFAULT_SURFACE]), -7.0, 0.98, 1.04)
+	_play_surface_stream(LAND_STREAMS.get(_current_surface, LAND_STREAMS[DEFAULT_SURFACE]), LAND_VOLUME_DB, 0.98, 1.04)
 
 func _play_surface_stream(streams_value: Variant, volume_db: float, pitch_min: float, pitch_max: float) -> void:
 	if _audio == null:

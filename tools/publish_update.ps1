@@ -31,6 +31,9 @@ $zipTarget = Join-Path $updateDir "kw_update.zip"
 $versionTag = ($Version -replace '[^A-Za-z0-9._-]', '_')
 $zipVersionedTarget = Join-Path $updateDir ("kw_update_{0}.zip" -f $versionTag)
 $manifestTarget = Join-Path $updateDir "update_manifest.json"
+$repoManifestTarget = Join-Path $projectRoot "update_manifest.json"
+$releaseManifestTarget = Join-Path $projectRoot "build/release/update_manifest.json"
+$launcherManifestTarget = Join-Path $projectRoot "build/launcher/update_manifest.json"
 
 Copy-Item "build/kw.exe" $exeTarget -Force
 Copy-Item "build/kw.pck" $pckTarget -Force
@@ -60,7 +63,17 @@ $manifest = @{
     published_at_utc = (Get-Date).ToUniversalTime().ToString("o")
 }
 
-$manifest | ConvertTo-Json | Set-Content -Path $manifestTarget -Encoding UTF8
+$manifestJson = $manifest | ConvertTo-Json
+$manifestJson | Set-Content -Path $manifestTarget -Encoding UTF8
+$manifestJson | Set-Content -Path $repoManifestTarget -Encoding UTF8
+
+if (Test-Path (Split-Path $releaseManifestTarget -Parent)) {
+    $manifestJson | Set-Content -Path $releaseManifestTarget -Encoding UTF8
+}
+
+if (Test-Path (Split-Path $launcherManifestTarget -Parent)) {
+    $manifestJson | Set-Content -Path $launcherManifestTarget -Encoding UTF8
+}
 
 Write-Output "[publish] Published update files:"
 Write-Output "  $exeTarget"
