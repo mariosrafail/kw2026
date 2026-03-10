@@ -129,11 +129,6 @@ func rpc_projectile_impact(projectile_id: int, impact_position: Vector2) -> void
 		return
 	if weapon_id == "grenade":
 		return
-	var impact_sfx := _weapon_impact_sfx(weapon_id)
-	if impact_sfx != null:
-		combat_effects.play_weapon_impact_sfx(impact_sfx, impact_position, -2.0, randf_range(0.95, 1.05), 6)
-		return
-	combat_effects.play_bullet_touch_sfx(impact_position)
 
 func rpc_spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2, blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), count_multiplier: float = 1.0) -> void:
 	if combat_effects == null:

@@ -63,10 +63,12 @@ scripts/warriors/
 ├── erebus_warrior.gd               # Erebus implementation
 └── skills/
     ├── skill.gd                    # Base class for all skills
-    ├── outrage_bomb_skill.gd       # Outrage Q ability
-    ├── outrage_damage_boost_skill.gd  # Outrage E ability (TODO)
-    ├── erebus_immunity_skill.gd    # Erebus Q ability
-    └── erebus_shield_skill.gd      # Erebus E ability (TODO)
+    ├── outrage_skill_Q.gd          # Outrage Q ability
+    ├── outrage_skill_E.gd          # Outrage E ability
+    ├── erebus_skill_Q.gd           # Erebus Q ability
+    ├── erebus_skill_E.gd           # Erebus E ability
+    ├── tasko_skill_Q.gd            # Tasko Q ability
+    └── tasko_skill_E.gd            # Tasko E ability
 ```
 
 ## Creating a New Warrior

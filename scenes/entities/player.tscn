@@ -182,3 +182,6 @@ shape = SubResource("CapsuleShape2D_0vb8o")
 stream = ExtResource("6_6oc35")
 volume_db = 2.0
 max_polyphony = 2
+
+[node name="FootstepAudio" type="AudioStreamPlayer2D" parent="." unique_id=1197630042]
+max_polyphony = 2

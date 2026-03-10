@@ -144,8 +144,8 @@ scripts/
 │
 ├── skills/                        # Character abilities
 │   ├── skills_service.gd
-│   ├── outrage_bomb_skill.gd
-│   └── erebus_immunity_skill.gd
+│   ├── outrage_skill_Q.gd
+│   └── erebus_skill_Q.gd
 │
 ├── effects/                       # Visual & audio
 │   ├── camera_shake.gd
@@ -430,4 +430,4 @@ Map info: `godot --headless -s tools/diag_map_catalog.gd`
 
 **Last Updated:** February 2026  
 **Engine:** Godot 4.3  
-**Latest Version:** alpha-0.1.21
+**Latest Version:** alpha-0.1.24

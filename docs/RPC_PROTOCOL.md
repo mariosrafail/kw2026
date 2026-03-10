@@ -2,7 +2,7 @@
 
 ## Overview
 
-KW uses Godot's MultiplayerAPI for real-time synchronization. All RPC calls are defined in `scripts/main.gd` which extends the base runtime.
+KW uses Godot's MultiplayerAPI for real-time synchronization. The active scene runtime uses `scripts/main.gd`, which extends the shared runtime controller.
 
 **Authority Model:**
 

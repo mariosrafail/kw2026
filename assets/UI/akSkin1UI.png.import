@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://o3dgidpqke1p"
-path="res://.godot/imported/akSkin1UI.png-f315de8b9bc083f7671c93d163023fd6.ctex"
+uid="uid://dpdbgw5wgynjk"
+path="res://.godot/imported/akSkin1UI.png-f04b9bcd1606eafec18ef1deaa90dab5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/UI/akSkin1UI.png"
-dest_files=["res://.godot/imported/akSkin1UI.png-f315de8b9bc083f7671c93d163023fd6.ctex"]
+source_file="res://assets/ui/akSkin1UI.png"
+dest_files=["res://.godot/imported/akSkin1UI.png-f04b9bcd1606eafec18ef1deaa90dab5.ctex"]
 
 [params]
 

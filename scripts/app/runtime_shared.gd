@@ -55,7 +55,7 @@ const CLIENT_RPC_FLOW_SERVICE_SCRIPT := preload("res://scripts/network/client_rp
 const CLIENT_INPUT_CONTROLLER_SCRIPT := preload("res://scripts/input/client_input_controller.gd")
 const COMBAT_EFFECTS_SCRIPT := preload("res://scripts/effects/combat_effects.gd")
 const CAMERA_SHAKE_SCRIPT := preload("res://scripts/effects/camera_shake.gd")
-const WEAPON_UI_SCRIPT := preload("res://scripts/ui/test_menu/weapon_ui.gd")
+const WEAPON_UI_SCRIPT := preload("res://scripts/ui/main_menu/weapon_ui.gd")
 
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")

@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_PATH = ROOT / "scripts" / "app" / "runtime_shared.gd"
 RUNTIME_PATH = ROOT / "scripts" / "app" / "runtime_rpc_logic.gd"
-BRIDGE_PATH = ROOT / "scripts" / "ui" / "test_menu" / "lobby_rpc_bridge.gd"
+BRIDGE_PATH = ROOT / "scripts" / "ui" / "main_menu" / "lobby_rpc_bridge.gd"
 MAIN_PATH = ROOT / "scripts" / "main.gd"
 
 

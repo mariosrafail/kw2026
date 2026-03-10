@@ -29,6 +29,11 @@ func reset_jump_state() -> void:
 	coyote_time_left = 0.0
 	jump_buffer_time_left = 0.0
 
+func configure_floor_movement() -> void:
+	if _player == null:
+		return
+	_configure_floor_movement()
+
 func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_held: bool) -> void:
 	if _player == null:
 		return
@@ -79,4 +84,3 @@ func _configure_floor_movement() -> void:
 	_player.safe_margin = PLAYER_SAFE_MARGIN
 	_player.max_slides = PLAYER_MAX_SLIDES
 	_player.motion_mode = CharacterBody2D.MOTION_MODE_GROUNDED
-

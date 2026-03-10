@@ -6,13 +6,12 @@
 
 extends WarriorProfile
 
-const TASKO_INVIS_FIELD_SKILL := preload("res://scripts/warriors/skills/tasko_invisibility_field_skill.gd")
-const TASKO_MINE_SKILL := preload("res://scripts/warriors/skills/tasko_mine_skill.gd")
+const TASKO_SKILL_Q := preload("res://scripts/warriors/skills/tasko_skill_Q.gd")
+const TASKO_SKILL_E := preload("res://scripts/warriors/skills/tasko_skill_E.gd")
 
 func _init() -> void:
 	super._init("tasko", "Tasko")
 
 func _init_skills() -> void:
-	skill1 = TASKO_INVIS_FIELD_SKILL.new()
-	skill2 = TASKO_MINE_SKILL.new()
-
+	skill1 = TASKO_SKILL_Q.new()
+	skill2 = TASKO_SKILL_E.new()

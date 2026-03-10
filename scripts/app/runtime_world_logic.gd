@@ -452,9 +452,9 @@ func _lobby_scene_path() -> String:
 	return lobby_scene_path
 
 func _menu_scene_path() -> String:
-	var configured := str(ProjectSettings.get_setting("application/run/main_scene", "res://scenes/ui/test_menu.tscn")).strip_edges()
+	var configured := str(ProjectSettings.get_setting("application/run/main_scene", "res://scenes/ui/main_menu.tscn")).strip_edges()
 	if configured.is_empty():
-		configured = "res://scenes/ui/test_menu.tscn"
+		configured = "res://scenes/ui/main_menu.tscn"
 	return configured
 
 func _server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:

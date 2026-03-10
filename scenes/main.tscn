@@ -14,6 +14,7 @@
 [ext_resource type="Shader" uid="uid://b5bs52gykxls7" path="res://assets/shaders/main_sky_grade.gdshader" id="12_eiv51"]
 [ext_resource type="Shader" uid="uid://be3ul1wrb4xp" path="res://assets/shaders/main_atmosphere_overlay.gdshader" id="13_lx0m1"]
 [ext_resource type="Shader" uid="uid://dk7ajln58td30" path="res://assets/shaders/main_vignette_overlay.gdshader" id="14_qe3xv"]
+[ext_resource type="Script" uid="uid://3lcyx3mfbfob" path="res://scripts/world/ground_audio_zone.gd" id="15_jkv2x"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("12_eiv51")
@@ -50,12 +51,7 @@ offset_bottom = 364.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_of5si")
-auth_require_login_on_startup = false
-dev_auto_login_on_autostart = true
-dev_auto_login_username = "mario"
-dev_auto_login_password = "1234"
-dev_auto_create_lobby_on_autostart = true
-dev_auto_create_lobby_name = "mario"
+dev_auto_login_password = ""
 
 [node name="Background" type="ColorRect" parent="." unique_id=1424354409]
 visible = false
@@ -376,3 +372,19 @@ theme_override_fonts/font = ExtResource("9_mcfv1")
 text = "Ping: -"
 horizontal_alignment = 2
 vertical_alignment = 1
+
+[node name="Area2D_wood" type="Area2D" parent="." unique_id=1000291770]
+visible = false
+script = ExtResource("15_jkv2x")
+surface_id = "wood"
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Area2D_wood" unique_id=1750393169]
+polygon = PackedVector2Array(1227, 38, 1220, 648, 42, 678, 39, -31)
+
+[node name="Area2D_grass" type="Area2D" parent="." unique_id=335937535]
+visible = false
+script = ExtResource("15_jkv2x")
+surface_priority = 1
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Area2D_grass" unique_id=334252510]
+polygon = PackedVector2Array(421, 224, 713, 477, 754, 524, 819, 519, 845, 499, 995, 491, 1184, 502, 1184, 611, 99, 631, 78, 272)

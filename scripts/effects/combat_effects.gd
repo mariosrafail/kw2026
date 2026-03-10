@@ -35,12 +35,32 @@ const SURFACE_CHUNK_COLLISION_MASK := 1
 const SURFACE_IMPACT_SAMPLE_RADIUS := 10
 const SURFACE_SPAWN_OFFSET := 1.5
 const SPLASH_HIT_VOLUME_DB := 4.0
+const SURFACE_IMPACT_VOLUME_DB := 0.0
 const EXPLOSION_FRAME_SIZE := Vector2(120.0, 120.0)
 const EXPLOSION_FRAME_COUNT := 8
 const EXPLOSION_FRAME_SEC := 0.035
 const EXPLOSION_Y_OFFSET := 10.0
 const HIT_FLASH_LIFETIME := 0.08
 const BLOOD_EFFECTS_Z_INDEX := 1000
+const SURFACE_ID_WOOD := "wood"
+const SURFACE_ID_GRASS := "grass"
+
+const SURFACE_IMPACT_STREAMS := {
+	SURFACE_ID_GRASS: [
+		preload("res://assets/sounds/sfx/ground/grass/grass_step_1.wav"),
+		preload("res://assets/sounds/sfx/ground/grass/grass_step_2.wav"),
+		preload("res://assets/sounds/sfx/ground/grass/grass_step_3.wav"),
+	],
+	SURFACE_ID_WOOD: [
+		preload("res://assets/sounds/sfx/ground/wood/wood_step_1.wav"),
+		preload("res://assets/sounds/sfx/ground/wood/wood_step_2.wav"),
+		preload("res://assets/sounds/sfx/ground/wood/wood_step_3.wav"),
+		preload("res://assets/sounds/sfx/ground/wood/wood_step_4.wav"),
+		preload("res://assets/sounds/sfx/ground/wood/wood_step_5.wav"),
+		preload("res://assets/sounds/sfx/ground/wood/wood_step_6.wav"),
+		preload("res://assets/sounds/sfx/ground/wood/wood_step_7.wav"),
+	],
+}
 
 var projectiles_root: Node2D
 var map_front_sprite: Sprite2D
@@ -116,6 +136,7 @@ func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2,
 func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
 	if projectiles_root == null:
 		return
+	_play_surface_impact_sfx(impact_position)
 
 	var spray_direction := Vector2.UP
 	if incoming_velocity.length_squared() > 0.0001:
@@ -200,6 +221,43 @@ func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector
 	dust.emitting = true
 
 	_queue_free_with_delay(dust, 0.85)
+
+func _play_surface_impact_sfx(impact_position: Vector2) -> void:
+	if projectiles_root == null:
+		return
+	var surface_id := _surface_id_at_world_point(impact_position)
+	var streams_value: Variant = SURFACE_IMPACT_STREAMS.get(surface_id, SURFACE_IMPACT_STREAMS[SURFACE_ID_WOOD])
+	if not (streams_value is Array):
+		return
+	var streams = streams_value as Array
+	if streams.is_empty():
+		return
+	var chosen_stream = streams[randi() % streams.size()]
+	if not (chosen_stream is AudioStream):
+		return
+	_play_positional_sfx(chosen_stream as AudioStream, impact_position, SURFACE_IMPACT_VOLUME_DB, randf_range(0.93, 1.04), 4)
+
+func _surface_id_at_world_point(world_point: Vector2) -> String:
+	var tree := projectiles_root.get_tree()
+	if tree == null:
+		return SURFACE_ID_WOOD
+	var best_zone: Node = null
+	var best_priority := -2147483648
+	for zone_value in tree.get_nodes_in_group("ground_audio_zones"):
+		var zone := zone_value as Node
+		if zone == null or not is_instance_valid(zone):
+			continue
+		if not zone.has_method("contains_world_point") or not bool(zone.call("contains_world_point", world_point)):
+			continue
+		var zone_priority := 0
+		if zone.has_method("get_surface_priority"):
+			zone_priority = int(zone.call("get_surface_priority"))
+		if best_zone == null or zone_priority > best_priority:
+			best_zone = zone
+			best_priority = zone_priority
+	if best_zone != null and best_zone.has_method("get_surface_id"):
+		return str(best_zone.call("get_surface_id")).strip_edges().to_lower()
+	return SURFACE_ID_WOOD
 
 func _blood_chunk_color(base_color: Color) -> Color:
 	var hsv_h := base_color.h

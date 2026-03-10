@@ -31,7 +31,7 @@ window/stretch/aspect="expand"
 
 [kw]
 
-auth_api_base_url="http://127.0.0.1:8090"
+auth_api_base_url="http://85.75.243.92:8081/auth"
 
 [rendering]
 

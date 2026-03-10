@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://umtvvl0nssio"
-path="res://.godot/imported/grenadeUI.png-7e36e27864938bad6557f10b3cff96bc.ctex"
+uid="uid://cboddbjpox1yq"
+path="res://.godot/imported/grenadeUI.png-1a1309303671768b45c2fa27804a6071.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/UI/grenadeUI.png"
-dest_files=["res://.godot/imported/grenadeUI.png-7e36e27864938bad6557f10b3cff96bc.ctex"]
+source_file="res://assets/ui/grenadeUI.png"
+dest_files=["res://.godot/imported/grenadeUI.png-1a1309303671768b45c2fa27804a6071.ctex"]
 
 [params]
 

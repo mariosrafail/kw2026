@@ -1,11 +1,11 @@
-[gd_scene format=3 uid="uid://wv12esw6y7ew"]
+[gd_scene format=3 uid="uid://ce5dw2vd5fcbe"]
 
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="1_font"]
 [ext_resource type="Texture2D" uid="uid://dhiu1fi77ffb3" path="res://assets/textures/textLogo.png" id="2_logo"]
 [ext_resource type="Texture2D" uid="uid://do6fg4jb02puj" path="res://assets/textures/bullet.png" id="3_bullet"]
 [ext_resource type="PackedScene" uid="uid://dmx2f1xqqr411" path="res://scenes/entities/player.tscn" id="4_player"]
 [ext_resource type="Texture2D" uid="uid://bu5qjamiys787" path="res://assets/warriors/guns.png" id="5_guns"]
-[ext_resource type="Script" uid="uid://ys3w7q1ukqid" path="res://scripts/ui/test_menu.gd" id="6_script"]
+[ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="6_script"]
 
 [sub_resource type="Theme" id="Theme_kw"]
 default_font = ExtResource("1_font")
@@ -79,7 +79,7 @@ border_color = Color(0.06, 0.05, 0.08, 1)
 shadow_color = Color(0, 0, 0, 0.45)
 shadow_size = 6
 
-[node name="TestMenu" type="Control" unique_id=800199876]
+[node name="MainMenu" type="Control" unique_id=800199876]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

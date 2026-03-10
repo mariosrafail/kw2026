@@ -273,12 +273,13 @@ func _apply_walk_to_head(bounce: float, wobble: float, goofy_wobble: float, bob_
 		return
 	var base_position := _base_positions.get("head", _head_sprite.position) as Vector2
 	var idle_float := sin(_walk_phase * 0.55 + 0.8 + _goofy_seed * 4.7) * 0.6
-	var random_rot := sin(_walk_phase * 2.1 + _goofy_seed * 7.1) * 0.055
+	var random_rot := sin(_walk_phase * 2.1 + _goofy_seed * 7.1) * 0.025
 	var head_drag_x := -_smoothed_velocity.x * 0.02
+	var backward_lean := -0.17 * _facing_sign
 	_apply_pose(_head_sprite, Vector2(
 		(base_position.x * _facing_sign) + head_drag_x + _head_aim_offset_x(),
 		base_position.y - bounce * bob_amp + idle_float + landing_offset * 0.82
-	) + _secondary_drag(0.012, 0.009) + _shot_jolt(1.0), wobble * 0.11 + goofy_wobble * 0.04 + random_rot - stop_sway * 0.02 + _head_aim_rotation(0.26) + _secondary_tilt(0.13) + _shot_jolt_rot(1.15))
+	) + _secondary_drag(0.012, 0.009) + _shot_jolt(1.0), backward_lean + wobble * 0.045 + goofy_wobble * 0.018 + random_rot - stop_sway * 0.01 + _head_aim_rotation(0.22) + _secondary_tilt(0.08) + _shot_jolt_rot(1.15))
 	if not grounded:
 		_head_sprite.rotation *= 0.55
 
