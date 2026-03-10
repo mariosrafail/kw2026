@@ -19,8 +19,8 @@ func magazine_size() -> int:
 func reload_duration() -> float:
 	return 1.0
 
-func boost_damage() -> int:
-	return base_damage()
+func boost_damage_cap() -> int:
+	return 0
 
 func camera_shake_per_shot() -> float:
 	return 0.0
@@ -45,6 +45,16 @@ func projectile_visual_config() -> Dictionary:
 
 func clamp_aim_world(_player_position: Vector2, desired_aim_world: Vector2) -> Vector2:
 	return desired_aim_world
+
+func damage_for_boost(boost_enabled: bool, boost_multiplier: float = 1.0) -> int:
+	if not boost_enabled:
+		return base_damage()
+	var resolved_multiplier := maxf(1.0, boost_multiplier)
+	var boosted_damage := maxi(base_damage(), int(round(float(base_damage()) * resolved_multiplier)))
+	var boosted_cap := boost_damage_cap()
+	if boosted_cap > 0:
+		boosted_damage = mini(boosted_damage, boosted_cap)
+	return boosted_damage
 
 func visual_advance_ms(last_ping_ms: int, lag_comp_ms: int, owner_is_local: bool) -> int:
 	var advance_ms := maxi(0, last_ping_ms >> 1)

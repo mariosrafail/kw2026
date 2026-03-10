@@ -7,7 +7,6 @@ const PROJECTILE_SPEED := 500.0
 const PROJECTILE_GRAVITY := Vector2(0.0, 1520.0)
 const ARC_LIFT := 320.0
 const BASE_DAMAGE := 60
-const BOOST_DAMAGE := 95
 const FIRE_INTERVAL := 0.42
 const MAGAZINE_SIZE := 1
 const RELOAD_DURATION := 1.5
@@ -36,9 +35,6 @@ func magazine_size() -> int:
 func reload_duration() -> float:
 	return RELOAD_DURATION
 
-func boost_damage() -> int:
-	return BOOST_DAMAGE
-
 func camera_shake_per_shot() -> float:
 	return CAMERA_SHAKE_PER_SHOT_VALUE
 
@@ -63,8 +59,8 @@ func projectile_visual_config() -> Dictionary:
 func explosion_radius() -> float:
 	return EXPLOSION_RADIUS
 
-func damage_for_boost(boost_enabled: bool) -> int:
-	return BOOST_DAMAGE if boost_enabled else BASE_DAMAGE
+func boost_damage_cap() -> int:
+	return 90
 
 func clamp_aim_world(player_position: Vector2, desired_aim_world: Vector2) -> Vector2:
 	var aim_delta := desired_aim_world - player_position
@@ -108,7 +104,7 @@ func build_server_shot(
 		"velocity": launch_velocity,
 		"lag_comp_ms": lag_comp_ms,
 		"trail_origin": trail_origin,
-		"shot_damage": damage_for_boost(bool(input_state.get("boost_damage", false)))
+		"shot_damage": damage_for_boost(bool(input_state.get("boost_damage", false)), float(input_state.get("boost_damage_multiplier", 1.0)))
 	}
 
 func _safe_spawn_position(player: NetPlayer, desired_spawn_position: Vector2, world_2d: World2D) -> Vector2:

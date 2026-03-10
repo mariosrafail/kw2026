@@ -6,6 +6,7 @@
 extends Skill
 
 const BOOST_DURATION_SEC := 4.0
+const BOOST_DAMAGE_MULTIPLIER := 1.5
 const VFX_NAME := "OutrageBoostVfx"
 const BOOST_SFX := preload("res://assets/sounds/sfx/skills/outrage_skill2.wav")
 const BOOST_VFX_FADE_IN_SEC := 0.12
@@ -260,6 +261,10 @@ func _set_boost_damage(peer_id: int, enabled: bool) -> void:
 		return
 	var state = input_states.get(peer_id, {}) as Dictionary
 	state["boost_damage"] = enabled
+	if enabled:
+		state["boost_damage_multiplier"] = BOOST_DAMAGE_MULTIPLIER
+	elif state.has("boost_damage_multiplier"):
+		state.erase("boost_damage_multiplier")
 	input_states[peer_id] = state
 
 func _set_boost_server_until_msec(peer_id: int, until_msec: int) -> void:

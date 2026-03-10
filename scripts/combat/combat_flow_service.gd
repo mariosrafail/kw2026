@@ -114,6 +114,7 @@ func default_input_state() -> Dictionary:
 		"aim_world": Vector2.ZERO,
 		"shoot_held": false,
 		"boost_damage": false,
+		"boost_damage_multiplier": 1.0,
 		"reported_rtt_ms": 0,
 		"last_packet_msec": 0
 	}

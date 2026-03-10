@@ -2,6 +2,8 @@ extends RefCounted
 class_name MainMenuAuthFlow
 
 const AUTH_REQUEST_TIMEOUT_SEC := 8.0
+const DEFAULT_AUTH_USERNAME := "mario"
+const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
@@ -78,14 +80,14 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 
 	var user_input := LineEdit.new()
 	user_input.placeholder_text = "Username or Email"
-	user_input.text = str(host.get("player_username"))
+	user_input.text = DEFAULT_AUTH_USERNAME
 	box.add_child(user_input)
 	host.set("_auth_user_input", user_input)
 
 	var pass_input := LineEdit.new()
 	pass_input.placeholder_text = "Password"
 	pass_input.secret = true
-	pass_input.text = "1234"
+	pass_input.text = DEFAULT_AUTH_PASSWORD
 	box.add_child(pass_input)
 	host.set("_auth_pass_input", pass_input)
 
@@ -491,7 +493,10 @@ func auth_on_logout_pressed(host: Control) -> void:
 		auth_login_button.disabled = false
 	var auth_pass_input := host.get("_auth_pass_input") as LineEdit
 	if auth_pass_input != null:
-		auth_pass_input.text = ""
+		auth_pass_input.text = DEFAULT_AUTH_PASSWORD
+	var auth_user_input := host.get("_auth_user_input") as LineEdit
+	if auth_user_input != null:
+		auth_user_input.text = DEFAULT_AUTH_USERNAME
 	var auth_overlay := host.get("_auth_overlay") as Control
 	if auth_overlay != null:
 		auth_overlay.visible = true

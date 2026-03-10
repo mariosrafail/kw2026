@@ -5,6 +5,8 @@ const AUTH_SESSION_PATH := "user://auth_session.json"
 const AUTH_API_BASE_URL_SETTING := "kw/auth_api_base_url"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
+const DEFAULT_AUTH_USERNAME := "mario"
+const DEFAULT_AUTH_PASSWORD := "1234"
 
 func setup_auth_flow(host: Node) -> void:
 	host.call("_resolve_auth_profile")
@@ -20,8 +22,11 @@ func setup_auth_flow(host: Node) -> void:
 	])
 	load_auth_session(host)
 	var auth_username_input := host.get("auth_username_input") as LineEdit
-	if auth_username_input != null and auth_username_input.text.strip_edges().is_empty() and not str(host.get("auth_username")).strip_edges().is_empty():
-		auth_username_input.text = str(host.get("auth_username"))
+	if auth_username_input != null:
+		auth_username_input.text = DEFAULT_AUTH_USERNAME
+	var auth_password_input := host.get("auth_password_input") as LineEdit
+	if auth_password_input != null:
+		auth_password_input.text = DEFAULT_AUTH_PASSWORD
 
 	if bool(host.get("auth_require_login_on_startup")):
 		if not str(host.get("auth_token")).strip_edges().is_empty():

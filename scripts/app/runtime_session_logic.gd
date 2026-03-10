@@ -17,8 +17,8 @@ var _auth_profile := "default"
 @export var auth_require_login_on_startup := true
 
 @export var dev_auto_login_on_autostart := false
-@export var dev_auto_login_username := ""
-@export var dev_auto_login_password := "test"
+@export var dev_auto_login_username := "mario"
+@export var dev_auto_login_password := "1234"
 @export var dev_auto_login_max_attempts := 3
 @export var dev_auto_create_lobby_on_autostart := false
 @export var dev_auto_create_lobby_name := ""
@@ -170,9 +170,9 @@ func _logout_to_login() -> void:
 	_set_wallet(0, 0)
 	owned_skins_by_character.clear()
 	if auth_username_input != null:
-		auth_username_input.text = ""
+		auth_username_input.text = "mario"
 	if auth_password_input != null:
-		auth_password_input.text = ""
+		auth_password_input.text = "1234"
 	if lobby_service != null and multiplayer != null and multiplayer.multiplayer_peer != null:
 		var local_peer_id := multiplayer.get_unique_id()
 		if local_peer_id > 0 and lobby_service.has_method("set_peer_display_name"):

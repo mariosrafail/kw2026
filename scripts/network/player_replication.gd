@@ -261,10 +261,13 @@ func server_submit_input(
 	state["shoot_held"] = shoot_held
 	if boost_until_msec > now_msec:
 		state["boost_damage"] = true
+		state["boost_damage_multiplier"] = float(state.get("boost_damage_multiplier", 1.5))
 	else:
 		state["boost_damage"] = boost_damage
 		if boost_until_msec != 0:
 			state.erase("boost_server_until_msec")
+		if not state["boost_damage"] and state.has("boost_damage_multiplier"):
+			state.erase("boost_damage_multiplier")
 	state["reported_rtt_ms"] = clampi(reported_rtt_ms, 0, max_reported_rtt_ms)
 	state["last_packet_msec"] = now_msec
 	input_states[peer_id] = state
@@ -327,6 +330,7 @@ func _default_input_state() -> Dictionary:
 		"aim_world": Vector2.ZERO,
 		"shoot_held": false,
 		"boost_damage": false,
+		"boost_damage_multiplier": 1.0,
 		"reported_rtt_ms": 0,
 		"last_packet_msec": 0
 	}

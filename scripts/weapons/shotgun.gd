@@ -7,7 +7,6 @@ const PELLET_COUNT := 10
 const PROJECTILE_SPEED_MIN := 1350.0
 const PROJECTILE_SPEED_MAX := 3000.0
 const BASE_DAMAGE := 5
-const BOOST_DAMAGE := 22
 const FIRE_INTERVAL := 0.2
 const MAGAZINE_SIZE := 2
 const RELOAD_DURATION := 1.2
@@ -39,9 +38,6 @@ func magazine_size() -> int:
 func reload_duration() -> float:
 	return RELOAD_DURATION
 
-func boost_damage() -> int:
-	return BOOST_DAMAGE
-
 func camera_shake_per_shot() -> float:
 	return CAMERA_SHAKE_PER_SHOT_VALUE
 
@@ -62,9 +58,6 @@ func projectile_visual_config() -> Dictionary:
 		"gravity_activation_speed": GRAVITY_ACTIVATION_SPEED,
 		"exponential_drag": EXPONENTIAL_DRAG
 	}
-
-func damage_for_boost(boost_enabled: bool) -> int:
-	return BOOST_DAMAGE if boost_enabled else BASE_DAMAGE
 
 func clamp_aim_world(player_position: Vector2, desired_aim_world: Vector2) -> Vector2:
 	var aim_delta := desired_aim_world - player_position
@@ -99,7 +92,7 @@ func build_server_shots(
 	var reported_rtt_ms := int(input_state.get("reported_rtt_ms", 0))
 	var lag_comp_ms := clampi(reported_rtt_ms >> 1, 0, max_reported_rtt_ms >> 1)
 	var pellets: Array = []
-	var pellet_damage := damage_for_boost(bool(input_state.get("boost_damage", false)))
+	var pellet_damage := damage_for_boost(bool(input_state.get("boost_damage", false)), float(input_state.get("boost_damage_multiplier", 1.0)))
 	for pellet_index in range(PELLET_COUNT):
 		var spread_angle := deg_to_rad(randf_range(-MAX_SPREAD_DEGREES, MAX_SPREAD_DEGREES))
 		var shoot_direction := base_direction.rotated(spread_angle).normalized()

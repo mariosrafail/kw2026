@@ -5,7 +5,6 @@ const WEAPON_ID := "kar"
 const NAME := "KAR"
 const PROJECTILE_SPEED := 6500
 const BASE_DAMAGE := 55
-const BOOST_DAMAGE := 140
 const FIRE_INTERVAL := 0.95
 const MAGAZINE_SIZE := 1
 const RELOAD_DURATION := 1.4
@@ -32,9 +31,6 @@ func magazine_size() -> int:
 func reload_duration() -> float:
 	return RELOAD_DURATION
 
-func boost_damage() -> int:
-	return BOOST_DAMAGE
-
 func camera_shake_per_shot() -> float:
 	return CAMERA_SHAKE_PER_SHOT_VALUE
 
@@ -52,9 +48,6 @@ func projectile_visual_config() -> Dictionary:
 		"trail_width": 4.2,
 		"trail_alpha": 0.58
 	}
-
-func damage_for_boost(boost_enabled: bool) -> int:
-	return BOOST_DAMAGE if boost_enabled else BASE_DAMAGE
 
 func clamp_aim_world(player_position: Vector2, desired_aim_world: Vector2) -> Vector2:
 	var aim_delta := desired_aim_world - player_position
@@ -94,7 +87,7 @@ func build_server_shot(
 		"velocity": shoot_direction * PROJECTILE_SPEED,
 		"lag_comp_ms": lag_comp_ms,
 		"trail_origin": trail_origin,
-		"shot_damage": damage_for_boost(bool(input_state.get("boost_damage", false)))
+		"shot_damage": damage_for_boost(bool(input_state.get("boost_damage", false)), float(input_state.get("boost_damage_multiplier", 1.0)))
 	}
 
 func _safe_spawn_position(player: NetPlayer, desired_spawn_position: Vector2, world_2d: World2D) -> Vector2:

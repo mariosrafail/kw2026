@@ -238,10 +238,11 @@ func _apply_idle_pose() -> void:
 		) + _secondary_drag(0.008, 0.006) + _shot_jolt(0.7), sway * 0.02 + _secondary_tilt(0.08) + _shot_jolt_rot(0.9))
 	if _head_sprite != null:
 		var head_base := _base_positions.get("head", _head_sprite.position) as Vector2
+		var head_anchor_x := head_base.x * _facing_sign
 		_apply_pose(_head_sprite, Vector2(
-			(head_base.x * _facing_sign) + sway * 0.65 * _facing_sign + _head_aim_offset_x() * 0.55,
+			_head_target_x(head_anchor_x, sway * 0.45 * _facing_sign + _head_aim_offset_x() * 0.95, 10.5),
 			head_base.y + breath * 1.2 + head_nod * 0.3
-		) + _secondary_drag(0.013, 0.01) + _shot_jolt(1.0), sway * 0.035 + head_nod * 0.025 + _head_aim_rotation(0.22) + _secondary_tilt(0.12) + _shot_jolt_rot(1.1))
+		) + _secondary_drag(0.013, 0.01) + _shot_jolt(1.0), sway * 0.02 + head_nod * 0.02 + _head_aim_rotation(0.55) + _secondary_tilt(0.12) + _shot_jolt_rot(1.1))
 
 func _apply_walk_to_leg(sprite: Sprite2D, key: String, phase: float, stomp: float, x_amp: float, y_amp: float, landing_offset: float, stop_sway: float) -> void:
 	if sprite == null:
@@ -275,11 +276,12 @@ func _apply_walk_to_head(bounce: float, wobble: float, goofy_wobble: float, bob_
 	var idle_float := sin(_walk_phase * 0.55 + 0.8 + _goofy_seed * 4.7) * 0.6
 	var random_rot := sin(_walk_phase * 2.1 + _goofy_seed * 7.1) * 0.025
 	var head_drag_x := -_smoothed_velocity.x * 0.02
-	var backward_lean := -0.17 * _facing_sign
+	var backward_lean := -0.08 * _facing_sign
+	var head_anchor_x := base_position.x * _facing_sign
 	_apply_pose(_head_sprite, Vector2(
-		(base_position.x * _facing_sign) + head_drag_x + _head_aim_offset_x(),
+		_head_target_x(head_anchor_x, head_drag_x + _head_aim_offset_x(), 11.5),
 		base_position.y - bounce * bob_amp + idle_float + landing_offset * 0.82
-	) + _secondary_drag(0.012, 0.009) + _shot_jolt(1.0), backward_lean + wobble * 0.045 + goofy_wobble * 0.018 + random_rot - stop_sway * 0.01 + _head_aim_rotation(0.22) + _secondary_tilt(0.08) + _shot_jolt_rot(1.15))
+	) + _secondary_drag(0.012, 0.009) + _shot_jolt(1.0), backward_lean + wobble * 0.02 + goofy_wobble * 0.01 + random_rot - stop_sway * 0.006 + _head_aim_rotation(0.5) + _secondary_tilt(0.08) + _shot_jolt_rot(1.15))
 	if not grounded:
 		_head_sprite.rotation *= 0.55
 
@@ -327,10 +329,11 @@ func _apply_air_head(head_lift: float, travel_tilt: float, vertical_ratio: float
 		return
 	var base_position := _base_positions.get("head", _head_sprite.position) as Vector2
 	var float_wobble := sin(_anim_time * 14.5 + _goofy_seed * 11.0) * 0.8
+	var head_anchor_x := base_position.x * _facing_sign
 	_apply_pose(_head_sprite, Vector2(
-		(base_position.x * _facing_sign) + (travel_tilt * 2.1 + flutter * 0.55) * blend + _head_aim_offset_x() * 0.7,
+		_head_target_x(head_anchor_x, (travel_tilt * 0.28 + flutter * 0.06) * blend + _head_aim_offset_x() * 0.32, 8.0),
 		base_position.y - head_lift - vertical_ratio * 3.1 * blend + float_wobble * 0.35 * blend
-	) + _secondary_drag(0.016, 0.013) + _shot_jolt(1.1), (0.24 * _facing_sign + travel_tilt * 0.08 + flutter * 0.035 + float_wobble * 0.03) * blend + _head_aim_rotation(0.32) + _secondary_tilt(0.16) + _shot_jolt_rot(1.2))
+	) + _secondary_drag(0.016, 0.013) + _shot_jolt(1.1), (0.04 * _facing_sign + travel_tilt * 0.012 + flutter * 0.006 + float_wobble * 0.02) * blend + _head_aim_rotation(0.28) + _secondary_tilt(0.16) + _shot_jolt_rot(1.2))
 
 func _apply_pose(sprite: Sprite2D, target_position: Vector2, target_rotation: float) -> void:
 	if sprite == null:
@@ -358,10 +361,13 @@ func _shot_jolt(weight: float) -> Vector2:
 func _shot_jolt_rot(weight: float) -> float:
 	return _shot_jolt_rotation * weight
 
+func _head_target_x(anchor_x: float, extra_x: float, max_distance: float) -> float:
+	return clampf(anchor_x + extra_x, anchor_x - max_distance, anchor_x + max_distance)
+
 func _pose_follow_weight(sprite: Sprite2D) -> float:
 	var follow_weight := _pose_blend_weight
 	if sprite == _head_sprite:
-		follow_weight *= 0.72
+		follow_weight *= 0.95
 	elif sprite == _torso_sprite:
 		follow_weight *= 0.82
 	else:
@@ -378,10 +384,10 @@ func _head_aim_rotation(max_rotation: float) -> float:
 	var local_angle := wrapf(_head_aim_angle, -PI, PI)
 	if _facing_sign < 0.0:
 		local_angle = wrapf(_head_aim_angle - PI, -PI, PI)
-	return clampf(local_angle * 0.32, -max_rotation, max_rotation)
+	return clampf(local_angle * 1.0, -max_rotation, max_rotation)
 
 func _head_aim_offset_x() -> float:
-	return _head_aim_rotation(0.28) * 6.5 * _facing_sign
+	return _head_aim_rotation(0.6) * 14.0 * _facing_sign
 
 func set_character_visual(new_character_id: String) -> void:
 	var normalized := new_character_id.strip_edges().to_lower()

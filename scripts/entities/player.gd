@@ -34,6 +34,7 @@ const DAMAGE_KNOCKBACK_X := 42.0
 const DAMAGE_KNOCKBACK_Y := -36.0
 const DAMAGE_PART_SCRAMBLE_DURATION_SEC := 0.2
 const ANIMATION_AIR_VELOCITY_THRESHOLD := 24.0
+const RESPAWN_DAMAGE_IMMUNITY_SEC := 0.3
 
 @onready var body: Polygon2D = get_node_or_null("Body") as Polygon2D
 @onready var feet: Polygon2D = get_node_or_null("Feet") as Polygon2D
@@ -975,12 +976,26 @@ func force_respawn(spawn_position: Vector2) -> void:
 	target_position = spawn_position
 	velocity = Vector2.ZERO
 	target_velocity = Vector2.ZERO
+	set_health(MAX_HEALTH)
+	target_health = MAX_HEALTH
+	damage_immune_remaining_sec = RESPAWN_DAMAGE_IMMUNITY_SEC
+	shield_health = 0
+	shield_remaining_sec = 0.0
 	damage_push_direction = Vector2.ZERO
 	target_damage_push_direction = Vector2.ZERO
+	damage_part_scramble_remaining_sec = 0.0
+	damage_part_scramble_offsets.clear()
+	damage_part_scramble_rotations.clear()
 	if movement_component != null:
 		movement_component.reset_jump_state()
 	if surface_audio_component != null:
 		surface_audio_component.reset_state()
+	if damage_flash_tween != null:
+		damage_flash_tween.kill()
+		_clear_damage_flash_tween()
+	if damage_screen_blood_tween != null:
+		damage_screen_blood_tween.kill()
+		_clear_screen_damage_blood()
 	clear_outrage_boost_visual()
 	if weapon_visual_component != null:
 		weapon_visual_component.reset_after_respawn(target_aim_angle)
