@@ -15,6 +15,11 @@ const EREBUS_WARRIOR_COLUMN := 2
 const TASKO_WARRIOR_COLUMN := 3
 const WARRIOR_FRAME_OFFSET_X := 64
 const SYNC_POSE_LERP_SPEED := 18.0
+const HEAD_LEFT_SOCKET_CORRECTION := 2.0
+const HEAD_GROUNDED_AIM_OFFSET_SCALE := 0.45
+const HEAD_GROUNDED_MAX_DRIFT := 7.5
+const HEAD_GROUNDED_IDLE_ROTATION_MAX := 0.26
+const HEAD_GROUNDED_WALK_ROTATION_MAX := 0.22
 
 const PART_TEXTURE_PATHS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -238,11 +243,11 @@ func _apply_idle_pose() -> void:
 		) + _secondary_drag(0.008, 0.006) + _shot_jolt(0.7), sway * 0.02 + _secondary_tilt(0.08) + _shot_jolt_rot(0.9))
 	if _head_sprite != null:
 		var head_base := _base_positions.get("head", _head_sprite.position) as Vector2
-		var head_anchor_x := head_base.x * _facing_sign
+		var head_anchor_x := _resolved_head_anchor_x(head_base.x)
 		_apply_pose(_head_sprite, Vector2(
-			_head_target_x(head_anchor_x, sway * 0.45 * _facing_sign + _head_aim_offset_x() * 0.95, 10.5),
+			_head_target_x(head_anchor_x, sway * 0.3 * _facing_sign + _head_aim_offset_x() * HEAD_GROUNDED_AIM_OFFSET_SCALE, HEAD_GROUNDED_MAX_DRIFT),
 			head_base.y + breath * 1.2 + head_nod * 0.3
-		) + _secondary_drag(0.013, 0.01) + _shot_jolt(1.0), sway * 0.02 + head_nod * 0.02 + _head_aim_rotation(0.55) + _secondary_tilt(0.12) + _shot_jolt_rot(1.1))
+		) + _secondary_drag(0.009, 0.008) + _shot_jolt(1.0), sway * 0.012 + head_nod * 0.016 + _head_aim_rotation(HEAD_GROUNDED_IDLE_ROTATION_MAX) + _secondary_tilt(0.07) + _shot_jolt_rot(0.9))
 
 func _apply_walk_to_leg(sprite: Sprite2D, key: String, phase: float, stomp: float, x_amp: float, y_amp: float, landing_offset: float, stop_sway: float) -> void:
 	if sprite == null:
@@ -276,12 +281,12 @@ func _apply_walk_to_head(bounce: float, wobble: float, goofy_wobble: float, bob_
 	var idle_float := sin(_walk_phase * 0.55 + 0.8 + _goofy_seed * 4.7) * 0.6
 	var random_rot := sin(_walk_phase * 2.1 + _goofy_seed * 7.1) * 0.025
 	var head_drag_x := -_smoothed_velocity.x * 0.02
-	var backward_lean := -0.08 * _facing_sign
-	var head_anchor_x := base_position.x * _facing_sign
+	var backward_lean := -0.1 * _facing_sign
+	var head_anchor_x := _resolved_head_anchor_x(base_position.x)
 	_apply_pose(_head_sprite, Vector2(
-		_head_target_x(head_anchor_x, head_drag_x + _head_aim_offset_x(), 11.5),
+		_head_target_x(head_anchor_x, head_drag_x * 0.5 + _head_aim_offset_x() * HEAD_GROUNDED_AIM_OFFSET_SCALE, HEAD_GROUNDED_MAX_DRIFT + 0.5),
 		base_position.y - bounce * bob_amp + idle_float + landing_offset * 0.82
-	) + _secondary_drag(0.012, 0.009) + _shot_jolt(1.0), backward_lean + wobble * 0.02 + goofy_wobble * 0.01 + random_rot - stop_sway * 0.006 + _head_aim_rotation(0.5) + _secondary_tilt(0.08) + _shot_jolt_rot(1.15))
+	) + _secondary_drag(0.01, 0.008) + _shot_jolt(1.0), backward_lean + wobble * 0.012 + goofy_wobble * 0.006 + random_rot * 0.5 - stop_sway * 0.004 + _head_aim_rotation(HEAD_GROUNDED_WALK_ROTATION_MAX) + _secondary_tilt(0.06) + _shot_jolt_rot(0.95))
 	if not grounded:
 		_head_sprite.rotation *= 0.55
 
@@ -329,7 +334,7 @@ func _apply_air_head(head_lift: float, travel_tilt: float, vertical_ratio: float
 		return
 	var base_position := _base_positions.get("head", _head_sprite.position) as Vector2
 	var float_wobble := sin(_anim_time * 14.5 + _goofy_seed * 11.0) * 0.8
-	var head_anchor_x := base_position.x * _facing_sign
+	var head_anchor_x := _resolved_head_anchor_x(base_position.x)
 	_apply_pose(_head_sprite, Vector2(
 		_head_target_x(head_anchor_x, (travel_tilt * 0.28 + flutter * 0.06) * blend + _head_aim_offset_x() * 0.32, 8.0),
 		base_position.y - head_lift - vertical_ratio * 3.1 * blend + float_wobble * 0.35 * blend
@@ -363,6 +368,12 @@ func _shot_jolt_rot(weight: float) -> float:
 
 func _head_target_x(anchor_x: float, extra_x: float, max_distance: float) -> float:
 	return clampf(anchor_x + extra_x, anchor_x - max_distance, anchor_x + max_distance)
+
+func _resolved_head_anchor_x(base_x: float) -> float:
+	var anchor_x := base_x * _facing_sign
+	if _facing_sign < 0.0:
+		anchor_x += HEAD_LEFT_SOCKET_CORRECTION
+	return anchor_x
 
 func _pose_follow_weight(sprite: Sprite2D) -> float:
 	var follow_weight := _pose_blend_weight

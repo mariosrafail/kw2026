@@ -192,6 +192,24 @@ func _rpc_sync_player_ammo(_peer_or_payload: Variant, _ammo: int = 0, _is_reload
 		return
 	client_rpc_flow_service.rpc_sync_player_ammo(peer_id, resolved_ammo, resolved_is_reloading)
 
+func _rpc_spawn_dropped_mag(_mag_id: int, _texture_path: String, _tint: Color, _spawn_position: Vector2, _linear_velocity: Vector2, _angular_velocity: float = 0.0) -> void:
+	if multiplayer.is_server():
+		return
+	if dropped_mag_service != null:
+		dropped_mag_service.client_spawn_rpc(_mag_id, _texture_path, _tint, _spawn_position, _linear_velocity, _angular_velocity)
+
+func _rpc_sync_dropped_mag(_mag_id: int, _world_position: Vector2, _world_rotation: float, _linear_velocity: Vector2, _angular_velocity: float) -> void:
+	if multiplayer.is_server():
+		return
+	if dropped_mag_service != null:
+		dropped_mag_service.client_sync_rpc(_mag_id, _world_position, _world_rotation, _linear_velocity, _angular_velocity)
+
+func _rpc_despawn_dropped_mag(_mag_id: int) -> void:
+	if multiplayer.is_server():
+		return
+	if dropped_mag_service != null:
+		dropped_mag_service.client_despawn_rpc(_mag_id)
+
 func _rpc_sync_player_weapon(_peer_id: int, _weapon_id: String) -> void:
 	if multiplayer.is_server():
 		return

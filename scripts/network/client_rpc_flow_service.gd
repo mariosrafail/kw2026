@@ -119,6 +119,7 @@ func rpc_projectile_impact(projectile_id: int, impact_position: Vector2) -> void
 	var weapon_id := projectile_system.get_projectile_weapon_id(projectile_id, "")
 	if weapon_id == "grenade":
 		combat_effects.spawn_explosion_effect(impact_position)
+		combat_effects.spawn_explosion_surface_particles(impact_position)
 		var grenade_impact_sfx := _weapon_impact_sfx(weapon_id)
 		if grenade_impact_sfx != null:
 			combat_effects.play_weapon_impact_sfx(grenade_impact_sfx, impact_position, 3.0, randf_range(0.97, 1.03), 2)

@@ -97,12 +97,16 @@ func _apply_bomb_damage(bomb: Dictionary) -> void:
 	var world_position := bomb.get("world_position", Vector2.ZERO) as Vector2
 	if lobby_id <= 0:
 		return
-	for member_value in _get_lobby_members(lobby_id):
-		var target_peer_id := int(member_value)
-		if target_peer_id <= 0 or target_peer_id == caster_peer_id:
+	for peer_value in players.keys():
+		var target_peer_id := int(peer_value)
+		if target_peer_id == caster_peer_id:
+			continue
+		if _get_peer_lobby(target_peer_id) != lobby_id:
 			continue
 		var target_player: NetPlayer = players.get(target_peer_id, null) as NetPlayer
 		if target_player == null:
+			continue
+		if target_player.get_health() <= 0:
 			continue
 		if target_player.global_position.distance_to(world_position) > RADIUS:
 			continue

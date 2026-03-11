@@ -56,6 +56,7 @@ const CLIENT_INPUT_CONTROLLER_SCRIPT := preload("res://scripts/input/client_inpu
 const COMBAT_EFFECTS_SCRIPT := preload("res://scripts/effects/combat_effects.gd")
 const CAMERA_SHAKE_SCRIPT := preload("res://scripts/effects/camera_shake.gd")
 const WEAPON_UI_SCRIPT := preload("res://scripts/ui/main_menu/weapon_ui.gd")
+const DROPPED_MAG_SERVICE_SCRIPT := preload("res://scripts/world/dropped_mag_service.gd")
 
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
@@ -214,6 +215,7 @@ var client_rpc_flow_service: ClientRpcFlowService
 var client_input_controller: ClientInputController
 var combat_effects: CombatEffects
 var camera_shake: CameraShake
+var dropped_mag_service: DroppedMagService
 var weapon_ui: RefCounted
 
 var weapon_profiles: Dictionary = {}
@@ -283,6 +285,18 @@ func _rpc_play_reload_sfx(_peer_or_payload: Variant, _weapon_id: String = "") ->
 
 @rpc("authority", "reliable")
 func _rpc_sync_player_ammo(_peer_or_payload: Variant, _ammo: int = 0, _is_reloading: bool = false) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_spawn_dropped_mag(_mag_id: int, _texture_path: String, _tint: Color, _spawn_position: Vector2, _linear_velocity: Vector2, _angular_velocity: float = 0.0) -> void:
+	pass
+
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_dropped_mag(_mag_id: int, _world_position: Vector2, _world_rotation: float, _linear_velocity: Vector2, _angular_velocity: float) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_despawn_dropped_mag(_mag_id: int) -> void:
 	pass
 
 @rpc("authority", "reliable")

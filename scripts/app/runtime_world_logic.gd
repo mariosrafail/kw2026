@@ -32,9 +32,16 @@ const KAR_RELOAD_FRAME_DURATION_SEC := 1.4 / 15.0
 const SHOTGUN_RELOAD_FRAME_DURATION_SEC := 1.2 / 7.0
 const UZI_RELOAD_FRAME_DURATION_SEC := 1.0 / 13.0
 const ESCAPE_LEAVE_TIMEOUT_SEC := 1.25
+const TARGET_DUMMY_PEER_ID := -1001
+const TARGET_DUMMY_NAME := "TARGET DUMMY"
+const TARGET_DUMMY_COLOR := Color(1.0, 0.48, 0.48, 1.0)
+const TARGET_DUMMY_Z_INDEX := 80
+const TARGET_DUMMY_HALF_HEIGHT := 22.0
 
 var weapon_idle_texture_by_id: Dictionary = {}
 var weapon_reload_frames_by_id: Dictionary = {}
+var target_dummy_spawn_position := Vector2.ZERO
+var target_dummy_lobby_id := 0
 
 func _request_lobby_list() -> void:
 	if not _is_client_connected():
@@ -79,6 +86,10 @@ func _reset_runtime_state() -> void:
 	snapshot_accumulator = 0.0
 	escape_return_pending = false
 	escape_return_nonce += 1
+	target_dummy_spawn_position = Vector2.ZERO
+	target_dummy_lobby_id = 0
+	if dropped_mag_service != null:
+		dropped_mag_service.reset()
 	_clear_players()
 	projectile_system.clear()
 	input_states.clear()
@@ -173,7 +184,12 @@ func _update_buttons() -> void:
 	_refresh_lobby_buttons()
 
 func _update_peer_labels() -> void:
-	var spawned_ids := players.keys()
+	var spawned_ids: Array = []
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		if _is_target_dummy_peer(peer_id):
+			continue
+		spawned_ids.append(peer_id)
 	spawned_ids.sort()
 	var local_peer_id := 0
 	var net_peers := PackedInt32Array()
@@ -267,13 +283,21 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if players.has(peer_id):
 		var existing := players[peer_id] as NetPlayer
 		if existing != null:
-			if existing.has_method("set_display_name"):
+			if _is_target_dummy_peer(peer_id):
+				existing.z_as_relative = false
+				existing.z_index = TARGET_DUMMY_Z_INDEX
+				existing.set_display_name(TARGET_DUMMY_NAME)
+				existing.set_weapon_visual(_weapon_visual_for_id(WEAPON_ID_AK47))
+				existing.set_sfx_suppressed(true)
+				existing.set_target_dummy_mode(true)
+				existing.set_aim_world(resolved_spawn + Vector2.LEFT * 160.0)
+			elif existing.has_method("set_display_name"):
 				existing.call("set_display_name", _ensure_player_display_name(peer_id))
-			existing.set_weapon_visual(_weapon_visual_for_peer(peer_id))
-			if existing.has_method("set_character_visual"):
-				existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
-			if existing.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
-				existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
+				existing.set_weapon_visual(_weapon_visual_for_peer(peer_id))
+				if existing.has_method("set_character_visual"):
+					existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
+				if existing.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
+					existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
 			existing.force_respawn(resolved_spawn)
 		return
 
@@ -283,21 +307,37 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	player.global_position = resolved_spawn
 	players_root.add_child(player)
 	player.configure(peer_id, _player_color(peer_id))
-	if player.has_method("set_display_name"):
+	if _is_target_dummy_peer(peer_id):
+		player.z_as_relative = false
+		player.z_index = TARGET_DUMMY_Z_INDEX
+		player.configure(peer_id, TARGET_DUMMY_COLOR)
+		player.set_display_name(TARGET_DUMMY_NAME)
+		player.use_network_smoothing = false
+		player.set_target_dummy_mode(true)
+		player.set_character_visual("outrage")
+		player.set_weapon_visual(_weapon_visual_for_id(WEAPON_ID_AK47))
+		player.set_shot_audio_stream(null)
+		player.set_reload_audio_stream(null)
+		player.set_sfx_suppressed(true)
+		player.set_aim_world(resolved_spawn + Vector2.LEFT * 160.0)
+	elif player.has_method("set_display_name"):
 		player.call("set_display_name", _ensure_player_display_name(peer_id))
-	player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
-	player.set_weapon_visual(_weapon_visual_for_peer(peer_id))
-	if player.has_method("set_character_visual"):
-		player.call("set_character_visual", _warrior_id_for_peer(peer_id))
-	if player.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
-		player.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
-	player.set_shot_audio_stream(_weapon_shot_sfx(_weapon_id_for_peer(peer_id)))
-	player.set_reload_audio_stream(_weapon_reload_sfx(_weapon_id_for_peer(peer_id)))
-	if ammo_by_peer.has(peer_id):
-		player.set_ammo(int(ammo_by_peer[peer_id]), float(reload_remaining_by_peer.get(peer_id, 0.0)) > 0.0)
+		player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
+		player.set_weapon_visual(_weapon_visual_for_peer(peer_id))
+		if player.has_method("set_character_visual"):
+			player.call("set_character_visual", _warrior_id_for_peer(peer_id))
+		if player.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
+			player.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
+		player.set_shot_audio_stream(_weapon_shot_sfx(_weapon_id_for_peer(peer_id)))
+		player.set_reload_audio_stream(_weapon_reload_sfx(_weapon_id_for_peer(peer_id)))
+		if ammo_by_peer.has(peer_id):
+			player.set_ammo(int(ammo_by_peer[peer_id]), float(reload_remaining_by_peer.get(peer_id, 0.0)) > 0.0)
 
 	players[peer_id] = player
 	combat_flow_service.record_player_history(peer_id, resolved_spawn)
+	if role == Role.SERVER and multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
+		target_dummy_lobby_id = _peer_lobby(peer_id)
+		_ensure_target_dummy(resolved_spawn)
 	_update_peer_labels()
 	_update_ui_visibility()
 	if peer_id == multiplayer.get_unique_id() and _uses_lobby_scene_flow():
@@ -318,7 +358,6 @@ func _remove_player_local(peer_id: int) -> void:
 	peer_character_ids.erase(peer_id)
 	_update_peer_labels()
 	_update_ui_visibility()
-
 func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
 	var recipients := target_peers.duplicate()
 	if recipients.is_empty():
@@ -473,6 +512,8 @@ func _server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 		_server_switch_lobby_to_map_scene(effective_lobby, lobby_map_id, peer_id)
 		return
 	combat_flow_service.server_spawn_peer_if_needed(peer_id, effective_lobby)
+	if dropped_mag_service != null:
+		dropped_mag_service.sync_all_to_peer(peer_id)
 	_update_peer_labels()
 	_update_score_labels()
 
@@ -502,14 +543,135 @@ func _server_switch_lobby_to_map_scene(lobby_id: int, map_id: String, trigger_pe
 		_switch_to_map_scene(normalized_map)
 
 func _server_sync_player_stats(peer_id: int) -> void:
+	if _is_target_dummy_peer(peer_id):
+		return
 	player_replication.server_sync_player_stats(peer_id)
 
 func _server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> void:
+	if _is_target_dummy_peer(attacker_peer_id) or _is_target_dummy_peer(target_peer_id):
+		return
 	player_replication.server_register_kill_death(attacker_peer_id, target_peer_id)
 	_update_score_labels()
 
 func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
+	if _is_target_dummy_peer(peer_id):
+		var respawn_position := target_dummy_spawn_position
+		if respawn_position == Vector2.ZERO:
+			respawn_position = spawn_flow_service.sanitize_spawn_position(_random_spawn_position(), _get_world_2d_ref(), 1)
+		player.force_respawn(respawn_position)
+		player.set_aim_world(respawn_position + Vector2.LEFT * 160.0)
+		combat_flow_service.record_player_history(peer_id, respawn_position)
+		return
 	combat_flow_service.server_respawn_player(peer_id, player)
+
+func _is_target_dummy_peer(peer_id: int) -> bool:
+	return peer_id == TARGET_DUMMY_PEER_ID
+
+func _ensure_target_dummy(_anchor_position: Vector2) -> void:
+	if _uses_lobby_scene_flow():
+		return
+	if players_root == null:
+		return
+	var desired_position := _target_dummy_spawn_point()
+	target_dummy_spawn_position = desired_position
+	var existing := players.get(TARGET_DUMMY_PEER_ID, null) as NetPlayer
+	if existing != null:
+		existing.force_respawn(desired_position)
+		existing.set_aim_world(desired_position + Vector2.LEFT * 160.0)
+		combat_flow_service.record_player_history(TARGET_DUMMY_PEER_ID, desired_position)
+		_broadcast_target_dummy_spawn(desired_position)
+		return
+
+	var dummy := PLAYER_SCENE.instantiate() as NetPlayer
+	if dummy == null:
+		return
+	dummy.global_position = desired_position
+	dummy.z_as_relative = false
+	dummy.z_index = TARGET_DUMMY_Z_INDEX
+	players_root.add_child(dummy)
+	dummy.configure(TARGET_DUMMY_PEER_ID, TARGET_DUMMY_COLOR)
+	dummy.set_display_name(TARGET_DUMMY_NAME)
+	dummy.use_network_smoothing = false
+	dummy.set_target_dummy_mode(true)
+	dummy.set_character_visual("outrage")
+	dummy.set_weapon_visual(_weapon_visual_for_id(WEAPON_ID_AK47))
+	dummy.set_shot_audio_stream(null)
+	dummy.set_reload_audio_stream(null)
+	dummy.set_sfx_suppressed(true)
+	dummy.set_aim_world(desired_position + Vector2.LEFT * 160.0)
+	players[TARGET_DUMMY_PEER_ID] = dummy
+	combat_flow_service.record_player_history(TARGET_DUMMY_PEER_ID, desired_position)
+	_broadcast_target_dummy_spawn(desired_position)
+
+func _broadcast_target_dummy_spawn(spawn_position: Vector2) -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	var recipients: Array = []
+	var self_peer_id := multiplayer.get_unique_id()
+	if self_peer_id > 0:
+		recipients.append(self_peer_id)
+	for member_value in multiplayer.get_peers():
+		var member_id := int(member_value)
+		if member_id <= 0:
+			continue
+		if recipients.has(member_id):
+			continue
+		recipients.append(member_id)
+	for member_value in recipients:
+		var member_id := int(member_value)
+		if member_id <= 0:
+			continue
+		_send_spawn_player_rpc(member_id, TARGET_DUMMY_PEER_ID, spawn_position, TARGET_DUMMY_NAME)
+
+func _target_dummy_spawn_point() -> Vector2:
+	if spawn_points.size() >= 2:
+		var second_spawn = spawn_points[1]
+		if second_spawn is Vector2:
+			return _snap_target_dummy_to_ground(second_spawn as Vector2)
+	if spawn_points.size() == 1:
+		var first_spawn = spawn_points[0]
+		if first_spawn is Vector2:
+			return _snap_target_dummy_to_ground(first_spawn as Vector2)
+	return _snap_target_dummy_to_ground(_random_spawn_position())
+
+func _snap_target_dummy_to_ground(world_position: Vector2) -> Vector2:
+	var snapped := spawn_flow_service.sanitize_spawn_position(world_position, _get_world_2d_ref(), 1)
+	var world_2d := _get_world_2d_ref()
+	if world_2d == null:
+		return snapped
+	var space_state := world_2d.direct_space_state
+	if space_state == null:
+		return snapped
+	var ray_from := snapped + Vector2(0.0, -64.0)
+	var ray_to := snapped + Vector2(0.0, 160.0)
+	var query := PhysicsRayQueryParameters2D.create(ray_from, ray_to, 1)
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	var hit := space_state.intersect_ray(query)
+	if hit.is_empty():
+		return snapped
+	var hit_position := hit.get("position", snapped) as Vector2
+	var grounded := Vector2(snapped.x, hit_position.y - TARGET_DUMMY_HALF_HEIGHT)
+	return spawn_flow_service.sanitize_spawn_position(grounded, world_2d, 1)
+
+func _server_ensure_target_dummy_if_needed() -> void:
+	if role != Role.SERVER:
+		return
+	if _uses_lobby_scene_flow():
+		return
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if not players.has(TARGET_DUMMY_PEER_ID):
+		for peer_value in players.keys():
+			var peer_id := int(peer_value)
+			if _is_target_dummy_peer(peer_id):
+				continue
+			var anchor_player := players.get(peer_id, null) as NetPlayer
+			if anchor_player == null:
+				continue
+			target_dummy_lobby_id = _peer_lobby(peer_id)
+			_ensure_target_dummy(anchor_player.global_position)
+			return
 
 func _server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 	player_replication.server_broadcast_player_state(peer_id, player)
@@ -630,6 +792,21 @@ func _send_player_ammo_rpc(target_peer_id: int, peer_id: int, ammo: int, is_relo
 	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
 		return
 	_rpc_sync_player_ammo.rpc_id(target_peer_id, peer_id, ammo, is_reloading)
+
+func _send_spawn_dropped_mag_rpc(target_peer_id: int, mag_id: int, texture_path: String, tint: Color, spawn_position: Vector2, linear_velocity: Vector2, angular_velocity: float) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
+	_rpc_spawn_dropped_mag.rpc_id(target_peer_id, mag_id, texture_path, tint, spawn_position, linear_velocity, angular_velocity)
+
+func _send_sync_dropped_mag_rpc(target_peer_id: int, mag_id: int, world_position: Vector2, world_rotation: float, linear_velocity: Vector2, angular_velocity: float) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
+	_rpc_sync_dropped_mag.rpc_id(target_peer_id, mag_id, world_position, world_rotation, linear_velocity, angular_velocity)
+
+func _send_despawn_dropped_mag_rpc(target_peer_id: int, mag_id: int) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
+	_rpc_despawn_dropped_mag.rpc_id(target_peer_id, mag_id)
 
 func _send_reload_sfx_rpc(target_peer_id: int, peer_id: int, weapon_id: String) -> void:
 	_rpc_play_reload_sfx.rpc_id(target_peer_id, peer_id, weapon_id)
@@ -1014,6 +1191,8 @@ func _has_active_lobbies() -> bool:
 	return lobby_service != null and lobby_service.has_active_lobbies()
 
 func _peer_lobby(peer_id: int) -> int:
+	if _is_target_dummy_peer(peer_id):
+		return _target_dummy_lobby_id()
 	if lobby_service != null:
 		var tracked_lobby := lobby_service.get_peer_lobby(peer_id)
 		if tracked_lobby > 0:
@@ -1021,6 +1200,26 @@ func _peer_lobby(peer_id: int) -> int:
 		if lobby_service.has_active_lobbies():
 			return 0
 	if not _uses_lobby_scene_flow():
+		return 1
+	return 0
+
+func _target_dummy_lobby_id() -> int:
+	if target_dummy_lobby_id > 0:
+		return target_dummy_lobby_id
+	if lobby_service != null:
+		for peer_value in players.keys():
+			var candidate_peer_id := int(peer_value)
+			if _is_target_dummy_peer(candidate_peer_id):
+				continue
+			var tracked_lobby := lobby_service.get_peer_lobby(candidate_peer_id)
+			if tracked_lobby > 0:
+				target_dummy_lobby_id = tracked_lobby
+				return tracked_lobby
+		if client_lobby_id > 0:
+			target_dummy_lobby_id = client_lobby_id
+			return client_lobby_id
+	if not _uses_lobby_scene_flow():
+		target_dummy_lobby_id = 1
 		return 1
 	return 0
 

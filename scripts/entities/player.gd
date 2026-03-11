@@ -11,6 +11,7 @@ const BLOOD_SCREEN_TEXTURES := [
 const DAMAGE_FLASH_WHITE_SHADER := preload("res://assets/shaders/damage_flash_white.gdshader")
 const DAMAGE_FLASH_MIX_SHADER := preload("res://assets/shaders/damage_flash_mix.gdshader")
 const OUTRAGE_BOOST_FIRE_SHADER := preload("res://assets/shaders/outrage_boost_fire.gdshader")
+const DAMAGE_NUMBER_FONT := preload("res://assets/fonts/kwfont.ttf")
 
 const SNAP_LERP_SPEED_X := 14.0
 const SNAP_LERP_SPEED_Y := 10.0
@@ -20,6 +21,7 @@ const REMOTE_VELOCITY_BLEND := 0.45
 const VISUAL_CORRECTION_DECAY := 9.0
 const MAX_HEALTH := 100
 const HIT_RADIUS := 12.0
+const HIT_HEIGHT := 34.0
 const DAMAGE_FLASH_DURATION_SEC := 0.38
 const DAMAGE_FLASH_ALPHA := 1.0
 const DAMAGE_FLASH_POP_IN_SEC := 0.015
@@ -32,7 +34,16 @@ const DAMAGE_FLASH_JOLT_X := 5.0
 const DAMAGE_FLASH_JOLT_Y := -2.5
 const DAMAGE_KNOCKBACK_X := 42.0
 const DAMAGE_KNOCKBACK_Y := -36.0
+const DAMAGE_SLOW_DURATION_SEC := DAMAGE_FLASH_DURATION_SEC
+const DAMAGE_SLOW_MULTIPLIER := 0.58
 const DAMAGE_PART_SCRAMBLE_DURATION_SEC := 0.2
+const DAMAGE_NUMBER_POP_SEC := 0.12
+const DAMAGE_NUMBER_HOLD_SEC := 0.06
+const DAMAGE_NUMBER_FADE_SEC := 0.24
+const DAMAGE_NUMBER_START_SCALE := 0.46
+const DAMAGE_NUMBER_PEAK_SCALE := 1.28
+const DAMAGE_NUMBER_END_SCALE := 0.72
+const DAMAGE_NUMBER_RISE_DISTANCE := 38.0
 const ANIMATION_AIR_VELOCITY_THRESHOLD := 24.0
 const RESPAWN_DAMAGE_IMMUNITY_SEC := 0.3
 
@@ -84,6 +95,7 @@ var outrage_boost_overlay_pairs: Array = []
 var target_animation_on_floor := true
 var damage_push_direction := Vector2.ZERO
 var target_damage_push_direction := Vector2.ZERO
+var damage_slow_remaining_sec := 0.0
 var damage_part_scramble_remaining_sec := 0.0
 var damage_part_scramble_offsets: Dictionary = {}
 var damage_part_scramble_rotations: Dictionary = {}
@@ -97,14 +109,17 @@ var outrage_boost_screen_fire_layer: CanvasLayer
 var outrage_boost_screen_fire_root: Control
 var outrage_boost_screen_fire_nodes: Array = []
 var outrage_boost_screen_fire_base_alpha := 0.0
+var target_dummy_mode := false
 var _screen_fire_edge_h_tex_cache: Texture2D
 var _screen_fire_edge_v_tex_cache: Texture2D
+var damage_numbers_root: Node2D
 
 func _ready() -> void:
 	_init_movement_component()
 	_init_vitals_hud_component()
 	_init_weapon_visual_component()
 	_init_surface_audio_component()
+	_init_damage_numbers_root()
 	target_position = global_position
 	target_velocity = velocity
 	target_aim_angle = 0.0
@@ -155,6 +170,18 @@ func _init_surface_audio_component() -> void:
 		footstep_audio,
 		Callable(self, "_is_sfx_suppressed")
 	)
+
+func _init_damage_numbers_root() -> void:
+	if visual_root == null:
+		return
+	damage_numbers_root = visual_root.get_node_or_null("DamageNumbers") as Node2D
+	if damage_numbers_root != null:
+		return
+	damage_numbers_root = Node2D.new()
+	damage_numbers_root.name = "DamageNumbers"
+	damage_numbers_root.z_index = 4
+	damage_numbers_root.position = Vector2(0.0, -16.0)
+	visual_root.add_child(damage_numbers_root)
 
 func _init_modular_visual() -> void:
 	modular_visual = PlayerModularVisual.new()
@@ -604,6 +631,15 @@ func set_display_name(display_name: String) -> void:
 	name_label.text = trimmed
 	name_label.visible = not trimmed.is_empty()
 
+func set_target_dummy_mode(enabled: bool) -> void:
+	target_dummy_mode = enabled
+	velocity = Vector2.ZERO
+	target_velocity = Vector2.ZERO
+	target_animation_on_floor = true
+
+func is_target_dummy() -> bool:
+	return target_dummy_mode
+
 func set_skill_cooldown_bars(q_ratio: float, e_ratio: float, bars_visible: bool) -> void:
 	if skill_bars_root != null:
 		skill_bars_root.visible = bars_visible
@@ -672,13 +708,60 @@ func set_skin_index(skin_index: int) -> void:
 func set_health(value: int) -> void:
 	if vitals_hud_component == null:
 		return
+	var previous_health := vitals_hud_component.get_health()
 	vitals_hud_component.set_health(value)
 	target_health = vitals_hud_component.get_health()
+	var damage_taken := previous_health - target_health
+	if damage_taken > 0:
+		_show_damage_number(damage_taken)
 
 func get_health() -> int:
 	if vitals_hud_component == null:
 		return MAX_HEALTH
 	return vitals_hud_component.get_health()
+
+func _show_damage_number(amount: int) -> void:
+	if amount <= 0:
+		return
+	if damage_numbers_root == null:
+		_init_damage_numbers_root()
+	if damage_numbers_root == null:
+		return
+	var label := Label.new()
+	var popup_size := Vector2(72.0, 24.0)
+	var start_offset := Vector2(randf_range(-10.0, 10.0), randf_range(-4.0, 2.0))
+	var end_offset := start_offset + Vector2(randf_range(-4.0, 4.0), -DAMAGE_NUMBER_RISE_DISTANCE)
+	label.text = "-%d" % amount
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.position = start_offset - (popup_size * 0.5)
+	label.size = popup_size
+	label.pivot_offset = popup_size * 0.5
+	label.scale = Vector2.ONE * DAMAGE_NUMBER_START_SCALE
+	label.add_theme_font_override("font", DAMAGE_NUMBER_FONT)
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(1.0, 0.18, 0.18, 1.0))
+	damage_numbers_root.add_child(label)
+
+	var move_tween := create_tween()
+	move_tween.bind_node(label)
+	var move_track := move_tween.tween_property(label, "position", end_offset - (popup_size * 0.5), DAMAGE_NUMBER_POP_SEC + DAMAGE_NUMBER_HOLD_SEC + DAMAGE_NUMBER_FADE_SEC)
+	move_track.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	var scale_tween := create_tween()
+	scale_tween.bind_node(label)
+	var grow_track := scale_tween.tween_property(label, "scale", Vector2.ONE * DAMAGE_NUMBER_PEAK_SCALE, DAMAGE_NUMBER_POP_SEC)
+	grow_track.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var shrink_track := scale_tween.tween_property(label, "scale", Vector2.ONE * DAMAGE_NUMBER_END_SCALE, DAMAGE_NUMBER_HOLD_SEC + DAMAGE_NUMBER_FADE_SEC)
+	shrink_track.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+	var fade_tween := create_tween()
+	fade_tween.bind_node(label)
+	fade_tween.tween_interval(DAMAGE_NUMBER_HOLD_SEC)
+	var fade_track := fade_tween.tween_property(label, "modulate:a", 0.0, DAMAGE_NUMBER_FADE_SEC)
+	fade_track.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	fade_tween.finished.connect(label.queue_free)
 
 func get_torso_dominant_color() -> Color:
 	if torso_sprite == null:
@@ -770,10 +853,16 @@ func apply_damage(amount: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int
 
 func _apply_damage_feedback() -> void:
 	var push_direction := _resolved_damage_push_direction()
+	damage_slow_remaining_sec = maxf(damage_slow_remaining_sec, DAMAGE_SLOW_DURATION_SEC)
 	velocity.x += DAMAGE_KNOCKBACK_X * push_direction.x
 	velocity.y = minf(velocity.y, DAMAGE_KNOCKBACK_Y)
 	target_velocity = velocity
 	_play_damage_visual_feedback(push_direction)
+
+func get_movement_speed_multiplier() -> float:
+	if damage_slow_remaining_sec > 0.0:
+		return DAMAGE_SLOW_MULTIPLIER
+	return 1.0
 
 func _play_damage_visual_feedback(push_direction := Vector2.ZERO) -> void:
 	if push_direction.length_squared() <= 0.0001:
@@ -971,6 +1060,9 @@ func set_sfx_suppressed(value: bool) -> void:
 func get_hit_radius() -> float:
 	return HIT_RADIUS
 
+func get_hit_height() -> float:
+	return HIT_HEIGHT
+
 func force_respawn(spawn_position: Vector2) -> void:
 	global_position = spawn_position
 	target_position = spawn_position
@@ -981,6 +1073,7 @@ func force_respawn(spawn_position: Vector2) -> void:
 	damage_immune_remaining_sec = RESPAWN_DAMAGE_IMMUNITY_SEC
 	shield_health = 0
 	shield_remaining_sec = 0.0
+	damage_slow_remaining_sec = 0.0
 	damage_push_direction = Vector2.ZERO
 	target_damage_push_direction = Vector2.ZERO
 	damage_part_scramble_remaining_sec = 0.0
@@ -1088,6 +1181,8 @@ func get_part_animation_state() -> Dictionary:
 func _physics_process(delta: float) -> void:
 	if damage_immune_remaining_sec > 0.0:
 		damage_immune_remaining_sec = maxf(0.0, damage_immune_remaining_sec - delta)
+	if damage_slow_remaining_sec > 0.0:
+		damage_slow_remaining_sec = maxf(0.0, damage_slow_remaining_sec - delta)
 	if outrage_boost_remaining_sec > 0.0:
 		outrage_boost_remaining_sec = maxf(0.0, outrage_boost_remaining_sec - delta)
 		_tick_outrage_boost_part_colors()
@@ -1102,6 +1197,26 @@ func _physics_process(delta: float) -> void:
 			shield_health = 0
 	if visual_root != null:
 		_tick_visual_correction(delta)
+	if target_dummy_mode:
+		if use_network_smoothing:
+			global_position = target_position
+			if weapon_visual_component != null:
+				weapon_visual_component.set_aim_angle(target_aim_angle, false)
+			_apply_player_facing_from_angle(target_aim_angle)
+			_apply_gun_horizontal_flip_from_angle(target_aim_angle)
+		if get_health() != target_health:
+			set_health(target_health)
+		velocity = Vector2.ZERO
+		target_velocity = Vector2.ZERO
+		target_animation_on_floor = true
+		if modular_visual != null:
+			modular_visual.update_walk_animation(delta, Vector2.ZERO, true)
+		_apply_damage_part_scramble(delta)
+		if not damage_flash_overlay_pairs.is_empty():
+			_sync_damage_flash_overlays()
+		if not outrage_boost_overlay_pairs.is_empty():
+			_sync_outrage_boost_overlays()
+		return
 	if modular_visual != null:
 		var animation_on_floor := is_on_floor()
 		if use_network_smoothing:

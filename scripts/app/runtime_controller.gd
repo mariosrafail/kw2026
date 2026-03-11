@@ -132,8 +132,11 @@ func _physics_process(delta: float) -> void:
 		session_controller.client_connect_watchdog_tick(delta)
 
 	if role == Role.SERVER and multiplayer.multiplayer_peer != null:
+		_server_ensure_target_dummy_if_needed()
 		snapshot_accumulator = combat_flow_service.server_simulate(delta, snapshot_accumulator)
 		combat_flow_service.server_tick_projectiles(delta)
+		if dropped_mag_service != null:
+			dropped_mag_service.server_tick(delta)
 
 	if role == Role.CLIENT and multiplayer.multiplayer_peer != null:
 		client_input_controller.client_predict_local_player(delta, damage_boost_enabled)

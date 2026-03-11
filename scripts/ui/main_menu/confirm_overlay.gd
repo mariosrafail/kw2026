@@ -36,29 +36,48 @@ func _make_menu_panel_style() -> StyleBoxFlat:
 
 func _make_menu_button_hover_style() -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.content_margin_left = 12.0
-	sb.content_margin_top = 7.0
-	sb.content_margin_right = 12.0
-	sb.content_margin_bottom = 7.0
-	sb.bg_color = Color(0.28, 0.24, 0.38, 1)
+	sb.content_margin_left = 14.0
+	sb.content_margin_top = 8.0
+	sb.content_margin_right = 14.0
+	sb.content_margin_bottom = 8.0
+	sb.bg_color = Color(0.1, 0.17, 0.27, 1)
 	sb.border_width_left = 3
 	sb.border_width_top = 3
 	sb.border_width_right = 3
-	sb.border_width_bottom = 3
-	sb.border_color = Color(0.9, 0.74, 0.27, 1)
-	sb.shadow_color = Color(0, 0, 0, 0.45)
-	sb.shadow_size = 3
+	sb.border_width_bottom = 5
+	sb.border_color = Color(0.33, 0.95, 1, 1)
+	sb.shadow_color = Color(0.02, 0.18, 0.24, 0.7)
+	sb.shadow_size = 7
+	return sb
+
+func _make_menu_button_focus_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.content_margin_left = 14.0
+	sb.content_margin_top = 8.0
+	sb.content_margin_right = 14.0
+	sb.content_margin_bottom = 8.0
+	sb.bg_color = Color(0.08, 0.22, 0.31, 0.5)
+	sb.border_width_left = 2
+	sb.border_width_top = 2
+	sb.border_width_right = 2
+	sb.border_width_bottom = 4
+	sb.border_color = Color(0.5, 0.98, 1, 0.95)
+	sb.shadow_color = Color(0.02, 0.12, 0.18, 0.35)
+	sb.shadow_size = 4
 	return sb
 
 func _normalize_confirm_button_theme(btn: Button) -> void:
 	if btn == null:
 		return
 	btn.add_theme_color_override("font_color", Color(0.92, 0.95, 0.98, 1))
+	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
 	btn.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
 	btn.add_theme_constant_override("outline_size", 0)
 	var hover_style := _make_menu_button_hover_style()
+	var focus_style := _make_menu_button_focus_style()
 	btn.add_theme_stylebox_override("hover", hover_style)
-	btn.add_theme_stylebox_override("focus", hover_style.duplicate())
+	btn.add_theme_stylebox_override("focus", focus_style)
 
 func _install_button_anim(btn: Button) -> void:
 	if btn == null:

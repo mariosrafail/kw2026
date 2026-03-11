@@ -18,6 +18,7 @@ func _init_services() -> void:
 	client_input_controller = CLIENT_INPUT_CONTROLLER_SCRIPT.new()
 	combat_effects = COMBAT_EFFECTS_SCRIPT.new()
 	camera_shake = CAMERA_SHAKE_SCRIPT.new()
+	dropped_mag_service = DROPPED_MAG_SERVICE_SCRIPT.new()
 	weapon_ui = WEAPON_UI_SCRIPT.new()
 
 func _init_weapons() -> void:
@@ -171,6 +172,27 @@ func _configure_services() -> void:
 		}
 	)
 
+	dropped_mag_service.configure(
+		{
+			"world_root": world_root,
+			"players": players,
+			"multiplayer": multiplayer
+		},
+		{
+			"normalize_weapon_id": Callable(self, "_normalize_weapon_id"),
+			"get_peer_lobby": Callable(self, "_peer_lobby"),
+			"get_lobby_members": Callable(self, "_lobby_members"),
+			"resolve_mag_color": Callable(self, "_projectile_color"),
+			"send_spawn_dropped_mag": Callable(self, "_send_spawn_dropped_mag_rpc"),
+			"send_sync_dropped_mag": Callable(self, "_send_sync_dropped_mag_rpc"),
+			"send_despawn_dropped_mag": Callable(self, "_send_despawn_dropped_mag_rpc")
+		},
+		{
+			"ak47_mag_spawn_delay_sec": 0.16,
+			"grenade_mag_spawn_delay_sec": 0.28
+		}
+	)
+
 	combat_flow_service.configure(
 		{
 			"players": players,
@@ -196,6 +218,8 @@ func _configure_services() -> void:
 			"weapon_id_for_peer": Callable(self, "_weapon_id_for_peer"),
 			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
 			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
+			"schedule_reload_mag_spawn": Callable(dropped_mag_service, "schedule_reload_mag_spawn"),
+			"clear_reload_mag_spawn": Callable(dropped_mag_service, "clear_pending_reload_mag_spawn"),
 			"send_player_ammo": Callable(self, "_send_player_ammo_rpc"),
 			"send_reload_sfx": Callable(self, "_send_reload_sfx_rpc"),
 			"send_spawn_projectile": Callable(self, "_send_spawn_projectile_rpc"),

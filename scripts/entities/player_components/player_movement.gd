@@ -50,7 +50,10 @@ func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_
 	else:
 		jump_buffer_time_left = maxf(jump_buffer_time_left - delta, 0.0)
 
-	var target_speed := axis * SPEED
+	var speed_multiplier := 1.0
+	if _player != null and _player.has_method("get_movement_speed_multiplier"):
+		speed_multiplier = float(_player.call("get_movement_speed_multiplier"))
+	var target_speed := axis * SPEED * clampf(speed_multiplier, 0.0, 1.0)
 	if absf(axis) > 0.001:
 		_player.velocity.x = target_speed
 	else:

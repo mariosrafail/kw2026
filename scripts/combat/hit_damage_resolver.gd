@@ -1,6 +1,9 @@
 extends RefCounted
 class_name HitDamageResolver
 
+const HEADSHOT_TOP_PORTION := 1.5 / 5.0
+const HEADSHOT_DAMAGE_MULTIPLIER := 2
+
 var players: Dictionary = {}
 var player_history: Dictionary = {}
 var player_history_ms := 800
@@ -90,10 +93,16 @@ func server_projectile_player_hit(projectile: NetProjectile, from_position: Vect
 
 	if best_peer_id == -1:
 		return {}
+	var headshot := false
+	var hit_player := players.get(best_peer_id, null) as NetPlayer
+	if hit_player != null:
+		var hit_rewound_position := get_player_rewound_position(best_peer_id, projectile.lag_comp_ms)
+		headshot = _is_headshot_hit(hit_player, best_position, hit_rewound_position)
 	return {
 		"peer_id": best_peer_id,
 		"position": best_position,
-		"t": best_t
+		"t": best_t,
+		"headshot": headshot
 	}
 
 func get_player_rewound_position(peer_id: int, rewind_ms: int) -> Vector2:
@@ -144,7 +153,7 @@ func record_player_history(peer_id: int, position: Vector2) -> void:
 		history.remove_at(0)
 	player_history[peer_id] = history
 
-func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, base_damage: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
+func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, base_damage: int, incoming_velocity: Vector2 = Vector2.ZERO, is_headshot: bool = false) -> int:
 	if target_player == null:
 		return 0
 
@@ -158,6 +167,8 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 	var shot_damage := base_damage
 	if get_projectile_damage_cb.is_valid():
 		shot_damage = int(get_projectile_damage_cb.call(projectile_id, base_damage))
+	if is_headshot:
+		shot_damage *= HEADSHOT_DAMAGE_MULTIPLIER
 
 	var remaining_health := target_player.apply_damage(shot_damage, incoming_velocity)
 	var target_lobby_id := _peer_lobby(target_peer_id)
@@ -185,6 +196,16 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 	if server_broadcast_player_state_cb.is_valid():
 		server_broadcast_player_state_cb.call(target_peer_id, target_player)
 	return remaining_health
+
+func _is_headshot_hit(target_player: NetPlayer, hit_position: Vector2, target_center: Vector2) -> bool:
+	if target_player == null:
+		return false
+	var hit_height := 34.0
+	if target_player.has_method("get_hit_height"):
+		hit_height = maxf(1.0, float(target_player.call("get_hit_height")))
+	var top_y := target_center.y - (hit_height * 0.5)
+	var headshot_limit_y := top_y + (hit_height * HEADSHOT_TOP_PORTION)
+	return hit_position.y <= headshot_limit_y
 
 func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, target_player: NetPlayer, damage: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
 	if target_player == null:

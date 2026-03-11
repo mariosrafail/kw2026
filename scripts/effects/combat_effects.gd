@@ -34,6 +34,9 @@ const SURFACE_CHUNK_COLLISION_LAYER := 32
 const SURFACE_CHUNK_COLLISION_MASK := 1
 const SURFACE_IMPACT_SAMPLE_RADIUS := 10
 const SURFACE_SPAWN_OFFSET := 1.5
+const EXPLOSION_SURFACE_BURST_COUNT := 6
+const EXPLOSION_SURFACE_RING_RADIUS := 16.0
+const EXPLOSION_SURFACE_VERTICAL_BIAS := 0.65
 const SPLASH_HIT_VOLUME_DB := 4.0
 const SURFACE_IMPACT_VOLUME_DB := 0.0
 const EXPLOSION_FRAME_SIZE := Vector2(120.0, 120.0)
@@ -134,9 +137,28 @@ func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2,
 		_queue_free_with_delay(chunk, BLOOD_PARTICLES_CLEANUP_DELAY + randf_range(0.0, 0.35))
 
 func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
+	_spawn_surface_particle_burst(impact_position, incoming_velocity, particle_color, true)
+
+func spawn_explosion_surface_particles(world_position: Vector2) -> void:
 	if projectiles_root == null:
 		return
-	_play_surface_impact_sfx(impact_position)
+	var center_color := sample_map_front_color(world_position)
+	if center_color.a <= 0.01:
+		return
+	for burst_index in range(EXPLOSION_SURFACE_BURST_COUNT):
+		var t := float(burst_index) / float(EXPLOSION_SURFACE_BURST_COUNT)
+		var angle: float = lerpf(-PI, 0.0, t) + randf_range(-0.22, 0.22)
+		var direction := Vector2(cos(angle), sin(angle) * EXPLOSION_SURFACE_VERTICAL_BIAS).normalized()
+		if direction.length_squared() <= 0.0001:
+			direction = Vector2.UP
+		var spawn_position := world_position + direction * randf_range(4.0, EXPLOSION_SURFACE_RING_RADIUS)
+		_spawn_surface_particle_burst(spawn_position, direction * randf_range(95.0, 165.0), center_color, false)
+
+func _spawn_surface_particle_burst(impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color, play_sfx: bool) -> void:
+	if projectiles_root == null:
+		return
+	if play_sfx:
+		_play_surface_impact_sfx(impact_position)
 
 	var spray_direction := Vector2.UP
 	if incoming_velocity.length_squared() > 0.0001:

@@ -237,8 +237,9 @@ func server_tick(
 			projectile.global_position = hit_position
 			var impact_velocity := projectile.velocity
 			var target_peer_id := int(player_hit.get("peer_id", -1))
+			var is_headshot := bool(player_hit.get("headshot", false))
 			if on_player_hit_cb.is_valid():
-				on_player_hit_cb.call(projectile_id, target_peer_id, hit_position, impact_velocity, projectile_lobby_id)
+				on_player_hit_cb.call(projectile_id, target_peer_id, hit_position, impact_velocity, projectile_lobby_id, is_headshot)
 			_mark_impact_and_emit(projectile_id, projectile_lobby_id, hit_position, on_impact_cb)
 			continue
 

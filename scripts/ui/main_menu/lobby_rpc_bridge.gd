@@ -262,11 +262,35 @@ func _rpc_sync_player_ammo(_peer_or_payload: Variant, _ammo: int = 0, _is_reload
 	pass
 
 @rpc("authority", "reliable")
+func _rpc_spawn_dropped_mag(_mag_id: int, _texture_path: String, _tint: Color, _spawn_position: Vector2, _linear_velocity: Vector2, _angular_velocity: float = 0.0) -> void:
+	pass
+
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_dropped_mag(_mag_id: int, _world_position: Vector2, _world_rotation: float, _linear_velocity: Vector2, _angular_velocity: float) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_despawn_dropped_mag(_mag_id: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
 func _rpc_sync_player_weapon(_peer_id: int, _weapon_id: String) -> void:
 	pass
 
 @rpc("authority", "reliable")
 func _rpc_sync_player_weapon_skin(_peer_id: int, _skin_index: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_sync_player_character(_peer_id: int, _character_id: String) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_sync_player_skin(_peer_id: int, _skin_index: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void:
 	pass
 
 @rpc("authority", "reliable")
@@ -313,18 +337,6 @@ func _rpc_lobby_set_display_name(_display_name: String) -> void:
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [_entries.size(), _active_lobby_id])
 	lobby_list_received.emit(_entries, _active_lobby_id)
-
-@rpc("authority", "reliable")
-func _rpc_sync_player_character(_peer_id: int, _character_id: String) -> void:
-	pass
-
-@rpc("authority", "reliable")
-func _rpc_sync_player_skin(_peer_id: int, _skin_index: int) -> void:
-	pass
-
-@rpc("authority", "reliable")
-func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void:
-	pass
 
 @rpc("authority", "reliable")
 func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id: int, _map_id: String, _lobby_scene_mode: bool) -> void:

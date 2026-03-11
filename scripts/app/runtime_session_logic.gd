@@ -272,13 +272,8 @@ func _start_purchase_button_idle_anim(btn: Button) -> void:
 		return
 	_kill_purchase_button_tween(btn, "_purchase_idle_tween")
 	_kill_purchase_button_tween(btn, "_purchase_fx_tween")
-
-	var tw := btn.create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tw.tween_property(btn, "rotation", deg_to_rad(-0.4), 0.55)
-	tw.parallel().tween_property(btn, "scale", Vector2.ONE * 1.01, 0.55)
-	tw.tween_property(btn, "rotation", deg_to_rad(0.4), 0.72)
-	tw.parallel().tween_property(btn, "scale", Vector2.ONE * 0.99, 0.72)
-	btn.set_meta("_purchase_idle_tween", tw)
+	btn.scale = Vector2.ONE
+	btn.rotation = 0.0
 
 func _animate_purchase_button_state(btn: Button, state: String) -> void:
 	if btn == null:
@@ -289,20 +284,16 @@ func _animate_purchase_button_state(btn: Button, state: String) -> void:
 
 	var target_scale := Vector2.ONE
 	var target_rot := 0.0
-	var dur := 0.08
+	var dur := 0.12
 	if state == "hover":
-		target_scale = Vector2.ONE * 1.035
+		target_scale = Vector2.ONE * 1.04
 	elif state == "press":
-		target_scale = Vector2.ONE * 0.97
-		target_rot = deg_to_rad(-0.65)
-		dur = 0.05
+		target_scale = btn.scale * 0.94
+		dur = 0.06
 
-	var tw := btn.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var tw := btn.create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tw.parallel().tween_property(btn, "scale", target_scale, dur)
 	tw.parallel().tween_property(btn, "rotation", target_rot, dur)
-	if state == "press":
-		tw.tween_property(btn, "scale", Vector2.ONE * 1.035, 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(btn, "rotation", 0.0, 0.1)
 	btn.set_meta("_purchase_fx_tween", tw)
 	if state == "idle":
 		_start_purchase_button_idle_anim(btn)
@@ -311,26 +302,33 @@ func _install_purchase_button_anim(btn: Button) -> void:
 	if btn == null or btn.has_meta("_purchase_anim_installed"):
 		return
 	btn.set_meta("_purchase_anim_installed", true)
+	btn.set_meta("kw_hovered", false)
 	_start_purchase_button_idle_anim(btn)
 
 	btn.mouse_entered.connect(func() -> void:
+		btn.set_meta("kw_hovered", true)
 		_animate_purchase_button_state(btn, "hover")
 	)
 	btn.focus_entered.connect(func() -> void:
+		btn.set_meta("kw_hovered", true)
 		_animate_purchase_button_state(btn, "hover")
 	)
 	btn.mouse_exited.connect(func() -> void:
+		btn.set_meta("kw_hovered", false)
 		_animate_purchase_button_state(btn, "idle")
 	)
 	btn.focus_exited.connect(func() -> void:
+		btn.set_meta("kw_hovered", false)
 		_animate_purchase_button_state(btn, "idle")
 	)
 	btn.button_down.connect(func() -> void:
 		_animate_purchase_button_state(btn, "press")
 	)
 	btn.button_up.connect(func() -> void:
-		var local_pos := btn.get_local_mouse_position()
-		if Rect2(Vector2.ZERO, btn.size).has_point(local_pos):
+		var hovered := false
+		if btn.has_meta("kw_hovered"):
+			hovered = bool(btn.get_meta("kw_hovered"))
+		if hovered:
 			_animate_purchase_button_state(btn, "hover")
 		else:
 			_animate_purchase_button_state(btn, "idle")

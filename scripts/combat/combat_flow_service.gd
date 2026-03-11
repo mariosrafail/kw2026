@@ -30,6 +30,8 @@ var weapon_profile_for_peer_cb: Callable = Callable()
 var weapon_id_for_peer_cb: Callable = Callable()
 var weapon_shot_sfx_cb: Callable = Callable()
 var weapon_reload_sfx_cb: Callable = Callable()
+var schedule_reload_mag_spawn_cb: Callable = Callable()
+var clear_reload_mag_spawn_cb: Callable = Callable()
 var send_player_ammo_cb: Callable = Callable()
 var send_reload_sfx_cb: Callable = Callable()
 var send_spawn_projectile_cb: Callable = Callable()
@@ -67,6 +69,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	weapon_id_for_peer_cb = callbacks.get("weapon_id_for_peer", Callable()) as Callable
 	weapon_shot_sfx_cb = callbacks.get("weapon_shot_sfx", Callable()) as Callable
 	weapon_reload_sfx_cb = callbacks.get("weapon_reload_sfx", Callable()) as Callable
+	schedule_reload_mag_spawn_cb = callbacks.get("schedule_reload_mag_spawn", Callable()) as Callable
+	clear_reload_mag_spawn_cb = callbacks.get("clear_reload_mag_spawn", Callable()) as Callable
 	send_player_ammo_cb = callbacks.get("send_player_ammo", Callable()) as Callable
 	send_reload_sfx_cb = callbacks.get("send_reload_sfx", Callable()) as Callable
 	send_spawn_projectile_cb = callbacks.get("send_spawn_projectile", Callable()) as Callable
@@ -154,6 +158,8 @@ func server_begin_reload(peer_id: int, weapon_profile: WeaponProfile) -> void:
 	if player != null:
 		player.set_reload_audio_stream(_weapon_reload_sfx(weapon_id))
 		player.play_reload_audio()
+	if schedule_reload_mag_spawn_cb.is_valid():
+		schedule_reload_mag_spawn_cb.call(peer_id, weapon_id)
 	server_broadcast_reload_audio(peer_id, weapon_id)
 	server_sync_player_ammo(peer_id)
 
@@ -231,7 +237,8 @@ func _on_server_projectile_player_hit(
 	target_peer_id: int,
 	hit_position: Vector2,
 	impact_velocity: Vector2,
-	projectile_lobby_id: int
+	projectile_lobby_id: int,
+	is_headshot: bool = false
 ) -> void:
 	var projectile_weapon_id := ""
 	if projectile_system != null:
@@ -245,7 +252,7 @@ func _on_server_projectile_player_hit(
 	if target_player != null and target_player.has_method("get_torso_dominant_color"):
 		blood_color = target_player.call("get_torso_dominant_color") as Color
 	if target_player != null:
-		server_apply_projectile_damage(projectile_id, target_peer_id, target_player, impact_velocity)
+		server_apply_projectile_damage(projectile_id, target_peer_id, target_player, impact_velocity, is_headshot)
 	if combat_effects != null:
 		combat_effects.spawn_blood_particles(target_blood_position, impact_velocity, blood_color, 1.0)
 	for member_value in _lobby_members(projectile_lobby_id):
@@ -317,7 +324,7 @@ func record_player_history(peer_id: int, position: Vector2) -> void:
 		return
 	hit_damage_resolver.record_player_history(peer_id, position)
 
-func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
+func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, incoming_velocity: Vector2 = Vector2.ZERO, is_headshot: bool = false) -> int:
 	if hit_damage_resolver == null:
 		return 0
 	var fallback_weapon := _weapon_profile_for_id(weapon_id_ak47)
@@ -327,7 +334,8 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 		target_peer_id,
 		target_player,
 		base_damage,
-		incoming_velocity
+		incoming_velocity,
+		is_headshot
 	)
 
 func _apply_explosive_projectile_impact(projectile_id: int, impact_position: Vector2, projectile_lobby_id: int) -> void:
@@ -342,6 +350,7 @@ func _apply_explosive_projectile_impact(projectile_id: int, impact_position: Vec
 		return
 	if combat_effects != null:
 		combat_effects.spawn_explosion_effect(impact_position)
+		combat_effects.spawn_explosion_surface_particles(impact_position)
 	if camera_shake != null:
 		camera_shake.add_explosion_shake(0.95, 1.0, 26.0, 0.12, 2.0)
 	var projectile := projectile_system.get_projectile(projectile_id)
@@ -385,6 +394,8 @@ func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	ammo_by_peer[peer_id] = ammo
 	reload_remaining_by_peer[peer_id] = 0.0
 	pending_reload_delay_by_peer[peer_id] = 0.0
+	if clear_reload_mag_spawn_cb.is_valid():
+		clear_reload_mag_spawn_cb.call(peer_id)
 	player.set_ammo(ammo, false)
 	server_sync_player_ammo(peer_id)
 
@@ -400,6 +411,8 @@ func server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 		reload_remaining_by_peer[peer_id] = 0.0
 	if not pending_reload_delay_by_peer.has(peer_id):
 		pending_reload_delay_by_peer[peer_id] = 0.0
+	if clear_reload_mag_spawn_cb.is_valid():
+		clear_reload_mag_spawn_cb.call(peer_id)
 	server_sync_player_ammo(peer_id)
 	if lobby_id > 0:
 		for member_value in _lobby_members(lobby_id):
@@ -412,6 +425,9 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 			continue
 		var player := players[peer_id] as NetPlayer
 		if player == null:
+			continue
+		if player.has_method("is_target_dummy") and bool(player.call("is_target_dummy")):
+			record_player_history(peer_id, player.global_position)
 			continue
 
 		var state: Dictionary = input_states.get(peer_id, default_input_state()) as Dictionary
@@ -478,6 +494,8 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				continue
 			var player := players[peer_id] as NetPlayer
 			if player == null:
+				continue
+			if player.has_method("is_target_dummy") and bool(player.call("is_target_dummy")):
 				continue
 			if broadcast_player_state_cb.is_valid():
 				broadcast_player_state_cb.call(peer_id, player)
