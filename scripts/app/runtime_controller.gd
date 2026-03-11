@@ -1,11 +1,13 @@
 extends "res://scripts/app/runtime_rpc_logic.gd"
 
 const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
+const SKILL_HUD_SCRIPT := preload("res://scripts/ui/skill_hud.gd")
 
 var _client_skill_cd_q_remaining := 0.0
 var _client_skill_cd_e_remaining := 0.0
 var _client_skill_cd_q_max := 0.0
 var _client_skill_cd_e_max := 0.0
+var _skill_hud = null
 
 const RPC_ROOT_NODE_NAME := "Main3"
 
@@ -26,6 +28,7 @@ func _ready() -> void:
 	_configure_services()
 	_connect_local_signals()
 	_setup_ui_defaults()
+	_ensure_skill_hud()
 
 	var startup_defaults := _load_startup_network_defaults()
 	port_spin.value = int(startup_defaults.get("port", DEFAULT_PORT))
@@ -133,6 +136,7 @@ func _physics_process(delta: float) -> void:
 
 	if role == Role.SERVER and multiplayer.multiplayer_peer != null:
 		_server_ensure_target_dummy_if_needed()
+		_server_tick_target_dummy_bot(delta)
 		snapshot_accumulator = combat_flow_service.server_simulate(delta, snapshot_accumulator)
 		combat_flow_service.server_tick_projectiles(delta)
 		if dropped_mag_service != null:
@@ -147,12 +151,34 @@ func _physics_process(delta: float) -> void:
 
 	client_input_controller.follow_local_player_camera(delta)
 
+func _ensure_skill_hud() -> void:
+	if cooldown_label != null:
+		cooldown_label.visible = false
+	if cooldown_q_label != null:
+		cooldown_q_label.visible = false
+	if cooldown_e_label != null:
+		cooldown_e_label.visible = false
+	var hud_layer := get_node_or_null("ClientHud") as CanvasLayer
+	if hud_layer == null:
+		return
+	var existing := hud_layer.get_node_or_null("SkillHud")
+	if existing != null and existing.has_method("set_character_id") and existing.has_method("update_cooldowns"):
+		_skill_hud = existing
+		return
+	if existing != null:
+		existing.queue_free()
+	_skill_hud = SKILL_HUD_SCRIPT.new()
+	_skill_hud.name = "SkillHud"
+	hud_layer.add_child(_skill_hud)
+
 func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	if ui_controller == null:
 		return
 	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
 	if local_peer_id <= 0 or not players.has(local_peer_id):
 		_update_skill_cooldowns_hud(0.0, 0.0)
+		if _skill_hud != null:
+			_skill_hud.visible = false
 		return
 
 	_client_skill_cd_q_remaining = maxf(0.0, _client_skill_cd_q_remaining - delta)
@@ -160,13 +186,20 @@ func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	_update_skill_cooldowns_hud(_client_skill_cd_q_remaining, _client_skill_cd_e_remaining)
 	var local_player := players.get(local_peer_id, null) as NetPlayer
 	if local_player != null and local_player.has_method("set_skill_cooldown_bars"):
-		var q_ratio := 1.0
-		var e_ratio := 1.0
-		if _client_skill_cd_q_max > 0.0:
-			q_ratio = 1.0 - clampf(_client_skill_cd_q_remaining / _client_skill_cd_q_max, 0.0, 1.0)
-		if _client_skill_cd_e_max > 0.0:
-			e_ratio = 1.0 - clampf(_client_skill_cd_e_remaining / _client_skill_cd_e_max, 0.0, 1.0)
-		local_player.call("set_skill_cooldown_bars", q_ratio, e_ratio, true)
+		local_player.call("set_skill_cooldown_bars", 1.0, 1.0, false)
+	if _skill_hud != null:
+		_skill_hud.visible = role == Role.CLIENT and _is_local_player_spawned()
+		_skill_hud.set_character_id(_warrior_id_for_peer(local_peer_id))
+		if local_player != null and local_player.has_method("get_torso_dominant_color"):
+			var torso_color_value: Variant = local_player.call("get_torso_dominant_color")
+			if torso_color_value is Color:
+				_skill_hud.set_tint(torso_color_value as Color)
+		_skill_hud.update_cooldowns(
+			_client_skill_cd_q_remaining,
+			_client_skill_cd_q_max,
+			_client_skill_cd_e_remaining,
+			_client_skill_cd_e_max
+		)
 
 func _begin_client_skill_cooldown(skill_number: int) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:

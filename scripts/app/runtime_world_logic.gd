@@ -32,16 +32,9 @@ const KAR_RELOAD_FRAME_DURATION_SEC := 1.4 / 15.0
 const SHOTGUN_RELOAD_FRAME_DURATION_SEC := 1.2 / 7.0
 const UZI_RELOAD_FRAME_DURATION_SEC := 1.0 / 13.0
 const ESCAPE_LEAVE_TIMEOUT_SEC := 1.25
-const TARGET_DUMMY_PEER_ID := -1001
-const TARGET_DUMMY_NAME := "TARGET DUMMY"
-const TARGET_DUMMY_COLOR := Color(1.0, 0.48, 0.48, 1.0)
-const TARGET_DUMMY_Z_INDEX := 80
-const TARGET_DUMMY_HALF_HEIGHT := 22.0
 
 var weapon_idle_texture_by_id: Dictionary = {}
 var weapon_reload_frames_by_id: Dictionary = {}
-var target_dummy_spawn_position := Vector2.ZERO
-var target_dummy_lobby_id := 0
 
 func _request_lobby_list() -> void:
 	if not _is_client_connected():
@@ -86,10 +79,10 @@ func _reset_runtime_state() -> void:
 	snapshot_accumulator = 0.0
 	escape_return_pending = false
 	escape_return_nonce += 1
-	target_dummy_spawn_position = Vector2.ZERO
-	target_dummy_lobby_id = 0
 	if dropped_mag_service != null:
 		dropped_mag_service.reset()
+	if target_dummy_bot_controller != null:
+		target_dummy_bot_controller.reset()
 	_clear_players()
 	projectile_system.clear()
 	input_states.clear()
@@ -284,13 +277,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 		var existing := players[peer_id] as NetPlayer
 		if existing != null:
 			if _is_target_dummy_peer(peer_id):
-				existing.z_as_relative = false
-				existing.z_index = TARGET_DUMMY_Z_INDEX
-				existing.set_display_name(TARGET_DUMMY_NAME)
-				existing.set_weapon_visual(_weapon_visual_for_id(WEAPON_ID_AK47))
-				existing.set_sfx_suppressed(true)
-				existing.set_target_dummy_mode(true)
-				existing.set_aim_world(resolved_spawn + Vector2.LEFT * 160.0)
+				if target_dummy_bot_controller != null:
+					target_dummy_bot_controller.setup_spawned_player(existing, resolved_spawn, role == Role.CLIENT)
 			elif existing.has_method("set_display_name"):
 				existing.call("set_display_name", _ensure_player_display_name(peer_id))
 				existing.set_weapon_visual(_weapon_visual_for_peer(peer_id))
@@ -308,18 +296,9 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	players_root.add_child(player)
 	player.configure(peer_id, _player_color(peer_id))
 	if _is_target_dummy_peer(peer_id):
-		player.z_as_relative = false
-		player.z_index = TARGET_DUMMY_Z_INDEX
-		player.configure(peer_id, TARGET_DUMMY_COLOR)
-		player.set_display_name(TARGET_DUMMY_NAME)
-		player.use_network_smoothing = false
-		player.set_target_dummy_mode(true)
-		player.set_character_visual("outrage")
-		player.set_weapon_visual(_weapon_visual_for_id(WEAPON_ID_AK47))
-		player.set_shot_audio_stream(null)
-		player.set_reload_audio_stream(null)
-		player.set_sfx_suppressed(true)
-		player.set_aim_world(resolved_spawn + Vector2.LEFT * 160.0)
+		if target_dummy_bot_controller != null:
+			player.configure(peer_id, target_dummy_bot_controller.BOT_COLOR)
+			target_dummy_bot_controller.setup_spawned_player(player, resolved_spawn, role == Role.CLIENT)
 	elif player.has_method("set_display_name"):
 		player.call("set_display_name", _ensure_player_display_name(peer_id))
 		player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
@@ -336,7 +315,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	players[peer_id] = player
 	combat_flow_service.record_player_history(peer_id, resolved_spawn)
 	if role == Role.SERVER and multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
-		target_dummy_lobby_id = _peer_lobby(peer_id)
+		if target_dummy_bot_controller != null:
+			target_dummy_bot_controller.set_lobby_id(_peer_lobby(peer_id))
 		_ensure_target_dummy(resolved_spawn)
 	_update_peer_labels()
 	_update_ui_visibility()
@@ -555,53 +535,20 @@ func _server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> 
 
 func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	if _is_target_dummy_peer(peer_id):
-		var respawn_position := target_dummy_spawn_position
-		if respawn_position == Vector2.ZERO:
-			respawn_position = spawn_flow_service.sanitize_spawn_position(_random_spawn_position(), _get_world_2d_ref(), 1)
-		player.force_respawn(respawn_position)
-		player.set_aim_world(respawn_position + Vector2.LEFT * 160.0)
-		combat_flow_service.record_player_history(peer_id, respawn_position)
+		if target_dummy_bot_controller != null:
+			target_dummy_bot_controller.respawn_player(player)
 		return
 	combat_flow_service.server_respawn_player(peer_id, player)
 
 func _is_target_dummy_peer(peer_id: int) -> bool:
-	return peer_id == TARGET_DUMMY_PEER_ID
+	return target_dummy_bot_controller != null and target_dummy_bot_controller.is_bot_peer(peer_id)
 
 func _ensure_target_dummy(_anchor_position: Vector2) -> void:
 	if _uses_lobby_scene_flow():
 		return
-	if players_root == null:
+	if players_root == null or target_dummy_bot_controller == null:
 		return
-	var desired_position := _target_dummy_spawn_point()
-	target_dummy_spawn_position = desired_position
-	var existing := players.get(TARGET_DUMMY_PEER_ID, null) as NetPlayer
-	if existing != null:
-		existing.force_respawn(desired_position)
-		existing.set_aim_world(desired_position + Vector2.LEFT * 160.0)
-		combat_flow_service.record_player_history(TARGET_DUMMY_PEER_ID, desired_position)
-		_broadcast_target_dummy_spawn(desired_position)
-		return
-
-	var dummy := PLAYER_SCENE.instantiate() as NetPlayer
-	if dummy == null:
-		return
-	dummy.global_position = desired_position
-	dummy.z_as_relative = false
-	dummy.z_index = TARGET_DUMMY_Z_INDEX
-	players_root.add_child(dummy)
-	dummy.configure(TARGET_DUMMY_PEER_ID, TARGET_DUMMY_COLOR)
-	dummy.set_display_name(TARGET_DUMMY_NAME)
-	dummy.use_network_smoothing = false
-	dummy.set_target_dummy_mode(true)
-	dummy.set_character_visual("outrage")
-	dummy.set_weapon_visual(_weapon_visual_for_id(WEAPON_ID_AK47))
-	dummy.set_shot_audio_stream(null)
-	dummy.set_reload_audio_stream(null)
-	dummy.set_sfx_suppressed(true)
-	dummy.set_aim_world(desired_position + Vector2.LEFT * 160.0)
-	players[TARGET_DUMMY_PEER_ID] = dummy
-	combat_flow_service.record_player_history(TARGET_DUMMY_PEER_ID, desired_position)
-	_broadcast_target_dummy_spawn(desired_position)
+	target_dummy_bot_controller.ensure_spawned(PLAYER_SCENE, _anchor_position)
 
 func _broadcast_target_dummy_spawn(spawn_position: Vector2) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
@@ -621,38 +568,9 @@ func _broadcast_target_dummy_spawn(spawn_position: Vector2) -> void:
 		var member_id := int(member_value)
 		if member_id <= 0:
 			continue
-		_send_spawn_player_rpc(member_id, TARGET_DUMMY_PEER_ID, spawn_position, TARGET_DUMMY_NAME)
-
-func _target_dummy_spawn_point() -> Vector2:
-	if spawn_points.size() >= 2:
-		var second_spawn = spawn_points[1]
-		if second_spawn is Vector2:
-			return _snap_target_dummy_to_ground(second_spawn as Vector2)
-	if spawn_points.size() == 1:
-		var first_spawn = spawn_points[0]
-		if first_spawn is Vector2:
-			return _snap_target_dummy_to_ground(first_spawn as Vector2)
-	return _snap_target_dummy_to_ground(_random_spawn_position())
-
-func _snap_target_dummy_to_ground(world_position: Vector2) -> Vector2:
-	var snapped := spawn_flow_service.sanitize_spawn_position(world_position, _get_world_2d_ref(), 1)
-	var world_2d := _get_world_2d_ref()
-	if world_2d == null:
-		return snapped
-	var space_state := world_2d.direct_space_state
-	if space_state == null:
-		return snapped
-	var ray_from := snapped + Vector2(0.0, -64.0)
-	var ray_to := snapped + Vector2(0.0, 160.0)
-	var query := PhysicsRayQueryParameters2D.create(ray_from, ray_to, 1)
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
-	var hit := space_state.intersect_ray(query)
-	if hit.is_empty():
-		return snapped
-	var hit_position := hit.get("position", snapped) as Vector2
-	var grounded := Vector2(snapped.x, hit_position.y - TARGET_DUMMY_HALF_HEIGHT)
-	return spawn_flow_service.sanitize_spawn_position(grounded, world_2d, 1)
+		var target_peer_id := target_dummy_bot_controller.peer_id() if target_dummy_bot_controller != null else -1001
+		var target_name := target_dummy_bot_controller.display_name() if target_dummy_bot_controller != null else "TARGET DUMMY"
+		_send_spawn_player_rpc(member_id, target_peer_id, spawn_position, target_name)
 
 func _server_ensure_target_dummy_if_needed() -> void:
 	if role != Role.SERVER:
@@ -661,7 +579,9 @@ func _server_ensure_target_dummy_if_needed() -> void:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return
-	if not players.has(TARGET_DUMMY_PEER_ID):
+	if target_dummy_bot_controller == null:
+		return
+	if not players.has(target_dummy_bot_controller.peer_id()):
 		for peer_value in players.keys():
 			var peer_id := int(peer_value)
 			if _is_target_dummy_peer(peer_id):
@@ -669,9 +589,14 @@ func _server_ensure_target_dummy_if_needed() -> void:
 			var anchor_player := players.get(peer_id, null) as NetPlayer
 			if anchor_player == null:
 				continue
-			target_dummy_lobby_id = _peer_lobby(peer_id)
+			target_dummy_bot_controller.set_lobby_id(_peer_lobby(peer_id))
 			_ensure_target_dummy(anchor_player.global_position)
 			return
+
+func _server_tick_target_dummy_bot(delta: float) -> void:
+	if role != Role.SERVER or target_dummy_bot_controller == null:
+		return
+	target_dummy_bot_controller.tick(delta)
 
 func _server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 	player_replication.server_broadcast_player_state(peer_id, player)
@@ -1204,8 +1129,8 @@ func _peer_lobby(peer_id: int) -> int:
 	return 0
 
 func _target_dummy_lobby_id() -> int:
-	if target_dummy_lobby_id > 0:
-		return target_dummy_lobby_id
+	if target_dummy_bot_controller != null and target_dummy_bot_controller.get_lobby_id() > 0:
+		return target_dummy_bot_controller.get_lobby_id()
 	if lobby_service != null:
 		for peer_value in players.keys():
 			var candidate_peer_id := int(peer_value)
@@ -1213,13 +1138,16 @@ func _target_dummy_lobby_id() -> int:
 				continue
 			var tracked_lobby := lobby_service.get_peer_lobby(candidate_peer_id)
 			if tracked_lobby > 0:
-				target_dummy_lobby_id = tracked_lobby
+				if target_dummy_bot_controller != null:
+					target_dummy_bot_controller.set_lobby_id(tracked_lobby)
 				return tracked_lobby
 		if client_lobby_id > 0:
-			target_dummy_lobby_id = client_lobby_id
+			if target_dummy_bot_controller != null:
+				target_dummy_bot_controller.set_lobby_id(client_lobby_id)
 			return client_lobby_id
 	if not _uses_lobby_scene_flow():
-		target_dummy_lobby_id = 1
+		if target_dummy_bot_controller != null:
+			target_dummy_bot_controller.set_lobby_id(1)
 		return 1
 	return 0
 
@@ -1272,6 +1200,20 @@ func _uses_lobby_scene_flow() -> bool:
 
 func _get_world_2d_ref() -> World2D:
 	return get_world_2d()
+
+func _play_bounds_rect() -> Rect2i:
+	if map_controller != null:
+		return map_controller.runtime_play_bounds_rect()
+	return Rect2i()
+
+func _ground_tiles_ref() -> TileMapLayer:
+	var world := world_root
+	if world == null:
+		return null
+	var primary := world.get_node_or_null("GroundTiles") as TileMapLayer
+	if primary != null:
+		return primary
+	return world.get_node_or_null("GroundTiles2") as TileMapLayer
 
 func _first_private_ipv4() -> String:
 	for address in IP.get_local_addresses():

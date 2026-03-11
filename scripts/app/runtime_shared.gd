@@ -57,6 +57,7 @@ const COMBAT_EFFECTS_SCRIPT := preload("res://scripts/effects/combat_effects.gd"
 const CAMERA_SHAKE_SCRIPT := preload("res://scripts/effects/camera_shake.gd")
 const WEAPON_UI_SCRIPT := preload("res://scripts/ui/main_menu/weapon_ui.gd")
 const DROPPED_MAG_SERVICE_SCRIPT := preload("res://scripts/world/dropped_mag_service.gd")
+const TARGET_DUMMY_BOT_CONTROLLER_SCRIPT := preload("res://scripts/world/target_dummy_bot_controller.gd")
 
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
@@ -216,6 +217,7 @@ var client_input_controller: ClientInputController
 var combat_effects: CombatEffects
 var camera_shake: CameraShake
 var dropped_mag_service: DroppedMagService
+var target_dummy_bot_controller: TargetDummyBotController
 var weapon_ui: RefCounted
 
 var weapon_profiles: Dictionary = {}

@@ -97,6 +97,20 @@ func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vec
 	else:
 		print("[SKILL ERROR] Warrior not found for id=%s (peer_id=%d)" % [warrior_id, caster_peer_id])
 
+func can_cast_skill_for_peer(peer_id: int, skill_number: int) -> bool:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null:
+		return false
+	return warrior.can_cast_skill(skill_number, peer_id)
+
+func skill_cooldown_remaining_for_peer(peer_id: int, skill_number: int) -> float:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null:
+		return 0.0
+	return warrior.get_skill_cooldown_remaining(skill_number, peer_id)
+
 func client_receive_skill_cast(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
 	var warrior_id = _warrior_id_for_peer(caster_peer_id)
 	var warrior = warriors_by_id.get(warrior_id) as WarriorProfile
@@ -426,10 +440,6 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 		var player := players[peer_id] as NetPlayer
 		if player == null:
 			continue
-		if player.has_method("is_target_dummy") and bool(player.call("is_target_dummy")):
-			record_player_history(peer_id, player.global_position)
-			continue
-
 		var state: Dictionary = input_states.get(peer_id, default_input_state()) as Dictionary
 		var now_msec := Time.get_ticks_msec()
 		var last_packet_msec := int(state.get("last_packet_msec", 0))
@@ -494,8 +504,6 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				continue
 			var player := players[peer_id] as NetPlayer
 			if player == null:
-				continue
-			if player.has_method("is_target_dummy") and bool(player.call("is_target_dummy")):
 				continue
 			if broadcast_player_state_cb.is_valid():
 				broadcast_player_state_cb.call(peer_id, player)

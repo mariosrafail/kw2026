@@ -19,6 +19,7 @@ func _init_services() -> void:
 	combat_effects = COMBAT_EFFECTS_SCRIPT.new()
 	camera_shake = CAMERA_SHAKE_SCRIPT.new()
 	dropped_mag_service = DROPPED_MAG_SERVICE_SCRIPT.new()
+	target_dummy_bot_controller = TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new()
 	weapon_ui = WEAPON_UI_SCRIPT.new()
 
 func _init_weapons() -> void:
@@ -93,6 +94,8 @@ func _init_scene_map_context() -> void:
 func _refresh_spawn_points() -> void:
 	spawn_points = spawn_flow_service.configured_spawn_points(map_controller, map_catalog, scene_file_path)
 	spawn_identity.spawn_points = spawn_points.duplicate()
+	if target_dummy_bot_controller != null:
+		target_dummy_bot_controller.update_spawn_points(spawn_points)
 
 func _configure_services() -> void:
 	projectile_system.configure(projectiles_root, PROJECTILE_SCENE, Callable(self, "_projectile_color"))
@@ -190,6 +193,36 @@ func _configure_services() -> void:
 		{
 			"ak47_mag_spawn_delay_sec": 0.16,
 			"grenade_mag_spawn_delay_sec": 0.28
+		}
+	)
+
+	target_dummy_bot_controller.configure(
+		{
+			"players": players,
+			"input_states": input_states,
+			"peer_weapon_ids": peer_weapon_ids,
+			"peer_weapon_skin_indices_by_peer": peer_weapon_skin_indices_by_peer,
+			"players_root": players_root,
+			"multiplayer": multiplayer,
+			"spawn_flow_service": spawn_flow_service
+		},
+		{
+			"get_world_2d": Callable(self, "_get_world_2d_ref"),
+			"random_spawn_position": Callable(self, "_random_spawn_position"),
+			"weapon_visual_for_peer": Callable(self, "_weapon_visual_for_peer"),
+			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
+			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
+			"broadcast_spawn": Callable(self, "_broadcast_target_dummy_spawn"),
+			"record_player_history": Callable(combat_flow_service, "record_player_history"),
+			"get_peer_lobby": Callable(self, "_peer_lobby"),
+			"default_input_state": Callable(self, "_default_input_state"),
+			"server_cast_skill": Callable(combat_flow_service, "server_cast_skill"),
+			"can_cast_skill": Callable(combat_flow_service, "can_cast_skill_for_peer"),
+			"get_play_bounds": Callable(self, "_play_bounds_rect"),
+			"get_ground_tiles": Callable(self, "_ground_tiles_ref")
+		},
+		{
+			"spawn_points": spawn_points
 		}
 	)
 

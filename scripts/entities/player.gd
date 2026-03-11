@@ -1197,26 +1197,6 @@ func _physics_process(delta: float) -> void:
 			shield_health = 0
 	if visual_root != null:
 		_tick_visual_correction(delta)
-	if target_dummy_mode:
-		if use_network_smoothing:
-			global_position = target_position
-			if weapon_visual_component != null:
-				weapon_visual_component.set_aim_angle(target_aim_angle, false)
-			_apply_player_facing_from_angle(target_aim_angle)
-			_apply_gun_horizontal_flip_from_angle(target_aim_angle)
-		if get_health() != target_health:
-			set_health(target_health)
-		velocity = Vector2.ZERO
-		target_velocity = Vector2.ZERO
-		target_animation_on_floor = true
-		if modular_visual != null:
-			modular_visual.update_walk_animation(delta, Vector2.ZERO, true)
-		_apply_damage_part_scramble(delta)
-		if not damage_flash_overlay_pairs.is_empty():
-			_sync_damage_flash_overlays()
-		if not outrage_boost_overlay_pairs.is_empty():
-			_sync_outrage_boost_overlays()
-		return
 	if modular_visual != null:
 		var animation_on_floor := is_on_floor()
 		if use_network_smoothing:
