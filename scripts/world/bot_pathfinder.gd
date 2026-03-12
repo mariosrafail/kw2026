@@ -10,6 +10,7 @@ const FLOOR_DUP_Y_EPSILON := 18.0
 const FLOOR_DUP_X_EPSILON := 20.0
 const WALK_LINK_MAX_DX := 64.0
 const WALK_LINK_MAX_DY := 16.0
+const JUMP_LINK_MIN_DX := 18.0
 const JUMP_LINK_MAX_DX := 124.0
 const JUMP_LINK_MAX_UP := 118.0
 const DROP_LINK_MAX_DOWN := 196.0
@@ -57,6 +58,39 @@ func waypoint_toward(from_position: Vector2, to_position: Vector2) -> Vector2:
 	if fallback_id != -1 and _node_positions.has(fallback_id):
 		return _node_positions[fallback_id] as Vector2
 	return to_position
+
+func climb_target_toward(from_position: Vector2, to_position: Vector2) -> Vector2:
+	if to_position == Vector2.ZERO:
+		return Vector2.ZERO
+	_rebuild_if_needed()
+	if _astar.get_point_count() <= 0:
+		return Vector2.ZERO
+	var start_id: int = _closest_node_id(from_position)
+	if start_id == -1:
+		return Vector2.ZERO
+	var current_distance_sq: float = from_position.distance_squared_to(to_position)
+	var best_target: Vector2 = Vector2.ZERO
+	var best_score: float = INF
+	for point_id_value in _node_positions.keys():
+		var point_id: int = int(point_id_value)
+		if point_id == start_id:
+			continue
+		var node_position: Vector2 = _node_positions[point_id] as Vector2
+		if node_position.y >= from_position.y - 12.0:
+			continue
+		var path: PackedVector2Array = _astar.get_point_path(start_id, point_id)
+		if path.size() < 2:
+			continue
+		var node_distance_sq: float = node_position.distance_squared_to(to_position)
+		if node_distance_sq >= current_distance_sq:
+			continue
+		var next_step: Vector2 = path[1]
+		var progress_score: float = next_step.distance_squared_to(to_position) * 0.25
+		var score: float = node_distance_sq + from_position.distance_squared_to(next_step) * 0.2 + progress_score
+		if score < best_score:
+			best_score = score
+			best_target = node_position
+	return best_target
 
 func _rebuild_if_needed(force: bool = false) -> void:
 	var now_msec: int = Time.get_ticks_msec()
@@ -181,6 +215,8 @@ func _can_traverse_from_to(world_2d: World2D, from_position: Vector2, to_positio
 	if dx > JUMP_LINK_MAX_DX:
 		return false
 	if dy < 0.0 and absf(dy) > JUMP_LINK_MAX_UP:
+		return false
+	if dy < -24.0 and dx < JUMP_LINK_MIN_DX:
 		return false
 	if dy > 0.0 and dy > DROP_LINK_MAX_DOWN:
 		return false

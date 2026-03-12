@@ -21,6 +21,7 @@ var _camera_mouse_look_offset := Vector2.ZERO
 const CAMERA_FOLLOW_LERP_SPEED := 8.0
 const CAMERA_MOUSE_LOOK_LERP_SPEED := 10.0
 const CAMERA_MOUSE_LOOK_MAX_OFFSET := Vector2(80.0, 50.0)
+const CAMERA_MOUSE_LOOK_SHIFT_MULTIPLIER := 2.65
 const CAMERA_MOUSE_LOOK_DEADZONE := 0.24
 const CAMERA_MOUSE_LOOK_CURVE := 1.35
 
@@ -157,9 +158,12 @@ func _camera_mouse_look_target() -> Vector2:
 		clampf((mouse_pos.x - half_size.x) / maxf(1.0, half_size.x), -1.0, 1.0),
 		clampf((mouse_pos.y - half_size.y) / maxf(1.0, half_size.y), -1.0, 1.0)
 	)
+	var look_offset_max := CAMERA_MOUSE_LOOK_MAX_OFFSET
+	if Input.is_key_pressed(KEY_SHIFT):
+		look_offset_max *= CAMERA_MOUSE_LOOK_SHIFT_MULTIPLIER
 	return Vector2(
-		_camera_mouse_look_axis(normalized.x) * CAMERA_MOUSE_LOOK_MAX_OFFSET.x,
-		_camera_mouse_look_axis(normalized.y) * CAMERA_MOUSE_LOOK_MAX_OFFSET.y
+		_camera_mouse_look_axis(normalized.x) * look_offset_max.x,
+		_camera_mouse_look_axis(normalized.y) * look_offset_max.y
 	)
 
 func _camera_mouse_look_axis(value: float) -> float:

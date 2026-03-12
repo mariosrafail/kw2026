@@ -30,6 +30,17 @@ const SKILL_E_CAST_DISTANCE := 196.0
 const EDGE_SEEK_VERTICAL_THRESHOLD := 56.0
 const EDGE_SEEK_SCAN_STEP := 18.0
 const EDGE_SEEK_SCAN_STEPS := 6
+const VANTAGE_HORIZONTAL_OFFSETS := [-132.0, -96.0, -64.0, 64.0, 96.0, 132.0]
+const VANTAGE_VERTICAL_SAMPLE_OFFSETS := [0.0, -72.0, -36.0, 36.0, 72.0]
+const VANTAGE_REACHED_DISTANCE := 20.0
+const PLATFORM_CLIMB_VERTICAL_THRESHOLD := 46.0
+const DIRECT_CHASE_REACHED_DISTANCE := 26.0
+const PLATFORM_STEP_UP_FORWARD_OFFSETS := [18.0, 30.0, 44.0, 60.0]
+const PLATFORM_STEP_UP_HEIGHT_OFFSETS := [-22.0, -40.0, -58.0, -76.0, -96.0]
+const PLATFORM_STEP_UP_MIN_RISE := 12.0
+const OBSTACLE_BYPASS_SCAN_OFFSETS := [16.0, 30.0, 46.0, 64.0, 84.0]
+const WALL_LEDGE_FORWARD_OFFSETS := [10.0, 16.0, 22.0]
+const WALL_LEDGE_HEIGHT_OFFSETS := [-28.0, -44.0, -62.0, -82.0, -104.0]
 
 var players: Dictionary = {}
 var input_states: Dictionary = {}
@@ -66,6 +77,7 @@ var last_seen_target_position := Vector2.ZERO
 var last_seen_memory_remaining := 0.0
 var pathfinder: BotPathfinder
 var preferred_target_peer_id := 0
+var current_vantage_position := Vector2.ZERO
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -98,13 +110,15 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 		pathfinder = BOT_PATHFINDER_SCRIPT.new()
 	pathfinder.configure({
 		"get_world_2d": _get_world_2d_cb,
-		"get_play_bounds": callbacks.get("get_play_bounds", Callable()) as Callable
+		"get_play_bounds": callbacks.get("get_play_bounds", Callable()) as Callable,
+		"get_ground_tiles": callbacks.get("get_ground_tiles", Callable()) as Callable
 	})
 
 func reset() -> void:
 	spawn_position = Vector2.ZERO
 	lobby_id = 0
 	preferred_target_peer_id = 0
+	current_vantage_position = Vector2.ZERO
 	patrol_direction = -1.0
 	jump_hold_remaining = 0.0
 	last_seen_target_position = Vector2.ZERO
@@ -168,6 +182,7 @@ func ensure_spawned(player_scene: PackedScene, anchor_position: Vector2) -> NetP
 	jump_hold_remaining = 0.0
 	last_seen_target_position = Vector2.ZERO
 	last_seen_memory_remaining = 0.0
+	current_vantage_position = Vector2.ZERO
 	var existing := players.get(bot_peer_id, null) as NetPlayer
 	if existing != null:
 		setup_spawned_player(existing, desired_position, false)
@@ -201,6 +216,7 @@ func respawn_player(player: NetPlayer) -> void:
 	jump_hold_remaining = 0.0
 	last_seen_target_position = Vector2.ZERO
 	last_seen_memory_remaining = 0.0
+	current_vantage_position = Vector2.ZERO
 	setup_spawned_player(player, respawn_position, false)
 	player.force_respawn(respawn_position)
 	_write_bot_input_state(respawn_position + Vector2.RIGHT * PATROL_AIM_DISTANCE, 0.0, false, false, false)
@@ -224,9 +240,11 @@ func tick(delta: float) -> void:
 	if target != null and has_target_los and not pursuing_goal:
 		last_seen_target_position = target.global_position
 		last_seen_memory_remaining = TARGET_MEMORY_SEC
+		current_vantage_position = Vector2.ZERO
 	var search_target := movement_goal if pursuing_goal else _resolve_search_target(bot, target, has_target_los)
 	var move_target := _movement_target(bot, search_target)
 	var chase_target := move_target if move_target != Vector2.ZERO else search_target
+	var climb_pursuit := target != null and not has_target_los and target.global_position.y < bot.global_position.y - PLATFORM_CLIMB_VERTICAL_THRESHOLD
 	var aim_world := _aim_point_for_position(search_target) if search_target != Vector2.ZERO else bot.global_position + Vector2(patrol_direction * PATROL_AIM_DISTANCE, 0.0)
 	bot.set_aim_world(aim_world)
 	var move_axis := _move_axis_for_target_position(bot, move_target)
@@ -237,10 +255,35 @@ func tick(delta: float) -> void:
 			move_axis = edge_seek_axis
 			obstacle_probe_axis = edge_seek_axis
 	var in_fire_range := (not pursuing_goal) and target != null and has_target_los and distance_to_target <= FIRE_ENGAGE_DISTANCE
-	if (not pursuing_goal) and target != null and has_target_los and distance_to_target <= FIRE_STOP_DISTANCE:
+	var should_hold_fire_position := (
+		(not pursuing_goal)
+		and target != null
+		and has_target_los
+		and distance_to_target <= FIRE_STOP_DISTANCE
+	)
+	if should_hold_fire_position:
 		move_axis = 0.0
 	elif search_target != Vector2.ZERO and bot.global_position.distance_to(search_target) <= SEARCH_REACHED_DISTANCE:
-		move_axis = patrol_direction
+		if climb_pursuit and search_target.distance_to(target.global_position) <= DIRECT_CHASE_REACHED_DISTANCE:
+			move_axis = signf(target.global_position.x - bot.global_position.x)
+		elif target != null:
+			move_axis = signf(target.global_position.x - bot.global_position.x)
+		else:
+			move_axis = patrol_direction
+	var pre_step_up_target := _nearby_platform_step_up_target(bot, search_target, obstacle_probe_axis)
+	var pre_wall_ledge_target := _wall_adjacent_ledge_target(bot, search_target, obstacle_probe_axis)
+	var pre_obstacle_bypass_axis := _obstacle_bypass_axis(bot, search_target, obstacle_probe_axis)
+	if climb_pursuit and absf(move_axis) <= 0.001:
+		if pre_step_up_target != Vector2.ZERO:
+			move_axis = signf(pre_step_up_target.x - bot.global_position.x)
+		elif pre_wall_ledge_target != Vector2.ZERO:
+			move_axis = signf(pre_wall_ledge_target.x - bot.global_position.x)
+		elif absf(pre_obstacle_bypass_axis) > 0.001:
+			move_axis = pre_obstacle_bypass_axis
+		elif target != null:
+			var target_axis := signf(target.global_position.x - bot.global_position.x)
+			if absf(target_axis) > 0.001:
+				move_axis = target_axis
 	var jump_pressed := false
 	if absf(move_axis) > 0.001:
 		patrol_direction = signf(move_axis)
@@ -259,12 +302,43 @@ func tick(delta: float) -> void:
 	var should_drop_to_target := _should_drop_to_target(bot, search_target, move_axis)
 	var knows_target_position := search_target != Vector2.ZERO
 	var pursuing_without_los := knows_target_position and not has_target_los
+	var step_up_target := pre_step_up_target
+	var wall_ledge_target := pre_wall_ledge_target
+	var airborne_side_target := _airborne_side_platform_target(bot, search_target, obstacle_probe_axis)
+	var obstacle_bypass_axis := pre_obstacle_bypass_axis
 	var stuck_at_gap := not floor_ahead and absf(move_axis) <= 0.001 and knows_target_position
 	if wall_ahead and bot.is_on_floor():
+		if wall_ledge_target != Vector2.ZERO:
+			jump_pressed = true
+			move_axis = signf(wall_ledge_target.x - bot.global_position.x)
+			if absf(move_axis) > 0.001:
+				patrol_direction = move_axis
+		elif step_up_target != Vector2.ZERO:
+			jump_pressed = true
+			move_axis = signf(step_up_target.x - bot.global_position.x)
+			if absf(move_axis) > 0.001:
+				patrol_direction = move_axis
+		elif absf(obstacle_bypass_axis) > 0.001:
+			move_axis = obstacle_bypass_axis
+			patrol_direction = obstacle_bypass_axis
+		else:
+			move_axis *= -1.0
+			if absf(move_axis) <= 0.001:
+				move_axis = -patrol_direction
+			patrol_direction = signf(move_axis) if absf(move_axis) > 0.001 else patrol_direction
+	elif wall_ledge_target != Vector2.ZERO and bot.is_on_floor():
 		jump_pressed = true
-	elif _should_jump_toward_target(bot, target) and bot.is_on_floor():
+		move_axis = signf(wall_ledge_target.x - bot.global_position.x)
+		if absf(move_axis) > 0.001:
+			patrol_direction = move_axis
+	elif step_up_target != Vector2.ZERO and bot.is_on_floor():
 		jump_pressed = true
-	elif _should_jump_toward_position(bot, chase_target) and bot.is_on_floor():
+		move_axis = signf(step_up_target.x - bot.global_position.x)
+		if absf(move_axis) > 0.001:
+			patrol_direction = move_axis
+	elif _should_jump_toward_target(bot, target) and bot.is_on_floor() and (not climb_pursuit or absf(move_axis) > 0.001):
+		jump_pressed = true
+	elif _should_jump_toward_position(bot, chase_target) and bot.is_on_floor() and (not climb_pursuit or absf(move_axis) > 0.001):
 		jump_pressed = true
 	elif stuck_at_gap and bot.is_on_floor():
 		jump_pressed = true
@@ -290,8 +364,16 @@ func tick(delta: float) -> void:
 		patrol_direction *= -1.0
 		move_axis = patrol_direction
 	if jump_pressed:
-		jump_hold_remaining = _jump_hold_duration(bot, target, wall_ahead)
+		jump_hold_remaining = _jump_hold_duration(bot, target, wall_ahead, climb_pursuit, wall_ledge_target != Vector2.ZERO or step_up_target != Vector2.ZERO)
 	var jump_held := jump_pressed or jump_hold_remaining > 0.0
+	if not bot.is_on_floor() and airborne_side_target != Vector2.ZERO:
+		move_axis = signf(airborne_side_target.x - bot.global_position.x)
+		if absf(move_axis) > 0.001:
+			patrol_direction = move_axis
+	elif not bot.is_on_floor() and wall_ledge_target != Vector2.ZERO and absf(move_axis) <= 0.001:
+		move_axis = signf(wall_ledge_target.x - bot.global_position.x)
+		if absf(move_axis) > 0.001:
+			patrol_direction = move_axis
 	_write_bot_input_state(aim_world, move_axis, jump_pressed, jump_held, in_fire_range)
 	if target == null and (bot.is_on_wall() or _should_turn(bot, move_axis)):
 		patrol_direction *= -1.0
@@ -519,14 +601,18 @@ func _should_force_jump_over_gap(bot: NetPlayer, target_position: Vector2, move_
 	# prefer a committed jump instead of dropping and stalling.
 	return dy >= -18.0 and dy <= 84.0
 
-func _jump_hold_duration(bot: NetPlayer, target: NetPlayer, wall_ahead: bool) -> float:
+func _jump_hold_duration(bot: NetPlayer, target: NetPlayer, wall_ahead: bool, climb_pursuit: bool = false, committed_climb: bool = false) -> float:
 	if bot == null:
 		return JUMP_HOLD_MIN_SEC
+	if committed_climb:
+		return JUMP_HOLD_MAX_SEC
 	var desired_height := 0.0
 	if target != null:
 		desired_height = maxf(0.0, bot.global_position.y - target.global_position.y)
 	if wall_ahead:
 		desired_height = maxf(desired_height, 72.0)
+	if climb_pursuit:
+		desired_height = maxf(desired_height, 104.0)
 	var t := clampf((desired_height - TARGET_JUMP_HEIGHT_THRESHOLD) / 140.0, 0.0, 1.0)
 	return lerpf(JUMP_HOLD_MIN_SEC, JUMP_HOLD_MAX_SEC, t)
 
@@ -607,11 +693,29 @@ func _has_weapon_los(bot: NetPlayer, target: NetPlayer) -> bool:
 	if space_state == null:
 		return false
 	var muzzle := bot.get_muzzle_world_position()
+	return _has_weapon_los_from_muzzle(space_state, muzzle, target, [bot, target])
+
+func _has_weapon_los_from_position(origin_position: Vector2, target: NetPlayer, bot: NetPlayer = null) -> bool:
+	var world_2d := _world_2d()
+	if target == null or world_2d == null:
+		return false
+	var space_state := world_2d.direct_space_state
+	if space_state == null:
+		return false
+	var exclude: Array = [target]
+	if bot != null:
+		exclude.append(bot)
+	var muzzle := origin_position + Vector2(0.0, -10.0)
+	return _has_weapon_los_from_muzzle(space_state, muzzle, target, exclude)
+
+func _has_weapon_los_from_muzzle(space_state: PhysicsDirectSpaceState2D, muzzle: Vector2, target: NetPlayer, exclude: Array) -> bool:
+	if space_state == null or target == null:
+		return false
 	for point in _target_aim_points(target):
 		var query := PhysicsRayQueryParameters2D.create(muzzle, point, 1)
 		query.collide_with_bodies = true
 		query.collide_with_areas = false
-		query.exclude = [bot, target]
+		query.exclude = exclude
 		var hit := space_state.intersect_ray(query)
 		if hit.is_empty():
 			return true
@@ -650,12 +754,265 @@ func _write_bot_input_state(aim_world: Vector2, move_axis: float, jump_pressed: 
 
 func _resolve_search_target(bot: NetPlayer, target: NetPlayer, has_target_los: bool) -> Vector2:
 	if bot != null and target != null and has_target_los:
+		current_vantage_position = Vector2.ZERO
 		return target.global_position
+	if bot != null and target != null:
+		var climb_target := _best_climb_target(bot, target, has_target_los)
+		if climb_target != Vector2.ZERO:
+			current_vantage_position = Vector2.ZERO
+			return climb_target
+		var vantage_position := _best_attack_vantage(bot, target)
+		if vantage_position != Vector2.ZERO:
+			current_vantage_position = vantage_position
+			return vantage_position
 	if last_seen_memory_remaining > 0.0 and last_seen_target_position != Vector2.ZERO:
 		return last_seen_target_position
 	if target != null:
 		return target.global_position
+	current_vantage_position = Vector2.ZERO
 	return Vector2.ZERO
+
+func _best_climb_target(bot: NetPlayer, target: NetPlayer, has_target_los: bool) -> Vector2:
+	if bot == null or target == null or has_target_los:
+		return Vector2.ZERO
+	var target_is_above: bool = target.global_position.y < bot.global_position.y - PLATFORM_CLIMB_VERTICAL_THRESHOLD
+	if not target_is_above:
+		return Vector2.ZERO
+	if pathfinder != null:
+		var graph_climb_target: Vector2 = pathfinder.climb_target_toward(bot.global_position, target.global_position)
+		if graph_climb_target != Vector2.ZERO:
+			return graph_climb_target
+	var direct_target: Vector2 = _snap_to_ground(target.global_position)
+	var best_target: Vector2 = Vector2.ZERO
+	var best_score: float = INF
+	var preferred_dir: float = signf(target.global_position.x - bot.global_position.x)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = patrol_direction
+	var climb_candidates: Array[Vector2] = [direct_target, target.global_position]
+	var nearby_step_up: Vector2 = _nearby_platform_step_up_target(bot, target.global_position, preferred_dir)
+	if nearby_step_up != Vector2.ZERO and not climb_candidates.has(nearby_step_up):
+		climb_candidates.append(nearby_step_up)
+	for candidate in climb_candidates:
+		if candidate == Vector2.ZERO:
+			continue
+		var approach_point: Vector2 = candidate
+		if pathfinder != null:
+			var waypoint: Vector2 = pathfinder.waypoint_toward(bot.global_position, candidate)
+			if waypoint != Vector2.ZERO:
+				approach_point = waypoint
+		var advances_upward: bool = approach_point.y < bot.global_position.y - 8.0
+		var advances_sideways: bool = absf(approach_point.x - bot.global_position.x) > 8.0
+		if not advances_upward and not advances_sideways:
+			continue
+		var score: float = approach_point.distance_squared_to(target.global_position)
+		if score < best_score:
+			best_score = score
+			best_target = candidate
+	return best_target
+
+func _nearby_platform_step_up_target(bot: NetPlayer, target_position: Vector2, direction: float) -> Vector2:
+	if bot == null or target_position == Vector2.ZERO:
+		return Vector2.ZERO
+	var current_distance_sq: float = bot.global_position.distance_squared_to(target_position)
+	var best_target: Vector2 = Vector2.ZERO
+	var best_score: float = INF
+	var preferred_dir: float = signf(direction)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = signf(target_position.x - bot.global_position.x)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = patrol_direction
+	var scan_dirs: Array[float] = []
+	if absf(preferred_dir) > 0.001:
+		scan_dirs.append(preferred_dir)
+		scan_dirs.append(-preferred_dir)
+	else:
+		scan_dirs = [-1.0, 1.0]
+	for dir in scan_dirs:
+		for height_offset in PLATFORM_STEP_UP_HEIGHT_OFFSETS:
+			for forward_offset in PLATFORM_STEP_UP_FORWARD_OFFSETS:
+				var probe_origin: Vector2 = bot.global_position + Vector2(dir * forward_offset, height_offset)
+				var candidate: Vector2 = _snap_to_ground(probe_origin)
+				if candidate == Vector2.ZERO:
+					continue
+				if candidate.y > bot.global_position.y - PLATFORM_STEP_UP_MIN_RISE:
+					continue
+				if absf(candidate.x - bot.global_position.x) > 86.0:
+					continue
+				var candidate_distance_sq: float = candidate.distance_squared_to(target_position)
+				if candidate_distance_sq >= current_distance_sq:
+					continue
+				var side_penalty: float = 0.0 if dir == preferred_dir else 18.0
+				var score: float = candidate_distance_sq + bot.global_position.distance_squared_to(candidate) * 0.3 + side_penalty
+				if score < best_score:
+					best_score = score
+					best_target = candidate
+	return best_target
+
+func _obstacle_bypass_axis(bot: NetPlayer, target_position: Vector2, direction: float) -> float:
+	if bot == null or target_position == Vector2.ZERO:
+		return 0.0
+	var preferred_dir: float = signf(direction)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = signf(target_position.x - bot.global_position.x)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = patrol_direction
+	if absf(preferred_dir) < 0.001:
+		return 0.0
+	var best_dir: float = 0.0
+	var best_score: float = INF
+	var bypass_dirs: Array[float] = [preferred_dir, -preferred_dir]
+	for dir in bypass_dirs:
+		var blocked: bool = false
+		var clearance_score: float = 0.0
+		for offset in OBSTACLE_BYPASS_SCAN_OFFSETS:
+			if _has_wall_ahead_at_distance(bot, dir, offset):
+				blocked = true
+				break
+			clearance_score += offset
+		if blocked:
+			continue
+		var projected: Vector2 = bot.global_position + Vector2(dir * 24.0, 0.0)
+		var score: float = projected.distance_squared_to(target_position) - clearance_score * 0.5
+		if score < best_score:
+			best_score = score
+			best_dir = dir
+	return best_dir
+
+func _wall_adjacent_ledge_target(bot: NetPlayer, target_position: Vector2, direction: float) -> Vector2:
+	if bot == null or target_position == Vector2.ZERO:
+		return Vector2.ZERO
+	var current_distance_sq: float = bot.global_position.distance_squared_to(target_position)
+	var preferred_dir: float = signf(direction)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = signf(target_position.x - bot.global_position.x)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = patrol_direction
+	var scan_dirs: Array[float] = []
+	if absf(preferred_dir) > 0.001:
+		scan_dirs.append(preferred_dir)
+		scan_dirs.append(-preferred_dir)
+	else:
+		scan_dirs = [-1.0, 1.0]
+	var best_target: Vector2 = Vector2.ZERO
+	var best_score: float = INF
+	for dir in scan_dirs:
+		for forward_offset in WALL_LEDGE_FORWARD_OFFSETS:
+			if not _has_wall_ahead_at_distance(bot, dir, forward_offset):
+				continue
+			for height_offset in WALL_LEDGE_HEIGHT_OFFSETS:
+				var probe_origin: Vector2 = bot.global_position + Vector2(dir * (forward_offset + 8.0), height_offset)
+				var candidate: Vector2 = _snap_to_ground(probe_origin)
+				if candidate == Vector2.ZERO:
+					continue
+				if candidate.y >= bot.global_position.y - PLATFORM_STEP_UP_MIN_RISE:
+					continue
+				if absf(candidate.x - bot.global_position.x) > 72.0:
+					continue
+				var candidate_distance_sq: float = candidate.distance_squared_to(target_position)
+				if candidate_distance_sq >= current_distance_sq:
+					continue
+				var side_penalty: float = 0.0 if dir == preferred_dir else 14.0
+				var score: float = candidate_distance_sq + bot.global_position.distance_squared_to(candidate) * 0.25 + side_penalty
+				if score < best_score:
+					best_score = score
+					best_target = candidate
+	return best_target
+
+func _airborne_side_platform_target(bot: NetPlayer, target_position: Vector2, direction: float) -> Vector2:
+	if bot == null:
+		return Vector2.ZERO
+	var preferred_dir: float = signf(direction)
+	if target_position != Vector2.ZERO and absf(preferred_dir) < 0.001:
+		preferred_dir = signf(target_position.x - bot.global_position.x)
+	if absf(preferred_dir) < 0.001:
+		preferred_dir = patrol_direction
+	var scan_dirs: Array[float] = []
+	if absf(preferred_dir) > 0.001:
+		scan_dirs.append(preferred_dir)
+		scan_dirs.append(-preferred_dir)
+	else:
+		scan_dirs = [-1.0, 1.0]
+	var best_target: Vector2 = Vector2.ZERO
+	var best_score: float = INF
+	var baseline_distance_sq: float = bot.global_position.distance_squared_to(target_position) if target_position != Vector2.ZERO else INF
+	for dir in scan_dirs:
+		for forward_offset in WALL_LEDGE_FORWARD_OFFSETS:
+			for height_offset in WALL_LEDGE_HEIGHT_OFFSETS:
+				var probe_origin: Vector2 = bot.global_position + Vector2(dir * (forward_offset + 10.0), height_offset)
+				var candidate: Vector2 = _snap_to_ground(probe_origin)
+				if candidate == Vector2.ZERO:
+					continue
+				if candidate.y >= bot.global_position.y - 6.0:
+					continue
+				if absf(candidate.x - bot.global_position.x) > 84.0:
+					continue
+				var toward_penalty := 0.0
+				if target_position != Vector2.ZERO:
+					var candidate_distance_sq: float = candidate.distance_squared_to(target_position)
+					if candidate_distance_sq > baseline_distance_sq * 1.1:
+						continue
+					toward_penalty = candidate_distance_sq * 0.0015
+				var side_penalty: float = 0.0 if dir == preferred_dir else 10.0
+				var score: float = bot.global_position.distance_squared_to(candidate) + toward_penalty + side_penalty
+				if score < best_score:
+					best_score = score
+					best_target = candidate
+	return best_target
+
+func _has_wall_ahead_at_distance(bot: NetPlayer, direction: float, lookahead_distance: float) -> bool:
+	var world_2d := _world_2d()
+	if bot == null or world_2d == null:
+		return false
+	var space_state := world_2d.direct_space_state
+	if space_state == null:
+		return false
+	var dir: float = signf(direction)
+	if absf(dir) < 0.001:
+		return false
+	var exclude := [bot]
+	var wall_from := bot.global_position + Vector2(0.0, -12.0)
+	var wall_to := wall_from + Vector2(dir * lookahead_distance, 0.0)
+	var wall_query := PhysicsRayQueryParameters2D.create(wall_from, wall_to, 1)
+	wall_query.collide_with_bodies = true
+	wall_query.collide_with_areas = false
+	wall_query.exclude = exclude
+	var wall_hit := space_state.intersect_ray(wall_query)
+	return not wall_hit.is_empty()
+
+func _best_attack_vantage(bot: NetPlayer, target: NetPlayer) -> Vector2:
+	if bot == null or target == null:
+		return Vector2.ZERO
+	if current_vantage_position != Vector2.ZERO:
+		var reached_vantage := bot.global_position.distance_to(current_vantage_position) <= VANTAGE_REACHED_DISTANCE
+		if not reached_vantage and _has_weapon_los_from_position(current_vantage_position, target, bot):
+			return current_vantage_position
+	var candidates: Array[Vector2] = []
+	for vertical_offset in VANTAGE_VERTICAL_SAMPLE_OFFSETS:
+		for horizontal_offset in VANTAGE_HORIZONTAL_OFFSETS:
+			var candidate := _snap_to_ground(target.global_position + Vector2(horizontal_offset, vertical_offset))
+			if candidates.has(candidate):
+				continue
+			candidates.append(candidate)
+	var best_position := Vector2.ZERO
+	var best_score := INF
+	for candidate in candidates:
+		if candidate == Vector2.ZERO:
+			continue
+		if candidate.distance_to(target.global_position) <= VANTAGE_REACHED_DISTANCE:
+			continue
+		if not _has_weapon_los_from_position(candidate, target, bot):
+			continue
+		var approach_point: Vector2 = candidate
+		if pathfinder != null:
+			var waypoint: Vector2 = pathfinder.waypoint_toward(bot.global_position, candidate)
+			if waypoint != Vector2.ZERO:
+				approach_point = waypoint
+		var score: float = bot.global_position.distance_squared_to(approach_point)
+		score += candidate.distance_squared_to(target.global_position) * 0.35
+		if score < best_score:
+			best_score = score
+			best_position = candidate
+	return best_position
 
 func _movement_goal() -> Vector2:
 	if _movement_goal_position_cb.is_valid():

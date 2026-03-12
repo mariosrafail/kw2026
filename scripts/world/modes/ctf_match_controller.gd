@@ -298,7 +298,7 @@ func _ensure_layout() -> void:
 	if _capture_areas != null:
 		_capture_areas.refresh(world_root)
 
-	var flag_home := red_base.lerp(blue_base, 0.5) + Vector2(0.0, -26.0)
+	var flag_home := red_base.lerp(blue_base, 0.5) + Vector2(0.0, -42.0)
 	if neutral_flag == null:
 		neutral_flag = CTF_FLAG_STATE_SCRIPT.new()
 		neutral_flag.configure(-1, flag_home)
@@ -346,7 +346,7 @@ func _objective_marker_position() -> Vector2:
 	var red_team := teams_by_id.get(TEAM_RED, null) as CtfTeam
 	var blue_team := teams_by_id.get(TEAM_BLUE, null) as CtfTeam
 	if red_team != null and blue_team != null:
-		return red_team.base_position.lerp(blue_team.base_position, 0.5) + Vector2(0.0, -26.0)
+		return red_team.base_position.lerp(blue_team.base_position, 0.5) + Vector2(0.0, -42.0)
 	return Vector2.ZERO
 
 func _is_inside_team_capture_area(player: NetPlayer, team_id: int) -> bool:
