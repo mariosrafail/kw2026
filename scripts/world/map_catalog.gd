@@ -2,7 +2,6 @@ extends RefCounted
 class_name MapCatalog
 
 const CLASSIC_MAP_CONTROLLER := preload("res://scripts/world/classic_map_controller.gd")
-const CYBERNEW_MAP_CONTROLLER := preload("res://scripts/world/cybernew_map_controller.gd")
 
 var _maps_by_id: Dictionary = {}
 var _ordered_map_ids: Array[String] = []
@@ -10,7 +9,6 @@ var _default_map_id := "classic"
 
 func _init() -> void:
 	_register_controller(CLASSIC_MAP_CONTROLLER.new())
-	_register_controller(CYBERNEW_MAP_CONTROLLER.new())
 	if _ordered_map_ids.is_empty():
 		_ordered_map_ids.append(_default_map_id)
 		_maps_by_id[_default_map_id] = {
@@ -18,7 +16,9 @@ func _init() -> void:
 			"label": "Classic",
 			"scene_path": "res://scenes/main.tscn",
 			"max_players": 2,
-			"spawn_points": []
+			"spawn_points": [],
+			"supported_modes": ["deathmatch"],
+			"mode_max_players": {}
 		}
 	if not _maps_by_id.has(_default_map_id):
 		_default_map_id = _ordered_map_ids[0]
@@ -76,9 +76,33 @@ func _register_controller(controller: MapController) -> void:
 		"label": controller.display_label(),
 		"scene_path": controller.configured_scene_path(),
 		"max_players": controller.configured_max_players(),
-		"spawn_points": controller.configured_spawn_points()
+		"spawn_points": controller.configured_spawn_points(),
+		"supported_modes": controller.configured_supported_modes(),
+		"mode_max_players": controller.configured_mode_max_players()
 	}
 
 func _map_entry(map_id: String) -> Dictionary:
 	var normalized := normalize_map_id(map_id)
 	return _maps_by_id.get(normalized, {}) as Dictionary
+
+func supported_modes_for_id(map_id: String) -> Array[String]:
+	var map_entry := _map_entry(map_id)
+	var raw_modes := map_entry.get("supported_modes", []) as Array
+	var modes: Array[String] = []
+	for mode_value in raw_modes:
+		var mode_id := str(mode_value).strip_edges().to_lower()
+		if mode_id.is_empty():
+			continue
+		if not modes.has(mode_id):
+			modes.append(mode_id)
+	if modes.is_empty():
+		modes.append("deathmatch")
+	return modes
+
+func max_players_for_mode(map_id: String, mode_id: String) -> int:
+	var map_entry := _map_entry(map_id)
+	var per_mode := map_entry.get("mode_max_players", {}) as Dictionary
+	var normalized_mode := str(mode_id).strip_edges().to_lower()
+	if per_mode.has(normalized_mode):
+		return maxi(1, int(per_mode.get(normalized_mode, max_players_for_id(map_id))))
+	return max_players_for_id(map_id)

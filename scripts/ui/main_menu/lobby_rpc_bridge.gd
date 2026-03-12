@@ -1,17 +1,24 @@
 extends Node
 
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
+const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
 
 signal connected_to_lobby_server
 signal lobby_connection_failed
 signal lobby_server_disconnected
 signal lobby_list_received(entries: Array, active_lobby_id: int)
 signal lobby_action_result_received(success: bool, message: String, active_lobby_id: int, map_id: String)
+signal lobby_room_state_received(payload: Dictionary)
 
 var _is_connected := false
 var _last_host := "127.0.0.1"
 var _last_port := 8080
 var _map_catalog = MAP_CATALOG_SCRIPT.new()
+var _map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
+var _active_lobby_id := 0
+var _pending_mode_id := "deathmatch"
+var _lobby_mode_by_id: Dictionary = {}
+var _rpc_handoff_attempts := 0
 
 func _log(message: String) -> void:
 	print("[lobby_rpc_bridge] %s" % message)
@@ -86,7 +93,7 @@ func request_lobby_list() -> bool:
 	_rpc_request_lobby_list.rpc_id(1)
 	return true
 
-func create_lobby(lobby_name: String, weapon_id: String, character_id: String, map_id: String = "classic") -> bool:
+func create_lobby(lobby_name: String, weapon_id: String, character_id: String, map_id: String = "classic", mode_id: String = "deathmatch") -> bool:
 	if not _can_send_server_rpc():
 		_log("create_lobby blocked can_send=false")
 		return false
@@ -99,9 +106,47 @@ func create_lobby(lobby_name: String, weapon_id: String, character_id: String, m
 	var normalized_map := map_id.strip_edges().to_lower()
 	if normalized_map.is_empty():
 		normalized_map = "classic"
-	var payload := "%s|%s|%s" % [normalized_weapon, normalized_character, normalized_map]
-	_log("create_lobby rpc_id(1) lobby_name=%s payload=%s" % [lobby_name.strip_edges(), payload])
+	var normalized_mode := _map_flow_service.select_mode_for_map(_map_catalog, normalized_map, mode_id)
+	_pending_mode_id = normalized_mode
+	var payload := "%s|%s|%s|%s" % [normalized_weapon, normalized_character, normalized_map, normalized_mode]
+	_log("create_lobby path=SERVER_RPC lobby_name=%s payload=%s host=%s port=%d" % [lobby_name.strip_edges(), payload, _last_host, _last_port])
 	_rpc_lobby_create.rpc_id(1, lobby_name.strip_edges(), payload)
+	return true
+
+func host_local_match(map_id: String = "classic", mode_id: String = "deathmatch") -> bool:
+	var normalized_map := map_id.strip_edges().to_lower()
+	if normalized_map.is_empty():
+		normalized_map = "classic"
+	var normalized_mode := _map_flow_service.select_mode_for_map(_map_catalog, normalized_map, mode_id)
+	var scene_path := _map_catalog.scene_path_for_id(normalized_map)
+	if scene_path.strip_edges().is_empty():
+		scene_path = "res://scenes/main.tscn"
+
+	ProjectSettings.set_setting("kw/pending_game_mode", normalized_mode)
+
+	var mp := multiplayer
+	if mp == null:
+		_log("host_local_match failed multiplayer=null")
+		return false
+	if mp.multiplayer_peer != null:
+		mp.multiplayer_peer.close()
+		mp.multiplayer_peer = null
+
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_server(_last_port, 8)
+	_log("host_local_match path=LOCAL_FALLBACK create_server err=%d port=%d map=%s mode=%s" % [err, _last_port, normalized_map, normalized_mode])
+	if err != OK:
+		err = peer.create_server(7777, 8)
+		_log("host_local_match fallback create_server err=%d port=%d" % [err, 7777])
+	if err != OK:
+		return false
+	_log("host_local_match result=LOCAL_SERVER_STARTED scene=%s mode=%s" % [scene_path, normalized_mode])
+	mp.multiplayer_peer = peer
+
+	var tree := get_tree()
+	if tree != null:
+		tree.call_deferred("change_scene_to_file", scene_path)
+		_begin_rpc_root_handoff()
 	return true
 
 func join_lobby(lobby_id: int, weapon_id: String, character_id: String) -> bool:
@@ -114,6 +159,7 @@ func join_lobby(lobby_id: int, weapon_id: String, character_id: String) -> bool:
 	var normalized_character := character_id.strip_edges().to_lower()
 	if normalized_character != "erebus" and normalized_character != "tasko":
 		normalized_character = "outrage"
+	_pending_mode_id = str(_lobby_mode_by_id.get(lobby_id, "deathmatch"))
 	_rpc_lobby_join.rpc_id(1, lobby_id, normalized_weapon, normalized_character)
 	_log("join_lobby rpc_id(1) lobby_id=%d weapon=%s character=%s" % [lobby_id, normalized_weapon, normalized_character])
 	return true
@@ -124,6 +170,22 @@ func leave_lobby() -> bool:
 		return false
 	_log("leave_lobby rpc_id(1)")
 	_rpc_lobby_leave.rpc_id(1)
+	return true
+
+func set_lobby_team(team_id: int) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_lobby_team blocked can_send=false")
+		return false
+	_log("set_lobby_team rpc_id(1) team_id=%d" % team_id)
+	_rpc_lobby_set_team.rpc_id(1, team_id)
+	return true
+
+func start_lobby_match() -> bool:
+	if not _can_send_server_rpc():
+		_log("start_lobby_match blocked can_send=false")
+		return false
+	_log("start_lobby_match rpc_id(1)")
+	_rpc_lobby_start_match.rpc_id(1)
 	return true
 
 func set_display_name(display_name: String) -> bool:
@@ -237,6 +299,10 @@ func _rpc_ping_response(_client_sent_msec: int) -> void:
 func _rpc_spawn_projectile(_projectile_id: int, _owner_peer_id: int, _spawn_position: Vector2, _velocity: Vector2, _lag_comp_ms: int, _trail_origin: Vector2, _weapon_id: String = "") -> void:
 	pass
 
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_ctf_flag(_carrier_peer_id: int, _world_position: Vector2, _red_score: int = 0, _blue_score: int = 0) -> void:
+	pass
+
 @rpc("authority", "reliable")
 func _rpc_despawn_projectile(_projectile_id: int) -> void:
 	pass
@@ -336,11 +402,31 @@ func _rpc_lobby_set_display_name(_display_name: String) -> void:
 @rpc("authority", "reliable")
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [_entries.size(), _active_lobby_id])
+	self._active_lobby_id = _active_lobby_id
+	_lobby_mode_by_id.clear()
+	for entry_value in _entries:
+		if not (entry_value is Dictionary):
+			continue
+		var entry := entry_value as Dictionary
+		var lobby_id := int(entry.get("id", 0))
+		if lobby_id <= 0:
+			continue
+		_lobby_mode_by_id[lobby_id] = _map_flow_service.normalize_mode_id(str(entry.get("mode_id", "deathmatch")))
+		if lobby_id == _active_lobby_id:
+			_log("rpc lobby_list active_lobby_mode=%s raw_entry=%s" % [str(_lobby_mode_by_id[lobby_id]), str(entry)])
 	lobby_list_received.emit(_entries, _active_lobby_id)
 
 @rpc("authority", "reliable")
 func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id: int, _map_id: String, _lobby_scene_mode: bool) -> void:
-	_log("rpc lobby_action_result success=%s active_lobby_id=%d map_id=%s message=%s" % [str(_success), _active_lobby_id, _map_id, _message])
+	_log("rpc lobby_action_result success=%s active_lobby_id=%d map_id=%s pending_mode=%s known_active_mode=%s message=%s" % [
+		str(_success),
+		_active_lobby_id,
+		_map_id,
+		_pending_mode_id,
+		str(_lobby_mode_by_id.get(_active_lobby_id, "unknown")),
+		_message
+	])
+	self._active_lobby_id = _active_lobby_id
 	lobby_action_result_received.emit(_success, _message, _active_lobby_id, _map_id)
 
 @rpc("authority", "reliable")
@@ -352,14 +438,25 @@ func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	var scene_path := _map_catalog.scene_path_for_id(normalized)
 	if scene_path.is_empty():
 		scene_path = "res://scenes/main.tscn"
-	var root := tree.root if tree != null else null
-	if name == "Main3":
-		name = "LobbyRpcBridge"
-	if root != null and get_parent() == root:
-		root.remove_child(self)
+	var mode_id := _map_flow_service.normalize_mode_id(str(_lobby_mode_by_id.get(_active_lobby_id, _pending_mode_id)))
+	ProjectSettings.set_setting("kw/pending_game_mode", mode_id)
+	_log("scene_switch source=SERVER_LOBBY map_id=%s mode=%s scene=%s" % [normalized, mode_id, scene_path])
 	if tree != null:
 		tree.call_deferred("change_scene_to_file", scene_path)
-	call_deferred("queue_free")
+		_begin_rpc_root_handoff()
+
+@rpc("authority", "reliable")
+func _rpc_lobby_room_state(_payload: Dictionary) -> void:
+	_log("rpc lobby_room_state payload=%s" % str(_payload))
+	lobby_room_state_received.emit(_payload)
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_team(_team_id: int) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_start_match() -> void:
+	pass
 
 @rpc("any_peer", "reliable")
 func _rpc_cast_skill1(_target_world: Vector2) -> void:
@@ -392,3 +489,29 @@ func _rpc_spawn_tasko_invis_field(_caster_peer_id: int, _world_position: Vector2
 @rpc("authority", "reliable")
 func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> void:
 	pass
+
+func _begin_rpc_root_handoff() -> void:
+	var tree := get_tree()
+	if tree == null:
+		call_deferred("queue_free")
+		return
+	_rpc_handoff_attempts = 0
+	tree.process_frame.connect(Callable(self, "_complete_rpc_root_handoff"), CONNECT_ONE_SHOT)
+
+func _complete_rpc_root_handoff() -> void:
+	var tree := get_tree()
+	if tree == null:
+		queue_free()
+		return
+	var root := tree.root
+	var current := tree.current_scene
+	if root == null or current == null or current == self or current.get_parent() != root:
+		_rpc_handoff_attempts += 1
+		if _rpc_handoff_attempts >= 30:
+			queue_free()
+			return
+		tree.process_frame.connect(Callable(self, "_complete_rpc_root_handoff"), CONNECT_ONE_SHOT)
+		return
+	name = "LobbyRpcBridge"
+	current.name = "Main3"
+	queue_free()

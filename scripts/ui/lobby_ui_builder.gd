@@ -27,6 +27,7 @@ static func bind_scene_ui(
 		"lobby_weapon_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LoadoutRow/LobbyWeaponOption") as OptionButton,
 		"lobby_character_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/CharacterRow/LobbyCharacterOption") as OptionButton,
 		"lobby_map_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/MapRow/LobbyMapOption") as OptionButton,
+		"lobby_mode_option": owner.get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/ModeRow/LobbyModeOption") as OptionButton,
 		"lobby_room_bg": owner.get_node_or_null("LobbyUi/LobbyRoomBg") as ColorRect,
 		"lobby_room_title": owner.get_node_or_null("LobbyUi/LobbyRoomTitle") as Label
 	}
@@ -41,7 +42,8 @@ static func bind_scene_ui(
 		refs.get("lobby_refresh_button", null) as Control,
 		refs.get("lobby_leave_button", null) as Control,
 		refs.get("lobby_weapon_option", null) as Control,
-		refs.get("lobby_map_option", null) as Control
+		refs.get("lobby_map_option", null) as Control,
+		refs.get("lobby_mode_option", null) as Control
 	]
 	for control in controls:
 		if control != null and font != null:
@@ -54,6 +56,7 @@ static func bind_scene_ui(
 	var lobby_list := refs.get("lobby_list", null) as ItemList
 	var lobby_weapon_option := refs.get("lobby_weapon_option", null) as OptionButton
 	var lobby_map_option := refs.get("lobby_map_option", null) as OptionButton
+	var lobby_mode_option := refs.get("lobby_mode_option", null) as OptionButton
 	_connect_button_once(create_button, on_create_pressed)
 	_connect_button_once(join_button, on_join_pressed)
 	_connect_button_once(refresh_button, on_refresh_pressed)

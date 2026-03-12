@@ -63,6 +63,8 @@ func _connect_local_signals() -> void:
 		lobby_skin_option.item_selected.connect(_on_lobby_skin_selected)
 	if lobby_map_option != null:
 		lobby_map_option.item_selected.connect(_on_lobby_map_selected)
+	if lobby_mode_option != null:
+		lobby_mode_option.item_selected.connect(_on_lobby_mode_selected)
 
 	if auth_login_button != null:
 		auth_login_button.pressed.connect(_on_auth_login_pressed)
@@ -537,6 +539,8 @@ func _dev_auto_create_lobby_if_ready() -> void:
 		return
 	selected_map_id = MAP_ID_CLASSIC
 	client_target_map_id = MAP_ID_CLASSIC
+	selected_game_mode = GAME_MODE_DEATHMATCH
+	client_target_game_mode = GAME_MODE_DEATHMATCH
 	_persist_local_weapon_selection()
 	_persist_local_character_selection()
 	_persist_local_outage_skin_if_needed()
@@ -554,7 +558,8 @@ func _dev_auto_create_lobby_if_ready() -> void:
 		Callable(self, "_normalize_weapon_id"),
 		selected_weapon_id,
 		selected_map_id,
-		selected_character_id
+		selected_character_id,
+		selected_game_mode
 	)
 	_rpc_lobby_create.rpc_id(1, lobby_name, payload)
 
@@ -722,6 +727,17 @@ func _setup_map_picker() -> void:
 		return
 	map_flow_service.setup_lobby_map_picker(lobby_map_option, map_catalog, selected_map_id)
 	_apply_pixel_dropdown_popup(lobby_map_option)
+	_setup_mode_picker()
+
+func _setup_mode_picker() -> void:
+	if lobby_mode_option == null:
+		return
+	selected_game_mode = map_flow_service.select_mode_for_map(map_catalog, selected_map_id, selected_game_mode)
+	map_flow_service.setup_lobby_mode_picker(lobby_mode_option, map_catalog, selected_map_id, selected_game_mode)
+	if lobby_mode_label != null:
+		lobby_mode_label.visible = true
+	lobby_mode_option.visible = true
+	_apply_pixel_dropdown_popup(lobby_mode_option)
 
 func _setup_character_picker() -> void:
 	if lobby_character_option == null:
@@ -874,7 +890,8 @@ func _on_lobby_create_pressed() -> void:
 		Callable(self, "_normalize_weapon_id"),
 		selected_weapon_id,
 		selected_map_id,
-		selected_character_id
+		selected_character_id,
+		selected_game_mode
 	)
 	_rpc_lobby_create.rpc_id(1, _lobby_name_value(), payload)
 
@@ -974,8 +991,18 @@ func _on_lobby_map_selected(index: int) -> void:
 	if lobby_map_option == null:
 		return
 	selected_map_id = map_flow_service.normalize_map_id(map_catalog, str(lobby_map_option.get_item_metadata(index)))
+	selected_game_mode = map_flow_service.select_mode_for_map(map_catalog, selected_map_id, selected_game_mode)
+	_setup_mode_picker()
 	if client_lobby_id <= 0:
 		client_target_map_id = selected_map_id
+		client_target_game_mode = selected_game_mode
+
+func _on_lobby_mode_selected(index: int) -> void:
+	if lobby_mode_option == null:
+		return
+	selected_game_mode = map_flow_service.select_mode_for_map(map_catalog, selected_map_id, str(lobby_mode_option.get_item_metadata(index)))
+	if client_lobby_id <= 0:
+		client_target_game_mode = selected_game_mode
 
 func _persist_local_weapon_selection() -> void:
 	if lobby_service == null:
@@ -1029,6 +1056,7 @@ func _apply_pixel_dropdown_popups() -> void:
 	_apply_pixel_dropdown_popup(lobby_character_option)
 	_apply_pixel_dropdown_popup(lobby_skin_option)
 	_apply_pixel_dropdown_popup(lobby_map_option)
+	_apply_pixel_dropdown_popup(lobby_mode_option)
 
 func _apply_pixel_dropdown_popup(option: OptionButton) -> void:
 	if option == null:
@@ -1126,4 +1154,3 @@ func _pixel_empty_icon() -> Texture2D:
 	img.fill(Color(0, 0, 0, 0))
 	_pixel_empty_icon_texture = ImageTexture.create_from_image(img)
 	return _pixel_empty_icon_texture
-

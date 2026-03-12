@@ -25,6 +25,14 @@ var lobby_refresh_button: Button
 var lobby_leave_button: Button
 var lobby_room_bg: ColorRect
 var lobby_room_title: Label
+var _ctf_room_panel: PanelContainer
+var _ctf_room_title: Label
+var _ctf_room_red_label: Label
+var _ctf_room_blue_label: Label
+var _ctf_join_red_button: Button
+var _ctf_join_blue_button: Button
+var _ctf_start_button: Button
+var _ctf_room_callbacks: Dictionary = {}
 
 func configure(refs: Dictionary) -> void:
 	start_server_button = refs.get("start_server_button", null) as Button
@@ -51,6 +59,7 @@ func configure(refs: Dictionary) -> void:
 	lobby_leave_button = refs.get("lobby_leave_button", null) as Button
 	lobby_room_bg = refs.get("lobby_room_bg", null) as ColorRect
 	lobby_room_title = refs.get("lobby_room_title", null) as Label
+	_ensure_ctf_room_ui()
 
 func update_buttons(
 	has_active_session: bool,
@@ -173,6 +182,10 @@ func update_lobby_buttons_state(connected_client: bool, has_active_lobby: bool) 
 		lobby_refresh_button.disabled = not connected_client
 	if lobby_leave_button != null:
 		lobby_leave_button.disabled = not connected_client or not has_active_lobby
+	if _ctf_join_red_button != null:
+		_ctf_join_red_button.disabled = not connected_client
+	if _ctf_join_blue_button != null:
+		_ctf_join_blue_button.disabled = not connected_client
 
 func set_lobby_status(text: String) -> void:
 	if lobby_status_label != null:
@@ -200,9 +213,12 @@ func refresh_lobby_list_ui(entries: Array, active_lobby_id: int, default_max_pla
 		var map_name := str(item.get("map_name", "")).strip_edges()
 		if map_name.is_empty():
 			map_name = str(item.get("map_id", "")).strip_edges()
+		var mode_name := str(item.get("mode_name", "")).strip_edges()
 		var row := "%s  [%d/%d]" % [name, players_count, max_players]
 		if not map_name.is_empty():
 			row += "  {%s}" % map_name
+		if not mode_name.is_empty():
+			row += "  <%s>" % mode_name
 		var index := lobby_list.get_item_count()
 		lobby_list.add_item(row)
 		lobby_list.set_item_metadata(index, lobby_id)
@@ -220,6 +236,44 @@ func refresh_lobby_list_ui(entries: Array, active_lobby_id: int, default_max_pla
 		set_lobby_status("")
 	else:
 		set_lobby_status("Choose or create lobby.")
+
+func set_ctf_room_callbacks(on_join_red: Callable, on_join_blue: Callable, on_start_match: Callable) -> void:
+	_ctf_room_callbacks = {
+		"join_red": on_join_red,
+		"join_blue": on_join_blue,
+		"start_match": on_start_match
+	}
+
+func show_ctf_room(room_state: Dictionary, local_peer_id: int) -> void:
+	_ensure_ctf_room_ui()
+	if _ctf_room_panel == null:
+		return
+	var owner_peer_id := int(room_state.get("owner_peer_id", 0))
+	var room_name := str(room_state.get("name", "CTF Room"))
+	var teams := room_state.get("teams", {}) as Dictionary
+	var red_members := teams.get("red", []) as Array
+	var blue_members := teams.get("blue", []) as Array
+	var team_by_peer := room_state.get("team_by_peer", {}) as Dictionary
+	var local_team := int(team_by_peer.get(local_peer_id, -1))
+
+	if _ctf_room_title != null:
+		_ctf_room_title.text = "%s  |  CTF ROOM" % room_name
+	if _ctf_room_red_label != null:
+		_ctf_room_red_label.text = _team_text("RED TEAM", red_members)
+	if _ctf_room_blue_label != null:
+		_ctf_room_blue_label.text = _team_text("BLUE TEAM", blue_members)
+	if _ctf_join_red_button != null:
+		_ctf_join_red_button.disabled = local_team == 0
+	if _ctf_join_blue_button != null:
+		_ctf_join_blue_button.disabled = local_team == 1
+	if _ctf_start_button != null:
+		_ctf_start_button.disabled = owner_peer_id != local_peer_id or local_peer_id <= 0
+		_ctf_start_button.text = "START MATCH" if owner_peer_id == local_peer_id else "HOST STARTS"
+	_ctf_room_panel.visible = true
+
+func hide_ctf_room() -> void:
+	if _ctf_room_panel != null:
+		_ctf_room_panel.visible = false
 
 func update_ui_visibility(
 	lobby_scene_mode: bool,
@@ -250,13 +304,13 @@ func update_ui_visibility(
 			# Keep network controls/log visible in lobby mode so connect/start flow remains usable.
 			ui_panel.visible = true
 		else:
-			ui_panel.visible = not is_client_role or not local_spawned
+			ui_panel.visible = not local_spawned
 	if ping_label != null:
-		ping_label.visible = is_client_role and local_spawned
+		ping_label.visible = local_spawned and (is_client_role or is_server_role)
 	if kd_label != null:
-		kd_label.visible = is_client_role and local_spawned
+		kd_label.visible = local_spawned and (is_client_role or is_server_role)
 	if scoreboard_label != null:
-		scoreboard_label.visible = is_client_role and local_spawned and scoreboard_visible
+		scoreboard_label.visible = local_spawned and scoreboard_visible
 	if lobby_panel != null:
 		lobby_panel.visible = show_lobby_room and not auth_blocking
 	if lobby_room_bg != null:
@@ -265,6 +319,106 @@ func update_ui_visibility(
 		lobby_room_title.visible = show_lobby_room and lobby_room_title_enabled
 	if world_root != null:
 		world_root.visible = not lobby_scene_mode
+	if not show_lobby_room:
+		hide_ctf_room()
+
+func _ensure_ctf_room_ui() -> void:
+	if lobby_panel == null:
+		return
+	if _ctf_room_panel != null and is_instance_valid(_ctf_room_panel):
+		return
+	var panel := PanelContainer.new()
+	panel.name = "CtfRoomPanel"
+	panel.visible = false
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.offset_left = 14.0
+	panel.offset_top = 42.0
+	panel.offset_right = -14.0
+	panel.offset_bottom = -54.0
+	lobby_panel.add_child(panel)
+	_ctf_room_panel = panel
+
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 10)
+	panel.add_child(root)
+
+	var title := Label.new()
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.text = "CTF ROOM"
+	root.add_child(title)
+	_ctf_room_title = title
+
+	var teams_row := HBoxContainer.new()
+	teams_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	teams_row.add_theme_constant_override("separation", 12)
+	root.add_child(teams_row)
+
+	var red_label := Label.new()
+	red_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	red_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	red_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	red_label.text = "RED TEAM"
+	teams_row.add_child(red_label)
+	_ctf_room_red_label = red_label
+
+	var blue_label := Label.new()
+	blue_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	blue_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	blue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	blue_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	blue_label.text = "BLUE TEAM"
+	teams_row.add_child(blue_label)
+	_ctf_room_blue_label = blue_label
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	root.add_child(actions)
+
+	var join_red := Button.new()
+	join_red.text = "JOIN RED"
+	join_red.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_red.pressed.connect(func() -> void:
+		var cb := _ctf_room_callbacks.get("join_red", Callable()) as Callable
+		if cb.is_valid():
+			cb.call()
+	)
+	actions.add_child(join_red)
+	_ctf_join_red_button = join_red
+
+	var join_blue := Button.new()
+	join_blue.text = "JOIN BLUE"
+	join_blue.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_blue.pressed.connect(func() -> void:
+		var cb := _ctf_room_callbacks.get("join_blue", Callable()) as Callable
+		if cb.is_valid():
+			cb.call()
+	)
+	actions.add_child(join_blue)
+	_ctf_join_blue_button = join_blue
+
+	var start_match := Button.new()
+	start_match.text = "START MATCH"
+	start_match.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_match.pressed.connect(func() -> void:
+		var cb := _ctf_room_callbacks.get("start_match", Callable()) as Callable
+		if cb.is_valid():
+			cb.call()
+	)
+	actions.add_child(start_match)
+	_ctf_start_button = start_match
+
+func _team_text(title: String, members: Array) -> String:
+	var lines := PackedStringArray()
+	lines.append(title)
+	lines.append("")
+	for slot in range(2):
+		if slot < members.size() and members[slot] is Dictionary:
+			var entry := members[slot] as Dictionary
+			lines.append("%d. %s" % [slot + 1, str(entry.get("display_name", "Player"))])
+		else:
+			lines.append("%d. [EMPTY]" % (slot + 1))
+	return "\n".join(lines)
 
 func _peer_list_to_text(ids: PackedInt32Array) -> String:
 	if ids.is_empty():

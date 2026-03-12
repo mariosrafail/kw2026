@@ -389,7 +389,10 @@ func _apply_explosive_projectile_impact(projectile_id: int, impact_position: Vec
 		var scale := clampf(1.0 - (dist / radius) * 0.65, 0.35, 1.0)
 		var applied_damage := maxi(1, int(round(float(base_damage) * scale)))
 		var target_blood_position := target_player.global_position
-		hit_damage_resolver.server_apply_direct_damage(attacker_peer_id, target_peer_id, target_player, applied_damage, to_target)
+		var health_before := target_player.get_health()
+		var health_after := hit_damage_resolver.server_apply_direct_damage(attacker_peer_id, target_peer_id, target_player, applied_damage, to_target)
+		if health_after >= health_before:
+			continue
 		var blood_velocity := to_target.normalized() * 180.0 if to_target.length_squared() > 0.0001 else Vector2.UP * -120.0
 		var blood_color := Color(0.98, 0.02, 0.07, 1.0)
 		if target_player.has_method("get_torso_dominant_color"):

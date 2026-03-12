@@ -81,8 +81,11 @@ func _reset_runtime_state() -> void:
 	escape_return_nonce += 1
 	if dropped_mag_service != null:
 		dropped_mag_service.reset()
-	if target_dummy_bot_controller != null:
-		target_dummy_bot_controller.reset()
+	for controller in bot_controllers:
+		if controller != null:
+			controller.reset()
+	if ctf_match_controller != null:
+		ctf_match_controller.reset()
 	_clear_players()
 	projectile_system.clear()
 	input_states.clear()
@@ -108,6 +111,7 @@ func _reset_runtime_state() -> void:
 		lobby_service.reset(true)
 		lobby_entries.clear()
 		lobby_map_by_id.clear()
+		lobby_mode_by_id.clear()
 		client_lobby_id = 0
 		lobby_auto_action_inflight = false
 	_update_score_labels()
@@ -130,6 +134,7 @@ func _reset_spawn_request_state() -> void:
 func _set_client_lobby_id(value: int) -> void:
 	client_lobby_id = maxi(0, value)
 	_refresh_lobby_buttons()
+	_refresh_ctf_room_ui()
 
 func _set_lobby_auto_action_inflight(value: bool) -> void:
 	lobby_auto_action_inflight = value
@@ -138,7 +143,13 @@ func _set_lobby_auto_action_inflight(value: bool) -> void:
 func _clear_lobby_list() -> void:
 	lobby_entries.clear()
 	lobby_map_by_id.clear()
+	lobby_mode_by_id.clear()
+	peer_team_by_peer.clear()
+	active_lobby_room_state.clear()
+	if ctf_match_controller != null:
+		ctf_match_controller.reset()
 	ui_controller.clear_lobby_list()
+	ui_controller.hide_ctf_room()
 	_refresh_lobby_buttons()
 
 func _set_lobby_status(text: String) -> void:
@@ -147,6 +158,7 @@ func _set_lobby_status(text: String) -> void:
 func _refresh_lobby_list_ui(entries: Array, active_lobby_id: int) -> void:
 	lobby_entries = entries.duplicate(true)
 	ui_controller.refresh_lobby_list_ui(entries, active_lobby_id, map_catalog.max_players_for_id(selected_map_id))
+	_refresh_ctf_room_ui()
 	_refresh_lobby_buttons()
 
 func _refresh_lobby_buttons() -> void:
@@ -211,13 +223,42 @@ func _update_ui_visibility() -> void:
 		true,
 		auth_blocking
 	)
+	_refresh_ctf_room_ui()
+
+func _refresh_ctf_room_ui() -> void:
+	if ui_controller == null:
+		return
+	if not _uses_lobby_scene_flow():
+		ui_controller.hide_ctf_room()
+		return
+	if _is_local_player_spawned():
+		ui_controller.hide_ctf_room()
+		return
+	if client_lobby_id <= 0:
+		ui_controller.hide_ctf_room()
+		return
+	if active_lobby_room_state.is_empty():
+		ui_controller.hide_ctf_room()
+		return
+	var mode_id := map_flow_service.normalize_mode_id(str(active_lobby_room_state.get("mode_id", GAME_MODE_DEATHMATCH)))
+	if mode_id != GAME_MODE_CTF or bool(active_lobby_room_state.get("started", false)):
+		ui_controller.hide_ctf_room()
+		return
+	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
+	ui_controller.show_ctf_room(active_lobby_room_state, local_peer_id)
 
 func _update_score_labels() -> void:
 	var local_peer_id := 0
 	if multiplayer != null and multiplayer.multiplayer_peer != null:
 		local_peer_id = multiplayer.get_unique_id()
-	ui_controller.update_kd_label(local_peer_id, player_stats)
-	ui_controller.update_scoreboard_label(player_stats, player_display_names)
+	if _ctf_enabled() and ctf_match_controller != null:
+		if kd_label != null:
+			kd_label.text = ctf_match_controller.hud_score_text()
+		if scoreboard_label != null:
+			scoreboard_label.text = ctf_match_controller.scoreboard_text(player_stats, player_display_names)
+	else:
+		ui_controller.update_kd_label(local_peer_id, player_stats)
+		ui_controller.update_scoreboard_label(player_stats, player_display_names)
 	# Cooldown UI is updated per-frame in runtime_controller (client only).
 
 func _cooldown_text(prefix: String, remaining_sec: float) -> String:
@@ -277,8 +318,9 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 		var existing := players[peer_id] as NetPlayer
 		if existing != null:
 			if _is_target_dummy_peer(peer_id):
-				if target_dummy_bot_controller != null:
-					target_dummy_bot_controller.setup_spawned_player(existing, resolved_spawn, role == Role.CLIENT)
+				var bot_controller := _bot_controller_for_peer(peer_id)
+				if bot_controller != null:
+					bot_controller.setup_spawned_player(existing, resolved_spawn, role == Role.CLIENT)
 			elif existing.has_method("set_display_name"):
 				existing.call("set_display_name", _ensure_player_display_name(peer_id))
 				existing.set_weapon_visual(_weapon_visual_for_peer(peer_id))
@@ -296,9 +338,10 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	players_root.add_child(player)
 	player.configure(peer_id, _player_color(peer_id))
 	if _is_target_dummy_peer(peer_id):
-		if target_dummy_bot_controller != null:
-			player.configure(peer_id, target_dummy_bot_controller.BOT_COLOR)
-			target_dummy_bot_controller.setup_spawned_player(player, resolved_spawn, role == Role.CLIENT)
+		var bot_controller := _bot_controller_for_peer(peer_id)
+		if bot_controller != null:
+			player.configure(peer_id, bot_controller.bot_color)
+			bot_controller.setup_spawned_player(player, resolved_spawn, role == Role.CLIENT)
 	elif player.has_method("set_display_name"):
 		player.call("set_display_name", _ensure_player_display_name(peer_id))
 		player.use_network_smoothing = role == Role.CLIENT and peer_id != multiplayer.get_unique_id()
@@ -315,9 +358,7 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	players[peer_id] = player
 	combat_flow_service.record_player_history(peer_id, resolved_spawn)
 	if role == Role.SERVER and multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
-		if target_dummy_bot_controller != null:
-			target_dummy_bot_controller.set_lobby_id(_peer_lobby(peer_id))
-		_ensure_target_dummy(resolved_spawn)
+		_server_ensure_bots_if_needed()
 	_update_peer_labels()
 	_update_ui_visibility()
 	if peer_id == multiplayer.get_unique_id() and _uses_lobby_scene_flow():
@@ -336,6 +377,7 @@ func _remove_player_local(peer_id: int) -> void:
 	peer_weapon_ids.erase(peer_id)
 	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
+	peer_team_by_peer.erase(peer_id)
 	_update_peer_labels()
 	_update_ui_visibility()
 func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
@@ -356,7 +398,11 @@ func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
 	peer_weapon_ids.erase(peer_id)
 	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
+	peer_team_by_peer.erase(peer_id)
 	spawn_slots.erase(peer_id)
+	if ctf_match_controller != null:
+		ctf_match_controller.drop_flag_for_peer(peer_id, _player_world_position_or_flag(peer_id))
+		_sync_ctf_flag_to_clients()
 	_update_peer_labels()
 	_update_score_labels()
 
@@ -486,12 +532,23 @@ func _server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 	if effective_lobby <= 0:
 		return
 	if _uses_lobby_scene_flow():
+		if _ctf_room_holds_in_lobby(effective_lobby):
+			_server_send_lobby_room_state_to_peer(peer_id, effective_lobby)
+			return
 		var lobby_map_id := _lobby_map_id(effective_lobby)
 		if lobby_map_id.is_empty():
 			lobby_map_id = selected_map_id
 		_server_switch_lobby_to_map_scene(effective_lobby, lobby_map_id, peer_id)
 		return
 	combat_flow_service.server_spawn_peer_if_needed(peer_id, effective_lobby)
+	if _ctf_enabled() and peer_id > 0:
+		for controller in bot_controllers:
+			if controller == null:
+				continue
+			var bot_player := players.get(controller.peer_id(), null) as NetPlayer
+			if bot_player == null:
+				continue
+			_send_spawn_player_rpc(peer_id, controller.peer_id(), bot_player.global_position, controller.display_name())
 	if dropped_mag_service != null:
 		dropped_mag_service.sync_all_to_peer(peer_id)
 	_update_peer_labels()
@@ -501,6 +558,11 @@ func _server_switch_lobby_to_map_scene(lobby_id: int, map_id: String, trigger_pe
 	if lobby_id <= 0:
 		return
 	var normalized_map := map_flow_service.normalize_map_id(map_catalog, map_id)
+	var lobby_mode := GAME_MODE_DEATHMATCH
+	if lobby_service != null:
+		var lobby := lobby_service.get_lobby_data(lobby_id)
+		if not lobby.is_empty():
+			lobby_mode = map_flow_service.normalize_mode_id(str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)))
 	var target_scene := map_flow_service.scene_path_for_id(map_catalog, normalized_map)
 	if target_scene.strip_edges().is_empty():
 		return
@@ -520,7 +582,8 @@ func _server_switch_lobby_to_map_scene(lobby_id: int, map_id: String, trigger_pe
 		_send_scene_switch_rpc(member_id, normalized_map)
 
 	if multiplayer.is_server():
-		_switch_to_map_scene(normalized_map)
+		_append_log("Server lobby->map switch: lobby_id=%d map=%s mode=%s scene=%s" % [lobby_id, normalized_map, lobby_mode, target_scene])
+		_switch_to_map_scene(normalized_map, lobby_mode)
 
 func _server_sync_player_stats(peer_id: int) -> void:
 	if _is_target_dummy_peer(peer_id):
@@ -534,23 +597,30 @@ func _server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> 
 	_update_score_labels()
 
 func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
+	var death_position := player.global_position if player != null else Vector2.ZERO
+	if ctf_match_controller != null:
+		ctf_match_controller.drop_flag_for_peer(peer_id, death_position)
+		_sync_ctf_flag_to_clients()
 	if _is_target_dummy_peer(peer_id):
-		if target_dummy_bot_controller != null:
-			target_dummy_bot_controller.respawn_player(player)
+		var bot_controller := _bot_controller_for_peer(peer_id)
+		if bot_controller != null:
+			bot_controller.respawn_player(player)
 		return
 	combat_flow_service.server_respawn_player(peer_id, player)
 
 func _is_target_dummy_peer(peer_id: int) -> bool:
-	return target_dummy_bot_controller != null and target_dummy_bot_controller.is_bot_peer(peer_id)
+	for controller in bot_controllers:
+		if controller != null and controller.is_bot_peer(peer_id):
+			return true
+	return false
 
-func _ensure_target_dummy(_anchor_position: Vector2) -> void:
-	if _uses_lobby_scene_flow():
-		return
-	if players_root == null or target_dummy_bot_controller == null:
-		return
-	target_dummy_bot_controller.ensure_spawned(PLAYER_SCENE, _anchor_position)
+func _bot_controller_for_peer(peer_id: int) -> TargetDummyBotController:
+	for controller in bot_controllers:
+		if controller != null and controller.is_bot_peer(peer_id):
+			return controller
+	return null
 
-func _broadcast_target_dummy_spawn(spawn_position: Vector2) -> void:
+func _broadcast_target_dummy_spawn(bot_peer_id: int, bot_name: String, spawn_position: Vector2) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return
 	var recipients: Array = []
@@ -568,35 +638,77 @@ func _broadcast_target_dummy_spawn(spawn_position: Vector2) -> void:
 		var member_id := int(member_value)
 		if member_id <= 0:
 			continue
-		var target_peer_id := target_dummy_bot_controller.peer_id() if target_dummy_bot_controller != null else -1001
-		var target_name := target_dummy_bot_controller.display_name() if target_dummy_bot_controller != null else "TARGET DUMMY"
-		_send_spawn_player_rpc(member_id, target_peer_id, spawn_position, target_name)
+		_send_spawn_player_rpc(member_id, bot_peer_id, spawn_position, bot_name)
 
-func _server_ensure_target_dummy_if_needed() -> void:
+func _server_ensure_bots_if_needed() -> void:
 	if role != Role.SERVER:
 		return
 	if _uses_lobby_scene_flow():
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return
+	var anchor_player: NetPlayer = null
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		if _is_target_dummy_peer(peer_id):
+			continue
+		anchor_player = players.get(peer_id, null) as NetPlayer
+		if anchor_player != null:
+			break
+	if anchor_player == null:
+		return
+	var lobby_id := _peer_lobby(anchor_player.peer_id)
+	if _ctf_enabled():
+		_assign_ctf_teams(lobby_id)
+		var planned_teams := _planned_ctf_team_assignments(lobby_id)
+		_append_log("CTF bot fill: lobby_id=%d human_count=%d planned=%s" % [
+			lobby_id,
+			_human_participant_count(lobby_id),
+			str(planned_teams)
+		])
+		for index in range(bot_controllers.size()):
+			var controller := bot_controllers[index]
+			if controller == null:
+				continue
+			controller.set_lobby_id(lobby_id)
+			var should_exist := planned_teams.has(controller.peer_id())
+			if should_exist and not players.has(controller.peer_id()):
+				_append_log("CTF bot spawn: peer_id=%d team=%d" % [controller.peer_id(), int(planned_teams.get(controller.peer_id(), -1))])
+				controller.ensure_spawned(PLAYER_SCENE, anchor_player.global_position)
+			elif not should_exist and players.has(controller.peer_id()):
+				_server_remove_player(controller.peer_id(), [])
+			if should_exist:
+				var spawn_position := _spawn_position_for_peer(controller.peer_id())
+				if spawn_position != Vector2.ZERO:
+					var previous_spawn := controller.get_spawn_position()
+					controller.set_spawn_position(spawn_position)
+					var bot_player := players.get(controller.peer_id(), null) as NetPlayer
+					if bot_player != null and (previous_spawn == Vector2.ZERO or previous_spawn.distance_squared_to(spawn_position) > 1.0):
+						controller.setup_spawned_player(bot_player, spawn_position, false)
+						bot_player.force_respawn(spawn_position)
+		_configure_ctf_bot_targets(lobby_id)
+		_assign_ctf_teams(lobby_id)
+		if ctf_match_controller != null:
+			ctf_match_controller.server_tick(true, 0.0)
+		return
 	if target_dummy_bot_controller == null:
 		return
+	target_dummy_bot_controller.set_lobby_id(lobby_id)
 	if not players.has(target_dummy_bot_controller.peer_id()):
-		for peer_value in players.keys():
-			var peer_id := int(peer_value)
-			if _is_target_dummy_peer(peer_id):
-				continue
-			var anchor_player := players.get(peer_id, null) as NetPlayer
-			if anchor_player == null:
-				continue
-			target_dummy_bot_controller.set_lobby_id(_peer_lobby(peer_id))
-			_ensure_target_dummy(anchor_player.global_position)
-			return
+		target_dummy_bot_controller.ensure_spawned(PLAYER_SCENE, anchor_player.global_position)
 
 func _server_tick_target_dummy_bot(delta: float) -> void:
-	if role != Role.SERVER or target_dummy_bot_controller == null:
+	if role != Role.SERVER:
 		return
-	target_dummy_bot_controller.tick(delta)
+	for controller in bot_controllers:
+		if controller == null:
+			continue
+		if players.has(controller.peer_id()):
+			controller.tick(delta)
+	if ctf_match_controller != null:
+		ctf_match_controller.server_tick(_ctf_enabled(), delta)
+		if _ctf_enabled():
+			_sync_ctf_flag_to_clients()
 
 func _server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 	player_replication.server_broadcast_player_state(peer_id, player)
@@ -621,12 +733,59 @@ func _server_send_lobby_action_result(peer_id: int, success: bool, message: Stri
 		return
 	_rpc_lobby_action_result.rpc_id(peer_id, success, message, active_lobby_id, map_id, _uses_lobby_scene_flow())
 
+func _server_send_lobby_room_state_to_peer(peer_id: int, lobby_id: int) -> void:
+	if lobby_service == null or peer_id <= 0 or lobby_id <= 0:
+		return
+	var payload := lobby_service.pack_lobby_room_state(lobby_id)
+	if peer_id == multiplayer.get_unique_id():
+		_rpc_lobby_room_state(payload)
+		return
+	_rpc_lobby_room_state.rpc_id(peer_id, payload)
+
+func _server_broadcast_lobby_room_state(lobby_id: int) -> void:
+	if lobby_service == null or lobby_id <= 0:
+		return
+	var recipients := _lobby_members(lobby_id)
+	if multiplayer != null and multiplayer.multiplayer_peer != null:
+		var self_peer_id := multiplayer.get_unique_id()
+		if self_peer_id > 0 and not recipients.has(self_peer_id):
+			recipients.append(self_peer_id)
+	for peer_value in recipients:
+		_server_send_lobby_room_state_to_peer(int(peer_value), lobby_id)
+
 func _send_scene_switch_rpc(peer_id: int, map_id: String) -> void:
 	var normalized_map := map_flow_service.normalize_map_id(map_catalog, map_id)
 	if peer_id == multiplayer.get_unique_id():
 		_rpc_scene_switch_to_map(normalized_map)
 		return
 	_rpc_scene_switch_to_map.rpc_id(peer_id, normalized_map)
+
+func _request_ctf_team(team_id: int) -> void:
+	if not _is_client_connected() or client_lobby_id <= 0:
+		return
+	_rpc_lobby_set_team.rpc_id(1, team_id)
+
+func _request_ctf_start_match() -> void:
+	if not _is_client_connected() or client_lobby_id <= 0:
+		return
+	_set_lobby_status("Starting CTF match...")
+	_rpc_lobby_start_match.rpc_id(1)
+
+func _server_start_ctf_lobby_match(peer_id: int) -> void:
+	if lobby_service == null:
+		return
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_id <= 0 or not lobby_service.is_ctf_lobby(lobby_id):
+		_server_send_lobby_action_result(peer_id, false, "CTF lobby not found.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	if lobby_service.owner_peer_for_lobby(lobby_id) != peer_id:
+		_server_send_lobby_action_result(peer_id, false, "Only the host can start.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	_prepare_ctf_match_team_assignments(lobby_id)
+	_append_log("CTF start: lobby_id=%d teams=%s" % [lobby_id, str(lobby_service.team_assignments_for_lobby(lobby_id))])
+	lobby_service.set_lobby_started(lobby_id, true)
+	_server_broadcast_lobby_room_state(lobby_id)
+	_server_switch_lobby_to_map_scene(lobby_id, _lobby_map_id(lobby_id), peer_id)
 
 func _try_switch_to_target_map_scene() -> void:
 	if not _uses_lobby_scene_flow():
@@ -646,7 +805,7 @@ func _try_switch_to_target_map_scene() -> void:
 	)
 	_switch_to_map_scene(target_map_id)
 
-func _switch_to_map_scene(map_id: String) -> void:
+func _switch_to_map_scene(map_id: String, forced_mode_id: String = "") -> void:
 	var normalized_map := map_flow_service.normalize_map_id(map_catalog, map_id)
 	var scene_path := map_flow_service.scene_path_for_id(map_catalog, normalized_map)
 	if scene_path.strip_edges().is_empty():
@@ -655,8 +814,12 @@ func _switch_to_map_scene(map_id: String) -> void:
 		return
 	if scene_path == scene_file_path:
 		return
+	var next_mode := _active_game_mode()
+	if not forced_mode_id.strip_edges().is_empty():
+		next_mode = map_flow_service.normalize_mode_id(forced_mode_id)
+	ProjectSettings.set_setting("kw/pending_game_mode", next_mode)
 	pending_scene_switch = scene_path
-	_append_log("Scene switch request: lobby_id=%d map=%s scene=%s" % [client_lobby_id, normalized_map, scene_path])
+	_append_log("Scene switch request: lobby_id=%d map=%s mode=%s scene=%s" % [client_lobby_id, normalized_map, next_mode, scene_path])
 	call_deferred("_deferred_scene_switch")
 
 func _deferred_scene_switch() -> void:
@@ -734,61 +897,103 @@ func _send_despawn_dropped_mag_rpc(target_peer_id: int, mag_id: int) -> void:
 	_rpc_despawn_dropped_mag.rpc_id(target_peer_id, mag_id)
 
 func _send_reload_sfx_rpc(target_peer_id: int, peer_id: int, weapon_id: String) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_play_reload_sfx.rpc_id(target_peer_id, peer_id, weapon_id)
 
 func _send_spawn_projectile_rpc(target_peer_id: int, projectile_id: int, owner_peer_id: int, spawn_position: Vector2, velocity: Vector2, lag_comp_ms: int, trail_origin: Vector2, weapon_id: String) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_spawn_projectile.rpc_id(target_peer_id, projectile_id, owner_peer_id, spawn_position, velocity, lag_comp_ms, trail_origin, weapon_id)
 
 func _send_spawn_blood_particles_rpc(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2, blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), count_multiplier: float = 1.0) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_spawn_blood_particles.rpc_id(target_peer_id, impact_position, incoming_velocity, blood_color, count_multiplier)
 
 func _send_spawn_surface_particles_rpc(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_spawn_surface_particles.rpc_id(target_peer_id, impact_position, incoming_velocity, particle_color)
 
 func _send_projectile_impact_rpc(target_peer_id: int, projectile_id: int, impact_position: Vector2) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_projectile_impact.rpc_id(target_peer_id, projectile_id, impact_position)
 
 func _send_despawn_projectile_rpc(target_peer_id: int, projectile_id: int) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_despawn_projectile.rpc_id(target_peer_id, projectile_id)
 
 func _play_death_sfx_local(impact_position: Vector2) -> void:
 	combat_effects.play_death_sfx(impact_position)
 
 func _send_play_death_sfx_rpc(target_peer_id: int, impact_position: Vector2) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
 	_rpc_play_death_sfx.rpc_id(target_peer_id, impact_position)
 
 func _send_spawn_outrage_bomb_rpc(target_peer_id: int, caster_peer_id: int, world_position: Vector2, fuse_sec: float) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		_rpc_spawn_outrage_bomb(caster_peer_id, world_position, fuse_sec)
+		return
 	_rpc_spawn_outrage_bomb.rpc_id(target_peer_id, caster_peer_id, world_position, fuse_sec)
 
 func _send_spawn_erebus_immunity_rpc(target_peer_id: int, caster_peer_id: int, duration_sec: float) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		_rpc_spawn_erebus_immunity(caster_peer_id, duration_sec)
+		return
 	_rpc_spawn_erebus_immunity.rpc_id(target_peer_id, caster_peer_id, duration_sec)
 
 func _send_spawn_erebus_shield_rpc(target_peer_id: int, caster_peer_id: int, duration_sec: float) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		_rpc_spawn_erebus_shield(caster_peer_id, duration_sec)
+		return
 	_rpc_spawn_erebus_shield.rpc_id(target_peer_id, caster_peer_id, duration_sec)
 
 func _send_skill_cast_rpc(target_peer_id: int, skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
 	"""Generic skill cast RPC dispatcher - routes to appropriate warrior skill RPC"""
+	var target_is_local_server := multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id()
 	var warrior_id = _warrior_id_for_peer(caster_peer_id)
 	match warrior_id:
 		"outrage":
 			if skill_number == 1:
 				# Outrage Skill 1: Bomb Blast
-				_rpc_spawn_outrage_bomb.rpc_id(target_peer_id, caster_peer_id, target_world, 0.9)
+				if target_is_local_server:
+					_rpc_spawn_outrage_bomb(caster_peer_id, target_world, 0.9)
+				else:
+					_rpc_spawn_outrage_bomb.rpc_id(target_peer_id, caster_peer_id, target_world, 0.9)
 			elif skill_number == 2:
 				# Outrage Skill 2: Damage Boost
-				_rpc_spawn_outrage_boost.rpc_id(target_peer_id, caster_peer_id, 4.0)
+				if target_is_local_server:
+					_rpc_spawn_outrage_boost(caster_peer_id, 4.0)
+				else:
+					_rpc_spawn_outrage_boost.rpc_id(target_peer_id, caster_peer_id, 4.0)
 		"erebus":
 			if skill_number == 1:
 				# Erebus Skill 1: Immunity
-				_rpc_spawn_erebus_immunity.rpc_id(target_peer_id, caster_peer_id, 5.0)
+				if target_is_local_server:
+					_rpc_spawn_erebus_immunity(caster_peer_id, 5.0)
+				else:
+					_rpc_spawn_erebus_immunity.rpc_id(target_peer_id, caster_peer_id, 5.0)
 			elif skill_number == 2:
 				# Erebus Skill 2: Shield
-				_rpc_spawn_erebus_shield.rpc_id(target_peer_id, caster_peer_id, 6.0)
+				if target_is_local_server:
+					_rpc_spawn_erebus_shield(caster_peer_id, 6.0)
+				else:
+					_rpc_spawn_erebus_shield.rpc_id(target_peer_id, caster_peer_id, 6.0)
 		"tasko":
 			if skill_number == 1:
-				_rpc_spawn_tasko_invis_field.rpc_id(target_peer_id, caster_peer_id, target_world)
+				if target_is_local_server:
+					_rpc_spawn_tasko_invis_field(caster_peer_id, target_world)
+				else:
+					_rpc_spawn_tasko_invis_field.rpc_id(target_peer_id, caster_peer_id, target_world)
 			elif skill_number == 2:
-				_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+				if target_is_local_server:
+					_rpc_spawn_tasko_mine(caster_peer_id, target_world)
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
 
 func _warrior_id_for_peer(peer_id: int) -> String:
 	var normalized := str(peer_character_ids.get(peer_id, "")).strip_edges().to_lower()
@@ -832,6 +1037,10 @@ func _default_input_state() -> Dictionary:
 	}
 
 func _spawn_position_for_peer(peer_id: int) -> Vector2:
+	if _ctf_enabled() and ctf_match_controller != null:
+		var ctf_spawn := ctf_match_controller.spawn_position_for_peer(peer_id)
+		if ctf_spawn != Vector2.ZERO:
+			return ctf_spawn
 	return spawn_identity.spawn_position_for_peer(peer_id)
 
 func _random_spawn_position() -> Vector2:
@@ -1117,7 +1326,10 @@ func _has_active_lobbies() -> bool:
 
 func _peer_lobby(peer_id: int) -> int:
 	if _is_target_dummy_peer(peer_id):
-		return _target_dummy_lobby_id()
+		var bot_controller := _bot_controller_for_peer(peer_id)
+		if bot_controller != null and bot_controller.get_lobby_id() > 0:
+			return bot_controller.get_lobby_id()
+		return 0
 	if lobby_service != null:
 		var tracked_lobby := lobby_service.get_peer_lobby(peer_id)
 		if tracked_lobby > 0:
@@ -1129,8 +1341,9 @@ func _peer_lobby(peer_id: int) -> int:
 	return 0
 
 func _target_dummy_lobby_id() -> int:
-	if target_dummy_bot_controller != null and target_dummy_bot_controller.get_lobby_id() > 0:
-		return target_dummy_bot_controller.get_lobby_id()
+	for controller in bot_controllers:
+		if controller != null and controller.get_lobby_id() > 0:
+			return controller.get_lobby_id()
 	if lobby_service != null:
 		for peer_value in players.keys():
 			var candidate_peer_id := int(peer_value)
@@ -1138,18 +1351,277 @@ func _target_dummy_lobby_id() -> int:
 				continue
 			var tracked_lobby := lobby_service.get_peer_lobby(candidate_peer_id)
 			if tracked_lobby > 0:
-				if target_dummy_bot_controller != null:
-					target_dummy_bot_controller.set_lobby_id(tracked_lobby)
+				for controller in bot_controllers:
+					if controller != null:
+						controller.set_lobby_id(tracked_lobby)
 				return tracked_lobby
 		if client_lobby_id > 0:
-			if target_dummy_bot_controller != null:
-				target_dummy_bot_controller.set_lobby_id(client_lobby_id)
+			for controller in bot_controllers:
+				if controller != null:
+					controller.set_lobby_id(client_lobby_id)
 			return client_lobby_id
 	if not _uses_lobby_scene_flow():
-		if target_dummy_bot_controller != null:
-			target_dummy_bot_controller.set_lobby_id(1)
+		for controller in bot_controllers:
+			if controller != null:
+				controller.set_lobby_id(1)
 		return 1
 	return 0
+
+func _active_game_mode() -> String:
+	if client_lobby_id > 0 and lobby_mode_by_id.has(client_lobby_id):
+		return str(lobby_mode_by_id.get(client_lobby_id, GAME_MODE_DEATHMATCH))
+	if role == Role.SERVER and multiplayer != null and multiplayer.multiplayer_peer != null:
+		var local_lobby_id := _peer_lobby(multiplayer.get_unique_id())
+		if local_lobby_id > 0 and lobby_service != null:
+			var lobby := lobby_service.get_lobby_data(local_lobby_id)
+			if not lobby.is_empty():
+				return map_flow_service.normalize_mode_id(str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)))
+	return map_flow_service.normalize_mode_id(client_target_game_mode if not client_target_game_mode.is_empty() else selected_game_mode)
+
+func _ctf_enabled() -> bool:
+	return _active_game_mode() == GAME_MODE_CTF
+
+func _human_participant_count(lobby_id: int) -> int:
+	var count := 0
+	for member_value in _lobby_members(lobby_id):
+		var member_id := int(member_value)
+		if member_id > 0:
+			count += 1
+	return count
+
+func _active_match_participant_count(lobby_id: int) -> int:
+	var count := _human_participant_count(lobby_id)
+	for controller in bot_controllers:
+		if controller != null and controller.get_lobby_id() == lobby_id and players.has(controller.peer_id()):
+			count += 1
+	return count
+
+func _assign_ctf_teams(lobby_id: int) -> void:
+	if lobby_id <= 0 or ctf_match_controller == null:
+		return
+	var planned := _planned_ctf_team_assignments(lobby_id)
+	if planned.is_empty():
+		var participants: Array[int] = []
+		for member_value in _lobby_members(lobby_id):
+			var member_id := int(member_value)
+			if member_id > 0 and not participants.has(member_id):
+				participants.append(member_id)
+		for controller in bot_controllers:
+			if controller == null:
+				continue
+			if controller.get_lobby_id() != lobby_id:
+				continue
+			if players.has(controller.peer_id()) and not participants.has(controller.peer_id()):
+				participants.append(controller.peer_id())
+		ctf_match_controller.assign_teams(participants)
+		return
+	peer_team_by_peer.clear()
+	for peer_value in planned.keys():
+		peer_team_by_peer[int(peer_value)] = int(planned.get(peer_value, 0))
+	ctf_match_controller.assign_teams([])
+
+func _planned_ctf_team_assignments(lobby_id: int) -> Dictionary:
+	if lobby_service == null or lobby_id <= 0:
+		return {}
+	var planned := lobby_service.team_assignments_for_lobby(lobby_id)
+	if planned.is_empty():
+		return {}
+	var out: Dictionary = {}
+	for peer_value in planned.keys():
+		out[int(peer_value)] = int(planned.get(peer_value, -1))
+	return out
+
+func _ctf_room_holds_in_lobby(lobby_id: int) -> bool:
+	if lobby_service == null or lobby_id <= 0:
+		return false
+	return lobby_service.is_ctf_lobby(lobby_id) and not lobby_service.lobby_started(lobby_id)
+
+func _prepare_ctf_match_team_assignments(lobby_id: int) -> void:
+	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_ctf_lobby(lobby_id):
+		return
+	lobby_service.clear_non_member_teams(lobby_id)
+	var teams := lobby_service.team_assignments_for_lobby(lobby_id)
+	var human_members := _lobby_members(lobby_id)
+	var red_count := 0
+	var blue_count := 0
+	for peer_value in teams.keys():
+		var peer_id := int(peer_value)
+		if peer_id < 0:
+			continue
+		var team_id := int(teams.get(peer_id, -1))
+		if team_id == 1:
+			blue_count += 1
+		else:
+			red_count += 1
+	var bot_assignments: Dictionary = {}
+	if human_members.size() == 1:
+		var solo_peer_id := int(human_members[0])
+		var solo_team_id := int(teams.get(solo_peer_id, 0))
+		var enemy_team_id := 1 if solo_team_id == 0 else 0
+		if bot_controllers.size() > 0 and bot_controllers[0] != null:
+			bot_assignments[(bot_controllers[0] as TargetDummyBotController).peer_id()] = solo_team_id
+		if bot_controllers.size() > 1 and bot_controllers[1] != null:
+			bot_assignments[(bot_controllers[1] as TargetDummyBotController).peer_id()] = enemy_team_id
+		if bot_controllers.size() > 2 and bot_controllers[2] != null:
+			bot_assignments[(bot_controllers[2] as TargetDummyBotController).peer_id()] = enemy_team_id
+	else:
+		for controller in bot_controllers:
+			if controller == null:
+				continue
+			var team_id := -1
+			if red_count < 2:
+				team_id = 0
+				red_count += 1
+			elif blue_count < 2:
+				team_id = 1
+				blue_count += 1
+			if team_id < 0:
+				break
+			bot_assignments[controller.peer_id()] = team_id
+	lobby_service.set_bot_team_assignments(lobby_id, bot_assignments)
+
+func _configure_ctf_bot_targets(lobby_id: int) -> void:
+	if lobby_id <= 0:
+		return
+	var human_members := _lobby_members(lobby_id)
+	if human_members.size() != 1:
+		for controller in bot_controllers:
+			if controller != null:
+				controller.set_preferred_target_peer_id(0)
+		return
+	var solo_peer_id := int(human_members[0])
+	var ally_bot_peer_id := 0
+	var enemy_bot_peer_ids: Array[int] = []
+	for controller in bot_controllers:
+		if controller == null:
+			continue
+		var bot_peer_id := controller.peer_id()
+		if _team_for_peer(bot_peer_id) == _team_for_peer(solo_peer_id):
+			ally_bot_peer_id = bot_peer_id
+		else:
+			enemy_bot_peer_ids.append(bot_peer_id)
+	enemy_bot_peer_ids.sort()
+	for controller in bot_controllers:
+		if controller == null:
+			continue
+		var bot_peer_id := controller.peer_id()
+		if bot_peer_id == ally_bot_peer_id:
+			if not enemy_bot_peer_ids.is_empty():
+				controller.set_preferred_target_peer_id(enemy_bot_peer_ids[0])
+			else:
+				controller.set_preferred_target_peer_id(0)
+			continue
+		if not enemy_bot_peer_ids.has(bot_peer_id):
+			controller.set_preferred_target_peer_id(0)
+			continue
+		var enemy_index := enemy_bot_peer_ids.find(bot_peer_id)
+		if enemy_index == 0:
+			controller.set_preferred_target_peer_id(solo_peer_id)
+		elif ally_bot_peer_id != 0:
+			controller.set_preferred_target_peer_id(ally_bot_peer_id)
+		else:
+			controller.set_preferred_target_peer_id(solo_peer_id)
+
+func _team_for_peer(peer_id: int) -> int:
+	if ctf_match_controller != null:
+		return ctf_match_controller.team_for_peer(peer_id)
+	return int(peer_team_by_peer.get(peer_id, -1))
+
+func _bot_movement_goal_position(peer_id: int) -> Vector2:
+	if not _ctf_enabled() or ctf_match_controller == null:
+		return Vector2.ZERO
+	if not ctf_match_controller.is_peer_carrying_flag(peer_id):
+		return Vector2.ZERO
+	var team_id := _team_for_peer(peer_id)
+	if team_id < 0:
+		return Vector2.ZERO
+	return ctf_match_controller.capture_goal_for_team(team_id)
+
+func _is_enemy_target(attacker_peer_id: int, target_peer_id: int) -> bool:
+	if attacker_peer_id == target_peer_id:
+		return false
+	if not _ctf_enabled():
+		return true
+	if ctf_match_controller != null:
+		return ctf_match_controller.is_enemy_target(attacker_peer_id, target_peer_id)
+	return _team_for_peer(attacker_peer_id) != _team_for_peer(target_peer_id)
+
+func _can_damage_peer(attacker_peer_id: int, target_peer_id: int) -> bool:
+	return _is_enemy_target(attacker_peer_id, target_peer_id)
+
+func _player_world_position_or_flag(peer_id: int) -> Vector2:
+	var player := players.get(peer_id, null) as NetPlayer
+	if player != null:
+		return player.global_position
+	return Vector2.ZERO
+
+func _ensure_ctf_flag_spawned() -> void:
+	if not _ctf_enabled() or world_root == null:
+		return
+	if ctf_flag_root != null and is_instance_valid(ctf_flag_root):
+		return
+	ctf_flag_root = Area2D.new()
+	ctf_flag_root.name = "CtfFlag"
+	ctf_flag_root.collision_layer = 0
+	ctf_flag_root.collision_mask = 0
+	world_root.add_child(ctf_flag_root)
+	ctf_flag_visual = Polygon2D.new()
+	ctf_flag_visual.polygon = PackedVector2Array([
+		Vector2(-10.0, -10.0),
+		Vector2(10.0, -10.0),
+		Vector2(10.0, 10.0),
+		Vector2(-10.0, 10.0)
+	])
+	ctf_flag_visual.color = Color(0.92, 0.18, 0.16, 1.0)
+	ctf_flag_visual.z_index = 60
+	ctf_flag_root.add_child(ctf_flag_visual)
+	if ctf_flag_world_position == Vector2.ZERO:
+		ctf_flag_world_position = Vector2(640.0, 360.0)
+	ctf_flag_root.global_position = ctf_flag_world_position
+
+func _server_tick_ctf_flag() -> void:
+	_ensure_ctf_flag_spawned()
+	if ctf_flag_root == null:
+		return
+	if ctf_flag_carrier_peer_id > 0:
+		var carrier := players.get(ctf_flag_carrier_peer_id, null) as NetPlayer
+		if carrier == null or carrier.get_health() <= 0:
+			_drop_ctf_flag(_player_world_position_or_flag(ctf_flag_carrier_peer_id))
+		else:
+			ctf_flag_world_position = carrier.global_position + Vector2(0.0, -28.0)
+			ctf_flag_root.global_position = ctf_flag_world_position
+			_sync_ctf_flag_to_clients()
+			return
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		var player := players.get(peer_id, null) as NetPlayer
+		if player == null or player.get_health() <= 0:
+			continue
+		if player.global_position.distance_to(ctf_flag_world_position) <= 22.0:
+			ctf_flag_carrier_peer_id = peer_id
+			ctf_flag_world_position = player.global_position + Vector2(0.0, -28.0)
+			ctf_flag_root.global_position = ctf_flag_world_position
+			_sync_ctf_flag_to_clients()
+			return
+	ctf_flag_root.global_position = ctf_flag_world_position
+	_sync_ctf_flag_to_clients()
+
+func _drop_ctf_flag(world_position: Vector2) -> void:
+	ctf_flag_carrier_peer_id = 0
+	ctf_flag_world_position = world_position
+	if ctf_flag_root != null and is_instance_valid(ctf_flag_root):
+		ctf_flag_root.global_position = world_position
+	_sync_ctf_flag_to_clients()
+
+func _sync_ctf_flag_to_clients() -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null or ctf_match_controller == null:
+		return
+	ctf_flag_carrier_peer_id = ctf_match_controller.flag_carrier_peer_id()
+	ctf_flag_world_position = ctf_match_controller.flag_world_position()
+	var red_score := ctf_match_controller.team_score(0)
+	var blue_score := ctf_match_controller.team_score(1)
+	for peer_value in multiplayer.get_peers():
+		_rpc_sync_ctf_flag.rpc_id(int(peer_value), ctf_flag_carrier_peer_id, ctf_flag_world_position, red_score, blue_score)
 
 func _lobby_members(lobby_id: int) -> Array:
 	if lobby_service != null and lobby_id > 0 and lobby_service.has_lobby(lobby_id):

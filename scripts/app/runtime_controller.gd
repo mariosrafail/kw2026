@@ -135,7 +135,9 @@ func _physics_process(delta: float) -> void:
 		session_controller.client_connect_watchdog_tick(delta)
 
 	if role == Role.SERVER and multiplayer.multiplayer_peer != null:
-		_server_ensure_target_dummy_if_needed()
+		if not _uses_lobby_scene_flow():
+			client_input_controller.local_host_apply_input(delta, damage_boost_enabled, input_states)
+		_server_ensure_bots_if_needed()
 		_server_tick_target_dummy_bot(delta)
 		snapshot_accumulator = combat_flow_service.server_simulate(delta, snapshot_accumulator)
 		combat_flow_service.server_tick_projectiles(delta)
@@ -149,7 +151,11 @@ func _physics_process(delta: float) -> void:
 		combat_flow_service.client_tick_projectiles(delta)
 		_client_tick_skill_cooldowns_hud(delta)
 
-	client_input_controller.follow_local_player_camera(delta)
+	if ctf_match_controller != null:
+		ctf_match_controller.visual_tick(_ctf_enabled())
+
+	if multiplayer.multiplayer_peer != null:
+		client_input_controller.follow_local_player_camera(delta)
 
 func _ensure_skill_hud() -> void:
 	if cooldown_label != null:
@@ -241,7 +247,7 @@ func _input(event: InputEvent) -> void:
 			_update_ui_visibility()
 
 func _try_cast_skill1() -> void:
-	if role != Role.CLIENT:
+	if role != Role.CLIENT and role != Role.SERVER:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return
@@ -249,10 +255,13 @@ func _try_cast_skill1() -> void:
 		return
 	var target_world := main_camera.get_global_mouse_position()
 	_begin_client_skill_cooldown(1)
+	if role == Role.SERVER:
+		combat_flow_service.server_cast_skill(1, multiplayer.get_unique_id(), target_world)
+		return
 	_rpc_cast_skill1.rpc_id(1, target_world)
 
 func _try_cast_skill2() -> void:
-	if role != Role.CLIENT:
+	if role != Role.CLIENT and role != Role.SERVER:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return
@@ -260,12 +269,22 @@ func _try_cast_skill2() -> void:
 		return
 	var target_world := main_camera.get_global_mouse_position()
 	_begin_client_skill_cooldown(2)
+	if role == Role.SERVER:
+		combat_flow_service.server_cast_skill(2, multiplayer.get_unique_id(), target_world)
+		return
 	_rpc_cast_skill2.rpc_id(1, target_world)
 
 func _try_reload() -> void:
-	if role != Role.CLIENT:
+	if role != Role.CLIENT and role != Role.SERVER:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if role == Role.SERVER:
+		var local_peer_id := multiplayer.get_unique_id()
+		var player := players.get(local_peer_id, null) as NetPlayer
+		var weapon_profile := _weapon_profile_for_peer(local_peer_id)
+		if player != null and weapon_profile != null:
+			combat_flow_service.server_begin_reload(local_peer_id, weapon_profile)
 		return
 	_rpc_request_reload.rpc_id(1)
 
@@ -309,9 +328,9 @@ func _read_launcher_config_defaults() -> Dictionary:
 	var candidate_paths := PackedStringArray()
 	var executable_config := OS.get_executable_path().get_base_dir().path_join("launcher_config.json")
 	candidate_paths.append(executable_config)
-	candidate_paths.append("res://launcher/launcher_config.json")
 	candidate_paths.append("res://build/release/launcher_config.json")
 	candidate_paths.append("res://build/launcher/launcher_config.json")
+	candidate_paths.append("res://launcher/launcher_config.json")
 
 	for path in candidate_paths:
 		if not FileAccess.file_exists(path):

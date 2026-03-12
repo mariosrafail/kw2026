@@ -19,6 +19,7 @@ var play_death_sfx_local_cb: Callable = Callable()
 var send_play_death_sfx_cb: Callable = Callable()
 var spawn_blood_particles_local_cb: Callable = Callable()
 var send_spawn_blood_particles_cb: Callable = Callable()
+var can_damage_peer_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -35,6 +36,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_play_death_sfx_cb = callbacks.get("send_play_death_sfx", Callable()) as Callable
 	spawn_blood_particles_local_cb = callbacks.get("spawn_blood_particles_local", Callable()) as Callable
 	send_spawn_blood_particles_cb = callbacks.get("send_spawn_blood_particles", Callable()) as Callable
+	can_damage_peer_cb = callbacks.get("can_damage_peer", Callable()) as Callable
 
 	player_history_ms = int(config.get("player_history_ms", player_history_ms))
 
@@ -74,6 +76,8 @@ func server_projectile_player_hit(projectile: NetProjectile, from_position: Vect
 	for key in players.keys():
 		var target_peer_id := int(key)
 		if target_peer_id == projectile.owner_peer_id:
+			continue
+		if can_damage_peer_cb.is_valid() and not bool(can_damage_peer_cb.call(projectile.owner_peer_id, target_peer_id)):
 			continue
 		if projectile_lobby_id > 0 and _peer_lobby(target_peer_id) != projectile_lobby_id:
 			continue
@@ -210,6 +214,8 @@ func _is_headshot_hit(target_player: NetPlayer, hit_position: Vector2, target_ce
 func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, target_player: NetPlayer, damage: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
 	if target_player == null:
 		return 0
+	if can_damage_peer_cb.is_valid() and not bool(can_damage_peer_cb.call(attacker_peer_id, target_peer_id)):
+		return target_player.get_health()
 	var applied_damage := maxi(0, damage)
 	var resolved_incoming_velocity := incoming_velocity
 	if resolved_incoming_velocity.length_squared() <= 0.0001 and attacker_peer_id > 0:

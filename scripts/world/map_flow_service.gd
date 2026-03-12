@@ -1,6 +1,30 @@
 extends RefCounted
 class_name MapFlowService
 
+func normalize_mode_id(mode_id: String) -> String:
+	var normalized := mode_id.strip_edges().to_lower()
+	if normalized == "ctf":
+		return "ctf"
+	return "deathmatch"
+
+func mode_label_for_id(mode_id: String) -> String:
+	var normalized := normalize_mode_id(mode_id)
+	if normalized == "ctf":
+		return "Capture The Flag"
+	return "Deathmatch"
+
+func supported_modes_for_map(map_catalog: MapCatalog, map_id: String) -> Array[String]:
+	if map_catalog == null:
+		return ["deathmatch"]
+	return map_catalog.supported_modes_for_id(map_id)
+
+func select_mode_for_map(map_catalog: MapCatalog, map_id: String, requested_mode: String) -> String:
+	var normalized_mode := normalize_mode_id(requested_mode)
+	var supported_modes := supported_modes_for_map(map_catalog, map_id)
+	if supported_modes.has(normalized_mode):
+		return normalized_mode
+	return str(supported_modes[0]) if not supported_modes.is_empty() else "deathmatch"
+
 func normalize_map_id(map_catalog: MapCatalog, map_id: String) -> String:
 	if map_catalog == null:
 		var normalized := map_id.strip_edges().to_lower()
@@ -26,6 +50,23 @@ func setup_lobby_map_picker(option: OptionButton, map_catalog: MapCatalog, selec
 		option.add_item(map_label_for_id(map_catalog, map_id))
 		option.set_item_metadata(option.item_count - 1, map_id)
 	sync_lobby_map_picker_selection(option, map_catalog, selected_map_id)
+
+func setup_lobby_mode_picker(option: OptionButton, map_catalog: MapCatalog, selected_map_id: String, selected_mode_id: String) -> void:
+	if option == null:
+		return
+	option.clear()
+	var normalized_map := normalize_map_id(map_catalog, selected_map_id)
+	var supported_modes := supported_modes_for_map(map_catalog, normalized_map)
+	for mode_id in supported_modes:
+		option.add_item(mode_label_for_id(mode_id))
+		option.set_item_metadata(option.item_count - 1, mode_id)
+	var resolved_mode := select_mode_for_map(map_catalog, normalized_map, selected_mode_id)
+	for index in range(option.item_count):
+		if normalize_mode_id(str(option.get_item_metadata(index))) == resolved_mode:
+			option.select(index)
+			return
+	if option.item_count > 0:
+		option.select(0)
 
 func sync_lobby_map_picker_selection(option: OptionButton, map_catalog: MapCatalog, selected_map_id: String) -> void:
 	if option == null:
@@ -59,7 +100,8 @@ func encode_create_lobby_payload(
 	normalize_weapon_id_cb: Callable,
 	weapon_id: String,
 	map_id: String,
-	character_id: String = ""
+	character_id: String = "",
+	mode_id: String = "deathmatch"
 ) -> String:
 	var normalized_weapon := weapon_id
 	if normalize_weapon_id_cb.is_valid():
@@ -67,8 +109,10 @@ func encode_create_lobby_payload(
 	var normalized_character := character_id.strip_edges().to_lower()
 	if normalized_character != "erebus" and normalized_character != "tasko":
 		normalized_character = "outrage"
-	# v2 payload: weapon|character|map (still supports v1 weapon|map)
-	return "%s|%s|%s" % [normalized_weapon, normalized_character, normalize_map_id(map_catalog, map_id)]
+	var normalized_map := normalize_map_id(map_catalog, map_id)
+	var normalized_mode := select_mode_for_map(map_catalog, normalized_map, mode_id)
+	# v3 payload: weapon|character|map|mode (still supports v2/v1)
+	return "%s|%s|%s|%s" % [normalized_weapon, normalized_character, normalized_map, normalized_mode]
 
 func decode_create_lobby_payload(
 	map_catalog: MapCatalog,
@@ -86,7 +130,8 @@ func decode_create_lobby_payload(
 		return {
 			"weapon_id": fallback_weapon_id,
 			"character_id": fallback_character_id,
-			"map_id": fallback_map_id
+			"map_id": fallback_map_id,
+			"mode_id": "deathmatch"
 		}
 
 	var sep_index := normalized_payload.find("|")
@@ -97,7 +142,8 @@ func decode_create_lobby_payload(
 		return {
 			"weapon_id": weapon_only,
 			"character_id": fallback_character_id,
-			"map_id": fallback_map_id
+			"map_id": fallback_map_id,
+			"mode_id": "deathmatch"
 		}
 
 	var parts := normalized_payload.split("|", false)
@@ -114,12 +160,14 @@ func decode_create_lobby_payload(
 		return {
 			"weapon_id": normalized_weapon_part_v1,
 			"character_id": fallback_character_id,
-			"map_id": raw_map_id_v1
+			"map_id": raw_map_id_v1,
+			"mode_id": "deathmatch"
 		}
 
 	var weapon_part := parts[0] if parts.size() > 0 else ""
 	var character_part := parts[1] if parts.size() > 1 else fallback_character_id
 	var map_part := parts[2] if parts.size() > 2 else fallback_map_id
+	var mode_part := parts[3] if parts.size() > 3 else "deathmatch"
 	var raw_map_id := str(map_part).strip_edges().to_lower()
 	if raw_map_id.is_empty():
 		raw_map_id = fallback_map_id
@@ -133,7 +181,8 @@ func decode_create_lobby_payload(
 	return {
 		"weapon_id": normalized_weapon_part,
 		"character_id": normalized_character_part,
-		"map_id": raw_map_id
+		"map_id": raw_map_id,
+		"mode_id": select_mode_for_map(map_catalog, raw_map_id, str(mode_part))
 	}
 
 func active_lobby_map_id(
@@ -204,10 +253,12 @@ func server_pack_lobby_entries(entries: Array, map_catalog: MapCatalog) -> Array
 			raw_map_id = fallback_map_id
 		var normalized := normalize_map_id(map_catalog, raw_map_id)
 		entry["map_id"] = raw_map_id
+		entry["mode_id"] = select_mode_for_map(map_catalog, raw_map_id, str(entry.get("mode_id", "deathmatch")))
 		if normalized == fallback_map_id and raw_map_id != fallback_map_id:
 			entry["map_name"] = raw_map_id.capitalize()
 		else:
 			entry["map_name"] = map_label_for_id(map_catalog, normalized)
+		entry["mode_name"] = mode_label_for_id(str(entry.get("mode_id", "deathmatch")))
 		packed_entries.append(entry)
 	return packed_entries
 
@@ -220,6 +271,7 @@ func normalize_client_lobby_entries(
 	var fallback_map_id := _default_map_id(map_catalog)
 	var normalized_entries: Array = []
 	var lobby_map_by_id: Dictionary = {}
+	var lobby_mode_by_id: Dictionary = {}
 	for entry_value in entries:
 		if not (entry_value is Dictionary):
 			continue
@@ -227,14 +279,19 @@ func normalize_client_lobby_entries(
 		var map_id := normalize_map_id(map_catalog, str(entry.get("map_id", fallback_map_id)))
 		entry["map_id"] = map_id
 		entry["map_name"] = map_label_for_id(map_catalog, map_id)
+		var mode_id := select_mode_for_map(map_catalog, map_id, str(entry.get("mode_id", "deathmatch")))
+		entry["mode_id"] = mode_id
+		entry["mode_name"] = mode_label_for_id(mode_id)
 		var lobby_id := int(entry.get("id", 0))
 		if lobby_id > 0:
 			lobby_map_by_id[lobby_id] = map_id
+			lobby_mode_by_id[lobby_id] = mode_id
 		normalized_entries.append(entry)
 
 	return {
 		"entries": normalized_entries,
 		"lobby_map_by_id": lobby_map_by_id,
+		"lobby_mode_by_id": lobby_mode_by_id,
 		"client_target_map_id": active_lobby_map_id(
 			normalized_entries,
 			active_lobby_id,

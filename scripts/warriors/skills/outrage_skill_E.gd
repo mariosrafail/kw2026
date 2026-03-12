@@ -195,32 +195,27 @@ func client_spawn_boost(peer_id: int, duration_sec: float) -> void:
 		return
 	var visible_duration := maxf(0.05, duration_sec)
 	var fade_out_delay := maxf(0.0, visible_duration - BOOST_VFX_FADE_OUT_SEC)
-	var begin_fade_out := func() -> void:
-		if flame_particles != null and is_instance_valid(flame_particles):
-			flame_particles.emitting = false
-		if flame_core_particles != null and is_instance_valid(flame_core_particles):
-			flame_core_particles.emitting = false
-		if ember_particles != null and is_instance_valid(ember_particles):
-			ember_particles.emitting = false
-		if smoke_particles != null and is_instance_valid(smoke_particles):
-			smoke_particles.emitting = false
-		if vfx == null or not is_instance_valid(vfx):
-			if player != null and is_instance_valid(player) and player.has_method("clear_outrage_boost_visual"):
-				player.call("clear_outrage_boost_visual")
-			return
-		var fade_out := vfx.create_tween()
-		fade_out.tween_property(vfx, "modulate:a", 0.0, BOOST_VFX_FADE_OUT_SEC).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-		fade_out.finished.connect(func() -> void:
-			if player != null and is_instance_valid(player) and player.has_method("clear_outrage_boost_visual"):
-				player.call("clear_outrage_boost_visual")
-			if vfx != null and is_instance_valid(vfx):
-				vfx.queue_free()
-		, CONNECT_ONE_SHOT)
+	var player_id := player.get_instance_id()
+	var vfx_id := vfx.get_instance_id()
+	var flame_particles_id := flame_particles.get_instance_id()
+	var flame_core_particles_id := flame_core_particles.get_instance_id()
+	var ember_particles_id := ember_particles.get_instance_id()
+	var smoke_particles_id := smoke_particles.get_instance_id()
 	if fade_out_delay <= 0.001:
-		begin_fade_out.call()
+		_begin_boost_vfx_fade_out(player_id, vfx_id, flame_particles_id, flame_core_particles_id, ember_particles_id, smoke_particles_id)
 		return
 	var timer := tree.create_timer(fade_out_delay)
-	timer.timeout.connect(begin_fade_out, CONNECT_ONE_SHOT)
+	timer.timeout.connect(
+		Callable(self, "_begin_boost_vfx_fade_out").bind(
+			player_id,
+			vfx_id,
+			flame_particles_id,
+			flame_core_particles_id,
+			ember_particles_id,
+			smoke_particles_id
+		),
+		CONNECT_ONE_SHOT
+	)
 
 func _begin_vfx_follow_lag(trail_anchor: Node2D, vfx_root: Node2D) -> void:
 	if trail_anchor == null or vfx_root == null:
@@ -228,10 +223,7 @@ func _begin_vfx_follow_lag(trail_anchor: Node2D, vfx_root: Node2D) -> void:
 	var tree := vfx_root.get_tree()
 	if tree == null:
 		return
-	tree.process_frame.connect(
-		Callable(self, "_follow_boost_vfx_frame").bind(trail_anchor.get_instance_id(), vfx_root.get_instance_id()),
-		CONNECT_ONE_SHOT
-	)
+	_schedule_vfx_follow_frame(tree, trail_anchor.get_instance_id(), vfx_root.get_instance_id())
 
 func _follow_boost_vfx_frame(trail_anchor_instance_id: int, vfx_root_instance_id: int) -> void:
 	var trail_anchor_obj := instance_from_id(trail_anchor_instance_id)
@@ -251,10 +243,45 @@ func _follow_boost_vfx_frame(trail_anchor_instance_id: int, vfx_root_instance_id
 	trail_anchor.set_meta("last_root_global_position", vfx_root.global_position)
 	var next_tree := vfx_root.get_tree()
 	if next_tree != null:
-		next_tree.process_frame.connect(
-			Callable(self, "_follow_boost_vfx_frame").bind(trail_anchor_instance_id, vfx_root_instance_id),
-			CONNECT_ONE_SHOT
-		)
+		_schedule_vfx_follow_frame(next_tree, trail_anchor_instance_id, vfx_root_instance_id)
+
+func _schedule_vfx_follow_frame(tree: SceneTree, trail_anchor_instance_id: int, vfx_root_instance_id: int) -> void:
+	var follow_callable := Callable(self, "_follow_boost_vfx_frame").bind(trail_anchor_instance_id, vfx_root_instance_id)
+	if tree.process_frame.is_connected(follow_callable):
+		return
+	tree.process_frame.connect(follow_callable, CONNECT_ONE_SHOT)
+
+func _begin_boost_vfx_fade_out(
+	player_id: int,
+	vfx_id: int,
+	flame_particles_id: int,
+	flame_core_particles_id: int,
+	ember_particles_id: int,
+	smoke_particles_id: int
+) -> void:
+	for particle_id in [flame_particles_id, flame_core_particles_id, ember_particles_id, smoke_particles_id]:
+		var particle_obj := instance_from_id(particle_id)
+		if particle_obj != null and particle_obj is CPUParticles2D:
+			(particle_obj as CPUParticles2D).emitting = false
+	var vfx_obj := instance_from_id(vfx_id)
+	if vfx_obj == null or not (vfx_obj is Node2D):
+		_clear_boost_visual_for_player(player_id)
+		return
+	var vfx := vfx_obj as Node2D
+	var fade_out := vfx.create_tween()
+	fade_out.tween_property(vfx, "modulate:a", 0.0, BOOST_VFX_FADE_OUT_SEC).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	fade_out.finished.connect(Callable(self, "_finish_boost_vfx_fade_out").bind(player_id, vfx_id), CONNECT_ONE_SHOT)
+
+func _finish_boost_vfx_fade_out(player_id: int, vfx_id: int) -> void:
+	_clear_boost_visual_for_player(player_id)
+	var vfx_obj := instance_from_id(vfx_id)
+	if vfx_obj != null and vfx_obj is Node:
+		(vfx_obj as Node).queue_free()
+
+func _clear_boost_visual_for_player(player_id: int) -> void:
+	var player_obj := instance_from_id(player_id)
+	if player_obj != null and player_obj is NetPlayer and (player_obj as NetPlayer).has_method("clear_outrage_boost_visual"):
+		(player_obj as NetPlayer).call("clear_outrage_boost_visual")
 
 func _set_boost_damage(peer_id: int, enabled: bool) -> void:
 	if not input_states.has(peer_id):

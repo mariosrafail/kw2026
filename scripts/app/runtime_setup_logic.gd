@@ -20,6 +20,12 @@ func _init_services() -> void:
 	camera_shake = CAMERA_SHAKE_SCRIPT.new()
 	dropped_mag_service = DROPPED_MAG_SERVICE_SCRIPT.new()
 	target_dummy_bot_controller = TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new()
+	bot_controllers = [
+		target_dummy_bot_controller,
+		TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new(),
+		TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new()
+	]
+	ctf_match_controller = CTF_MATCH_CONTROLLER_SCRIPT.new()
 	weapon_ui = WEAPON_UI_SCRIPT.new()
 
 func _init_weapons() -> void:
@@ -74,6 +80,35 @@ func _init_scene_map_context() -> void:
 	else:
 		selected_map_id = map_flow_service.normalize_map_id(map_catalog, scene_map_id)
 	client_target_map_id = selected_map_id
+	var pending_mode := str(ProjectSettings.get_setting("kw/pending_game_mode", "")).strip_edges().to_lower()
+	var resolved_from_lobby := false
+	if multiplayer != null and multiplayer.multiplayer_peer != null and lobby_service != null:
+		var local_peer_id := multiplayer.get_unique_id()
+		var local_lobby_id := lobby_service.get_peer_lobby(local_peer_id)
+		if local_lobby_id > 0:
+			var lobby := lobby_service.get_lobby_data(local_lobby_id)
+			selected_game_mode = map_flow_service.select_mode_for_map(
+				map_catalog,
+				selected_map_id,
+				str(lobby.get("mode_id", selected_game_mode))
+			)
+			resolved_from_lobby = true
+	if not resolved_from_lobby and not pending_mode.is_empty():
+		selected_game_mode = map_flow_service.select_mode_for_map(
+			map_catalog,
+			selected_map_id,
+			pending_mode
+		)
+		ProjectSettings.set_setting("kw/pending_game_mode", "")
+	selected_game_mode = map_flow_service.select_mode_for_map(map_catalog, selected_map_id, selected_game_mode)
+	client_target_game_mode = selected_game_mode
+	print("[MATCH MODE] scene=%s selected_map=%s pending_mode=%s resolved_mode=%s lobby_scene=%s" % [
+		scene_file_path,
+		selected_map_id,
+		pending_mode,
+		selected_game_mode,
+		str(_uses_lobby_scene_flow())
+	])
 
 	spawn_flow_service.apply_map_controller_bounds(
 		map_controller,
@@ -94,8 +129,9 @@ func _init_scene_map_context() -> void:
 func _refresh_spawn_points() -> void:
 	spawn_points = spawn_flow_service.configured_spawn_points(map_controller, map_catalog, scene_file_path)
 	spawn_identity.spawn_points = spawn_points.duplicate()
-	if target_dummy_bot_controller != null:
-		target_dummy_bot_controller.update_spawn_points(spawn_points)
+	for controller in bot_controllers:
+		if controller != null:
+			controller.update_spawn_points(spawn_points)
 
 func _configure_services() -> void:
 	projectile_system.configure(projectiles_root, PROJECTILE_SCENE, Callable(self, "_projectile_color"))
@@ -168,7 +204,8 @@ func _configure_services() -> void:
 			"play_death_sfx_local": Callable(self, "_play_death_sfx_local"),
 			"send_play_death_sfx": Callable(self, "_send_play_death_sfx_rpc"),
 			"spawn_blood_particles_local": Callable(combat_effects, "spawn_blood_particles"),
-			"send_spawn_blood_particles": Callable(self, "_send_spawn_blood_particles_rpc")
+			"send_spawn_blood_particles": Callable(self, "_send_spawn_blood_particles_rpc"),
+			"can_damage_peer": Callable(self, "_can_damage_peer")
 		},
 		{
 			"player_history_ms": PLAYER_HISTORY_MS
@@ -196,35 +233,45 @@ func _configure_services() -> void:
 		}
 	)
 
-	target_dummy_bot_controller.configure(
-		{
-			"players": players,
-			"input_states": input_states,
-			"peer_weapon_ids": peer_weapon_ids,
-			"peer_weapon_skin_indices_by_peer": peer_weapon_skin_indices_by_peer,
-			"players_root": players_root,
-			"multiplayer": multiplayer,
-			"spawn_flow_service": spawn_flow_service
-		},
-		{
-			"get_world_2d": Callable(self, "_get_world_2d_ref"),
-			"random_spawn_position": Callable(self, "_random_spawn_position"),
-			"weapon_visual_for_peer": Callable(self, "_weapon_visual_for_peer"),
-			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
-			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
-			"broadcast_spawn": Callable(self, "_broadcast_target_dummy_spawn"),
-			"record_player_history": Callable(combat_flow_service, "record_player_history"),
-			"get_peer_lobby": Callable(self, "_peer_lobby"),
-			"default_input_state": Callable(self, "_default_input_state"),
-			"server_cast_skill": Callable(combat_flow_service, "server_cast_skill"),
-			"can_cast_skill": Callable(combat_flow_service, "can_cast_skill_for_peer"),
-			"get_play_bounds": Callable(self, "_play_bounds_rect"),
-			"get_ground_tiles": Callable(self, "_ground_tiles_ref")
-		},
-		{
-			"spawn_points": spawn_points
-		}
-	)
+	for index in range(bot_controllers.size()):
+		var controller := bot_controllers[index]
+		if controller == null:
+			continue
+		controller.configure(
+			{
+				"players": players,
+				"input_states": input_states,
+				"peer_weapon_ids": peer_weapon_ids,
+				"peer_weapon_skin_indices_by_peer": peer_weapon_skin_indices_by_peer,
+				"players_root": players_root,
+				"multiplayer": multiplayer,
+				"spawn_flow_service": spawn_flow_service
+			},
+			{
+				"get_world_2d": Callable(self, "_get_world_2d_ref"),
+				"random_spawn_position": Callable(self, "_random_spawn_position"),
+				"weapon_visual_for_peer": Callable(self, "_weapon_visual_for_peer"),
+				"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
+				"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
+				"broadcast_spawn": Callable(self, "_broadcast_target_dummy_spawn"),
+				"record_player_history": Callable(combat_flow_service, "record_player_history"),
+				"get_peer_lobby": Callable(self, "_peer_lobby"),
+				"default_input_state": Callable(self, "_default_input_state"),
+				"server_cast_skill": Callable(combat_flow_service, "server_cast_skill"),
+				"can_cast_skill": Callable(combat_flow_service, "can_cast_skill_for_peer"),
+				"get_play_bounds": Callable(self, "_play_bounds_rect"),
+				"get_ground_tiles": Callable(self, "_ground_tiles_ref"),
+				"is_enemy_target": Callable(self, "_is_enemy_target"),
+				"movement_goal_position": Callable(self, "_bot_movement_goal_position")
+			},
+			{
+				"spawn_points": spawn_points,
+				"bot_peer_id": -1001 - index,
+				"bot_name": "BOT %d" % (index + 1),
+				"bot_color": Color(1.0, 0.48 + 0.12 * float(index), 0.48, 1.0),
+				"spawn_point_index": mini(index + 1, 3)
+			}
+		)
 
 	combat_flow_service.configure(
 		{
@@ -335,6 +382,25 @@ func _configure_services() -> void:
 			"lobby_room_title": lobby_room_title
 		}
 	)
+	ui_controller.set_ctf_room_callbacks(
+		Callable(self, "_request_ctf_team").bind(0),
+		Callable(self, "_request_ctf_team").bind(1),
+		Callable(self, "_request_ctf_start_match")
+	)
+
+	if ctf_match_controller != null:
+		ctf_match_controller.configure(
+			{
+				"players": players,
+				"player_display_names": player_display_names,
+				"peer_team_by_peer": peer_team_by_peer,
+				"world_root": world_root
+			},
+			{
+				"get_play_bounds": Callable(self, "_play_bounds_rect"),
+				"on_score_changed": Callable(self, "_update_score_labels")
+			}
+		)
 
 	session_controller.configure(
 		{
@@ -389,6 +455,7 @@ func _configure_services() -> void:
 			"server_spawn_peer_if_needed": Callable(self, "_server_spawn_peer_if_needed"),
 			"server_send_lobby_list_to_peer": Callable(self, "_server_send_lobby_list_to_peer"),
 			"server_broadcast_lobby_list": Callable(self, "_server_broadcast_lobby_list"),
+			"server_broadcast_lobby_room_state": Callable(self, "_server_broadcast_lobby_room_state"),
 			"send_lobby_action_result": Callable(self, "_server_send_lobby_action_result"),
 			"refresh_lobby_list_ui": Callable(self, "_refresh_lobby_list_ui"),
 			"update_ui_visibility": Callable(self, "_update_ui_visibility"),

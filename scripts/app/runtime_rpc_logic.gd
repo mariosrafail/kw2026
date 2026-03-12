@@ -132,6 +132,15 @@ func _rpc_spawn_projectile(_projectile_id: int, _owner_peer_id: int, _spawn_posi
 		last_ping_ms
 	)
 
+func _rpc_sync_ctf_flag(_carrier_peer_id: int, _world_position: Vector2, _red_score: int = 0, _blue_score: int = 0) -> void:
+	if multiplayer.is_server():
+		return
+	ctf_flag_carrier_peer_id = _carrier_peer_id
+	ctf_flag_world_position = _world_position
+	if ctf_match_controller != null and _ctf_enabled():
+		ctf_match_controller.apply_synced_state(_carrier_peer_id, _world_position, _red_score, _blue_score)
+	_update_score_labels()
+
 func _rpc_despawn_projectile(_projectile_id: int) -> void:
 	if multiplayer.is_server():
 		return
@@ -304,15 +313,29 @@ func _rpc_lobby_create(_requested_name: String, _payload: String) -> void:
 	var weapon_id := _normalize_weapon_id(str(decoded.get("weapon_id", WEAPON_ID_AK47)))
 	var character_id := _normalize_character_id(str(decoded.get("character_id", CHARACTER_ID_OUTRAGE)))
 	var map_id := map_flow_service.normalize_map_id(map_catalog, str(decoded.get("map_id", MAP_ID_CLASSIC)))
+	var mode_id := map_flow_service.select_mode_for_map(map_catalog, map_id, str(decoded.get("mode_id", GAME_MODE_DEATHMATCH)))
+	print("[LOBBY TRACE][SERVER] create_request peer_id=%d name=%s weapon=%s character=%s map=%s mode=%s payload=%s" % [
+		peer_id,
+		_requested_name,
+		weapon_id,
+		character_id,
+		map_id,
+		mode_id,
+		_payload
+	])
 	peer_weapon_ids[peer_id] = weapon_id
 	peer_character_ids[peer_id] = character_id
 	if lobby_service != null:
 		lobby_service.set_peer_weapon(peer_id, weapon_id)
 		lobby_service.set_peer_character(peer_id, character_id)
-	lobby_flow_controller.server_create_lobby(peer_id, _requested_name, map_id, map_catalog.max_players_for_id(map_id))
-	if not _uses_lobby_scene_flow():
+	lobby_flow_controller.server_create_lobby(peer_id, _requested_name, map_id, map_catalog.max_players_for_mode(map_id, mode_id), mode_id)
+	if not _uses_lobby_scene_flow() and mode_id != GAME_MODE_CTF:
 		var active_lobby_id := _peer_lobby(peer_id)
 		if active_lobby_id > 0:
+			print("[LOBBY TRACE][SERVER] create_request result=SERVER_LOBBY_CREATED lobby_id=%d map=%s scene_switch_pending=true" % [
+				active_lobby_id,
+				_lobby_map_id(active_lobby_id)
+			])
 			_send_scene_switch_rpc(peer_id, _lobby_map_id(active_lobby_id))
 
 func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String = "") -> void:
@@ -320,16 +343,26 @@ func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String =
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	var normalized_character_id := _normalize_character_id(_character_id)
-	print("[DBG JOIN] Peer %d joining with weapon=%s character=%s (normalized=%s)" % [peer_id, _weapon_id, _character_id, normalized_character_id])
+	print("[LOBBY TRACE][SERVER] join_request peer_id=%d lobby_id=%d weapon=%s character=%s normalized_character=%s" % [
+		peer_id,
+		_lobby_id,
+		_weapon_id,
+		_character_id,
+		normalized_character_id
+	])
 	peer_weapon_ids[peer_id] = _normalize_weapon_id(_weapon_id)
 	peer_character_ids[peer_id] = normalized_character_id
 	if lobby_service != null:
 		lobby_service.set_peer_weapon(peer_id, _normalize_weapon_id(_weapon_id))
 		lobby_service.set_peer_character(peer_id, normalized_character_id)
 	lobby_flow_controller.server_join_lobby(peer_id, _lobby_id)
-	if not _uses_lobby_scene_flow():
+	if not _uses_lobby_scene_flow() and lobby_service != null and not lobby_service.is_ctf_lobby(_lobby_id):
 		var active_lobby_id := _peer_lobby(peer_id)
 		if active_lobby_id > 0:
+			print("[LOBBY TRACE][SERVER] join_request result=SERVER_LOBBY_JOINED lobby_id=%d map=%s scene_switch_pending=true" % [
+				active_lobby_id,
+				_lobby_map_id(active_lobby_id)
+			])
 			_send_scene_switch_rpc(peer_id, _lobby_map_id(active_lobby_id))
 
 func _rpc_lobby_leave(_legacy_a: Variant = null, _legacy_b: Variant = null) -> void:
@@ -491,7 +524,14 @@ func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 		map_catalog
 	)
 	lobby_map_by_id = normalized.get("lobby_map_by_id", {}) as Dictionary
+	lobby_mode_by_id = normalized.get("lobby_mode_by_id", {}) as Dictionary
 	client_target_map_id = str(normalized.get("client_target_map_id", selected_map_id))
+	if _active_lobby_id > 0 and lobby_mode_by_id.has(_active_lobby_id):
+		client_target_game_mode = str(lobby_mode_by_id.get(_active_lobby_id, GAME_MODE_DEATHMATCH))
+		if client_target_game_mode == GAME_MODE_CTF and active_lobby_room_state.is_empty() and _is_client_connected():
+			_rpc_request_spawn.rpc_id(1)
+	elif _active_lobby_id <= 0:
+		client_target_game_mode = selected_game_mode
 	lobby_flow_controller.client_receive_lobby_list(normalized.get("entries", []) as Array, _active_lobby_id)
 	if escape_return_pending and _active_lobby_id <= 0:
 		_complete_escape_return_to_lobby_menu(escape_return_nonce)
@@ -499,12 +539,42 @@ func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id: int, _map_id: String, _lobby_scene_mode: bool) -> void:
 	if _map_id.strip_edges() != "":
 		client_target_map_id = map_flow_service.normalize_map_id(map_catalog, _map_id)
+	if _active_lobby_id > 0 and lobby_mode_by_id.has(_active_lobby_id):
+		client_target_game_mode = str(lobby_mode_by_id.get(_active_lobby_id, GAME_MODE_DEATHMATCH))
+	elif _active_lobby_id <= 0:
+		active_lobby_room_state.clear()
 	lobby_flow_controller.client_lobby_action_result(_success, _message, _active_lobby_id, _lobby_scene_mode)
 	if escape_return_pending and _active_lobby_id <= 0:
 		_complete_escape_return_to_lobby_menu(escape_return_nonce)
 
+func _rpc_lobby_room_state(_payload: Dictionary) -> void:
+	if multiplayer.is_server() and role != Role.CLIENT:
+		return
+	print("[CTF ROOM][CLIENT] room_state=%s" % str(_payload))
+	active_lobby_room_state = _payload.duplicate(true)
+	_refresh_ctf_room_ui()
+
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	_switch_to_map_scene(_map_id)
+
+func _rpc_lobby_set_team(_team_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_ctf_lobby(lobby_id):
+		return
+	print("[CTF ROOM][SERVER] team_request peer_id=%d lobby_id=%d team_id=%d" % [peer_id, lobby_id, _team_id])
+	if not lobby_service.set_peer_team(lobby_id, peer_id, _team_id):
+		_server_send_lobby_action_result(peer_id, false, "Team is full.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	_server_broadcast_lobby_room_state(lobby_id)
+
+func _rpc_lobby_start_match() -> void:
+	if not multiplayer.is_server():
+		return
+	print("[CTF ROOM][SERVER] start_request peer_id=%d" % multiplayer.get_remote_sender_id())
+	_server_start_ctf_lobby_match(multiplayer.get_remote_sender_id())
 
 func _rpc_cast_skill1(_target_world: Vector2) -> void:
 	if not multiplayer.is_server():

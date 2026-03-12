@@ -10,6 +10,7 @@ var server_sync_player_stats_cb: Callable = Callable()
 var server_spawn_peer_if_needed_cb: Callable = Callable()
 var server_send_lobby_list_to_peer_cb: Callable = Callable()
 var server_broadcast_lobby_list_cb: Callable = Callable()
+var server_broadcast_lobby_room_state_cb: Callable = Callable()
 var send_lobby_action_result_cb: Callable = Callable()
 var refresh_lobby_list_ui_cb: Callable = Callable()
 var update_ui_visibility_cb: Callable = Callable()
@@ -30,6 +31,7 @@ func configure(refs: Dictionary, callbacks: Dictionary) -> void:
 	server_spawn_peer_if_needed_cb = callbacks.get("server_spawn_peer_if_needed", Callable()) as Callable
 	server_send_lobby_list_to_peer_cb = callbacks.get("server_send_lobby_list_to_peer", Callable()) as Callable
 	server_broadcast_lobby_list_cb = callbacks.get("server_broadcast_lobby_list", Callable()) as Callable
+	server_broadcast_lobby_room_state_cb = callbacks.get("server_broadcast_lobby_room_state", Callable()) as Callable
 	send_lobby_action_result_cb = callbacks.get("send_lobby_action_result", Callable()) as Callable
 	refresh_lobby_list_ui_cb = callbacks.get("refresh_lobby_list_ui", Callable()) as Callable
 	update_ui_visibility_cb = callbacks.get("update_ui_visibility", Callable()) as Callable
@@ -66,6 +68,7 @@ func server_leave_lobby(peer_id: int, remove_player: bool = true, update_lists: 
 		lobby_service.remove_lobby(lobby_id)
 	else:
 		lobby_service.set_lobby_members(lobby_id, members)
+		_broadcast_lobby_room_state(lobby_id)
 		if server_sync_player_stats_cb.is_valid():
 			for member_value in members:
 				server_sync_player_stats_cb.call(int(member_value))
@@ -80,20 +83,24 @@ func server_create_lobby(
 	peer_id: int,
 	requested_name: String,
 	requested_map_id: String = "classic",
-	requested_max_players: int = 0
+	requested_max_players: int = 0,
+	requested_mode_id: String = "deathmatch"
 ) -> void:
 	if _peer_lobby(peer_id) > 0:
 		var existing_lobby_id := _peer_lobby(peer_id)
 		_send_lobby_action_result(peer_id, false, "Already in lobby. Leave first.", existing_lobby_id, _lobby_map_id(existing_lobby_id))
 		return
 
-	var create_result := lobby_service.create_lobby(peer_id, requested_name, requested_map_id, requested_max_players)
+	var create_result := lobby_service.create_lobby(peer_id, requested_name, requested_map_id, requested_max_players, requested_mode_id)
 	var lobby_id := int(create_result.get("lobby_id", 0))
 	var lobby_name := str(create_result.get("lobby_name", "Lobby %d" % lobby_id))
 	var map_id := _lobby_map_id(lobby_id)
+	if lobby_service != null and lobby_service.is_ctf_lobby(lobby_id):
+		lobby_service.auto_assign_team_for_peer(lobby_id, peer_id)
 	if server_spawn_peer_if_needed_cb.is_valid():
 		server_spawn_peer_if_needed_cb.call(peer_id, lobby_id)
 	_send_lobby_action_result(peer_id, true, "Created %s" % lobby_name, lobby_id, map_id)
+	_broadcast_lobby_room_state(lobby_id)
 	_server_broadcast_lobby_list()
 
 func server_join_lobby(peer_id: int, lobby_id: int) -> void:
@@ -124,10 +131,13 @@ func server_join_lobby(peer_id: int, lobby_id: int) -> void:
 		members.append(peer_id)
 	lobby_service.set_lobby_members(lobby_id, members)
 	lobby_service.assign_peer_to_lobby(peer_id, lobby_id)
+	if lobby_service != null and lobby_service.is_ctf_lobby(lobby_id):
+		lobby_service.auto_assign_team_for_peer(lobby_id, peer_id)
 
 	if server_spawn_peer_if_needed_cb.is_valid():
 		server_spawn_peer_if_needed_cb.call(peer_id, lobby_id)
 	_send_lobby_action_result(peer_id, true, "Joined %s" % lobby_service.get_lobby_name(lobby_id), lobby_id, _lobby_map_id(lobby_id))
+	_broadcast_lobby_room_state(lobby_id)
 	_server_broadcast_lobby_list()
 
 func server_leave_lobby_request(peer_id: int) -> void:
@@ -183,6 +193,12 @@ func _server_broadcast_lobby_list() -> void:
 func _send_lobby_action_result(peer_id: int, success: bool, message: String, active_lobby_id: int, map_id: String = "") -> void:
 	if send_lobby_action_result_cb.is_valid():
 		send_lobby_action_result_cb.call(peer_id, success, message, active_lobby_id, map_id)
+
+func _broadcast_lobby_room_state(lobby_id: int) -> void:
+	if lobby_id <= 0:
+		return
+	if server_broadcast_lobby_room_state_cb.is_valid():
+		server_broadcast_lobby_room_state_cb.call(lobby_id)
 
 func _lobby_map_id(lobby_id: int) -> String:
 	if lobby_id <= 0 or lobby_service == null:

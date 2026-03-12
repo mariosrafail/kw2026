@@ -3,9 +3,9 @@ class_name TargetDummyBotController
 
 const BOT_PATHFINDER_SCRIPT := preload("res://scripts/world/bot_pathfinder.gd")
 
-const BOT_PEER_ID := -1001
-const BOT_NAME := "TARGET DUMMY"
-const BOT_COLOR := Color(1.0, 0.48, 0.48, 1.0)
+const DEFAULT_BOT_PEER_ID := -1001
+const DEFAULT_BOT_NAME := "TARGET DUMMY"
+const DEFAULT_BOT_COLOR := Color(1.0, 0.48, 0.48, 1.0)
 const BOT_Z_INDEX := 80
 const BOT_HALF_HEIGHT := 22.0
 const PATROL_DISTANCE := 96.0
@@ -50,15 +50,22 @@ var _get_peer_lobby_cb: Callable = Callable()
 var _default_input_state_cb: Callable = Callable()
 var _server_cast_skill_cb: Callable = Callable()
 var _can_cast_skill_cb: Callable = Callable()
+var _is_enemy_target_cb: Callable = Callable()
+var _movement_goal_position_cb: Callable = Callable()
 
 var spawn_points: Array = []
 var spawn_position := Vector2.ZERO
 var lobby_id := 0
+var bot_peer_id := DEFAULT_BOT_PEER_ID
+var bot_name := DEFAULT_BOT_NAME
+var bot_color := DEFAULT_BOT_COLOR
+var spawn_point_index := 1
 var patrol_direction := -1.0
 var jump_hold_remaining := 0.0
 var last_seen_target_position := Vector2.ZERO
 var last_seen_memory_remaining := 0.0
 var pathfinder: BotPathfinder
+var preferred_target_peer_id := 0
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -69,6 +76,10 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	multiplayer = state_refs.get("multiplayer", null) as MultiplayerAPI
 	spawn_flow_service = state_refs.get("spawn_flow_service", null)
 	spawn_points = (config.get("spawn_points", []) as Array).duplicate(true)
+	bot_peer_id = int(config.get("bot_peer_id", DEFAULT_BOT_PEER_ID))
+	bot_name = str(config.get("bot_name", DEFAULT_BOT_NAME))
+	bot_color = config.get("bot_color", DEFAULT_BOT_COLOR) as Color
+	spawn_point_index = maxi(0, int(config.get("spawn_point_index", 1)))
 
 	_get_world_2d_cb = callbacks.get("get_world_2d", Callable()) as Callable
 	_random_spawn_position_cb = callbacks.get("random_spawn_position", Callable()) as Callable
@@ -81,6 +92,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	_default_input_state_cb = callbacks.get("default_input_state", Callable()) as Callable
 	_server_cast_skill_cb = callbacks.get("server_cast_skill", Callable()) as Callable
 	_can_cast_skill_cb = callbacks.get("can_cast_skill", Callable()) as Callable
+	_is_enemy_target_cb = callbacks.get("is_enemy_target", Callable()) as Callable
+	_movement_goal_position_cb = callbacks.get("movement_goal_position", Callable()) as Callable
 	if pathfinder == null:
 		pathfinder = BOT_PATHFINDER_SCRIPT.new()
 	pathfinder.configure({
@@ -91,6 +104,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 func reset() -> void:
 	spawn_position = Vector2.ZERO
 	lobby_id = 0
+	preferred_target_peer_id = 0
 	patrol_direction = -1.0
 	jump_hold_remaining = 0.0
 	last_seen_target_position = Vector2.ZERO
@@ -102,13 +116,13 @@ func update_spawn_points(value: Array) -> void:
 	spawn_points = value.duplicate(true)
 
 func peer_id() -> int:
-	return BOT_PEER_ID
+	return bot_peer_id
 
 func display_name() -> String:
-	return BOT_NAME
+	return bot_name
 
 func is_bot_peer(peer_id: int) -> bool:
-	return peer_id == BOT_PEER_ID
+	return peer_id == bot_peer_id
 
 func set_lobby_id(value: int) -> void:
 	lobby_id = maxi(0, value)
@@ -116,22 +130,28 @@ func set_lobby_id(value: int) -> void:
 func get_lobby_id() -> int:
 	return lobby_id
 
+func set_preferred_target_peer_id(value: int) -> void:
+	preferred_target_peer_id = value
+
 func get_spawn_position() -> Vector2:
 	return spawn_position
+
+func set_spawn_position(value: Vector2) -> void:
+	spawn_position = value
 
 func setup_spawned_player(player: NetPlayer, desired_position: Vector2, allow_smoothing: bool = false) -> void:
 	if player == null:
 		return
 	player.z_as_relative = false
 	player.z_index = BOT_Z_INDEX
-	player.set_display_name(BOT_NAME)
+	player.set_display_name(bot_name)
 	player.use_network_smoothing = allow_smoothing
 	player.set_target_dummy_mode(true)
 	player.set_character_visual("outrage")
-	peer_weapon_ids[BOT_PEER_ID] = BOT_WEAPON_ID
-	peer_weapon_skin_indices_by_peer[BOT_PEER_ID] = 0
+	peer_weapon_ids[bot_peer_id] = BOT_WEAPON_ID
+	peer_weapon_skin_indices_by_peer[bot_peer_id] = 0
 	if _weapon_visual_for_peer_cb.is_valid():
-		player.set_weapon_visual(_weapon_visual_for_peer_cb.call(BOT_PEER_ID, BOT_WEAPON_ID) as Dictionary)
+		player.set_weapon_visual(_weapon_visual_for_peer_cb.call(bot_peer_id, BOT_WEAPON_ID) as Dictionary)
 	if _weapon_shot_sfx_cb.is_valid():
 		player.set_shot_audio_stream(_weapon_shot_sfx_cb.call(BOT_WEAPON_ID) as AudioStream)
 	if _weapon_reload_sfx_cb.is_valid():
@@ -148,7 +168,7 @@ func ensure_spawned(player_scene: PackedScene, anchor_position: Vector2) -> NetP
 	jump_hold_remaining = 0.0
 	last_seen_target_position = Vector2.ZERO
 	last_seen_memory_remaining = 0.0
-	var existing := players.get(BOT_PEER_ID, null) as NetPlayer
+	var existing := players.get(bot_peer_id, null) as NetPlayer
 	if existing != null:
 		setup_spawned_player(existing, desired_position, false)
 		existing.force_respawn(desired_position)
@@ -162,9 +182,9 @@ func ensure_spawned(player_scene: PackedScene, anchor_position: Vector2) -> NetP
 		return null
 	bot.global_position = desired_position
 	players_root.add_child(bot)
-	bot.configure(BOT_PEER_ID, BOT_COLOR)
+	bot.configure(bot_peer_id, bot_color)
 	setup_spawned_player(bot, desired_position, false)
-	players[BOT_PEER_ID] = bot
+	players[bot_peer_id] = bot
 	_write_bot_input_state(desired_position + Vector2.LEFT * PATROL_AIM_DISTANCE, 0.0, false, false, false)
 	_record_history(desired_position)
 	_broadcast_spawn(desired_position)
@@ -187,22 +207,26 @@ func respawn_player(player: NetPlayer) -> void:
 	_record_history(respawn_position)
 
 func tick(delta: float) -> void:
-	var bot := players.get(BOT_PEER_ID, null) as NetPlayer
+	var bot := players.get(bot_peer_id, null) as NetPlayer
 	if bot == null:
 		return
 	if bot.get_health() <= 0:
 		return
 	jump_hold_remaining = maxf(0.0, jump_hold_remaining - delta)
 	last_seen_memory_remaining = maxf(0.0, last_seen_memory_remaining - delta)
+	var movement_goal := _movement_goal()
+	var pursuing_goal := movement_goal != Vector2.ZERO
 	var target := _nearest_target(bot)
 	var has_target_los := _has_weapon_los(bot, target)
 	var distance_to_target := bot.global_position.distance_to(target.global_position) if target != null else INF
-	_try_cast_skills(bot, target, has_target_los, distance_to_target)
-	if target != null and has_target_los:
+	if not pursuing_goal:
+		_try_cast_skills(bot, target, has_target_los, distance_to_target)
+	if target != null and has_target_los and not pursuing_goal:
 		last_seen_target_position = target.global_position
 		last_seen_memory_remaining = TARGET_MEMORY_SEC
-	var search_target := _resolve_search_target(bot, target, has_target_los)
+	var search_target := movement_goal if pursuing_goal else _resolve_search_target(bot, target, has_target_los)
 	var move_target := _movement_target(bot, search_target)
+	var chase_target := move_target if move_target != Vector2.ZERO else search_target
 	var aim_world := _aim_point_for_position(search_target) if search_target != Vector2.ZERO else bot.global_position + Vector2(patrol_direction * PATROL_AIM_DISTANCE, 0.0)
 	bot.set_aim_world(aim_world)
 	var move_axis := _move_axis_for_target_position(bot, move_target)
@@ -212,8 +236,8 @@ func tick(delta: float) -> void:
 		if absf(edge_seek_axis) > 0.001:
 			move_axis = edge_seek_axis
 			obstacle_probe_axis = edge_seek_axis
-	var in_fire_range := target != null and has_target_los and distance_to_target <= FIRE_ENGAGE_DISTANCE
-	if target != null and has_target_los and distance_to_target <= FIRE_STOP_DISTANCE:
+	var in_fire_range := (not pursuing_goal) and target != null and has_target_los and distance_to_target <= FIRE_ENGAGE_DISTANCE
+	if (not pursuing_goal) and target != null and has_target_los and distance_to_target <= FIRE_STOP_DISTANCE:
 		move_axis = 0.0
 	elif search_target != Vector2.ZERO and bot.global_position.distance_to(search_target) <= SEARCH_REACHED_DISTANCE:
 		move_axis = patrol_direction
@@ -240,15 +264,19 @@ func tick(delta: float) -> void:
 		jump_pressed = true
 	elif _should_jump_toward_target(bot, target) and bot.is_on_floor():
 		jump_pressed = true
+	elif _should_jump_toward_position(bot, chase_target) and bot.is_on_floor():
+		jump_pressed = true
 	elif stuck_at_gap and bot.is_on_floor():
 		jump_pressed = true
 		move_axis = signf(search_target.x - bot.global_position.x)
 		if absf(move_axis) > 0.001:
 			patrol_direction = move_axis
 	elif not floor_ahead:
-		if should_drop_to_target:
+		if _should_force_jump_over_gap(bot, chase_target, move_axis) and bot.is_on_floor():
+			jump_pressed = true
+		elif should_drop_to_target:
 			pass
-		elif pursuing_without_los and bot.is_on_floor():
+		elif _should_jump_gap_toward_position(bot, chase_target, move_axis) and bot.is_on_floor():
 			jump_pressed = true
 		elif target != null or search_target != Vector2.ZERO:
 			move_axis = signf(search_target.x - bot.global_position.x)
@@ -274,13 +302,30 @@ func tick(delta: float) -> void:
 
 func _record_history(world_position: Vector2) -> void:
 	if _record_player_history_cb.is_valid():
-		_record_player_history_cb.call(BOT_PEER_ID, world_position)
+		_record_player_history_cb.call(bot_peer_id, world_position)
 
 func _broadcast_spawn(world_position: Vector2) -> void:
 	if _broadcast_spawn_cb.is_valid():
-		_broadcast_spawn_cb.call(world_position)
+		_broadcast_spawn_cb.call(bot_peer_id, bot_name, world_position)
 
 func _target_spawn_point(anchor_position: Vector2) -> Vector2:
+	if anchor_position != Vector2.ZERO and not spawn_points.is_empty():
+		var farthest_point := Vector2.ZERO
+		var farthest_distance_sq := -1.0
+		for point_value in spawn_points:
+			if not (point_value is Vector2):
+				continue
+			var candidate := point_value as Vector2
+			var distance_sq := candidate.distance_squared_to(anchor_position)
+			if distance_sq > farthest_distance_sq:
+				farthest_distance_sq = distance_sq
+				farthest_point = candidate
+		if farthest_distance_sq >= 0.0:
+			return _snap_to_ground(farthest_point)
+	if spawn_points.size() > spawn_point_index:
+		var indexed_spawn = spawn_points[spawn_point_index]
+		if indexed_spawn is Vector2:
+			return _snap_to_ground(indexed_spawn as Vector2)
 	if spawn_points.size() >= 2:
 		var second_spawn = spawn_points[1]
 		if second_spawn is Vector2:
@@ -365,6 +410,9 @@ func _has_floor_ahead(bot: NetPlayer, direction: float) -> bool:
 	return not floor_hit.is_empty()
 
 func _nearest_target(bot: NetPlayer) -> NetPlayer:
+	var preferred := _resolve_preferred_target()
+	if preferred != null:
+		return preferred
 	var best: NetPlayer = null
 	var best_dist_sq := INF
 	for peer_value in players.keys():
@@ -372,6 +420,8 @@ func _nearest_target(bot: NetPlayer) -> NetPlayer:
 		if is_bot_peer(peer_id):
 			continue
 		if lobby_id > 0 and _peer_lobby(peer_id) != lobby_id:
+			continue
+		if _is_enemy_target_cb.is_valid() and not bool(_is_enemy_target_cb.call(bot_peer_id, peer_id)):
 			continue
 		var candidate := players.get(peer_id, null) as NetPlayer
 		if candidate == null:
@@ -383,6 +433,20 @@ func _nearest_target(bot: NetPlayer) -> NetPlayer:
 			best_dist_sq = dist_sq
 			best = candidate
 	return best
+
+func _resolve_preferred_target() -> NetPlayer:
+	if preferred_target_peer_id == 0:
+		return null
+	if lobby_id > 0 and _peer_lobby(preferred_target_peer_id) != lobby_id:
+		return null
+	if _is_enemy_target_cb.is_valid() and not bool(_is_enemy_target_cb.call(bot_peer_id, preferred_target_peer_id)):
+		return null
+	var candidate := players.get(preferred_target_peer_id, null) as NetPlayer
+	if candidate == null:
+		return null
+	if candidate.get_health() <= 0:
+		return null
+	return candidate
 
 func _move_axis_for_target(bot: NetPlayer, target: NetPlayer) -> float:
 	if bot == null or target == null:
@@ -409,6 +473,51 @@ func _should_jump_toward_target(bot: NetPlayer, target: NetPlayer) -> bool:
 	if absf(dx) > TARGET_JUMP_HORIZONTAL_THRESHOLD:
 		return false
 	return dy < -TARGET_JUMP_HEIGHT_THRESHOLD
+
+func _should_jump_toward_position(bot: NetPlayer, target_position: Vector2) -> bool:
+	if bot == null or target_position == Vector2.ZERO:
+		return false
+	var dx := target_position.x - bot.global_position.x
+	var dy := target_position.y - bot.global_position.y
+	if absf(dx) > _jump_link_horizontal_threshold():
+		return false
+	return dy < -TARGET_JUMP_HEIGHT_THRESHOLD
+
+func _jump_link_horizontal_threshold() -> float:
+	return maxf(TARGET_JUMP_HORIZONTAL_THRESHOLD, 96.0)
+
+func _should_jump_gap_toward_position(bot: NetPlayer, target_position: Vector2, move_axis: float) -> bool:
+	if bot == null or target_position == Vector2.ZERO:
+		return false
+	var dir := signf(move_axis)
+	if absf(dir) < 0.001:
+		dir = signf(target_position.x - bot.global_position.x)
+	if absf(dir) < 0.001:
+		return false
+	var dx := target_position.x - bot.global_position.x
+	if absf(dx) < 20.0:
+		return false
+	# If the target is generally ahead on the same level or above, prefer jumping gaps.
+	var dy := target_position.y - bot.global_position.y
+	if dy > 36.0:
+		return false
+	return true
+
+func _should_force_jump_over_gap(bot: NetPlayer, target_position: Vector2, move_axis: float) -> bool:
+	if bot == null or target_position == Vector2.ZERO:
+		return false
+	var dir := signf(move_axis)
+	if absf(dir) < 0.001:
+		dir = signf(target_position.x - bot.global_position.x)
+	if absf(dir) < 0.001:
+		return false
+	var dx := target_position.x - bot.global_position.x
+	if absf(dx) < 28.0:
+		return false
+	var dy := target_position.y - bot.global_position.y
+	# When the chase target is lower or roughly level but across a ledge,
+	# prefer a committed jump instead of dropping and stalling.
+	return dy >= -18.0 and dy <= 84.0
 
 func _jump_hold_duration(bot: NetPlayer, target: NetPlayer, wall_ahead: bool) -> float:
 	if bot == null:
@@ -537,7 +646,7 @@ func _write_bot_input_state(aim_world: Vector2, move_axis: float, jump_pressed: 
 	state["boost_damage"] = false
 	state["reported_rtt_ms"] = 0
 	state["last_packet_msec"] = Time.get_ticks_msec()
-	input_states[BOT_PEER_ID] = state
+	input_states[bot_peer_id] = state
 
 func _resolve_search_target(bot: NetPlayer, target: NetPlayer, has_target_los: bool) -> Vector2:
 	if bot != null and target != null and has_target_los:
@@ -546,6 +655,11 @@ func _resolve_search_target(bot: NetPlayer, target: NetPlayer, has_target_los: b
 		return last_seen_target_position
 	if target != null:
 		return target.global_position
+	return Vector2.ZERO
+
+func _movement_goal() -> Vector2:
+	if _movement_goal_position_cb.is_valid():
+		return _movement_goal_position_cb.call(bot_peer_id) as Vector2
 	return Vector2.ZERO
 
 func _movement_target(bot: NetPlayer, search_target: Vector2) -> Vector2:
@@ -583,11 +697,11 @@ func _try_cast_skills(bot: NetPlayer, target: NetPlayer, has_target_los: bool, d
 
 func _cast_skill(skill_number: int, target_world: Vector2) -> void:
 	if _server_cast_skill_cb.is_valid():
-		_server_cast_skill_cb.call(skill_number, BOT_PEER_ID, target_world)
+		_server_cast_skill_cb.call(skill_number, bot_peer_id, target_world)
 
 func _can_cast_skill(skill_number: int) -> bool:
 	if _can_cast_skill_cb.is_valid():
-		return bool(_can_cast_skill_cb.call(BOT_PEER_ID, skill_number))
+		return bool(_can_cast_skill_cb.call(bot_peer_id, skill_number))
 	return false
 
 func _default_input_state() -> Dictionary:

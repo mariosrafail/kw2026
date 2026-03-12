@@ -615,6 +615,29 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_field_focus")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_field_focus")
 theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
 
+[node name="ModeRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
+layout_mode = 2
+anchor_right = 1.0
+offset_left = 306.0
+offset_top = 154.0
+offset_bottom = 146.0
+theme_override_constants/separation = 4
+
+[node name="LobbyModeLabel" type="Label" parent="LobbyUi/LobbyPanel/Margin/VBox/ModeRow"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+text = "Mode"
+
+[node name="LobbyModeOption" type="OptionButton" parent="LobbyUi/LobbyPanel/Margin/VBox/ModeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_styles/focus = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/hover = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_lobby_field_focus")
+theme_override_styles/normal = SubResource("StyleBoxFlat_lobby_field_normal")
+
 [node name="LobbyActionsRow" type="HBoxContainer" parent="LobbyUi/LobbyPanel/Margin/VBox"]
 layout_mode = 2
 anchor_right = 1.0

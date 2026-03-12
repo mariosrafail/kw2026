@@ -96,6 +96,7 @@ var target_animation_on_floor := true
 var damage_push_direction := Vector2.ZERO
 var target_damage_push_direction := Vector2.ZERO
 var damage_slow_remaining_sec := 0.0
+var external_movement_speed_multiplier := 1.0
 var damage_part_scramble_remaining_sec := 0.0
 var damage_part_scramble_offsets: Dictionary = {}
 var damage_part_scramble_rotations: Dictionary = {}
@@ -860,9 +861,13 @@ func _apply_damage_feedback() -> void:
 	_play_damage_visual_feedback(push_direction)
 
 func get_movement_speed_multiplier() -> float:
+	var multiplier := clampf(external_movement_speed_multiplier, 0.0, 1.0)
 	if damage_slow_remaining_sec > 0.0:
-		return DAMAGE_SLOW_MULTIPLIER
-	return 1.0
+		multiplier *= DAMAGE_SLOW_MULTIPLIER
+	return multiplier
+
+func set_external_movement_speed_multiplier(value: float) -> void:
+	external_movement_speed_multiplier = clampf(value, 0.0, 1.0)
 
 func _play_damage_visual_feedback(push_direction := Vector2.ZERO) -> void:
 	if push_direction.length_squared() <= 0.0001:
@@ -1074,6 +1079,7 @@ func force_respawn(spawn_position: Vector2) -> void:
 	shield_health = 0
 	shield_remaining_sec = 0.0
 	damage_slow_remaining_sec = 0.0
+	external_movement_speed_multiplier = 1.0
 	damage_push_direction = Vector2.ZERO
 	target_damage_push_direction = Vector2.ZERO
 	damage_part_scramble_remaining_sec = 0.0

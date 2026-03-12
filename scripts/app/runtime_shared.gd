@@ -21,6 +21,7 @@ const ARG_PORT_PREFIX := "--port="
 const ARG_NO_AUTOSTART := "--no-autostart"
 
 const MAP_ID_CLASSIC := "classic"
+const MAP_ID_CYBERNEW := "cybernew"
 const WEAPON_ID_AK47 := "ak47"
 const WEAPON_ID_GRENADE := "grenade"
 const WEAPON_ID_KAR := "kar"
@@ -29,6 +30,8 @@ const WEAPON_ID_UZI := "uzi"
 const CHARACTER_ID_OUTRAGE := "outrage"
 const CHARACTER_ID_EREBUS := "erebus"
 const CHARACTER_ID_TASKO := "tasko"
+const GAME_MODE_DEATHMATCH := "deathmatch"
+const GAME_MODE_CTF := "ctf"
 
 const PLAYER_SCENE := preload("res://scenes/entities/player.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/entities/bullet.tscn")
@@ -58,6 +61,7 @@ const CAMERA_SHAKE_SCRIPT := preload("res://scripts/effects/camera_shake.gd")
 const WEAPON_UI_SCRIPT := preload("res://scripts/ui/main_menu/weapon_ui.gd")
 const DROPPED_MAG_SERVICE_SCRIPT := preload("res://scripts/world/dropped_mag_service.gd")
 const TARGET_DUMMY_BOT_CONTROLLER_SCRIPT := preload("res://scripts/world/target_dummy_bot_controller.gd")
+const CTF_MATCH_CONTROLLER_SCRIPT := preload("res://scripts/world/modes/ctf_match_controller.gd")
 
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
@@ -132,6 +136,8 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var lobby_skin_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/SkinRow/SkinLabel") as Label
 @onready var lobby_skin_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/SkinRow/LobbySkinOption") as OptionButton
 @onready var lobby_map_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/MapRow/LobbyMapOption") as OptionButton
+@onready var lobby_mode_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/ModeRow/LobbyModeLabel") as Label
+@onready var lobby_mode_option: OptionButton = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/ModeRow/LobbyModeOption") as OptionButton
 @onready var lobby_panel: PanelContainer = get_node_or_null("LobbyUi/LobbyPanel") as PanelContainer
 @onready var lobby_room_bg: ColorRect = get_node_or_null("LobbyUi/LobbyRoomBg") as ColorRect
 @onready var lobby_room_title: Label = get_node_or_null("LobbyUi/LobbyRoomTitle") as Label
@@ -187,10 +193,15 @@ var selected_weapon_skin := 0
 var selected_map_id := MAP_ID_CLASSIC
 var selected_character_id := CHARACTER_ID_OUTRAGE
 var client_target_map_id := MAP_ID_CLASSIC
+var selected_game_mode := GAME_MODE_DEATHMATCH
+var client_target_game_mode := GAME_MODE_DEATHMATCH
 var client_lobby_id := 0
 var lobby_auto_action_inflight := false
 var lobby_entries: Array = []
 var lobby_map_by_id: Dictionary = {}
+var lobby_mode_by_id: Dictionary = {}
+var peer_team_by_peer: Dictionary = {}
+var active_lobby_room_state: Dictionary = {}
 
 var auth_token := ""
 var auth_username := ""
@@ -218,7 +229,14 @@ var combat_effects: CombatEffects
 var camera_shake: CameraShake
 var dropped_mag_service: DroppedMagService
 var target_dummy_bot_controller: TargetDummyBotController
+var bot_controllers: Array[TargetDummyBotController] = []
+var ctf_match_controller: CtfMatchController
 var weapon_ui: RefCounted
+
+var ctf_flag_root: Area2D
+var ctf_flag_visual: Polygon2D
+var ctf_flag_carrier_peer_id := 0
+var ctf_flag_world_position := Vector2.ZERO
 
 var weapon_profiles: Dictionary = {}
 var weapon_shot_sfx_by_id: Dictionary = {}
@@ -263,6 +281,10 @@ func _rpc_ping_response(_client_sent_msec: int) -> void:
 
 @rpc("authority", "reliable")
 func _rpc_spawn_projectile(_projectile_id: int, _owner_peer_id: int, _spawn_position: Vector2, _velocity: Vector2, _lag_comp_ms: int, _trail_origin: Vector2, _weapon_id: String = "") -> void:
+	pass
+
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_ctf_flag(_carrier_peer_id: int, _world_position: Vector2, _red_score: int = 0, _blue_score: int = 0) -> void:
 	pass
 
 @rpc("authority", "reliable")
@@ -370,7 +392,19 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 	pass
 
 @rpc("authority", "reliable")
+func _rpc_lobby_room_state(_payload: Dictionary) -> void:
+	pass
+
+@rpc("authority", "reliable")
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_team(_team_id: int) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_start_match() -> void:
 	pass
 
 @rpc("any_peer", "reliable")

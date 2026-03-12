@@ -6,6 +6,8 @@ class_name MapController
 @export var scene_path := ""
 @export_range(1, 64, 1) var max_players := 2
 @export var spawn_points: Array[Vector2] = []
+@export var supported_modes: Array[String] = ["deathmatch"]
+@export var mode_max_players: Dictionary = {}
 @export var play_bounds: Rect2i = Rect2i(0, 0, 1280, 720)
 @export var camera_limits_rect: Rect2i = Rect2i(128, 104, 1024, 512)
 var _runtime_play_bounds: Rect2i = Rect2i()
@@ -33,6 +35,21 @@ func configured_max_players() -> int:
 
 func configured_spawn_points() -> Array:
 	return spawn_points.duplicate()
+
+func configured_supported_modes() -> Array[String]:
+	var modes: Array[String] = []
+	for mode_value in supported_modes:
+		var mode_id := str(mode_value).strip_edges().to_lower()
+		if mode_id.is_empty():
+			continue
+		if not modes.has(mode_id):
+			modes.append(mode_id)
+	if modes.is_empty():
+		modes.append("deathmatch")
+	return modes
+
+func configured_mode_max_players() -> Dictionary:
+	return mode_max_players.duplicate(true)
 
 func configured_play_bounds_rect() -> Rect2i:
 	return Rect2i(

@@ -106,6 +106,23 @@ func client_predict_local_player(delta: float, damage_boost_enabled: bool) -> vo
 		bool(state.get("jump_held", false))
 	)
 
+func local_host_apply_input(delta: float, damage_boost_enabled: bool, input_states: Dictionary) -> void:
+	if multiplayer == null:
+		return
+	var local_id := multiplayer.get_unique_id()
+	if local_id <= 0 or not players.has(local_id):
+		return
+	var local_player := players.get(local_id, null) as NetPlayer
+	if local_player == null:
+		return
+	var state: Dictionary = _read_local_input_state(damage_boost_enabled)
+	_cached_local_input_state = state
+	local_player.set_aim_world(state.get("aim_world", local_player.global_position + Vector2.RIGHT * 120.0) as Vector2)
+	var authoritative_state := state.duplicate(true)
+	authoritative_state["reported_rtt_ms"] = 0
+	authoritative_state["last_packet_msec"] = Time.get_ticks_msec()
+	input_states[local_id] = authoritative_state
+
 func follow_local_player_camera(delta: float) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return

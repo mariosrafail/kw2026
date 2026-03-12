@@ -118,7 +118,9 @@ func server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 		)
 
 func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
-	var respawn_position := _random_spawn_position()
+	var respawn_position := _spawn_position_for_peer(peer_id)
+	if respawn_position == Vector2.ZERO:
+		respawn_position = _random_spawn_position()
 	player.force_respawn(respawn_position)
 	player.set_health(100)
 	var state: Dictionary = _default_input_state()
