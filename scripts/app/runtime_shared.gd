@@ -21,7 +21,6 @@ const ARG_PORT_PREFIX := "--port="
 const ARG_NO_AUTOSTART := "--no-autostart"
 
 const MAP_ID_CLASSIC := "classic"
-const MAP_ID_CYBERNEW := "cybernew"
 const WEAPON_ID_AK47 := "ak47"
 const WEAPON_ID_GRENADE := "grenade"
 const WEAPON_ID_KAR := "kar"
@@ -233,8 +232,6 @@ var bot_controllers: Array[TargetDummyBotController] = []
 var ctf_match_controller: CtfMatchController
 var weapon_ui: RefCounted
 
-var ctf_flag_root: Area2D
-var ctf_flag_visual: Polygon2D
 var ctf_flag_carrier_peer_id := 0
 var ctf_flag_world_position := Vector2.ZERO
 

@@ -1,8 +1,7 @@
-[gd_scene format=3 uid="uid://04fj2b4l7ix7"]
+[gd_scene format=3 uid="uid://ccyr4dvh4hndf"]
 
 [ext_resource type="PackedScene" uid="uid://b7yb7yrpb6dtq" path="res://scenes/main.tscn" id="1_main"]
 
 [node name="Main3" unique_id=283169641 instance=ExtResource("1_main")]
-dev_auto_login_on_autostart = false
 dev_auto_login_username = ""
 dev_auto_login_password = "test"

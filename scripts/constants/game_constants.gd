@@ -120,7 +120,6 @@ const CHARACTERS := {
 # ============================================================================
 
 const MAP_ID_CLASSIC := "classic"
-const MAP_ID_CYBERNEW := "cybernew"
 
 const MAPS := {
 	MAP_ID_CLASSIC: {
@@ -128,12 +127,6 @@ const MAPS := {
 		"scene_path": "res://scenes/main.tscn",
 		"max_players": 2,
 		"description": "Original warriors arena"
-	},
-	MAP_ID_CYBERNEW: {
-		"name": "CyberNew",
-		"scene_path": "res://scenes/cybernew.tscn",
-		"max_players": 2,
-		"description": "CyberNew"
 	}
 }
 

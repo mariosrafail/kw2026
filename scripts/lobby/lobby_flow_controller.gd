@@ -86,8 +86,10 @@ func server_create_lobby(
 	requested_max_players: int = 0,
 	requested_mode_id: String = "deathmatch"
 ) -> void:
+	print("[LOBBY FLOW] server_create_lobby begin peer_id=%d name=%s map=%s mode=%s" % [peer_id, requested_name, requested_map_id, requested_mode_id])
 	if _peer_lobby(peer_id) > 0:
 		var existing_lobby_id := _peer_lobby(peer_id)
+		print("[LOBBY FLOW] server_create_lobby blocked existing_lobby_id=%d" % existing_lobby_id)
 		_send_lobby_action_result(peer_id, false, "Already in lobby. Leave first.", existing_lobby_id, _lobby_map_id(existing_lobby_id))
 		return
 
@@ -95,12 +97,23 @@ func server_create_lobby(
 	var lobby_id := int(create_result.get("lobby_id", 0))
 	var lobby_name := str(create_result.get("lobby_name", "Lobby %d" % lobby_id))
 	var map_id := _lobby_map_id(lobby_id)
+	print("[LOBBY FLOW] server_create_lobby created lobby_id=%d lobby_name=%s map_id=%s is_ctf=%s" % [
+		lobby_id,
+		lobby_name,
+		map_id,
+		str(lobby_service != null and lobby_service.is_ctf_lobby(lobby_id))
+	])
 	if lobby_service != null and lobby_service.is_ctf_lobby(lobby_id):
 		lobby_service.auto_assign_team_for_peer(lobby_id, peer_id)
+		print("[LOBBY FLOW] server_create_lobby auto_assigned_ctf_team peer_id=%d teams=%s" % [peer_id, str(lobby_service.team_assignments_for_lobby(lobby_id))])
 	if server_spawn_peer_if_needed_cb.is_valid():
+		print("[LOBBY FLOW] server_create_lobby spawn_peer_if_needed peer_id=%d lobby_id=%d" % [peer_id, lobby_id])
 		server_spawn_peer_if_needed_cb.call(peer_id, lobby_id)
+	print("[LOBBY FLOW] server_create_lobby send_action_result peer_id=%d lobby_id=%d" % [peer_id, lobby_id])
 	_send_lobby_action_result(peer_id, true, "Created %s" % lobby_name, lobby_id, map_id)
+	print("[LOBBY FLOW] server_create_lobby broadcast_room_state lobby_id=%d" % lobby_id)
 	_broadcast_lobby_room_state(lobby_id)
+	print("[LOBBY FLOW] server_create_lobby broadcast_lobby_list lobby_id=%d" % lobby_id)
 	_server_broadcast_lobby_list()
 
 func server_join_lobby(peer_id: int, lobby_id: int) -> void:
