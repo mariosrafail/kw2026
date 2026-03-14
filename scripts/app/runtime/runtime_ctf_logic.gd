@@ -222,12 +222,16 @@ func _team_for_peer(peer_id: int) -> int:
 func _bot_movement_goal_position(peer_id: int) -> Vector2:
 	if not _ctf_enabled() or ctf_match_controller == null:
 		return Vector2.ZERO
-	if not ctf_match_controller.is_peer_carrying_flag(peer_id):
-		return Vector2.ZERO
 	var team_id := _team_for_peer(peer_id)
 	if team_id < 0:
 		return Vector2.ZERO
-	return ctf_match_controller.capture_goal_for_team(team_id)
+	# Priority 1: carrying the flag → deliver it to the capture goal.
+	if ctf_match_controller.is_peer_carrying_flag(peer_id):
+		return ctf_match_controller.capture_goal_for_team(team_id)
+	# Priority 2: flag is loose (nobody carrying it) → navigate to pick it up.
+	if ctf_flag_carrier_peer_id <= 0 and ctf_flag_world_position != Vector2.ZERO:
+		return ctf_flag_world_position
+	return Vector2.ZERO
 
 func _is_enemy_target(attacker_peer_id: int, target_peer_id: int) -> bool:
 	if attacker_peer_id == target_peer_id:

@@ -36,11 +36,16 @@ const VANTAGE_REACHED_DISTANCE := 20.0
 const PLATFORM_CLIMB_VERTICAL_THRESHOLD := 46.0
 const DIRECT_CHASE_REACHED_DISTANCE := 26.0
 const PLATFORM_STEP_UP_FORWARD_OFFSETS := [18.0, 30.0, 44.0, 60.0]
-const PLATFORM_STEP_UP_HEIGHT_OFFSETS := [-22.0, -40.0, -58.0, -76.0, -96.0]
+const PLATFORM_STEP_UP_HEIGHT_OFFSETS := [-22.0, -40.0, -58.0, -76.0, -96.0, -114.0]
 const PLATFORM_STEP_UP_MIN_RISE := 12.0
 const OBSTACLE_BYPASS_SCAN_OFFSETS := [16.0, 30.0, 46.0, 64.0, 84.0]
 const WALL_LEDGE_FORWARD_OFFSETS := [10.0, 16.0, 22.0]
-const WALL_LEDGE_HEIGHT_OFFSETS := [-28.0, -44.0, -62.0, -82.0, -104.0]
+const WALL_LEDGE_HEIGHT_OFFSETS := [-28.0, -44.0, -62.0, -82.0, -104.0, -120.0]
+const STUCK_CHECK_INTERVAL := 1.2
+const STUCK_DISTANCE_THRESHOLD := 16.0
+const STUCK_CLIMB_JUMP_COOLDOWN := 0.6
+
+enum BotRole { ENEMY = 0, ALLY = 1 }
 
 var players: Dictionary = {}
 var input_states: Dictionary = {}
@@ -78,6 +83,11 @@ var last_seen_memory_remaining := 0.0
 var pathfinder: BotPathfinder
 var preferred_target_peer_id := 0
 var current_vantage_position := Vector2.ZERO
+var bot_role: BotRole = BotRole.ENEMY
+var ally_peer_id: int = 0
+var _stuck_check_timer := 0.0
+var _stuck_last_position := Vector2.ZERO
+var _stuck_climb_cooldown := 0.0
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -92,6 +102,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	bot_name = str(config.get("bot_name", DEFAULT_BOT_NAME))
 	bot_color = config.get("bot_color", DEFAULT_BOT_COLOR) as Color
 	spawn_point_index = maxi(0, int(config.get("spawn_point_index", 1)))
+	bot_role = int(config.get("bot_role", BotRole.ENEMY)) as BotRole
+	ally_peer_id = int(config.get("ally_peer_id", 0))
 
 	_get_world_2d_cb = callbacks.get("get_world_2d", Callable()) as Callable
 	_random_spawn_position_cb = callbacks.get("random_spawn_position", Callable()) as Callable
@@ -123,6 +135,9 @@ func reset() -> void:
 	jump_hold_remaining = 0.0
 	last_seen_target_position = Vector2.ZERO
 	last_seen_memory_remaining = 0.0
+	_stuck_check_timer = 0.0
+	_stuck_last_position = Vector2.ZERO
+	_stuck_climb_cooldown = 0.0
 	if pathfinder != null:
 		pathfinder.invalidate()
 
@@ -254,7 +269,8 @@ func tick(delta: float) -> void:
 		if absf(edge_seek_axis) > 0.001:
 			move_axis = edge_seek_axis
 			obstacle_probe_axis = edge_seek_axis
-	var in_fire_range := (not pursuing_goal) and target != null and has_target_los and distance_to_target <= FIRE_ENGAGE_DISTANCE
+	# Fire whenever the target is in LOS and range, even while pursuing an objective.
+	var in_fire_range := target != null and has_target_los and distance_to_target <= FIRE_ENGAGE_DISTANCE
 	var should_hold_fire_position := (
 		(not pursuing_goal)
 		and target != null
@@ -336,9 +352,11 @@ func tick(delta: float) -> void:
 		move_axis = signf(step_up_target.x - bot.global_position.x)
 		if absf(move_axis) > 0.001:
 			patrol_direction = move_axis
-	elif _should_jump_toward_target(bot, target) and bot.is_on_floor() and (not climb_pursuit or absf(move_axis) > 0.001):
+	elif _should_jump_toward_target(bot, target) and bot.is_on_floor() and not _has_ceiling_block(bot) and (not climb_pursuit or absf(move_axis) > 0.001):
 		jump_pressed = true
-	elif _should_jump_toward_position(bot, chase_target) and bot.is_on_floor() and (not climb_pursuit or absf(move_axis) > 0.001):
+	elif _should_jump_toward_position(bot, chase_target) and bot.is_on_floor() and not _has_ceiling_block(bot) and (not climb_pursuit or absf(move_axis) > 0.001):
+		jump_pressed = true
+	elif _should_jump_toward_waypoint(bot, move_target) and bot.is_on_floor() and not _has_ceiling_block(bot):
 		jump_pressed = true
 	elif stuck_at_gap and bot.is_on_floor():
 		jump_pressed = true
@@ -365,6 +383,19 @@ func tick(delta: float) -> void:
 		move_axis = patrol_direction
 	if jump_pressed:
 		jump_hold_remaining = _jump_hold_duration(bot, target, wall_ahead, climb_pursuit, wall_ledge_target != Vector2.ZERO or step_up_target != Vector2.ZERO)
+	# Stuck detection: if the bot hasn't progressed toward a target above it for
+	# STUCK_CHECK_INTERVAL seconds, force a max-height jump to break free.
+	_stuck_climb_cooldown = maxf(0.0, _stuck_climb_cooldown - delta)
+	_stuck_check_timer += delta
+	if _stuck_check_timer >= STUCK_CHECK_INTERVAL:
+		var moved := bot.global_position.distance_to(_stuck_last_position)
+		if moved < STUCK_DISTANCE_THRESHOLD and search_target != Vector2.ZERO and _stuck_climb_cooldown <= 0.0:
+			if search_target.y < bot.global_position.y - 20.0 and bot.is_on_floor() and not _has_ceiling_block(bot):
+				jump_pressed = true
+				jump_hold_remaining = JUMP_HOLD_MAX_SEC
+				_stuck_climb_cooldown = STUCK_CLIMB_JUMP_COOLDOWN
+		_stuck_last_position = bot.global_position
+		_stuck_check_timer = 0.0
 	var jump_held := jump_pressed or jump_hold_remaining > 0.0
 	if not bot.is_on_floor() and airborne_side_target != Vector2.ZERO:
 		move_axis = signf(airborne_side_target.x - bot.global_position.x)
@@ -374,6 +405,10 @@ func tick(delta: float) -> void:
 		move_axis = signf(wall_ledge_target.x - bot.global_position.x)
 		if absf(move_axis) > 0.001:
 			patrol_direction = move_axis
+	# Safety net: never completely freeze.  If all navigation logic produced zero
+	# axis and we're not in a deliberate fire-stop, fall back to patrol direction.
+	if absf(move_axis) < 0.001 and not should_hold_fire_position:
+		move_axis = patrol_direction if absf(patrol_direction) > 0.001 else 1.0
 	_write_bot_input_state(aim_world, move_axis, jump_pressed, jump_held, in_fire_range)
 	if target == null and (bot.is_on_wall() or _should_turn(bot, move_axis)):
 		patrol_direction *= -1.0
@@ -566,7 +601,36 @@ func _should_jump_toward_position(bot: NetPlayer, target_position: Vector2) -> b
 	return dy < -TARGET_JUMP_HEIGHT_THRESHOLD
 
 func _jump_link_horizontal_threshold() -> float:
-	return maxf(TARGET_JUMP_HORIZONTAL_THRESHOLD, 96.0)
+	return maxf(TARGET_JUMP_HORIZONTAL_THRESHOLD, 130.0)
+
+func _has_ceiling_block(bot: NetPlayer) -> bool:
+	# Returns true when solid geometry is directly above within jump reach.
+	# Used to prevent the bot from repeatedly jumping into the underside of a
+	# platform instead of moving sideways to find the edge.
+	var world_2d := _world_2d()
+	if bot == null or world_2d == null:
+		return false
+	var space_state := world_2d.direct_space_state
+	if space_state == null:
+		return false
+	var from := bot.global_position + Vector2(0.0, -(BOT_HALF_HEIGHT + 2.0))
+	var to := from + Vector2(0.0, -90.0)
+	var query := PhysicsRayQueryParameters2D.create(from, to, 1)
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	query.exclude = [bot]
+	return not space_state.intersect_ray(query).is_empty()
+
+func _should_jump_toward_waypoint(bot: NetPlayer, waypoint: Vector2) -> bool:
+	# Trigger a jump when the A* waypoint itself is above us — meaning the graph
+	# path goes through a jump link that requires vertical traversal.
+	if bot == null or waypoint == Vector2.ZERO:
+		return false
+	var dy := waypoint.y - bot.global_position.y
+	if dy >= -TARGET_JUMP_HEIGHT_THRESHOLD:
+		return false
+	var dx := absf(waypoint.x - bot.global_position.x)
+	return dx <= 140.0
 
 func _should_jump_gap_toward_position(bot: NetPlayer, target_position: Vector2, move_axis: float) -> bool:
 	if bot == null or target_position == Vector2.ZERO:
@@ -604,7 +668,9 @@ func _should_force_jump_over_gap(bot: NetPlayer, target_position: Vector2, move_
 func _jump_hold_duration(bot: NetPlayer, target: NetPlayer, wall_ahead: bool, climb_pursuit: bool = false, committed_climb: bool = false) -> float:
 	if bot == null:
 		return JUMP_HOLD_MIN_SEC
-	if committed_climb:
+	# Always use max hold when actively climbing to reach a platform above us —
+	# the A* graph allows jumps up to 118px which requires near-full hold.
+	if committed_climb or climb_pursuit:
 		return JUMP_HOLD_MAX_SEC
 	var desired_height := 0.0
 	if target != null:
