@@ -93,7 +93,7 @@ func request_lobby_list() -> bool:
 	_rpc_request_lobby_list.rpc_id(1)
 	return true
 
-func create_lobby(lobby_name: String, weapon_id: String, character_id: String, map_id: String = "classic", mode_id: String = "deathmatch") -> bool:
+func create_lobby(lobby_name: String, weapon_id: String, character_id: String, map_id: String = "", mode_id: String = "deathmatch") -> bool:
 	if not _can_send_server_rpc():
 		_log("create_lobby blocked can_send=false")
 		return false
@@ -103,9 +103,11 @@ func create_lobby(lobby_name: String, weapon_id: String, character_id: String, m
 	var normalized_character := character_id.strip_edges().to_lower()
 	if normalized_character != "erebus" and normalized_character != "tasko":
 		normalized_character = "outrage"
+	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
 	var normalized_map := map_id.strip_edges().to_lower()
 	if normalized_map.is_empty():
-		normalized_map = "classic"
+		normalized_map = default_map_id
+	normalized_map = _map_flow_service.normalize_map_id(_map_catalog, normalized_map)
 	var normalized_mode := _map_flow_service.select_mode_for_map(_map_catalog, normalized_map, mode_id)
 	_pending_mode_id = normalized_mode
 	var payload := "%s|%s|%s|%s" % [normalized_weapon, normalized_character, normalized_map, normalized_mode]
@@ -113,14 +115,16 @@ func create_lobby(lobby_name: String, weapon_id: String, character_id: String, m
 	_rpc_lobby_create.rpc_id(1, lobby_name.strip_edges(), payload)
 	return true
 
-func host_local_match(map_id: String = "classic", mode_id: String = "deathmatch") -> bool:
+func host_local_match(map_id: String = "", mode_id: String = "deathmatch") -> bool:
+	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
 	var normalized_map := map_id.strip_edges().to_lower()
 	if normalized_map.is_empty():
-		normalized_map = "classic"
+		normalized_map = default_map_id
+	normalized_map = _map_flow_service.normalize_map_id(_map_catalog, normalized_map)
 	var normalized_mode := _map_flow_service.select_mode_for_map(_map_catalog, normalized_map, mode_id)
 	var scene_path := _map_catalog.scene_path_for_id(normalized_map)
 	if scene_path.strip_edges().is_empty():
-		scene_path = "res://scenes/main.tscn"
+		scene_path = _map_catalog.scene_path_for_id(default_map_id)
 
 	ProjectSettings.set_setting("kw/pending_game_mode", normalized_mode)
 
@@ -432,12 +436,14 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 @rpc("authority", "reliable")
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	var tree := get_tree()
+	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
 	var normalized := str(_map_id).strip_edges().to_lower()
 	if normalized.is_empty():
-		normalized = "classic"
+		normalized = default_map_id
+	normalized = _map_flow_service.normalize_map_id(_map_catalog, normalized)
 	var scene_path := _map_catalog.scene_path_for_id(normalized)
 	if scene_path.is_empty():
-		scene_path = "res://scenes/main.tscn"
+		scene_path = _map_catalog.scene_path_for_id(default_map_id)
 	var mode_id := _map_flow_service.normalize_mode_id(str(_lobby_mode_by_id.get(_active_lobby_id, _pending_mode_id)))
 	ProjectSettings.set_setting("kw/pending_game_mode", mode_id)
 	_log("scene_switch source=SERVER_LOBBY map_id=%s mode=%s scene=%s" % [normalized, mode_id, scene_path])

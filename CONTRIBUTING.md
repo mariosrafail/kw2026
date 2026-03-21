@@ -36,7 +36,7 @@ Thank you for contributing! This guide helps maintain code quality and consisten
 2. **Open Project**
    - Launch Godot 4.3
    - Open `c:\Users\mario\Documents\kw_godot\`
-   - Set main scene to `scenes/lobby.tscn`
+   - Set main scene to `scenes/ui/main_menu.tscn`
 
 3. **Test Locally**
 

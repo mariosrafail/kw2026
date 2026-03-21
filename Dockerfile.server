@@ -1,0 +1,11 @@
+FROM barichello/godot-ci:4.6.1
+
+WORKDIR /game
+
+COPY . /game
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends libfontconfig1 python3-minimal \
+	&& rm -rf /var/lib/apt/lists/*
+
+CMD bash -lc "python3 /game/tools/check_rpc_surface.py && if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/main_dth.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}; else godot --headless --verbose --path /game res://scenes/main_dth.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}; fi"

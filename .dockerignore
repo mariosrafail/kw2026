@@ -1,0 +1,16 @@
+.git
+.gitignore
+.godot
+.vscode
+.claude
+build
+docs
+launcher
+updates_site
+tools/auth_api
+server_headless.log
+server_headless_8080.log
+*.sln
+*.zip
+*.pdb
+*.tmp

@@ -4,6 +4,7 @@ const LOBBY_RPC_BRIDGE_SCRIPT := preload("res://scripts/ui/main_menu/lobby_rpc_b
 const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
+const CONNECT_WATCHDOG_TIMEOUT_SEC := 8.0
 
 var _host: Control
 var _make_button: Callable
@@ -52,6 +53,7 @@ var _lobby_service = LOBBY_SERVICE_SCRIPT.new()
 var _map_catalog = MAP_CATALOG_SCRIPT.new()
 var _map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
 var _selected_mode_id := "deathmatch"
+var _selected_map_id := ""
 
 func _log(message: String) -> void:
 	print("[lobby_overlay] %s" % message)
@@ -88,6 +90,9 @@ func open(play_button: Control) -> void:
 	_ensure_rpc_bridge()
 	if _overlay == null:
 		return
+	_ensure_valid_map_selection()
+	if _mode_button != null:
+		_mode_button.text = _selected_map_button_text()
 	_lobby_list_ready = false
 	_pending_create_request = {}
 	_ctf_room_state.clear()
@@ -361,7 +366,7 @@ func _start_connect_watchdog() -> void:
 	_connect_nonce += 1
 	var nonce := _connect_nonce
 	_log("start_connect_watchdog nonce=%d" % nonce)
-	var timer := _host.get_tree().create_timer(2.5)
+	var timer := _host.get_tree().create_timer(CONNECT_WATCHDOG_TIMEOUT_SEC)
 	timer.timeout.connect(func() -> void:
 		if nonce != _connect_nonce:
 			return
@@ -500,6 +505,15 @@ func _on_rpc_action_result(success: bool, message: String, active_lobby_id: int,
 			_overlay.visible = false
 		if _on_closed.is_valid():
 			_on_closed.call()
+		_refresh_lobby_buttons_state()
+		return
+	if success and active_lobby_id <= 0 and not _pending_create_request.is_empty():
+		if _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc")):
+			_log("action_result post-leave sending pending create request")
+			_send_create_lobby_request(_pending_create_request)
+			return
+		_log("action_result post-leave pending create exists; reconnecting")
+		_request_lobby_list_from_server()
 		_refresh_lobby_buttons_state()
 		return
 	_request_lobby_list_from_server()
@@ -645,12 +659,19 @@ func _create_lobby_room() -> void:
 	if _rpc_bridge == null:
 		_log("create_lobby clicked but rpc_bridge=null")
 		return
-	if _joined_lobby_id > 0:
-		_log("create_lobby blocked already_in_lobby id=%d" % _joined_lobby_id)
-		if _status_label != null:
-			_status_label.text = "Leave current lobby first"
-		return
 	var request := _build_create_lobby_request()
+	if _joined_lobby_id > 0:
+		_log("create_lobby while in lobby id=%d; leaving first then creating new lobby" % _joined_lobby_id)
+		_pending_create_request = request.duplicate(true)
+		if _status_label != null:
+			_status_label.text = "Leaving current lobby..."
+		_begin_lobby_action("Leaving current lobby...")
+		var sent_leave := bool(_rpc_bridge.call("leave_lobby"))
+		if not sent_leave:
+			_action_inflight = false
+			_request_lobby_list_from_server()
+		_refresh_lobby_buttons_state()
+		return
 	_log("create_lobby clicked request=%s can_send=%s" % [str(request), str(bool(_rpc_bridge.call("can_send_lobby_rpc")))])
 	if not bool(_rpc_bridge.call("can_send_lobby_rpc")):
 		_log("create_lobby has no active lobby-server connection; queueing reconnect for ONLINE lobby create")
@@ -680,7 +701,22 @@ func _leave_lobby_room() -> void:
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
+func _start_ctf_match() -> void:
+	if _rpc_bridge == null:
+		return
+	if _joined_lobby_id <= 0:
+		return
+	_begin_lobby_action("Starting CTF match...")
+	var sent_start := bool(_rpc_bridge.call("start_lobby_match"))
+	if _status_label != null:
+		_status_label.text = "Starting CTF match..." if sent_start else "Still connecting..."
+	if not sent_start:
+		_action_inflight = false
+		_request_lobby_list_from_server()
+	_refresh_lobby_buttons_state()
+
 func _build_create_lobby_request() -> Dictionary:
+	_ensure_valid_map_selection()
 	var requested_name := "My Lobby %d" % (_room_entries.size() + 1)
 	var selected_weapon_id := _selected_weapon_id()
 	var selected_character_id := _selected_warrior_id()
@@ -688,18 +724,20 @@ func _build_create_lobby_request() -> Dictionary:
 		"name": requested_name,
 		"weapon_id": selected_weapon_id,
 		"character_id": selected_character_id,
-		"map_id": "classic",
+		"map_id": _selected_map_id,
 		"mode_id": _selected_mode_id,
 	}
-	_log("build_create_lobby_request selected_mode_id=%s request=%s" % [_selected_mode_id, str(request)])
+	_log("build_create_lobby_request selected_map_id=%s selected_mode_id=%s request=%s" % [_selected_map_id, _selected_mode_id, str(request)])
 	return request
 
 func _send_create_lobby_request(request: Dictionary) -> void:
 	_pending_create_request = {}
+	_ensure_valid_map_selection()
+	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
 	var requested_name := str(request.get("name", "")).strip_edges()
 	var selected_weapon_id := str(request.get("weapon_id", "ak47")).strip_edges().to_lower()
 	var selected_character_id := str(request.get("character_id", "outrage")).strip_edges().to_lower()
-	var map_id := str(request.get("map_id", "classic")).strip_edges().to_lower()
+	var map_id := str(request.get("map_id", default_map_id)).strip_edges().to_lower()
 	var mode_id := str(request.get("mode_id", "deathmatch")).strip_edges().to_lower()
 	if requested_name.is_empty():
 		requested_name = "My Lobby %d" % (_room_entries.size() + 1)
@@ -708,7 +746,8 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 	if selected_character_id != "erebus" and selected_character_id != "tasko":
 		selected_character_id = "outrage"
 	if map_id.is_empty():
-		map_id = "classic"
+		map_id = default_map_id
+	map_id = _map_flow_service.normalize_map_id(_map_catalog, map_id)
 	mode_id = _map_flow_service.select_mode_for_map(_map_catalog, map_id, mode_id)
 	_log("send_create_lobby_request name=%s weapon=%s character=%s map=%s mode=%s can_send=%s" % [
 		requested_name,
@@ -734,6 +773,42 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 		_request_lobby_list_from_server()
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
+
+func _ensure_valid_map_selection() -> void:
+	var map_ids := _map_catalog.all_map_ids()
+	if map_ids.is_empty():
+		_selected_map_id = "classic"
+		_selected_mode_id = "deathmatch"
+		return
+	var fallback_map := _map_flow_service.normalize_map_id(_map_catalog, str(map_ids[0]))
+	var candidate := _selected_map_id
+	if candidate.strip_edges().is_empty():
+		candidate = _map_catalog.default_map_id()
+	_selected_map_id = _map_flow_service.normalize_map_id(_map_catalog, candidate)
+	if map_ids.find(_selected_map_id) < 0:
+		_selected_map_id = fallback_map
+	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
+
+func _selected_map_button_text() -> String:
+	_ensure_valid_map_selection()
+	var map_label := _map_flow_service.map_label_for_id(_map_catalog, _selected_map_id).to_upper()
+	var mode_label := _map_flow_service.mode_label_for_id(_selected_mode_id).to_upper()
+	return "MAP: %s (%s)" % [map_label, mode_label]
+
+func _cycle_selected_map() -> void:
+	_ensure_valid_map_selection()
+	var map_ids := _map_catalog.all_map_ids()
+	if map_ids.is_empty():
+		return
+	var current_index := map_ids.find(_selected_map_id)
+	if current_index < 0:
+		current_index = 0
+	var next_index := (current_index + 1) % map_ids.size()
+	_selected_map_id = _map_flow_service.normalize_map_id(_map_catalog, str(map_ids[next_index]))
+	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
+	if _mode_button != null:
+		_mode_button.text = _selected_map_button_text()
+	_log("map_button cycled selected_map_id=%s selected_mode_id=%s" % [_selected_map_id, _selected_mode_id])
 
 func _refresh_lobby_buttons_state() -> void:
 	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
@@ -885,19 +960,17 @@ func _ensure_overlay() -> void:
 	_mode_row = mode_row
 
 	var map_label := Label.new()
-	map_label.text = "Map: MAIN"
+	map_label.text = "Map"
 	map_label.add_theme_font_size_override("font_size", 11)
 	mode_row.add_child(map_label)
 
 	var mode_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
-	mode_btn.text = "MODE: DEATHMATCH"
+	mode_btn.text = _selected_map_button_text()
 	mode_btn.custom_minimum_size = Vector2(0, 24)
 	mode_btn.add_theme_font_size_override("font_size", 10)
 	mode_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mode_btn.pressed.connect(func() -> void:
-		_selected_mode_id = "ctf" if _selected_mode_id == "deathmatch" else "deathmatch"
-		mode_btn.text = "MODE: CAPTURE THE FLAG" if _selected_mode_id == "ctf" else "MODE: DEATHMATCH"
-		_log("mode_button toggled selected_mode_id=%s" % _selected_mode_id)
+		_cycle_selected_map()
 	)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(mode_btn)
@@ -1031,10 +1104,7 @@ func _ensure_overlay() -> void:
 	var start_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	start_btn.text = "START MATCH"
 	start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	start_btn.pressed.connect(func() -> void:
-		if _rpc_bridge != null:
-			_rpc_bridge.call("start_lobby_match")
-	)
+	start_btn.pressed.connect(_start_ctf_match)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(start_btn)
 	room_actions.add_child(start_btn)

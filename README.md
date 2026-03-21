@@ -162,7 +162,7 @@ scripts/
     └── game_constants.gd          # All magic numbers/strings
 
 scenes/
-├── lobby.tscn                     # Lobby scene (main entry)
+├── main.tscn                      # Runtime game scene
 ├── main.tscn                      # Classic map gameplay
 ├── main_cyber.tscn                # Cyber map variant
 ├── main_test.tscn                 # Dev testing playground

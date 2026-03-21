@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://dd67uk2pjld6v"]
+[gd_scene format=3 uid="uid://bo6avdr05ufok"]
 
 [ext_resource type="Script" uid="uid://c3v1lctyi2pqg" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="2_font"]

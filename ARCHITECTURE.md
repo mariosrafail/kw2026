@@ -29,7 +29,7 @@ scripts/
 
 scenes/
 ├── main.tscn         # Game scene (combat)
-├── lobby.tscn        # Lobby/connection scene
+├── main.tscn         # Runtime game scene
 ├── main_cyber.tscn   # Alternate map
 ├── main_test.tscn    # Test map
 └── entities/         # Player & projectile scenes
@@ -182,7 +182,7 @@ Managed by `SkillsService`, triggered via RPC.
 **Flow:**
 
 ```
-Lobby Scene loads (lobby.tscn with main.gd script)
+Runtime scene loads (`main.tscn` with `main.gd` script)
 Select weapon/character
 Create/Join lobby (peer list tracked in LobbyService)
 Once 2+ players → Start game (load actual game map)

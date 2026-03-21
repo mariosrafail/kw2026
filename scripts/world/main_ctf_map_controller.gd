@@ -1,14 +1,13 @@
 extends MapController
-class_name ClassicMapController
+class_name MainCtfMapController
 
 func _init() -> void:
-	map_id = "classic"
-	map_label = "Main"
-	scene_path = "res://scenes/main.tscn"
-	max_players = 2
-	supported_modes = ["deathmatch", "ctf"]
+	map_id = "main_ctf"
+	map_label = "Main Map Capture The Flag"
+	scene_path = "res://scenes/main_ctf.tscn"
+	max_players = 4
+	supported_modes = ["ctf"]
 	mode_max_players = {
-		"deathmatch": 2,
 		"ctf": 4
 	}
 	spawn_points = [

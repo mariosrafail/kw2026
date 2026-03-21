@@ -19,7 +19,7 @@ godot --mode=client --host=127.0.0.1 --port=8080
 godot --mode=client --host=127.0.0.1 --port=8080
 ```
 
-Main scene: `scenes/lobby.tscn`
+Main scene: `scenes/ui/main_menu.tscn`
 
 Auth API base URL is configured in `project.godot` → `kw/auth_api_base_url` (default `http://127.0.0.1:8090`). See `tools/auth_api/README.md` to run it locally.
 

@@ -14,7 +14,18 @@ const RPC_ROOT_NODE_NAME := "Main3"
 func _allows_scene_network_bootstrap() -> bool:
 	if _uses_lobby_scene_flow():
 		return true
+	if _has_cmdline_network_boot_override():
+		return true
 	return OS.has_feature("editor") and dev_auto_login_on_autostart
+
+func _has_cmdline_network_boot_override() -> bool:
+	for raw_arg in OS.get_cmdline_user_args():
+		var arg := str(raw_arg).strip_edges().to_lower()
+		if arg.begins_with(ARG_MODE_PREFIX):
+			var mode := arg.substr(ARG_MODE_PREFIX.length())
+			if mode == "server" or mode == "client":
+				return true
+	return false
 
 func _ready() -> void:
 	_ensure_rpc_root_node_name()
@@ -38,6 +49,7 @@ func _ready() -> void:
 	session_controller.disable_editor_localhost_override = dev_remote_autostart
 	session_controller.disable_editor_retry_fallback = dev_remote_autostart
 	var startup_autostart := true
+	var has_cmdline_network_override := _has_cmdline_network_boot_override()
 	if _uses_lobby_scene_flow():
 		startup_mode = Role.CLIENT
 		startup_autostart = true
@@ -47,7 +59,7 @@ func _ready() -> void:
 			startup_autostart = true
 		else:
 			startup_mode = Role.SERVER if OS.has_feature("editor") else Role.NONE
-			startup_autostart = false
+			startup_autostart = has_cmdline_network_override
 	session_controller.set_startup(startup_mode, startup_autostart)
 	session_controller.apply_startup_overrides()
 	session_controller.set_connection_defaults(host_input.text.strip_edges())

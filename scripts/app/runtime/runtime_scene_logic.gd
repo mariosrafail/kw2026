@@ -113,6 +113,7 @@ func _request_lobby_scene_switch() -> void:
 
 func _lobby_scene_path() -> String:
 	var dedicated_lobby_scene := "res://scenes/lobby.tscn"
+	var legacy_dedicated_lobby_scene := "res://scenes/main.tscn"
 	var should_use_runtime_lobby := (
 		role == Role.SERVER
 		or (multiplayer != null and multiplayer.is_server())
@@ -122,6 +123,8 @@ func _lobby_scene_path() -> String:
 	)
 	if should_use_runtime_lobby and ResourceLoader.exists(dedicated_lobby_scene):
 		return dedicated_lobby_scene
+	if should_use_runtime_lobby and ResourceLoader.exists(legacy_dedicated_lobby_scene):
+		return legacy_dedicated_lobby_scene
 	var explicit_lobby_scene := "res://scenes/ui/main_menu.tscn"
 	if ResourceLoader.exists(explicit_lobby_scene):
 		return explicit_lobby_scene
@@ -180,8 +183,6 @@ func _server_switch_lobby_to_map_scene(lobby_id: int, map_id: String, trigger_pe
 	var target_scene := map_flow_service.scene_path_for_id(map_catalog, normalized_map)
 	if target_scene.strip_edges().is_empty():
 		return
-	if scene_file_path == target_scene or pending_scene_switch == target_scene:
-		return
 
 	var recipients := _lobby_members(lobby_id)
 	if recipients.is_empty() and trigger_peer_id > 0:
@@ -196,16 +197,25 @@ func _server_switch_lobby_to_map_scene(lobby_id: int, map_id: String, trigger_pe
 		_send_scene_switch_rpc(member_id, normalized_map)
 
 	if multiplayer.is_server():
+		if scene_file_path == target_scene or pending_scene_switch == target_scene:
+			_append_log("Server already at target scene; remote scene switch sent only. lobby_id=%d map=%s mode=%s scene=%s" % [lobby_id, normalized_map, lobby_mode, target_scene])
+			return
 		_append_log("Server lobby->map switch: lobby_id=%d map=%s mode=%s scene=%s" % [lobby_id, normalized_map, lobby_mode, target_scene])
 		_switch_to_map_scene(normalized_map, lobby_mode)
 
 func _server_send_lobby_list_to_peer(peer_id: int) -> void:
 	var entries := lobby_service.pack_lobby_list()
 	var packed_entries := map_flow_service.server_pack_lobby_entries(entries, map_catalog)
+	var active_lobby_id := _peer_lobby(peer_id)
+	if active_lobby_id > 0 and (lobby_service == null or not lobby_service.has_lobby(active_lobby_id)):
+		_append_log("Clearing stale active lobby for peer %d (missing lobby_id=%d)." % [peer_id, active_lobby_id])
+		if lobby_service != null:
+			lobby_service.remove_peer_from_lobby(peer_id)
+		active_lobby_id = 0
 	if peer_id == multiplayer.get_unique_id():
-		_rpc_lobby_list(packed_entries, _peer_lobby(peer_id))
+		_rpc_lobby_list(packed_entries, active_lobby_id)
 		return
-	_rpc_lobby_list.rpc_id(peer_id, packed_entries, _peer_lobby(peer_id))
+	_rpc_lobby_list.rpc_id(peer_id, packed_entries, active_lobby_id)
 
 func _server_broadcast_lobby_list() -> void:
 	for peer_id in multiplayer.get_peers():

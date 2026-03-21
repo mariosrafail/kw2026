@@ -329,14 +329,23 @@ func _rpc_lobby_create(_requested_name: String, _payload: String) -> void:
 		lobby_service.set_peer_weapon(peer_id, weapon_id)
 		lobby_service.set_peer_character(peer_id, character_id)
 	lobby_flow_controller.server_create_lobby(peer_id, _requested_name, map_id, map_catalog.max_players_for_mode(map_id, mode_id), mode_id)
-	if not _uses_lobby_scene_flow() and mode_id != GAME_MODE_CTF:
+	if not _uses_lobby_scene_flow():
 		var active_lobby_id := _peer_lobby(peer_id)
 		if active_lobby_id > 0:
-			print("[LOBBY TRACE][SERVER] create_request result=SERVER_LOBBY_CREATED lobby_id=%d map=%s scene_switch_pending=true" % [
-				active_lobby_id,
-				_lobby_map_id(active_lobby_id)
-			])
-			_send_scene_switch_rpc(peer_id, _lobby_map_id(active_lobby_id))
+			if lobby_service != null and lobby_service.is_ctf_lobby(active_lobby_id):
+				print("[LOBBY TRACE][SERVER] create_request result=SERVER_CTF_AUTO_START lobby_id=%d map=%s" % [
+					active_lobby_id,
+					_lobby_map_id(active_lobby_id)
+				])
+				# In direct match flow (no in-scene lobby room), start CTF immediately
+				# so behavior matches deathmatch (host presses Play -> enters match).
+				_server_start_ctf_lobby_match(peer_id)
+			else:
+				print("[LOBBY TRACE][SERVER] create_request result=SERVER_LOBBY_CREATED lobby_id=%d map=%s scene_switch_pending=true" % [
+					active_lobby_id,
+					_lobby_map_id(active_lobby_id)
+				])
+				_send_scene_switch_rpc(peer_id, _lobby_map_id(active_lobby_id))
 
 func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String = "") -> void:
 	if not multiplayer.is_server():
@@ -356,14 +365,19 @@ func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String =
 		lobby_service.set_peer_weapon(peer_id, _normalize_weapon_id(_weapon_id))
 		lobby_service.set_peer_character(peer_id, normalized_character_id)
 	lobby_flow_controller.server_join_lobby(peer_id, _lobby_id)
-	if not _uses_lobby_scene_flow() and lobby_service != null and not lobby_service.is_ctf_lobby(_lobby_id):
+	if not _uses_lobby_scene_flow() and lobby_service != null:
 		var active_lobby_id := _peer_lobby(peer_id)
 		if active_lobby_id > 0:
-			print("[LOBBY TRACE][SERVER] join_request result=SERVER_LOBBY_JOINED lobby_id=%d map=%s scene_switch_pending=true" % [
-				active_lobby_id,
-				_lobby_map_id(active_lobby_id)
-			])
-			_send_scene_switch_rpc(peer_id, _lobby_map_id(active_lobby_id))
+			var should_switch := true
+			if lobby_service.is_ctf_lobby(active_lobby_id) and not lobby_service.lobby_started(active_lobby_id):
+				# CTF lobby not started yet -> stay in room flow (if enabled).
+				should_switch = false
+			if should_switch:
+				print("[LOBBY TRACE][SERVER] join_request result=SERVER_LOBBY_JOINED lobby_id=%d map=%s scene_switch_pending=true" % [
+					active_lobby_id,
+					_lobby_map_id(active_lobby_id)
+				])
+				_send_scene_switch_rpc(peer_id, _lobby_map_id(active_lobby_id))
 
 func _rpc_lobby_leave(_legacy_a: Variant = null, _legacy_b: Variant = null) -> void:
 	if not multiplayer.is_server():

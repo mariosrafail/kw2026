@@ -1,0 +1,11 @@
+services:
+  kw_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: kw_server
+    environment:
+      KW_GAME_PORT: ${KW_GAME_PORT:-8080}
+    ports:
+      - "${KW_GAME_PORT:-8080}:${KW_GAME_PORT:-8080}/udp"
+    restart: unless-stopped
