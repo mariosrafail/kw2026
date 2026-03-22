@@ -1,5 +1,9 @@
 extends CanvasLayer
 
+const MENU_CURSOR_TEXTURE := preload("res://assets/cursor.png")
+const MENU_CURSOR_CELL_SIZE := 32
+const MENU_CURSOR_SCALE := 2
+
 @export var pixel_size := 4.0 # size of each small square (in pixels)
 @export var horizontal_rect_size := Vector2(6.5, 3.0)
 @export var vertical_rect_size := Vector2(3.0, 6.5)
@@ -47,15 +51,23 @@ var _button_click_boost_mult := 0.0
 var _shoot_spread_mult := 0.0
 var _shoot_feedback_until_msec := 0
 var _pixel_tex: Texture2D
+var _cursor_context := "game" # game|menu
+var _menu_cursor_default_scaled: Texture2D
+var _menu_cursor_hover_scaled: Texture2D
+var _menu_cursor_text_scaled: Texture2D
+var _menu_hover_blocked := false
 
 func _ready() -> void:
 	# Keep custom cursor above all regular UI/game canvas content.
 	layer = 10000
 	_process(true)
 	_setup_crosshair()
-	_hide_system_cursor_if_visible()
+	set_cursor_context(_cursor_context)
 
 func _exit_tree() -> void:
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_POINTING_HAND)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_IBEAM)
 	_show_system_cursor_if_hidden()
 
 func _make_pixel_texture() -> Texture2D:
@@ -120,6 +132,79 @@ func _hide_system_cursor_if_visible() -> void:
 func _show_system_cursor_if_hidden() -> void:
 	if Input.get_mouse_mode() == Input.MOUSE_MODE_HIDDEN:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+func set_cursor_context(context: String) -> void:
+	var normalized := context.strip_edges().to_lower()
+	if normalized != "menu" and normalized != "game":
+		normalized = "game"
+	_cursor_context = normalized
+	if _cursor_context == "menu":
+		_show_system_cursor_if_hidden()
+		_apply_menu_cursor_shapes()
+		if _root != null:
+			_root.visible = false
+		set_process(false)
+		return
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_POINTING_HAND)
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_IBEAM)
+	_hide_system_cursor_if_visible()
+	if _root != null:
+		_root.visible = true
+	set_process(true)
+
+func set_menu_hover_blocked(blocked: bool) -> void:
+	_menu_hover_blocked = blocked
+	if _cursor_context == "menu":
+		_apply_menu_cursor_shapes()
+
+func _apply_menu_cursor_shapes() -> void:
+	var default_tex := _menu_cursor_texture_default_x4()
+	Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_ARROW, Vector2.ZERO)
+	if _menu_hover_blocked:
+		Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_POINTING_HAND, Vector2.ZERO)
+		Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_IBEAM, Vector2.ZERO)
+	else:
+		Input.set_custom_mouse_cursor(_menu_cursor_texture_hover_x4(), Input.CURSOR_POINTING_HAND, Vector2.ZERO)
+		Input.set_custom_mouse_cursor(_menu_cursor_texture_text_x4(), Input.CURSOR_IBEAM, Vector2.ZERO)
+
+func _menu_cursor_texture_default_x4() -> Texture2D:
+	if _menu_cursor_default_scaled != null:
+		return _menu_cursor_default_scaled
+	_menu_cursor_default_scaled = _menu_cursor_texture_cell_scaled_x4(0)
+	return _menu_cursor_default_scaled
+
+func _menu_cursor_texture_hover_x4() -> Texture2D:
+	if _menu_cursor_hover_scaled != null:
+		return _menu_cursor_hover_scaled
+	_menu_cursor_hover_scaled = _menu_cursor_texture_cell_scaled_x4(1)
+	return _menu_cursor_hover_scaled
+
+func _menu_cursor_texture_text_x4() -> Texture2D:
+	if _menu_cursor_text_scaled != null:
+		return _menu_cursor_text_scaled
+	_menu_cursor_text_scaled = _menu_cursor_texture_cell_scaled_x4(2)
+	return _menu_cursor_text_scaled
+
+func _menu_cursor_texture_cell_scaled_x4(cell_index: int) -> Texture2D:
+	if MENU_CURSOR_TEXTURE == null:
+		return null
+	var img := MENU_CURSOR_TEXTURE.get_image()
+	if img == null:
+		return MENU_CURSOR_TEXTURE
+	var src := Rect2i(
+		maxi(0, cell_index) * MENU_CURSOR_CELL_SIZE,
+		0,
+		MENU_CURSOR_CELL_SIZE,
+		MENU_CURSOR_CELL_SIZE
+	)
+	if src.position.x + src.size.x > img.get_width() or src.size.y > img.get_height():
+		src = Rect2i(0, 0, mini(MENU_CURSOR_CELL_SIZE, img.get_width()), mini(MENU_CURSOR_CELL_SIZE, img.get_height()))
+	var cell := Image.create(src.size.x, src.size.y, false, Image.FORMAT_RGBA8)
+	cell.fill(Color(0, 0, 0, 0))
+	cell.blit_rect(img, src, Vector2i.ZERO)
+	cell.resize(maxi(1, cell.get_width() * MENU_CURSOR_SCALE), maxi(1, cell.get_height() * MENU_CURSOR_SCALE), Image.INTERPOLATE_NEAREST)
+	return ImageTexture.create_from_image(cell)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:

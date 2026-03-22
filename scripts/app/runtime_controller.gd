@@ -2,6 +2,7 @@ extends "res://scripts/app/runtime_rpc_logic.gd"
 
 const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
 const SKILL_HUD_SCRIPT := preload("res://scripts/ui/skill_hud.gd")
+const CURSOR_MANAGER_NAME := "CursorManager"
 
 var _client_skill_cd_q_remaining := 0.0
 var _client_skill_cd_e_remaining := 0.0
@@ -112,11 +113,26 @@ func _ensure_cursor_manager() -> void:
 	var root := tree.get_root()
 	if root == null:
 		return
-	if root.get_node_or_null("CursorManager") != null:
+	var existing := root.get_node_or_null(CURSOR_MANAGER_NAME)
+	if existing != null:
+		if existing.has_method("set_cursor_context"):
+			existing.call("set_cursor_context", "game")
 		return
 	var cm := CURSOR_MANAGER_SCRIPT.new()
-	cm.name = "CursorManager"
+	cm.name = CURSOR_MANAGER_NAME
 	root.call_deferred("add_child", cm)
+	call_deferred("_apply_game_cursor_context")
+
+func _apply_game_cursor_context() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var root := tree.get_root()
+	if root == null:
+		return
+	var cm := root.get_node_or_null(CURSOR_MANAGER_NAME)
+	if cm != null and cm.has_method("set_cursor_context"):
+		cm.call("set_cursor_context", "game")
 
 func _ensure_rpc_root_node_name() -> void:
 	var tree := get_tree()

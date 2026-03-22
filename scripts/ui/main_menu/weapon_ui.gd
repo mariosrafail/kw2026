@@ -360,7 +360,7 @@ func weapon_item_status_text(host: Object, weapon_id: String, skin_index: int) -
 		if host != null and host.has_method("_equipped_weapon_skin"):
 			equipped_skin = int(host.call("_equipped_weapon_skin", normalized))
 		if idx == equipped_skin:
-			return "EQUIPPED"
+			return "OWNED"
 		return "OWNED"
 	return "BUY %d" % weapon_skin_cost(normalized, idx)
 

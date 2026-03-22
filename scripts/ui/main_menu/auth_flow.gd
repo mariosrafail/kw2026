@@ -2,7 +2,7 @@ extends RefCounted
 class_name MainMenuAuthFlow
 
 const AUTH_REQUEST_TIMEOUT_SEC := 8.0
-const DEFAULT_AUTH_USERNAME := "mario"
+const DEFAULT_AUTH_USERNAME := "BLACKSHADOW"
 const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
@@ -50,13 +50,25 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.04, 0.04, 0.07, 0.94)
+	bg.color = Color(0.3059, 0.5529, 0.6118, 0.34)
 	overlay.add_child(bg)
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(440, 240)
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-220, -120)
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.96)
+	panel_style.border_width_left = 3
+	panel_style.border_width_top = 3
+	panel_style.border_width_right = 3
+	panel_style.border_width_bottom = 3
+	panel_style.border_color = Color(0.9294, 0.9686, 0.7412, 0.92)
+	panel_style.corner_radius_top_left = 0
+	panel_style.corner_radius_top_right = 0
+	panel_style.corner_radius_bottom_left = 0
+	panel_style.corner_radius_bottom_right = 0
+	panel.add_theme_stylebox_override("panel", panel_style)
 	overlay.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -76,11 +88,32 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	title.text = "LOGIN"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(0.9294, 0.9686, 0.7412, 1.0))
 	box.add_child(title)
+
+	var field_style := StyleBoxFlat.new()
+	field_style.bg_color = Color(0.5216, 0.7804, 0.6039, 0.82)
+	field_style.border_width_left = 2
+	field_style.border_width_top = 2
+	field_style.border_width_right = 2
+	field_style.border_width_bottom = 2
+	field_style.border_color = Color(0.9294, 0.9686, 0.7412, 0.85)
+	field_style.corner_radius_top_left = 0
+	field_style.corner_radius_top_right = 0
+	field_style.corner_radius_bottom_left = 0
+	field_style.corner_radius_bottom_right = 0
+	var field_focus_style := field_style.duplicate() as StyleBoxFlat
+	field_focus_style.border_color = Color(0.9294, 0.9686, 0.7412, 1.0)
 
 	var user_input := LineEdit.new()
 	user_input.placeholder_text = "Username or Email"
 	user_input.text = DEFAULT_AUTH_USERNAME
+	user_input.custom_minimum_size = Vector2(0, 34)
+	user_input.add_theme_stylebox_override("normal", field_style)
+	user_input.add_theme_stylebox_override("focus", field_focus_style)
+	user_input.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 1.0))
+	user_input.add_theme_color_override("font_placeholder_color", Color(0.58, 0.65, 0.77, 0.95))
+	user_input.add_theme_color_override("caret_color", Color(0.83, 0.97, 1.0, 1.0))
 	box.add_child(user_input)
 	host.set("_auth_user_input", user_input)
 
@@ -88,6 +121,12 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	pass_input.placeholder_text = "Password"
 	pass_input.secret = true
 	pass_input.text = DEFAULT_AUTH_PASSWORD
+	pass_input.custom_minimum_size = Vector2(0, 34)
+	pass_input.add_theme_stylebox_override("normal", field_style)
+	pass_input.add_theme_stylebox_override("focus", field_focus_style)
+	pass_input.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 1.0))
+	pass_input.add_theme_color_override("font_placeholder_color", Color(0.58, 0.65, 0.77, 0.95))
+	pass_input.add_theme_color_override("caret_color", Color(0.83, 0.97, 1.0, 1.0))
 	box.add_child(pass_input)
 	host.set("_auth_pass_input", pass_input)
 
@@ -104,6 +143,7 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.add_theme_font_size_override("font_size", 12)
+	status.add_theme_color_override("font_color", Color(0.9294, 0.9686, 0.7412, 0.95))
 	box.add_child(status)
 	host.set("_auth_status_label", status)
 
@@ -129,6 +169,8 @@ func auth_set_ui_locked(host: Control, locked: bool) -> void:
 	var auth_logout_button := host.get("_auth_logout_button") as Button
 	if auth_logout_button != null:
 		auth_logout_button.visible = not locked and bool(host.get("_auth_logged_in"))
+	if host.has_method("_refresh_auth_footer"):
+		host.call("_refresh_auth_footer")
 
 func auth_submit_login(host: Control) -> void:
 	var auth_http := host.get("_auth_http") as HTTPRequest
@@ -241,6 +283,8 @@ func auth_sync_wallet(host: Control) -> void:
 	var endpoint := str(endpoint_candidates[endpoint_index])
 	print("[AUTH][WALLET_SYNC] request user=%s url=%s coins=%d clk=%d" % [str(host.get("player_username")), auth_url(host, endpoint), int(host.get("wallet_coins")), int(host.get("wallet_clk"))])
 	host.set("_auth_pending_action", "wallet_sync")
+	if host.has_method("_show_menu_loading_overlay"):
+		host.call("_show_menu_loading_overlay", "SYNCING...")
 	var err := auth_http.request(
 		auth_url(host, endpoint),
 		PackedStringArray([
@@ -256,6 +300,8 @@ func auth_sync_wallet(host: Control) -> void:
 		auth_stop_request_watchdog(host)
 		host.set("_auth_wallet_sync_queued", true)
 		auth_schedule_wallet_retry(host)
+		if host.has_method("_hide_menu_loading_overlay"):
+			host.call("_hide_menu_loading_overlay")
 		return
 	auth_start_request_watchdog(host)
 
@@ -277,6 +323,8 @@ func auth_purchase_warrior_skin(host: Control, skin_index: int) -> void:
 	var body := JSON.stringify({"character_id": str(host.get("selected_warrior_id")), "skin_index": idx})
 	print("[AUTH][BUY_SKIN] request user=%s skin=%d coins_ui=%d" % [str(host.get("player_username")), idx, int(host.get("wallet_coins"))])
 	host.set("_auth_pending_action", "purchase_skin")
+	if host.has_method("_show_menu_loading_overlay"):
+		host.call("_show_menu_loading_overlay", "PURCHASING...")
 	var err := auth_http.request(
 		auth_url(host, "/purchase/skin"),
 		PackedStringArray([
@@ -294,6 +342,8 @@ func auth_purchase_warrior_skin(host: Control, skin_index: int) -> void:
 		var auth_status_label := host.get("_auth_status_label") as Label
 		if auth_status_label != null:
 			auth_status_label.text = "Buy request failed (%s)" % str(err)
+		if host.has_method("_hide_menu_loading_overlay"):
+			host.call("_hide_menu_loading_overlay")
 		return
 	auth_start_request_watchdog(host)
 
@@ -316,6 +366,8 @@ func auth_maybe_flush_wallet_sync(host: Control) -> void:
 func auth_handle_http_completed(host: Control, response_code: int, body: PackedByteArray) -> void:
 	var action := str(host.get("_auth_pending_action"))
 	auth_stop_request_watchdog(host)
+	if not action.is_empty() and host.has_method("_hide_menu_loading_overlay"):
+		host.call("_hide_menu_loading_overlay")
 	var text := body.get_string_from_utf8()
 	var parsed: Variant = null
 	var trimmed := text.strip_edges()
@@ -501,6 +553,8 @@ func auth_on_logout_pressed(host: Control) -> void:
 	if auth_overlay != null:
 		auth_overlay.visible = true
 	auth_set_ui_locked(host, true)
+	if host.has_method("_hide_menu_loading_overlay"):
+		host.call("_hide_menu_loading_overlay")
 
 func auth_url(host: Control, path: String) -> String:
 	return "%s%s" % [str(host.get("_auth_api_base_url")), path]
@@ -550,6 +604,8 @@ func auth_request_login_with_current_candidate(host: Control) -> int:
 	var auth_http := host.get("_auth_http") as HTTPRequest
 	if auth_http == null:
 		return ERR_UNCONFIGURED
+	if host.has_method("_show_menu_loading_overlay"):
+		host.call("_show_menu_loading_overlay", "LOGGING IN...")
 	var auth_user_input := host.get("_auth_user_input") as LineEdit
 	var url := "%s/login" % auth_login_current_base_url(host)
 	print("[AUTH][LOGIN] request url=%s user=%s" % [url, (auth_user_input.text.strip_edges() if auth_user_input != null else "")])
@@ -561,6 +617,9 @@ func auth_request_login_with_current_candidate(host: Control) -> int:
 	)
 	if err == OK:
 		auth_start_request_watchdog(host)
+	else:
+		if host.has_method("_hide_menu_loading_overlay"):
+			host.call("_hide_menu_loading_overlay")
 	return err
 
 func auth_request_profile(host: Control) -> void:
@@ -568,6 +627,8 @@ func auth_request_profile(host: Control) -> void:
 	var auth_token := str(host.get("_auth_token")).strip_edges()
 	if auth_http == null or auth_token.is_empty():
 		return
+	if host.has_method("_show_menu_loading_overlay"):
+		host.call("_show_menu_loading_overlay", "LOADING PROFILE...")
 	host.set("_auth_pending_action", "profile")
 	var auth_status_label := host.get("_auth_status_label") as Label
 	if auth_status_label != null:
@@ -585,6 +646,8 @@ func auth_request_profile(host: Control) -> void:
 		var auth_login_button := host.get("_auth_login_button") as Button
 		if auth_login_button != null:
 			auth_login_button.disabled = false
+		if host.has_method("_hide_menu_loading_overlay"):
+			host.call("_hide_menu_loading_overlay")
 		return
 	auth_start_request_watchdog(host)
 
@@ -617,6 +680,8 @@ func auth_on_request_watchdog_timeout(host: Control) -> void:
 	var action := str(host.get("_auth_pending_action")).strip_edges()
 	if action.is_empty():
 		return
+	if host.has_method("_hide_menu_loading_overlay"):
+		host.call("_hide_menu_loading_overlay")
 	var auth_token := str(host.get("_auth_token")).strip_edges()
 	var auth_http := host.get("_auth_http") as HTTPRequest
 	if auth_http != null:

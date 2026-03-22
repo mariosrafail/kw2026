@@ -5,8 +5,6 @@ var _set_weapon_icon: Callable
 var _apply_weapon_skin: Callable
 var _center_pivot_cb: Callable
 var _hover_pop_cb: Callable
-var _press_anim_cb: Callable
-var _release_to_hover_cb: Callable
 
 var _panel: Control
 var _title_label: Label
@@ -24,63 +22,24 @@ func _make_menu_panel_style() -> StyleBoxFlat:
 	sb.content_margin_top = 12.0
 	sb.content_margin_right = 14.0
 	sb.content_margin_bottom = 12.0
-	sb.bg_color = Color(0.12, 0.11, 0.16, 0.98)
+	sb.bg_color = Color(0.3059, 0.5529, 0.6118, 0.96)
 	sb.border_width_left = 4
 	sb.border_width_top = 4
 	sb.border_width_right = 4
 	sb.border_width_bottom = 4
-	sb.border_color = Color(0.06, 0.05, 0.08, 1)
-	sb.shadow_color = Color(0, 0, 0, 0.45)
+	sb.border_color = Color(0.9294, 0.9686, 0.7412, 0.92)
+	sb.shadow_color = Color(0.1569, 0.1098, 0.3490, 0.22)
 	sb.shadow_size = 6
-	return sb
-
-func _make_menu_button_hover_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.content_margin_left = 14.0
-	sb.content_margin_top = 8.0
-	sb.content_margin_right = 14.0
-	sb.content_margin_bottom = 8.0
-	sb.bg_color = Color(0.1, 0.17, 0.27, 1)
-	sb.border_width_left = 3
-	sb.border_width_top = 3
-	sb.border_width_right = 3
-	sb.border_width_bottom = 5
-	sb.border_color = Color(0.33, 0.95, 1, 1)
-	sb.shadow_color = Color(0.02, 0.18, 0.24, 0.7)
-	sb.shadow_size = 7
-	return sb
-
-func _make_menu_button_focus_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.content_margin_left = 14.0
-	sb.content_margin_top = 8.0
-	sb.content_margin_right = 14.0
-	sb.content_margin_bottom = 8.0
-	sb.bg_color = Color(0.08, 0.22, 0.31, 0.5)
-	sb.border_width_left = 2
-	sb.border_width_top = 2
-	sb.border_width_right = 2
-	sb.border_width_bottom = 4
-	sb.border_color = Color(0.5, 0.98, 1, 0.95)
-	sb.shadow_color = Color(0.02, 0.12, 0.18, 0.35)
-	sb.shadow_size = 4
 	return sb
 
 func _normalize_confirm_button_theme(btn: Button) -> void:
 	if btn == null:
 		return
-	btn.add_theme_color_override("font_color", Color(0.92, 0.95, 0.98, 1))
+	btn.add_theme_color_override("font_color", Color(0.9294, 0.9686, 0.7412, 1))
 	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
 	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
 	btn.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
 	btn.add_theme_constant_override("outline_size", 0)
-	var hover_style := _make_menu_button_hover_style()
-	var focus_style: StyleBoxFlat = hover_style
-	var normal_sb := btn.get_theme_stylebox("normal")
-	if normal_sb is StyleBoxFlat:
-		focus_style = (normal_sb as StyleBoxFlat).duplicate() as StyleBoxFlat
-	btn.add_theme_stylebox_override("hover", hover_style)
-	btn.add_theme_stylebox_override("focus", focus_style)
 
 func _install_button_anim(btn: Button) -> void:
 	if btn == null:
@@ -89,23 +48,13 @@ func _install_button_anim(btn: Button) -> void:
 		_center_pivot_cb.call(btn)
 	if _hover_pop_cb.is_valid():
 		_hover_pop_cb.call(btn)
-	btn.button_down.connect(func() -> void:
-		if _press_anim_cb.is_valid():
-			_press_anim_cb.call(btn, 0.06)
-	)
-	btn.button_up.connect(func() -> void:
-		if _release_to_hover_cb.is_valid():
-			_release_to_hover_cb.call(btn, btn)
-	)
 
-func configure(make_button: Callable, set_weapon_icon: Callable, apply_weapon_skin: Callable, center_pivot: Callable = Callable(), hover_pop: Callable = Callable(), press_anim: Callable = Callable(), release_to_hover: Callable = Callable()) -> void:
+func configure(make_button: Callable, set_weapon_icon: Callable, apply_weapon_skin: Callable, center_pivot: Callable = Callable(), hover_pop: Callable = Callable()) -> void:
 	_make_button = make_button
 	_set_weapon_icon = set_weapon_icon
 	_apply_weapon_skin = apply_weapon_skin
 	_center_pivot_cb = center_pivot
 	_hover_pop_cb = hover_pop
-	_press_anim_cb = press_anim
-	_release_to_hover_cb = release_to_hover
 
 func _ready() -> void:
 	visible = false
@@ -121,7 +70,7 @@ func _ready() -> void:
 	var bg := ColorRect.new()
 	bg.name = "Bg"
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.03, 0.03, 0.04, 1.0)
+	bg.color = Color(0.3059, 0.5529, 0.6118, 0.34)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	bg.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
@@ -178,8 +127,8 @@ func _ready() -> void:
 	weapon_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	weapon_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var weapon_sb := StyleBoxFlat.new()
-	weapon_sb.bg_color = Color(0.05, 0.05, 0.06, 1)
-	weapon_sb.border_color = Color(0.18, 0.2, 0.24, 1)
+	weapon_sb.bg_color = Color(0.5216, 0.7804, 0.6039, 0.82)
+	weapon_sb.border_color = Color(0.9294, 0.9686, 0.7412, 0.85)
 	weapon_sb.border_width_left = 2
 	weapon_sb.border_width_right = 2
 	weapon_sb.border_width_top = 2

@@ -177,7 +177,7 @@ func warrior_item_status_text(host: Object, warrior_id: String, skin_index: int)
 		if host != null and host.has_method("_equipped_warrior_skin"):
 			equipped_skin = int(host.call("_equipped_warrior_skin", normalized))
 		if selected_warrior_id == normalized and equipped_skin == 0:
-			return "EQUIPPED"
+			return "OWNED"
 		return "OWNED"
 	var skin_owned := false
 	if host != null and host.has_method("_warrior_skin_is_owned"):
@@ -190,7 +190,7 @@ func warrior_item_status_text(host: Object, warrior_id: String, skin_index: int)
 		if host != null:
 			selected_id = str(host.get("selected_warrior_id")).strip_edges().to_lower()
 		if selected_id == normalized and idx == equipped_skin:
-			return "EQUIPPED"
+			return "OWNED"
 		return "OWNED"
 	return "BUY %d" % warrior_skin_cost(normalized, idx)
 

@@ -62,6 +62,7 @@ func open_warriors_menu() -> void:
 		_stop_idle_loop.call()
 
 	_screen_warriors.visible = true
+	_screen_warriors.z_index = 1200
 	_screen_warriors.position = Vector2.ZERO
 	_screen_warriors.scale = Vector2.ONE
 	_screen_warriors.modulate = Color(1, 1, 1, 0)
@@ -100,7 +101,7 @@ func open_warriors_menu_stage2(warriors_menu_preview_scale_mult: float, warrior_
 	_warrior_open_transition = Node2D.new()
 	_warrior_open_transition.global_position = start_pos
 	_warrior_open_transition.scale = start_scale
-	_warrior_open_transition.z_index = 950
+	_warrior_open_transition.z_index = 1200
 	_warrior_open_transition.add_child(src_visual.duplicate())
 	_fx_layer.add_child(_warrior_open_transition)
 
@@ -158,7 +159,7 @@ func close_warriors_menu_stage2(warrior_shop_preview_base_scale: Vector2) -> voi
 	_warrior_open_transition = Node2D.new()
 	_warrior_open_transition.global_position = start_pos
 	_warrior_open_transition.scale = start_scale
-	_warrior_open_transition.z_index = 950
+	_warrior_open_transition.z_index = 1200
 	_warrior_open_transition.add_child(src_visual.duplicate())
 	_fx_layer.add_child(_warrior_open_transition)
 
@@ -197,6 +198,7 @@ func open_weapons_menu(pending_weapon_id: String, pending_weapon_skin: int) -> v
 		_stop_idle_loop.call()
 
 	_screen_weapons.visible = true
+	_screen_weapons.z_index = 1200
 	_screen_weapons.position = Vector2.ZERO
 	_screen_weapons.scale = Vector2.ONE
 	_screen_weapons.modulate = Color(1, 1, 1, 0)
@@ -252,7 +254,7 @@ func open_weapons_menu_stage2(pending_weapon_id: String, pending_weapon_skin: in
 
 	_weapon_open_transition = Node2D.new()
 	_weapon_open_transition.global_position = start_center
-	_weapon_open_transition.z_index = 950
+	_weapon_open_transition.z_index = 1200
 	var spr := Sprite2D.new()
 	spr.centered = true
 	spr.texture = tex
@@ -328,7 +330,7 @@ func close_weapons_menu_stage2(visible_weapon_id: String, visible_weapon_skin: i
 
 	_weapon_open_transition = Node2D.new()
 	_weapon_open_transition.global_position = start_center
-	_weapon_open_transition.z_index = 950
+	_weapon_open_transition.z_index = 1200
 	var spr := Sprite2D.new()
 	spr.centered = true
 	spr.texture = tex

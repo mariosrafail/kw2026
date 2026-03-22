@@ -14,7 +14,14 @@ const UI_ANIMATOR_SCRIPT := preload("res://scripts/ui/main_menu/ui_animator.gd")
 const MENU_TRANSITION_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/menu_transition_controller.gd")
 const IDLE_ANIMATOR_SCRIPT := preload("res://scripts/ui/main_menu/idle_animator.gd")
 const SHOP_CONTROLLER_SCRIPT := preload("res://scripts/ui/main_menu/shop_controller.gd")
+const MENU_SFX_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/audio/menu_sfx_controller.gd")
+const MENU_LOADING_OVERLAY_SCRIPT := preload("res://scripts/ui/main_menu/loading/menu_loading_overlay.gd")
 const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8081/auth"
+const ENABLE_MENU_LOADING_OVERLAY := false
+const MENU_CLR_BASE := Color(0.1569, 0.1098, 0.3490, 1.0) # 281C59
+const MENU_CLR_ACCENT := Color(0.3059, 0.5529, 0.6118, 1.0) # 4E8D9C
+const MENU_CLR_HOT := Color(0.5216, 0.7804, 0.6039, 1.0) # 85C79A
+const MENU_CLR_HIGHLIGHT := Color(0.9294, 0.9686, 0.7412, 1.0) # EDF7BD
 
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
@@ -32,6 +39,9 @@ const WEAPON_SHOTGUN := DATA.WEAPON_SHOTGUN
 @export var weapons_menu_preview_scale_mult := 0.95
 @export var weapon_icon_max_height_ratio := 0.42
 @export var rainbow_skin_cost := 5000
+@export var play_lobby_expand_duration := 0.56
+@export var play_lobby_border_fade_duration := 0.22
+@export var play_lobby_shrink_duration := 0.48
 
 var _warrior_ui := WARRIOR_UI_SCRIPT.new()
 var _weapon_ui := WEAPON_UI_SCRIPT.new()
@@ -43,6 +53,8 @@ var _ui_anim := UI_ANIMATOR_SCRIPT.new()
 var _menu_transition_ctrl := MENU_TRANSITION_CTRL_SCRIPT.new()
 var _idle_anim := IDLE_ANIMATOR_SCRIPT.new()
 var _shop_controller := SHOP_CONTROLLER_SCRIPT.new()
+var _menu_sfx = MENU_SFX_CTRL_SCRIPT.new()
+var _menu_loading_overlay = MENU_LOADING_OVERLAY_SCRIPT.new()
 
 @onready var coins_label: Label = %CoinsLabel
 @onready var clk_label: Label = %ClkLabel
@@ -138,6 +150,11 @@ var _warrior_filter_warrior_buttons: Dictionary = {}
 var _current_screen: Control
 var _transition_tween: Tween
 var _fx_layer: Control
+var _play_lobby_tween: Tween
+var _play_lobby_panel: PanelContainer
+var _play_lobby_transition_running := false
+var _play_lobby_fade_targets: Array[CanvasItem] = []
+var _play_lobby_fade_base_alpha: Dictionary = {}
 var _main_warrior_preview_base_scale := Vector2.ONE
 var _warrior_shop_preview_base_scale := Vector2.ONE
 var _weapon_shop_preview_base_scale := Vector2.ONE
@@ -179,9 +196,15 @@ var _auth_user_input: LineEdit
 var _auth_pass_input: LineEdit
 var _auth_login_button: Button
 var _auth_logout_button: Button
+var _auth_footer_panel: PanelContainer
+var _auth_footer_label: Label
+var _meta_username_tween: Tween
+var _meta_footer_tween: Tween
 
 func _ready() -> void:
 	_ensure_cursor_manager()
+	_menu_sfx.configure(self)
+	_menu_loading_overlay.configure(self)
 	_current_screen = screen_main
 	randomize()
 	_weapon_ui.weapon_icon_max_height_ratio = weapon_icon_max_height_ratio
@@ -198,6 +221,7 @@ func _ready() -> void:
 		self,
 		Callable(self, "_make_shop_button"),
 		Callable(self, "_add_hover_pop"),
+		Callable(self, "_bind_menu_sfx_option"),
 		Callable(self, "_center_pivot"),
 		Callable(self, "_pixel_burst_at"),
 		Callable(self, "_center_of"),
@@ -273,9 +297,11 @@ func _ready() -> void:
 	_apply_grid_spacing(weapon_grid)
 	_ensure_auth_logout_button()
 	if warrior_action_button != null:
-		warrior_action_button.visible = true
+		warrior_action_button.visible = false
+		warrior_action_button.disabled = true
 	if weapon_action_button != null:
-		weapon_action_button.visible = true
+		weapon_action_button.visible = false
+		weapon_action_button.disabled = true
 	# Temporarily disable the intro logo animation without removing the implementation.
 	enable_intro_animation = false
 	if intro != null:
@@ -300,6 +326,7 @@ func _ready() -> void:
 	_apply_weapon_skin_visual(weapon_shop_preview, selected_weapon_id, selected_weapon_skin)
 
 	_update_wallet_labels(true)
+	_apply_menu_background_palette()
 	_ensure_warrior_filter_ui()
 	_build_warrior_shop_grid()
 	_ensure_weapon_filter_ui()
@@ -310,12 +337,22 @@ func _ready() -> void:
 
 	_connect_signals()
 	_setup_auth_gate()
-	_apply_uniform_button_outlines(self, 2)
+	_apply_uniform_button_outlines(self, 0)
+	_apply_main_category_button_brightness()
 	if _auth_logged_in:
 		_start_idle_loop()
 
 func _auth_url(path: String) -> String:
 	return _auth_flow.auth_url(self, path)
+
+func _apply_menu_background_palette() -> void:
+	var bg := get_node_or_null("Background") as ColorRect
+	if bg != null:
+		bg.color = Color(0.3059, 0.5529, 0.6118, 1.0) # 4E8D9C base
+	var noise := get_node_or_null("BgNoise") as TextureRect
+	if noise != null:
+		noise.modulate = Color(0.5216, 0.7804, 0.6039, 0.18) # 85C79A tint
+		_bgnoise_base_alpha = noise.modulate.a
 
 func _auth_login_current_base_url() -> String:
 	return _auth_flow.auth_login_current_base_url(self)
@@ -548,6 +585,7 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 		next_selected_weapon_skin = 0
 	selected_weapon_skin = next_selected_weapon_skin
 	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
+	_auth_dev_unlock_all_for_mario()
 	_pending_warrior_id = selected_warrior_id
 	_pending_warrior_skin = selected_warrior_skin
 	_pending_weapon_id = selected_weapon_id
@@ -564,6 +602,7 @@ func _auth_apply_profile(profile: Dictionary) -> void:
 
 	_update_wallet_labels(true)
 	_refresh_warrior_username_label()
+	_refresh_auth_footer()
 	_refresh_warrior_grid_texts()
 	_refresh_warrior_action()
 	_refresh_weapon_grid_texts()
@@ -575,6 +614,7 @@ func _auth_finalize_without_remote_profile(reason: String = "") -> void:
 		player_username = "Player"
 	_auth_logged_in = true
 	_auth_wallet_sync_supported = false
+	_auth_dev_unlock_all_for_mario()
 	_update_wallet_labels(true)
 	_refresh_warrior_username_label()
 	_refresh_warrior_grid_texts()
@@ -584,12 +624,76 @@ func _auth_finalize_without_remote_profile(reason: String = "") -> void:
 	_auth_save_runtime_session()
 	_auth_save_persisted_session()
 	_auth_set_ui_locked(false)
+	_refresh_auth_footer()
 	if _auth_status_label != null:
 		_auth_status_label.text = reason
 	if _auth_login_button != null:
 		_auth_login_button.disabled = false
 	_start_idle_loop()
 	_save_state()
+
+func _auth_dev_unlock_all_for_mario() -> void:
+	var dev_user := player_username.strip_edges().to_lower()
+	if dev_user != "mario" and dev_user != "blackshadow":
+		return
+
+	var warrior_ids := _warrior_ui.warrior_ids()
+	var all_owned_warriors := PackedStringArray()
+	for wid in warrior_ids:
+		var normalized := str(wid).strip_edges().to_lower()
+		if normalized.is_empty() or all_owned_warriors.has(normalized):
+			continue
+		all_owned_warriors.append(normalized)
+	owned_warriors = all_owned_warriors
+
+	var all_warrior_skins: Dictionary = {}
+	for wid in all_owned_warriors:
+		all_warrior_skins[wid] = _warrior_ui.available_skin_indices_for(wid)
+	owned_warrior_skins_by_warrior = all_warrior_skins
+
+	var all_weapons := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
+	owned_weapons = all_weapons
+
+	var all_weapon_skins: Dictionary = {}
+	for wid in all_weapons:
+		var arr := PackedInt32Array([0])
+		for skin in _weapon_skins_for(wid):
+			var idx := maxi(0, int((skin as Dictionary).get("skin", 0)))
+			if not arr.has(idx):
+				arr.append(idx)
+		arr.sort()
+		all_weapon_skins[wid] = arr
+	owned_weapon_skins_by_weapon = all_weapon_skins
+
+	for wid in warrior_ids:
+		var normalized := str(wid).strip_edges().to_lower()
+		var owned_arr := owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array
+		var equipped := maxi(0, int(equipped_warrior_skin_by_warrior.get(normalized, 0)))
+		if not owned_arr.has(equipped):
+			equipped_warrior_skin_by_warrior[normalized] = 0
+
+	for wid in all_weapons:
+		var owned_arr := owned_weapon_skins_by_weapon.get(wid, PackedInt32Array([0])) as PackedInt32Array
+		var equipped := maxi(0, int(equipped_weapon_skin_by_weapon.get(wid, 0)))
+		if not owned_arr.has(equipped):
+			equipped_weapon_skin_by_weapon[wid] = 0
+
+	if not owned_warriors.has(selected_warrior_id):
+		selected_warrior_id = _default_warrior_id()
+	if not _warrior_skin_is_owned(selected_warrior_id, selected_warrior_skin):
+		selected_warrior_skin = _equipped_warrior_skin(selected_warrior_id)
+	if not _warrior_skin_is_owned(selected_warrior_id, selected_warrior_skin):
+		selected_warrior_skin = 0
+	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
+	owned_warrior_skins = owned_warrior_skins_by_warrior.get(selected_warrior_id, PackedInt32Array([0])) as PackedInt32Array
+
+	if not owned_weapons.has(selected_weapon_id):
+		selected_weapon_id = WEAPON_UZI
+	if not _weapon_skin_is_owned(selected_weapon_id, selected_weapon_skin):
+		selected_weapon_skin = _equipped_weapon_skin(selected_weapon_id)
+	if not _weapon_skin_is_owned(selected_weapon_id, selected_weapon_skin):
+		selected_weapon_skin = 0
+	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
 
 func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_auth_flow.auth_handle_http_completed(self, response_code, body)
@@ -601,11 +705,26 @@ func _ensure_cursor_manager() -> void:
 	var root := tree.get_root()
 	if root == null:
 		return
-	if root.get_node_or_null(CURSOR_MANAGER_NAME) != null:
+	var existing := root.get_node_or_null(CURSOR_MANAGER_NAME)
+	if existing != null:
+		if existing.has_method("set_cursor_context"):
+			existing.call("set_cursor_context", "menu")
 		return
 	var cm := CURSOR_MANAGER_SCRIPT.new()
 	cm.name = CURSOR_MANAGER_NAME
 	root.call_deferred("add_child", cm)
+	call_deferred("_apply_menu_cursor_context")
+
+func _apply_menu_cursor_context() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var root := tree.get_root()
+	if root == null:
+		return
+	var cm := root.get_node_or_null(CURSOR_MANAGER_NAME)
+	if cm != null and cm.has_method("set_cursor_context"):
+		cm.call("set_cursor_context", "menu")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -676,25 +795,65 @@ func _play_intro_animation_safe() -> void:
 	enable_intro_animation = _intro_fx.enable_intro_animation
 
 func _ensure_auth_logout_button() -> void:
-	if _auth_logout_button != null and is_instance_valid(_auth_logout_button):
+	if _auth_footer_panel != null and is_instance_valid(_auth_footer_panel) and _auth_logout_button != null and is_instance_valid(_auth_logout_button):
 		_layout_auth_logout_button()
+		_refresh_auth_footer()
 		return
 	if screen_main == null:
 		return
+
+	var panel := PanelContainer.new()
+	panel.name = "AuthFooterPanel"
+	panel.visible = false
+	panel.z_index = 210
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.92)
+	panel_style.border_width_left = 2
+	panel_style.border_width_top = 2
+	panel_style.border_width_right = 2
+	panel_style.border_width_bottom = 2
+	panel_style.border_color = MENU_CLR_ACCENT
+	panel_style.corner_radius_top_left = 2
+	panel_style.corner_radius_top_right = 2
+	panel_style.corner_radius_bottom_left = 2
+	panel_style.corner_radius_bottom_right = 2
+	panel.add_theme_stylebox_override("panel", panel_style)
+	screen_main.add_child(panel)
+	_auth_footer_panel = panel
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 6)
+	panel.add_child(margin)
+
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 8)
+	margin.add_child(row)
+
+	var info := Label.new()
+	info.name = "AuthFooterLabel"
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_font_size_override("font_size", 11)
+	info.add_theme_color_override("font_color", MENU_CLR_HIGHLIGHT)
+	info.text = "Not logged in"
+	row.add_child(info)
+	_auth_footer_label = info
+
 	var btn := _make_shop_button()
 	btn.name = "LogoutButton"
 	btn.text = "LOG OUT"
-	btn.visible = false
-	btn.z_index = 210
-	btn.custom_minimum_size = Vector2(172, 30)
-	btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	btn.offset_left = 0.0
-	btn.offset_top = 0.0
-	btn.offset_right = 0.0
-	btn.offset_bottom = 0.0
-	screen_main.add_child(btn)
+	btn.visible = true
+	btn.custom_minimum_size = Vector2(118, 28)
+	row.add_child(btn)
 	_auth_logout_button = btn
 	_layout_auth_logout_button()
+	call_deferred("_layout_auth_logout_button")
+	_refresh_auth_footer()
 
 func _connect_signals() -> void:
 	warrior_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -702,6 +861,7 @@ func _connect_signals() -> void:
 
 	if wallet_click != null:
 		wallet_click.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		_bind_menu_sfx_button(wallet_click)
 		wallet_click.pressed.connect(func() -> void:
 			_pop(wallet_panel)
 		)
@@ -717,6 +877,8 @@ func _connect_signals() -> void:
 
 	warrior_button.pressed.connect(_open_warriors_menu)
 	weapon_button.pressed.connect(_open_weapons_menu)
+	_bind_menu_sfx_button(warrior_button)
+	_bind_menu_sfx_button(weapon_button)
 
 	options_back_button.pressed.connect(_on_options_back_pressed)
 	warriors_back_button.pressed.connect(_on_warriors_back_pressed)
@@ -742,21 +904,196 @@ func _connect_signals() -> void:
 	weapon_button.mouse_exited.connect(func() -> void: _hover_area(weapon_area, false))
 
 func _on_play_pressed() -> void:
+	if _play_lobby_transition_running:
+		return
 	_button_press_anim(play_button)
+	await _run_play_lobby_transition()
 	_open_lobby_menu_flow()
+	_fade_out_play_lobby_transition()
 
 func _open_lobby_menu_flow() -> void:
-	_stop_idle_loop()
 	if _lobby_overlay_ctrl != null:
 		_lobby_overlay_ctrl.open(play_button)
+	_sync_lobby_overlay_interaction_state()
+	_refresh_meta_ui_visibility()
+
+func _run_play_lobby_transition() -> void:
+	if _fx_layer == null or play_button == null:
+		return
+	_cleanup_play_lobby_transition()
+	_play_lobby_transition_running = true
+	_cache_play_lobby_fade_targets()
+
+	var panel := PanelContainer.new()
+	panel.name = "PlayLobbyTransition"
+	panel.z_index = 980
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.modulate = Color(1, 1, 1, 1)
+	panel.top_level = true
+
+	var source_rect := play_button.get_global_rect()
+	panel.global_position = source_rect.position
+	panel.size = source_rect.size
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.1569, 0.1098, 0.3490, 0.2)
+	style.border_color = MENU_CLR_HIGHLIGHT
+	style.border_width_left = 3
+	style.border_width_top = 3
+	style.border_width_right = 3
+	style.border_width_bottom = 5
+	style.corner_radius_top_left = 3
+	style.corner_radius_top_right = 3
+	style.corner_radius_bottom_left = 3
+	style.corner_radius_bottom_right = 3
+	panel.add_theme_stylebox_override("panel", style)
+	_fx_layer.add_child(panel)
+	_play_lobby_panel = panel
+
+	var viewport_rect := get_viewport_rect()
+	var duration := maxf(0.12, play_lobby_expand_duration)
+	_play_lobby_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_play_lobby_tween.parallel().tween_property(panel, "global_position", viewport_rect.position, duration)
+	_play_lobby_tween.parallel().tween_property(panel, "size", viewport_rect.size, duration)
+	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(0.3059, 0.5529, 0.6118, 0.42), duration * 0.75)
+	for target in _play_lobby_fade_targets:
+		if target == null or not is_instance_valid(target):
+			continue
+		var item_path := str(target.get_path())
+		var base_alpha := float(_play_lobby_fade_base_alpha.get(item_path, target.modulate.a))
+		target.modulate.a = clampf(base_alpha, 0.0, 1.0)
+		_play_lobby_tween.parallel().tween_property(target, "modulate:a", 0.0, duration * 0.82)
+	await _play_lobby_tween.finished
+	_play_lobby_tween = null
+
+func _fade_out_play_lobby_transition() -> void:
+	if _play_lobby_panel == null or not is_instance_valid(_play_lobby_panel):
+		_cleanup_play_lobby_transition()
+		return
+	var fade_duration := maxf(0.08, play_lobby_border_fade_duration)
+	var fade := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	fade.tween_property(_play_lobby_panel, "modulate:a", 0.0, fade_duration)
+	fade.finished.connect(_cleanup_play_lobby_transition)
+
+func _cleanup_play_lobby_transition() -> void:
+	if _play_lobby_tween != null:
+		_play_lobby_tween.kill()
+		_play_lobby_tween = null
+	if _play_lobby_panel != null and is_instance_valid(_play_lobby_panel):
+		_play_lobby_panel.queue_free()
+	_play_lobby_panel = null
+	_play_lobby_transition_running = false
+
+func _cache_play_lobby_fade_targets() -> void:
+	_play_lobby_fade_targets.clear()
+	_play_lobby_fade_base_alpha.clear()
+	var targets: Array[CanvasItem] = []
+
+	var background := get_node_or_null("Background") as CanvasItem
+	var bg_noise := get_node_or_null("BgNoise") as CanvasItem
+	if background != null:
+		targets.append(background)
+	if bg_noise != null:
+		targets.append(bg_noise)
+	if wallet_panel != null:
+		targets.append(wallet_panel)
+	if play_button != null:
+		targets.append(play_button)
+	if options_button != null:
+		targets.append(options_button)
+	if exit_button != null:
+		targets.append(exit_button)
+	if _auth_footer_panel != null and is_instance_valid(_auth_footer_panel):
+		targets.append(_auth_footer_panel)
+	elif _auth_logout_button != null and is_instance_valid(_auth_logout_button):
+		targets.append(_auth_logout_button)
+	if logo_node != null and logo_node is CanvasItem:
+		targets.append(logo_node as CanvasItem)
+
+	for item in targets:
+		if item == null or not is_instance_valid(item):
+			continue
+		if _play_lobby_fade_targets.has(item):
+			continue
+		_play_lobby_fade_targets.append(item)
+		_play_lobby_fade_base_alpha[str(item.get_path())] = item.modulate.a
+
+func _restore_play_lobby_fade_targets() -> void:
+	for item in _play_lobby_fade_targets:
+		if item == null or not is_instance_valid(item):
+			continue
+		var item_path := str(item.get_path())
+		item.modulate.a = clampf(float(_play_lobby_fade_base_alpha.get(item_path, 1.0)), 0.0, 1.0)
+	_play_lobby_fade_targets.clear()
+	_play_lobby_fade_base_alpha.clear()
+
+func _run_play_lobby_reverse_transition() -> void:
+	if _play_lobby_fade_targets.is_empty():
+		return
+	if _fx_layer == null or play_button == null:
+		_restore_play_lobby_fade_targets()
+		return
+	_cleanup_play_lobby_transition()
+	_play_lobby_transition_running = true
+
+	var panel := PanelContainer.new()
+	panel.name = "PlayLobbyTransitionReverse"
+	panel.z_index = 980
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.modulate = Color(1, 1, 1, 1)
+	panel.top_level = true
+
+	var viewport_rect := get_viewport_rect()
+	panel.global_position = viewport_rect.position
+	panel.size = viewport_rect.size
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.42)
+	style.border_color = MENU_CLR_HIGHLIGHT
+	style.border_width_left = 3
+	style.border_width_top = 3
+	style.border_width_right = 3
+	style.border_width_bottom = 5
+	style.corner_radius_top_left = 3
+	style.corner_radius_top_right = 3
+	style.corner_radius_bottom_left = 3
+	style.corner_radius_bottom_right = 3
+	panel.add_theme_stylebox_override("panel", style)
+	_fx_layer.add_child(panel)
+	_play_lobby_panel = panel
+
+	var target_rect := play_button.get_global_rect()
+	var duration := maxf(0.12, play_lobby_shrink_duration)
+	_play_lobby_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_play_lobby_tween.parallel().tween_property(panel, "global_position", target_rect.position, duration)
+	_play_lobby_tween.parallel().tween_property(panel, "size", target_rect.size, duration)
+	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(0.1569, 0.1098, 0.3490, 0.2), duration * 0.86)
+
+	for target in _play_lobby_fade_targets:
+		if target == null or not is_instance_valid(target):
+			continue
+		var item_path := str(target.get_path())
+		var base_alpha := clampf(float(_play_lobby_fade_base_alpha.get(item_path, 1.0)), 0.0, 1.0)
+		target.modulate.a = 0.0
+		_play_lobby_tween.parallel().tween_property(target, "modulate:a", base_alpha, duration * 0.92)
+
+	await _play_lobby_tween.finished
+	_play_lobby_tween = null
+	_cleanup_play_lobby_transition()
+	_restore_play_lobby_fade_targets()
 
 func _run_lobby_menu_loading_sequence() -> void:
 	if _lobby_overlay_ctrl != null:
+		_show_menu_loading_overlay("LOADING LOBBIES...")
 		await _lobby_overlay_ctrl.run_loading_sequence()
+		_hide_menu_loading_overlay()
 
 func _on_lobby_overlay_closed() -> void:
-	if _current_screen == screen_main:
-		_start_idle_loop()
+	_hide_menu_loading_overlay()
+	await _run_play_lobby_reverse_transition()
+	_restore_play_lobby_fade_targets()
+	_sync_lobby_overlay_interaction_state()
+	_refresh_meta_ui_visibility()
 
 func _on_exit_pressed() -> void:
 	_button_press_anim(exit_button)
@@ -782,27 +1119,115 @@ func _notification(what: int) -> void:
 		_layout_auth_logout_button()
 
 func _layout_auth_logout_button() -> void:
-	if _auth_logout_button == null or not is_instance_valid(_auth_logout_button):
+	if _auth_footer_panel == null or not is_instance_valid(_auth_footer_panel):
 		return
 	if screen_main == null:
 		return
-	var btn_size := _auth_logout_button.size
-	if btn_size.x <= 0.0 or btn_size.y <= 0.0:
-		btn_size = _auth_logout_button.custom_minimum_size
-	if btn_size.x <= 0.0 or btn_size.y <= 0.0:
-		call_deferred("_layout_auth_logout_button")
+	var measured := _auth_footer_panel.get_combined_minimum_size()
+	var desired_size := Vector2(maxf(344.0, measured.x), maxf(44.0, measured.y))
+	_auth_footer_panel.custom_minimum_size = desired_size
+	if _auth_footer_panel.size.x <= 0.0 or _auth_footer_panel.size.y <= 0.0:
+		_auth_footer_panel.size = desired_size
+	var panel_size := Vector2(maxf(desired_size.x, _auth_footer_panel.size.x), maxf(desired_size.y, _auth_footer_panel.size.y))
+	var margin_bottom: float = 12.0
+	var x: float = floorf((screen_main.size.x - panel_size.x) * 0.5)
+	var y: float = floorf(screen_main.size.y - panel_size.y - margin_bottom)
+	_auth_footer_panel.position = Vector2(maxf(0.0, x), maxf(0.0, y))
+	if _auth_logout_button != null and is_instance_valid(_auth_logout_button):
+		_center_pivot(_auth_logout_button)
+
+func _refresh_auth_footer() -> void:
+	if _auth_footer_panel == null or not is_instance_valid(_auth_footer_panel):
 		return
-	var margin_bottom: float = 14.0
-	var x: float = floorf((screen_main.size.x - btn_size.x) * 0.5)
-	var y: float = floorf(screen_main.size.y - btn_size.y - margin_bottom)
-	_auth_logout_button.position = Vector2(maxf(0.0, x), maxf(0.0, y))
-	_center_pivot(_auth_logout_button)
+	var logged := bool(_auth_logged_in)
+	if _auth_logout_button != null and is_instance_valid(_auth_logout_button):
+		_auth_logout_button.visible = logged
+	if _auth_footer_label != null and is_instance_valid(_auth_footer_label):
+		if logged:
+			var name := player_username.strip_edges()
+			if name.is_empty():
+				name = "Player"
+			_auth_footer_label.text = "Logged in: %s" % name
+		else:
+			_auth_footer_label.text = "Not logged in"
+	_layout_auth_logout_button()
+	_refresh_meta_ui_visibility()
+
+func _is_main_menu_meta_ui_visible() -> bool:
+	var lobby_visible := _lobby_overlay_ctrl != null and _lobby_overlay_ctrl.is_visible()
+	return _current_screen == screen_main and not lobby_visible
+
+func _refresh_meta_ui_visibility() -> void:
+	_apply_meta_ui_visibility(_is_main_menu_meta_ui_visible())
+
+func _apply_meta_ui_visibility(show_on_main: bool) -> void:
+	_tween_meta_visibility(_warrior_username_label, show_on_main, _meta_username_tween, "_meta_username_tween")
+	_tween_meta_visibility(_auth_footer_panel, bool(_auth_logged_in) and show_on_main, _meta_footer_tween, "_meta_footer_tween")
+
+func _tween_meta_visibility(item: CanvasItem, should_show: bool, active_tween: Tween, tween_slot: String) -> void:
+	if item == null or not is_instance_valid(item):
+		return
+	if active_tween != null:
+		active_tween.kill()
+	var current_alpha := clampf(item.modulate.a, 0.0, 1.0)
+	if should_show:
+		item.visible = true
+		if current_alpha < 0.98:
+			item.modulate.a = current_alpha
+		var t_show := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		t_show.tween_property(item, "modulate:a", 1.0, 0.2)
+		set(tween_slot, t_show)
+	else:
+		if not item.visible and current_alpha <= 0.01:
+			item.modulate.a = 0.0
+			set(tween_slot, null)
+			return
+		item.visible = true
+		var t_hide := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		t_hide.tween_property(item, "modulate:a", 0.0, 0.16)
+		t_hide.tween_callback(func() -> void:
+			item.visible = false
+			item.modulate.a = 0.0
+			set(tween_slot, null)
+		)
+		set(tween_slot, t_hide)
+
+func _show_menu_loading_overlay(message: String = "LOADING...") -> void:
+	if not ENABLE_MENU_LOADING_OVERLAY:
+		return
+	_set_menu_cursor_hover_blocked(true)
+	if _menu_loading_overlay != null:
+		_menu_loading_overlay.show(message)
+
+func _hide_menu_loading_overlay() -> void:
+	if not ENABLE_MENU_LOADING_OVERLAY:
+		return
+	if _menu_loading_overlay != null:
+		_menu_loading_overlay.hide()
+
+func _on_menu_loading_overlay_shown() -> void:
+	_set_menu_cursor_hover_blocked(true)
+
+func _on_menu_loading_overlay_hidden() -> void:
+	_set_menu_cursor_hover_blocked(false)
+
+func _set_menu_cursor_hover_blocked(blocked: bool) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var root := tree.get_root()
+	if root == null:
+		return
+	var cm := root.get_node_or_null(CURSOR_MANAGER_NAME)
+	if cm != null and cm.has_method("set_menu_hover_blocked"):
+		cm.call("set_menu_hover_blocked", blocked)
 
 func _switch_to(target: Control, direction: int) -> void:
 	if target == null:
 		return
 	if _current_screen == target:
 		return
+	_apply_meta_ui_visibility(target == screen_main)
 
 	if _transition_tween != null:
 		_transition_tween.kill()
@@ -838,6 +1263,9 @@ func _switch_to(target: Control, direction: int) -> void:
 			target.position = Vector2.ZERO
 			target.modulate = Color(1, 1, 1, 1)
 			_current_screen = target
+			_sync_lobby_overlay_interaction_state()
+			_refresh_warrior_username_label()
+			_refresh_auth_footer()
 		)
 		return
 
@@ -850,6 +1278,9 @@ func _switch_to(target: Control, direction: int) -> void:
 			from.position = Vector2.ZERO
 			from.modulate = Color(1, 1, 1, 1)
 			_current_screen = target
+			_sync_lobby_overlay_interaction_state()
+			_refresh_warrior_username_label()
+			_refresh_auth_footer()
 		)
 		return
 
@@ -880,6 +1311,9 @@ func _switch_to(target: Control, direction: int) -> void:
 		target.position = Vector2.ZERO
 		target.modulate = Color(1, 1, 1, 1)
 		_current_screen = target
+		_sync_lobby_overlay_interaction_state()
+		_refresh_warrior_username_label()
+		_refresh_auth_footer()
 		if _current_screen == screen_main:
 			_start_idle_loop()
 	)
@@ -888,6 +1322,7 @@ func _open_warriors_menu() -> void:
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
+	_apply_meta_ui_visibility(false)
 	_menu_transition_ctrl.open_warriors_menu()
 
 func _open_warriors_menu_stage2() -> void:
@@ -908,6 +1343,7 @@ func _open_weapons_menu() -> void:
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
+	_apply_meta_ui_visibility(false)
 	_menu_transition_ctrl.open_weapons_menu(_pending_weapon_id, _pending_weapon_skin)
 
 func _open_weapons_menu_stage2() -> void:
@@ -929,6 +1365,18 @@ func _close_weapons_menu_stage2() -> void:
 
 func _set_current_screen_ref(target: Control) -> void:
 	_current_screen = target
+	_sync_lobby_overlay_interaction_state()
+	_refresh_warrior_username_label()
+	_refresh_auth_footer()
+
+func _sync_lobby_overlay_interaction_state() -> void:
+	if _lobby_overlay_ctrl == null:
+		return
+	if not _lobby_overlay_ctrl.is_visible():
+		_lobby_overlay_ctrl.set_interaction_enabled(true)
+		return
+	var allow_interaction := _current_screen == screen_main
+	_lobby_overlay_ctrl.set_interaction_enabled(allow_interaction)
 
 func _prepare_player_preview(player: Node) -> void:
 	if player == null:
@@ -980,7 +1428,7 @@ func _make_filter_button(text: String) -> Button:
 func _set_filter_btn_selected(btn: Button, selected: bool) -> void:
 	if btn == null:
 		return
-	btn.modulate = Color(1, 1, 1, 1) if selected else Color(0.78, 0.8, 0.86, 0.85)
+	btn.modulate = Color(1, 1, 1, 1) if selected else Color(0.86, 0.82, 0.95, 0.9)
 
 func _refresh_weapon_filter_button_state() -> void:
 	for key in _weapon_filter_weapon_buttons.keys():
@@ -1001,7 +1449,7 @@ func _refresh_weapon_filter_button_state() -> void:
 			btn.text = "%s  (LOCKED)" % wname
 			continue
 		var eq := _equipped_weapon_skin(wid)
-		btn.text = "%s - %s  (1 EQUIPPED)" % [wname, _weapon_skin_label(wid, eq)]
+		btn.text = "%s - %s  (OWNED)" % [wname, _weapon_skin_label(wid, eq)]
 
 func _ensure_weapon_filter_ui() -> void:
 	if weapon_scroll == null:
@@ -1146,7 +1594,7 @@ func _make_shop_button() -> Button:
 
 	# Clone the look from an existing styled button in the scene.
 	_copy_button_look(options_button, btn)
-	_normalize_button_outline(btn, 2)
+	_normalize_button_outline(btn, 0)
 	btn.add_theme_font_size_override("font_size", 11)
 	_add_hover_pop(btn)
 	btn.pressed.connect(func() -> void:
@@ -1171,14 +1619,14 @@ func _copy_button_look(src: Button, dst: Button) -> void:
 			dst.add_theme_font_override("font", f)
 
 	# Ensure readable text even if the source doesn't override all states.
-	dst.add_theme_color_override("font_color", Color(0.92, 0.95, 0.98, 1))
-	dst.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	dst.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
-	dst.add_theme_color_override("font_disabled_color", Color(0.65, 0.7, 0.75, 0.9))
+	dst.add_theme_color_override("font_color", MENU_CLR_HIGHLIGHT)
+	dst.add_theme_color_override("font_hover_color", Color(1, 0.98, 0.86, 1))
+	dst.add_theme_color_override("font_pressed_color", Color(1, 0.96, 0.78, 1))
+	dst.add_theme_color_override("font_disabled_color", Color(0.78, 0.72, 0.88, 0.9))
 	dst.add_theme_constant_override("outline_size", 0)
-	_normalize_button_outline(dst, 2)
+	_normalize_button_outline(dst, 0)
 
-func _apply_uniform_button_outlines(root: Node, border_width: int = 2) -> void:
+func _apply_uniform_button_outlines(root: Node, border_width: int = 0) -> void:
 	if root == null:
 		return
 	if root is Button:
@@ -1187,7 +1635,7 @@ func _apply_uniform_button_outlines(root: Node, border_width: int = 2) -> void:
 		if child is Node:
 			_apply_uniform_button_outlines(child as Node, border_width)
 
-func _normalize_button_outline(btn: Button, border_width: int = 2) -> void:
+func _normalize_button_outline(btn: Button, border_width: int = 0) -> void:
 	if btn == null:
 		return
 	var base_style := btn.get_theme_stylebox("normal")
@@ -1211,21 +1659,81 @@ func _normalize_button_outline(btn: Button, border_width: int = 2) -> void:
 		normalized.corner_radius_top_right = base_flat.corner_radius_top_right
 		normalized.corner_radius_bottom_left = base_flat.corner_radius_bottom_left
 		normalized.corner_radius_bottom_right = base_flat.corner_radius_bottom_right
+		normalized.bg_color = _brighten_button_bg(normalized.bg_color, sb_name)
 		btn.add_theme_stylebox_override(sb_name, normalized)
+
+func _apply_main_category_button_brightness() -> void:
+	_apply_button_brightness_override(warrior_button)
+	_apply_button_brightness_override(weapon_button)
+
+func _apply_button_brightness_override(btn: Button) -> void:
+	if btn == null:
+		return
+	var base_style := btn.get_theme_stylebox("normal")
+	if not (base_style is StyleBoxFlat):
+		return
+	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := btn.get_theme_stylebox(sb_name)
+		if not (sb is StyleBoxFlat):
+			continue
+		var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		match sb_name:
+			"normal":
+				flat.bg_color = _mix_to_color(flat.bg_color, MENU_CLR_ACCENT, 0.72)
+			"hover":
+				flat.bg_color = _mix_to_color(flat.bg_color, MENU_CLR_HOT, 0.78)
+			"pressed":
+				flat.bg_color = _mix_to_color(flat.bg_color, MENU_CLR_HOT, 0.66)
+			"focus":
+				flat.bg_color = _mix_to_color(flat.bg_color, MENU_CLR_ACCENT, 0.8)
+			"disabled":
+				flat.bg_color = _mix_to_color(flat.bg_color, MENU_CLR_BASE, 0.52)
+		btn.add_theme_stylebox_override(sb_name, flat)
+
+func _mix_to_color(src: Color, target: Color, blend: float) -> Color:
+	return Color(
+		lerpf(src.r, target.r, clampf(blend, 0.0, 1.0)),
+		lerpf(src.g, target.g, clampf(blend, 0.0, 1.0)),
+		lerpf(src.b, target.b, clampf(blend, 0.0, 1.0)),
+		src.a
+	)
+
+func _brighten_button_bg(c: Color, state: String) -> Color:
+	var target := MENU_CLR_BASE
+	var blend := 0.52
+	if state == "hover":
+		target = MENU_CLR_ACCENT
+		blend = 0.66
+	elif state == "pressed":
+		target = MENU_CLR_HOT
+		blend = 0.62
+	elif state == "focus":
+		target = MENU_CLR_ACCENT
+		blend = 0.68
+	elif state == "disabled":
+		target = MENU_CLR_BASE
+		blend = 0.36
+	var out := Color(
+		lerpf(c.r, target.r, blend),
+		lerpf(c.g, target.g, blend),
+		lerpf(c.b, target.b, blend),
+		c.a
+	)
+	if state != "disabled":
+		out.a = clampf(c.a + 0.04, 0.0, 1.0)
+	return out
 
 func _init_confirm_dialog() -> void:
 	var overlay := CONFIRM_OVERLAY_SCRIPT.new()
 	overlay.name = "ConfirmOverlay"
-	add_child(overlay)
 	overlay.configure(
 		Callable(self, "_make_shop_button"),
 		Callable(self, "_set_weapon_icon_sprite"),
 		Callable(self, "_apply_weapon_skin_visual"),
 		Callable(self, "_center_pivot"),
-		Callable(self, "_add_hover_pop"),
-		Callable(self, "_button_press_anim"),
-		Callable(self, "_release_to_hover")
+		Callable(self, "_add_hover_pop")
 	)
+	add_child(overlay)
 	_confirm_overlay_ui = overlay
 
 func _ask_confirm(title: String, text: String, on_confirm: Callable, weapon_id: String = "", skin_index: int = 0) -> void:
@@ -1237,18 +1745,19 @@ func _apply_pixel_slider_style(slider: HSlider) -> void:
 	if slider == null:
 		return
 	_ensure_slider_grabbers()
+	_bind_menu_sfx_slider(slider)
 
 	slider.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	slider.add_theme_icon_override("grabber", _slider_grabber)
 	slider.add_theme_icon_override("grabber_highlight", _slider_grabber_hi)
 
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.12, 0.11, 0.16, 0.95)
+	track.bg_color = Color(0.3059, 0.5529, 0.6118, 0.82)
 	track.border_width_left = 3
 	track.border_width_top = 3
 	track.border_width_right = 3
 	track.border_width_bottom = 3
-	track.border_color = Color(0.06, 0.05, 0.08, 1)
+	track.border_color = MENU_CLR_ACCENT
 	track.content_margin_left = 6.0
 	track.content_margin_right = 6.0
 	track.content_margin_top = 4.0
@@ -1256,29 +1765,29 @@ func _apply_pixel_slider_style(slider: HSlider) -> void:
 	slider.add_theme_stylebox_override("slider", track)
 
 	var area := StyleBoxFlat.new()
-	area.bg_color = Color(0.28, 0.24, 0.38, 0.25)
+	area.bg_color = Color(0.3059, 0.5529, 0.6118, 0.28)
 	area.border_width_left = 2
 	area.border_width_top = 2
 	area.border_width_right = 2
 	area.border_width_bottom = 2
-	area.border_color = Color(0.9, 0.74, 0.27, 0.5)
+	area.border_color = Color(0.9294, 0.9686, 0.7412, 0.62)
 	slider.add_theme_stylebox_override("grabber_area_highlight", area)
 
 	var focus := StyleBoxFlat.new()
-	focus.bg_color = Color(0.25, 0.6, 0.85, 0.18)
+	focus.bg_color = Color(0.5216, 0.7804, 0.6039, 0.2)
 	focus.border_width_left = 2
 	focus.border_width_top = 2
 	focus.border_width_right = 2
 	focus.border_width_bottom = 2
-	focus.border_color = Color(0.25, 0.6, 0.85, 0.45)
+	focus.border_color = Color(0.5216, 0.7804, 0.6039, 0.55)
 	slider.add_theme_stylebox_override("focus", focus)
 
 func _ensure_slider_grabbers() -> void:
 	if _slider_grabber != null and _slider_grabber_hi != null:
 		return
-	var border := Color(0.06, 0.05, 0.08, 1)
-	var fill := Color(0.9, 0.74, 0.27, 1)
-	var fill_hi := Color(0.98, 0.9, 0.35, 1)
+	var border := MENU_CLR_ACCENT
+	var fill := MENU_CLR_ACCENT
+	var fill_hi := MENU_CLR_HIGHLIGHT
 
 	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)
 	img.fill(fill)
@@ -1319,12 +1828,12 @@ func _apply_pixel_scroll_style(scroll: ScrollContainer) -> void:
 
 	# Give the scroll area a subtle framed panel feel (if the theme key exists).
 	var panel := StyleBoxFlat.new()
-	panel.bg_color = Color(0.08, 0.08, 0.12, 0.35)
+	panel.bg_color = Color(0.3059, 0.5529, 0.6118, 0.40)
 	panel.border_width_left = 2
 	panel.border_width_top = 2
 	panel.border_width_right = 2
 	panel.border_width_bottom = 2
-	panel.border_color = Color(0.06, 0.05, 0.08, 0.85)
+	panel.border_color = Color(0.3059, 0.5529, 0.6118, 0.9)
 	panel.content_margin_left = 6.0
 	panel.content_margin_top = 6.0
 	panel.content_margin_right = 6.0
@@ -1351,10 +1860,10 @@ func _apply_pixel_scrollbar(sb: ScrollBar) -> void:
 func _ensure_scrollbar_styleboxes() -> void:
 	if _scroll_sb != null:
 		return
-	var border := Color(0.06, 0.05, 0.08, 1)
+	var border := MENU_CLR_ACCENT
 
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.12, 0.11, 0.16, 0.85)
+	track.bg_color = Color(0.3059, 0.5529, 0.6118, 0.88)
 	track.border_width_left = 3
 	track.border_width_top = 3
 	track.border_width_right = 3
@@ -1367,7 +1876,7 @@ func _ensure_scrollbar_styleboxes() -> void:
 	_scroll_sb = track
 
 	var grab := StyleBoxFlat.new()
-	grab.bg_color = Color(0.22, 0.19, 0.3, 1)
+	grab.bg_color = Color(0.3059, 0.5529, 0.6118, 1)
 	grab.border_width_left = 3
 	grab.border_width_top = 3
 	grab.border_width_right = 3
@@ -1376,16 +1885,16 @@ func _ensure_scrollbar_styleboxes() -> void:
 	_scroll_grabber = grab
 
 	var grab_hi := StyleBoxFlat.new()
-	grab_hi.bg_color = Color(0.28, 0.24, 0.38, 1)
+	grab_hi.bg_color = Color(0.5216, 0.7804, 0.6039, 1)
 	grab_hi.border_width_left = 3
 	grab_hi.border_width_top = 3
 	grab_hi.border_width_right = 3
 	grab_hi.border_width_bottom = 3
-	grab_hi.border_color = Color(0.9, 0.74, 0.27, 1)
+	grab_hi.border_color = MENU_CLR_HIGHLIGHT
 	_scroll_grabber_hi = grab_hi
 
 	var grab_pressed := StyleBoxFlat.new()
-	grab_pressed.bg_color = Color(0.14, 0.12, 0.2, 1)
+	grab_pressed.bg_color = Color(0.1569, 0.1098, 0.3490, 1)
 	grab_pressed.border_width_left = 3
 	grab_pressed.border_width_top = 3
 	grab_pressed.border_width_right = 3
@@ -1546,7 +2055,7 @@ func _weapon_item_button_text(weapon_id: String, skin_index: int) -> String:
 
 	if _weapon_skin_is_owned(weapon_id, skin_index):
 		if weapon_id == selected_weapon_id and skin_index == selected_weapon_skin:
-			return "%s  [EQUIPPED]" % base
+			return "%s  [OWNED]" % base
 		return base
 
 	return "%s  (%d)  [LOCKED]" % [base, _weapon_skin_cost(weapon_id, skin_index)]
@@ -1793,10 +2302,10 @@ func _ensure_warrior_username_label() -> void:
 	label.anchor_right = 0.5
 	label.anchor_top = 0.0
 	label.anchor_bottom = 0.0
-	label.offset_left = -74
+	label.offset_left = -64
 	label.offset_right = 74
-	label.offset_top = -6
-	label.offset_bottom = 16
+	label.offset_top = 45
+	label.offset_bottom = 30
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 12)
@@ -1810,6 +2319,7 @@ func _refresh_warrior_username_label() -> void:
 	if _warrior_username_label == null:
 		return
 	_warrior_username_label.text = player_username
+	_refresh_meta_ui_visibility()
 
 func _update_wallet_labels(silent: bool) -> void:
 	coins_label.text = "Coins: %d" % wallet_coins
@@ -1824,7 +2334,23 @@ func _clear_children(node: Node) -> void:
 		child.queue_free()
 
 func _add_hover_pop(btn: Button) -> void:
+	_bind_menu_sfx_button(btn)
 	_ui_anim.add_hover_pop(btn)
+
+func _bind_menu_sfx_button(btn: BaseButton) -> void:
+	if _menu_sfx == null:
+		return
+	_menu_sfx.bind_button(btn)
+
+func _bind_menu_sfx_slider(slider: HSlider) -> void:
+	if _menu_sfx == null:
+		return
+	_menu_sfx.bind_slider(slider)
+
+func _bind_menu_sfx_option(option: OptionButton) -> void:
+	if _menu_sfx == null:
+		return
+	_menu_sfx.bind_option(option)
 
 func _hover_area(area: Control, hovered: bool) -> void:
 	_ui_anim.hover_area(area, hovered)

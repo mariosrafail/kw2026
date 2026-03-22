@@ -16,13 +16,13 @@ content_margin_left = 14.0
 content_margin_top = 8.0
 content_margin_right = 14.0
 content_margin_bottom = 8.0
-bg_color = Color(0.07, 0.12, 0.19, 0.96)
+bg_color = Color(0.3059, 0.5529, 0.6118, 0.94)
 border_width_left = 3
 border_width_top = 3
 border_width_right = 3
 border_width_bottom = 5
-border_color = Color(0.09, 0.72, 0.84, 1)
-shadow_color = Color(0, 0.04, 0.08, 0.58)
+border_color = Color(0.5216, 0.7804, 0.6039, 1)
+shadow_color = Color(0.1569, 0.1098, 0.349, 0.28)
 shadow_size = 5
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
@@ -30,13 +30,13 @@ content_margin_left = 14.0
 content_margin_top = 9.0
 content_margin_right = 14.0
 content_margin_bottom = 7.0
-bg_color = Color(0.05, 0.09, 0.15, 1)
+bg_color = Color(0.1569, 0.1098, 0.349, 0.96)
 border_width_left = 3
 border_width_top = 3
 border_width_right = 3
 border_width_bottom = 3
-border_color = Color(0.04, 0.55, 0.68, 1)
-shadow_color = Color(0, 0.02, 0.04, 0.35)
+border_color = Color(0.5216, 0.7804, 0.6039, 1)
+shadow_color = Color(0.1569, 0.1098, 0.349, 0.22)
 shadow_size = 1
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
@@ -44,22 +44,22 @@ content_margin_left = 14.0
 content_margin_top = 8.0
 content_margin_right = 14.0
 content_margin_bottom = 8.0
-bg_color = Color(0.1, 0.17, 0.27, 1)
+bg_color = Color(0.5216, 0.7804, 0.6039, 0.96)
 border_width_left = 3
 border_width_top = 3
 border_width_right = 3
 border_width_bottom = 5
-border_color = Color(0.33, 0.95, 1, 1)
-shadow_color = Color(0.02, 0.18, 0.24, 0.7)
+border_color = Color(0.9294, 0.9686, 0.7412, 1)
+shadow_color = Color(0.1569, 0.1098, 0.349, 0.24)
 shadow_size = 7
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_focus"]
-bg_color = Color(0.08, 0.22, 0.31, 0.5)
+bg_color = Color(0.3059, 0.5529, 0.6118, 0.56)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 4
-border_color = Color(0.5, 0.98, 1, 0.95)
+border_color = Color(0.9294, 0.9686, 0.7412, 0.95)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_ak_icon"]
 atlas = ExtResource("5_guns")
@@ -70,13 +70,13 @@ content_margin_left = 14.0
 content_margin_top = 12.0
 content_margin_right = 14.0
 content_margin_bottom = 12.0
-bg_color = Color(0.12, 0.11, 0.16, 0.98)
+bg_color = Color(0.3059, 0.5529, 0.6118, 0.92)
 border_width_left = 4
 border_width_top = 4
 border_width_right = 4
 border_width_bottom = 4
-border_color = Color(0.06, 0.05, 0.08, 1)
-shadow_color = Color(0, 0, 0, 0.45)
+border_color = Color(0.9294, 0.9686, 0.7412, 0.9)
+shadow_color = Color(0.1569, 0.1098, 0.349, 0.24)
 shadow_size = 6
 
 [node name="MainMenu" type="Control" unique_id=800199876]
@@ -96,7 +96,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.06666667, 0.13333334, 0.50980395, 1)
+color = Color(0.3059, 0.5529, 0.6118, 1)
 
 [node name="BgNoise" type="TextureRect" parent="." unique_id=36156868]
 modulate = Color(1, 1, 1, 0.06)
@@ -474,6 +474,7 @@ text = "BACK"
 [node name="ScreenWarriors" type="Control" parent="Screens" unique_id=1631116497]
 unique_name_in_owner = true
 visible = false
+z_index = 1200
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -590,6 +591,7 @@ columns = 2
 [node name="ScreenWeapons" type="Control" parent="Screens" unique_id=1598157277]
 unique_name_in_owner = true
 visible = false
+z_index = 1200
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0

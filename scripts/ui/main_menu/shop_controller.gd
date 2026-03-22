@@ -164,14 +164,13 @@ func refresh_warrior_action(host: Control) -> void:
 	var warrior_action_button = host.get("warrior_action_button") as Button
 	if warrior_action_button == null:
 		return
+	warrior_action_button.visible = false
+	warrior_action_button.disabled = true
+	return
 	var warrior_ui = host.get("_warrior_ui")
 	var status = str(warrior_ui.warrior_item_status_text(host, str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin"))))
-	if status == "EQUIPPED":
-		warrior_action_button.text = "EQUIPPED"
-		warrior_action_button.disabled = true
-		return
 	if status == "OWNED":
-		warrior_action_button.text = "EQUIP"
+		warrior_action_button.text = "OWNED"
 		warrior_action_button.disabled = false
 		return
 	warrior_action_button.text = status
@@ -335,6 +334,9 @@ func refresh_weapon_action(host: Control) -> void:
 	var weapon_action_button = host.get("weapon_action_button") as Button
 	if weapon_action_button == null:
 		return
+	weapon_action_button.visible = false
+	weapon_action_button.disabled = true
+	return
 	var pending_weapon_id = str(host.get("_pending_weapon_id"))
 	var pending_weapon_skin = int(host.get("_pending_weapon_skin"))
 	if not bool(host.call("_weapon_is_owned", pending_weapon_id)):
@@ -344,10 +346,10 @@ func refresh_weapon_action(host: Control) -> void:
 		return
 	if bool(host.call("_weapon_skin_is_owned", pending_weapon_id, pending_weapon_skin)):
 		if pending_weapon_id == str(host.get("selected_weapon_id")) and pending_weapon_skin == int(host.get("selected_weapon_skin")):
-			weapon_action_button.text = "EQUIPPED"
-			weapon_action_button.disabled = true
+			weapon_action_button.text = "OWNED"
+			weapon_action_button.disabled = false
 		else:
-			weapon_action_button.text = "EQUIP"
+			weapon_action_button.text = "OWNED"
 			weapon_action_button.disabled = false
 		return
 	weapon_action_button.disabled = false
