@@ -451,9 +451,10 @@ func push_kill_feed(attacker_name: String, victim_name: String) -> void:
 	_ensure_kill_feed_ui()
 	if _kill_feed_root == null or not is_instance_valid(_kill_feed_root):
 		return
+	_update_kill_feed_position()
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(430.0, 40.0)
+	panel.custom_minimum_size = Vector2(320.0, 30.0)
 	panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	panel.scale = Vector2(0.72, 0.72)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -477,7 +478,7 @@ func push_kill_feed(attacker_name: String, victim_name: String) -> void:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	label.add_theme_font_override("font", KILL_FEED_FONT)
-	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_font_size_override("font_size", 16)
 	label.add_theme_color_override("font_color", Color(0.94, 0.98, 1.0, 1.0))
 	label.text = "%s has killed %s" % [attacker_name, victim_name]
 	panel.add_child(label)
@@ -531,12 +532,20 @@ func _ensure_kill_feed_ui() -> void:
 	root.name = "KillFeedRoot"
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.z_index = 200
-	root.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	root.offset_left = 0.0
-	root.offset_top = 12.0
-	root.offset_right = 0.0
-	root.offset_bottom = 180.0
-	root.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.alignment = BoxContainer.ALIGNMENT_BEGIN
 	root.add_theme_constant_override("separation", 6)
+	root.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	root.size = Vector2(360.0, 160.0)
+	root.set_as_top_level(true)
 	host.add_child(root)
 	_kill_feed_root = root
+	_update_kill_feed_position()
+
+func _update_kill_feed_position() -> void:
+	if _kill_feed_root == null or not is_instance_valid(_kill_feed_root):
+		return
+	if scoreboard_label != null and is_instance_valid(scoreboard_label):
+		var score_pos := scoreboard_label.get_global_position()
+		_kill_feed_root.global_position = Vector2(maxf(8.0, score_pos.x - 90.0), maxf(8.0, score_pos.y - 50.0))
+		return
+	_kill_feed_root.global_position = Vector2(24.0, 12.0)

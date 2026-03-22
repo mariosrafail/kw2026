@@ -9,7 +9,7 @@
 [ext_resource type="Script" uid="uid://b6s5u5888fb2n" path="res://scripts/world/ground_tilemap_layer.gd" id="7_t3qyr"]
 [ext_resource type="TileSet" uid="uid://bxeuelht67e75" path="res://assets/tiles/ground_tileset_8x8.tres" id="8_1m6if"]
 [ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="9_mcfv1"]
-[ext_resource type="Script" uid="uid://lotupdelmf50" path="res://scripts/world/main_dth_map_controller.gd" id="10_6jxsl"]
+[ext_resource type="Script" uid="uid://bpbm7wrjhaxjy" path="res://scripts/world/main_tdth_map_controller.gd" id="10_6jxsl"]
 [ext_resource type="Script" uid="uid://drsoyyyeoq8ct" path="res://scripts/world/main_visuals_controller.gd" id="11_g3n6m"]
 [ext_resource type="Shader" uid="uid://b5bs52gykxls7" path="res://assets/shaders/main_sky_grade.gdshader" id="12_eiv51"]
 [ext_resource type="Shader" uid="uid://be3ul1wrb4xp" path="res://assets/shaders/main_atmosphere_overlay.gdshader" id="13_lx0m1"]

@@ -1,22 +1,24 @@
 extends RefCounted
 class_name MapCatalog
 
-const MAIN_DTH_MAP_CONTROLLER := preload("res://scripts/world/main_dth_map_controller.gd")
+const MAIN_FFA_MAP_CONTROLLER := preload("res://scripts/world/main_ffa_map_controller.gd")
+const MAIN_TDTH_MAP_CONTROLLER := preload("res://scripts/world/main_tdth_map_controller.gd")
 const MAIN_CTF_MAP_CONTROLLER := preload("res://scripts/world/main_ctf_map_controller.gd")
 
 var _maps_by_id: Dictionary = {}
 var _ordered_map_ids: Array[String] = []
-var _default_map_id := "main_deathmatch"
+var _default_map_id := "main_ffa"
 
 func _init() -> void:
-	_register_controller(MAIN_DTH_MAP_CONTROLLER.new())
+	_register_controller(MAIN_FFA_MAP_CONTROLLER.new())
+	_register_controller(MAIN_TDTH_MAP_CONTROLLER.new())
 	_register_controller(MAIN_CTF_MAP_CONTROLLER.new())
 	if _ordered_map_ids.is_empty():
 		_ordered_map_ids.append(_default_map_id)
 		_maps_by_id[_default_map_id] = {
 			"id": _default_map_id,
-			"label": "Main Map Deathmatch",
-			"scene_path": "res://scenes/main_dth.tscn",
+			"label": "Main Map FFA",
+			"scene_path": "res://scenes/main_ffa.tscn",
 			"max_players": 2,
 			"spawn_points": [],
 			"supported_modes": ["deathmatch"],

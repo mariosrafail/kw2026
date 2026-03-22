@@ -91,7 +91,7 @@ func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
 	peer_character_ids.erase(peer_id)
 	peer_team_by_peer.erase(peer_id)
 	spawn_slots.erase(peer_id)
-	if ctf_match_controller != null:
+	if ctf_match_controller != null and _ctf_objective_enabled():
 		ctf_match_controller.drop_flag_for_peer(peer_id, _player_world_position_or_flag(peer_id))
 		_sync_ctf_flag_to_clients()
 	_update_peer_labels()
@@ -103,9 +103,6 @@ func _server_sync_player_stats(peer_id: int) -> void:
 	player_replication.server_sync_player_stats(peer_id)
 
 func _server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> void:
-	if _is_target_dummy_peer(attacker_peer_id) or _is_target_dummy_peer(target_peer_id):
-		player_replication.server_emit_kill_feed(attacker_peer_id, target_peer_id)
-		return
 	player_replication.server_register_kill_death(attacker_peer_id, target_peer_id)
 	_update_score_labels()
 

@@ -155,13 +155,54 @@ func _update_score_labels() -> void:
 	if multiplayer != null and multiplayer.multiplayer_peer != null:
 		local_peer_id = multiplayer.get_unique_id()
 	if _ctf_enabled() and ctf_match_controller != null:
+		_merge_team_assignments_from_room_state()
+		_merge_team_assignments_from_lobby_service(local_peer_id)
+		if peer_team_by_peer.is_empty() and role == Role.SERVER:
+			var server_lobby_id := _peer_lobby(local_peer_id)
+			if server_lobby_id <= 0:
+				server_lobby_id = _target_dummy_lobby_id()
+			if server_lobby_id > 0:
+				_assign_ctf_teams(server_lobby_id)
+		var mode_label := "CTF" if _ctf_objective_enabled() else "TDTH"
 		if kd_label != null:
-			kd_label.text = ctf_match_controller.hud_score_text()
+			kd_label.text = ctf_match_controller.hud_score_text_for_mode(mode_label)
 		if scoreboard_label != null:
-			scoreboard_label.text = ctf_match_controller.scoreboard_text(player_stats, player_display_names)
+			scoreboard_label.text = ctf_match_controller.scoreboard_table_text(
+				player_stats,
+				player_display_names,
+				_ctf_objective_enabled(),
+				mode_label
+			)
 	else:
 		ui_controller.update_kd_label(local_peer_id, player_stats)
 		ui_controller.update_scoreboard_label(player_stats, player_display_names)
+
+func _merge_team_assignments_from_room_state() -> void:
+	if active_lobby_room_state.is_empty():
+		return
+	var raw_team_by_peer := active_lobby_room_state.get("team_by_peer", {}) as Dictionary
+	for peer_value in raw_team_by_peer.keys():
+		var peer_id := int(peer_value)
+		if peer_id == 0:
+			continue
+		peer_team_by_peer[peer_id] = int(raw_team_by_peer.get(peer_value, -1))
+
+func _merge_team_assignments_from_lobby_service(local_peer_id: int) -> void:
+	if lobby_service == null:
+		return
+	var lobby_id := client_lobby_id
+	if lobby_id <= 0 and local_peer_id > 0:
+		lobby_id = _peer_lobby(local_peer_id)
+	if lobby_id <= 0:
+		lobby_id = _target_dummy_lobby_id()
+	if lobby_id <= 0:
+		return
+	var planned := lobby_service.team_assignments_for_lobby(lobby_id)
+	for peer_value in planned.keys():
+		var peer_id := int(peer_value)
+		if peer_id == 0:
+			continue
+		peer_team_by_peer[peer_id] = int(planned.get(peer_value, -1))
 
 func _cooldown_text(prefix: String, remaining_sec: float) -> String:
 	if remaining_sec <= 0.0:

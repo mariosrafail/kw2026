@@ -4,6 +4,9 @@ class_name LobbyService
 const TEAM_RED := 0
 const TEAM_BLUE := 1
 const TEAM_SIZE_LIMIT := 2
+const GAME_MODE_DEATHMATCH := "deathmatch"
+const GAME_MODE_CTF := "ctf"
+const GAME_MODE_TDTH := "tdth"
 
 var lobby_config: LobbyConfig
 static var _global_server_lobbies: Dictionary = {}
@@ -105,7 +108,7 @@ func pack_lobby_list() -> Array:
 			"players": members.size(),
 			"max_players": max_players_for_lobby(lobby_id),
 			"map_id": map_id,
-			"mode_id": str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower()
+			"mode_id": str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower()
 		})
 	return payload
 
@@ -114,7 +117,7 @@ func create_lobby(
 	requested_name: String,
 	requested_map_id: String = "classic",
 	requested_max_players: int = 0,
-	requested_mode_id: String = "deathmatch"
+	requested_mode_id: String = GAME_MODE_DEATHMATCH
 ) -> Dictionary:
 	var lobby_id := _global_next_lobby_id
 	_global_next_lobby_id += 1
@@ -125,8 +128,8 @@ func create_lobby(
 	if map_id.is_empty():
 		map_id = "classic"
 	var mode_id := requested_mode_id.strip_edges().to_lower()
-	if mode_id != "ctf":
-		mode_id = "deathmatch"
+	if mode_id != GAME_MODE_CTF and mode_id != GAME_MODE_TDTH:
+		mode_id = GAME_MODE_DEATHMATCH
 	var max_players := requested_max_players
 	if max_players <= 0:
 		max_players = lobby_config.max_players_for_new_lobby(lobby_name)
@@ -142,7 +145,7 @@ func create_lobby(
 		"started": false,
 		"ready_by_peer": {peer_id: false},
 		"add_bots": false,
-		"team_by_peer": {peer_id: TEAM_RED} if mode_id == "ctf" else {}
+		"team_by_peer": {peer_id: TEAM_RED} if _is_team_mode(mode_id) else {}
 	}
 	_global_peer_lobby_by_peer[peer_id] = lobby_id
 	return {
@@ -168,13 +171,22 @@ func is_ctf_lobby(lobby_id: int) -> bool:
 	var lobby := get_lobby_data(lobby_id)
 	if lobby.is_empty():
 		return false
-	return str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower() == "ctf"
+	return str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower() == GAME_MODE_CTF
 
 func is_deathmatch_lobby(lobby_id: int) -> bool:
 	var lobby := get_lobby_data(lobby_id)
 	if lobby.is_empty():
 		return false
-	return str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower() == "deathmatch"
+	return str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower() == GAME_MODE_DEATHMATCH
+
+func is_tdth_lobby(lobby_id: int) -> bool:
+	var lobby := get_lobby_data(lobby_id)
+	if lobby.is_empty():
+		return false
+	return str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower() == GAME_MODE_TDTH
+
+func is_team_lobby(lobby_id: int) -> bool:
+	return is_ctf_lobby(lobby_id) or is_tdth_lobby(lobby_id)
 
 func lobby_started(lobby_id: int) -> bool:
 	var lobby := get_lobby_data(lobby_id)
@@ -274,6 +286,15 @@ func can_start_ctf_lobby(lobby_id: int) -> bool:
 		return false
 	return get_lobby_members(lobby_id).size() > 0
 
+func can_start_tdth_lobby(lobby_id: int) -> bool:
+	if not is_tdth_lobby(lobby_id):
+		return false
+	if lobby_started(lobby_id):
+		return false
+	if not all_non_owner_humans_ready(lobby_id):
+		return false
+	return get_lobby_members(lobby_id).size() > 0
+
 func team_assignments_for_lobby(lobby_id: int) -> Dictionary:
 	var lobby := get_lobby_data(lobby_id)
 	if lobby.is_empty():
@@ -288,7 +309,7 @@ func team_for_peer(lobby_id: int, peer_id: int) -> int:
 	return _normalized_team_id(int(teams.get(peer_id, -1)))
 
 func auto_assign_team_for_peer(lobby_id: int, peer_id: int) -> int:
-	if not is_ctf_lobby(lobby_id):
+	if not is_team_lobby(lobby_id):
 		return -1
 	var existing := team_for_peer(lobby_id, peer_id)
 	if existing >= 0:
@@ -304,7 +325,7 @@ func auto_assign_team_for_peer(lobby_id: int, peer_id: int) -> int:
 func set_peer_team(lobby_id: int, peer_id: int, team_id: int) -> bool:
 	if not _global_server_lobbies.has(lobby_id):
 		return false
-	if not is_ctf_lobby(lobby_id):
+	if not is_team_lobby(lobby_id):
 		return false
 	var normalized_team := _normalized_team_id(team_id)
 	if normalized_team < 0:
@@ -373,7 +394,7 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 	if lobby.is_empty():
 		return {
 			"lobby_id": 0,
-			"mode_id": "deathmatch",
+			"mode_id": GAME_MODE_DEATHMATCH,
 			"ready_by_peer": {},
 			"members": [],
 			"all_ready": false,
@@ -402,12 +423,14 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 			blue_members.append(entry)
 		else:
 			red_members.append(entry)
-	var mode_id := str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower()
+	var mode_id := str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower()
 	var can_start := false
-	if mode_id == "deathmatch":
+	if mode_id == GAME_MODE_DEATHMATCH:
 		can_start = can_start_deathmatch_lobby(lobby_id)
-	elif mode_id == "ctf":
+	elif mode_id == GAME_MODE_CTF:
 		can_start = can_start_ctf_lobby(lobby_id)
+	elif mode_id == GAME_MODE_TDTH:
+		can_start = can_start_tdth_lobby(lobby_id)
 	return {
 		"lobby_id": lobby_id,
 		"name": str(lobby.get("name", "Lobby %d" % lobby_id)),
@@ -615,3 +638,7 @@ func _preferred_team_for_lobby(lobby_id: int) -> int:
 	if red_count <= blue_count and red_count < TEAM_SIZE_LIMIT:
 		return TEAM_RED
 	return TEAM_BLUE
+
+func _is_team_mode(mode_id: String) -> bool:
+	var normalized := mode_id.strip_edges().to_lower()
+	return normalized == GAME_MODE_CTF or normalized == GAME_MODE_TDTH

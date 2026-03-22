@@ -735,7 +735,7 @@ func _normalize_api_base_url(raw: String) -> String:
 	var api_base := raw.strip_edges().trim_suffix("/")
 	if api_base.is_empty():
 		return api_base
-	if api_base == "http://127.0.0.1:8090" or api_base == "http://localhost:8090":
+	if api_base == "http://85.75.243.92:8081/auth" or api_base == "http://85.75.243.92:8081":
 		return "http://127.0.0.1:8081/auth"
 	return api_base
 

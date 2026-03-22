@@ -164,7 +164,7 @@ func _physics_process(delta: float) -> void:
 		_client_tick_skill_cooldowns_hud(delta)
 
 	if ctf_match_controller != null:
-		ctf_match_controller.visual_tick(_ctf_enabled())
+		ctf_match_controller.visual_tick(_ctf_objective_enabled())
 
 	if multiplayer.multiplayer_peer != null:
 		client_input_controller.follow_local_player_camera(delta)

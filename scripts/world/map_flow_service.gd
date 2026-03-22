@@ -5,13 +5,17 @@ func normalize_mode_id(mode_id: String) -> String:
 	var normalized := mode_id.strip_edges().to_lower()
 	if normalized == "ctf":
 		return "ctf"
+	if normalized == "tdth":
+		return "tdth"
 	return "deathmatch"
 
 func mode_label_for_id(mode_id: String) -> String:
 	var normalized := normalize_mode_id(mode_id)
 	if normalized == "ctf":
 		return "Capture The Flag"
-	return "Deathmatch"
+	if normalized == "tdth":
+		return "Team Deathmatch (TDTH)"
+	return "Free For All (FFA)"
 
 func supported_modes_for_map(map_catalog: MapCatalog, map_id: String) -> Array[String]:
 	if map_catalog == null:

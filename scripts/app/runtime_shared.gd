@@ -31,6 +31,7 @@ const CHARACTER_ID_EREBUS := "erebus"
 const CHARACTER_ID_TASKO := "tasko"
 const GAME_MODE_DEATHMATCH := "deathmatch"
 const GAME_MODE_CTF := "ctf"
+const GAME_MODE_TDTH := "tdth"
 
 const PLAYER_SCENE := preload("res://scenes/entities/player.tscn")
 const PROJECTILE_SCENE := preload("res://scenes/entities/bullet.tscn")
@@ -60,7 +61,8 @@ const CAMERA_SHAKE_SCRIPT := preload("res://scripts/effects/camera_shake.gd")
 const WEAPON_UI_SCRIPT := preload("res://scripts/ui/main_menu/weapon_ui.gd")
 const DROPPED_MAG_SERVICE_SCRIPT := preload("res://scripts/world/dropped_mag_service.gd")
 const TARGET_DUMMY_BOT_CONTROLLER_SCRIPT := preload("res://scripts/world/target_dummy_bot_controller.gd")
-const CTF_MATCH_CONTROLLER_SCRIPT := preload("res://scripts/world/modes/ctf_match_controller.gd")
+const TEAM_MATCH_CONTROLLER_SCRIPT := preload("res://scripts/world/modes/team_match_controller.gd")
+const CTF_MATCH_CONTROLLER_SCRIPT := TEAM_MATCH_CONTROLLER_SCRIPT
 
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
@@ -229,7 +231,7 @@ var camera_shake: CameraShake
 var dropped_mag_service: DroppedMagService
 var target_dummy_bot_controller: TargetDummyBotController
 var bot_controllers: Array[TargetDummyBotController] = []
-var ctf_match_controller: CtfMatchController
+var ctf_match_controller: TeamMatchController
 var weapon_ui: RefCounted
 
 var ctf_flag_carrier_peer_id := 0

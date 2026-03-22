@@ -1,14 +1,14 @@
 extends MapController
-class_name MainDthMapController
+class_name MainTdthMapController
 
 func _init() -> void:
-	map_id = "main_deathmatch"
-	map_label = "Main Map Deathmatch"
-	scene_path = "res://scenes/main_dth.tscn"
-	max_players = 2
-	supported_modes = ["deathmatch"]
+	map_id = "main_tdth"
+	map_label = "Main Map TDTH"
+	scene_path = "res://scenes/main_tdth.tscn"
+	max_players = 4
+	supported_modes = ["tdth"]
 	mode_max_players = {
-		"deathmatch": 2
+		"tdth": 4
 	}
 	spawn_points = [
 		Vector2(180.0, 480.0),

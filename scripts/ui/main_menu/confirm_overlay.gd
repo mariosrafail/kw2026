@@ -75,7 +75,10 @@ func _normalize_confirm_button_theme(btn: Button) -> void:
 	btn.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
 	btn.add_theme_constant_override("outline_size", 0)
 	var hover_style := _make_menu_button_hover_style()
-	var focus_style := _make_menu_button_focus_style()
+	var focus_style: StyleBoxFlat = hover_style
+	var normal_sb := btn.get_theme_stylebox("normal")
+	if normal_sb is StyleBoxFlat:
+		focus_style = (normal_sb as StyleBoxFlat).duplicate() as StyleBoxFlat
 	btn.add_theme_stylebox_override("hover", hover_style)
 	btn.add_theme_stylebox_override("focus", focus_style)
 

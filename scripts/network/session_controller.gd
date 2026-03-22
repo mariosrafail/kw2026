@@ -162,7 +162,7 @@ func start_server(port: int) -> void:
 			target_port = candidate_port
 			break
 	if err != OK:
-		for fallback_port in [7777, 8000, 8080, 8090, 9000, 10000]:
+		for fallback_port in [7777, 8000, 8080, 9000, 10000]:
 			var candidate_port := int(fallback_port)
 			if attempted_ports.has(candidate_port):
 				continue

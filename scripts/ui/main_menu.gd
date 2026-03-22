@@ -310,6 +310,7 @@ func _ready() -> void:
 
 	_connect_signals()
 	_setup_auth_gate()
+	_apply_uniform_button_outlines(self, 2)
 	if _auth_logged_in:
 		_start_idle_loop()
 
@@ -1145,6 +1146,7 @@ func _make_shop_button() -> Button:
 
 	# Clone the look from an existing styled button in the scene.
 	_copy_button_look(options_button, btn)
+	_normalize_button_outline(btn, 2)
 	btn.add_theme_font_size_override("font_size", 11)
 	_add_hover_pop(btn)
 	btn.pressed.connect(func() -> void:
@@ -1174,6 +1176,42 @@ func _copy_button_look(src: Button, dst: Button) -> void:
 	dst.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
 	dst.add_theme_color_override("font_disabled_color", Color(0.65, 0.7, 0.75, 0.9))
 	dst.add_theme_constant_override("outline_size", 0)
+	_normalize_button_outline(dst, 2)
+
+func _apply_uniform_button_outlines(root: Node, border_width: int = 2) -> void:
+	if root == null:
+		return
+	if root is Button:
+		_normalize_button_outline(root as Button, border_width)
+	for child in root.get_children():
+		if child is Node:
+			_apply_uniform_button_outlines(child as Node, border_width)
+
+func _normalize_button_outline(btn: Button, border_width: int = 2) -> void:
+	if btn == null:
+		return
+	var base_style := btn.get_theme_stylebox("normal")
+	if not (base_style is StyleBoxFlat):
+		return
+	var base_flat := base_style as StyleBoxFlat
+	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := btn.get_theme_stylebox(sb_name)
+		var src: StyleBoxFlat = null
+		if sb is StyleBoxFlat:
+			src = sb as StyleBoxFlat
+		else:
+			src = base_flat
+		var normalized := src.duplicate() as StyleBoxFlat
+		normalized.border_width_left = border_width
+		normalized.border_width_top = border_width
+		normalized.border_width_right = border_width
+		normalized.border_width_bottom = border_width
+		# Keep identical corner shape even when button is disabled.
+		normalized.corner_radius_top_left = base_flat.corner_radius_top_left
+		normalized.corner_radius_top_right = base_flat.corner_radius_top_right
+		normalized.corner_radius_bottom_left = base_flat.corner_radius_bottom_left
+		normalized.corner_radius_bottom_right = base_flat.corner_radius_bottom_right
+		btn.add_theme_stylebox_override(sb_name, normalized)
 
 func _init_confirm_dialog() -> void:
 	var overlay := CONFIRM_OVERLAY_SCRIPT.new()

@@ -343,12 +343,12 @@ func _rpc_lobby_create(_requested_name: String, _payload: String) -> void:
 	if not _uses_lobby_scene_flow():
 		var active_lobby_id := _peer_lobby(peer_id)
 		if active_lobby_id > 0:
-			if lobby_service != null and lobby_service.is_ctf_lobby(active_lobby_id):
-				print("[LOBBY TRACE][SERVER] create_request result=SERVER_CTF_AUTO_START lobby_id=%d map=%s" % [
+			if lobby_service != null and lobby_service.is_team_lobby(active_lobby_id):
+				print("[LOBBY TRACE][SERVER] create_request result=SERVER_TEAM_AUTO_START lobby_id=%d map=%s" % [
 					active_lobby_id,
 					_lobby_map_id(active_lobby_id)
 				])
-				# In direct match flow (no in-scene lobby room), start CTF immediately
+				# In direct match flow (no in-scene lobby room), start team modes immediately
 				# so behavior matches deathmatch (host presses Play -> enters match).
 				_server_start_ctf_lobby_match(peer_id)
 			else:
@@ -380,8 +380,8 @@ func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String =
 		var active_lobby_id := _peer_lobby(peer_id)
 		if active_lobby_id > 0:
 			var should_switch := true
-			if lobby_service.is_ctf_lobby(active_lobby_id) and not lobby_service.lobby_started(active_lobby_id):
-				# CTF lobby not started yet -> stay in room flow (if enabled).
+			if lobby_service.is_team_lobby(active_lobby_id) and not lobby_service.lobby_started(active_lobby_id):
+				# Team lobby not started yet -> stay in room flow (if enabled).
 				should_switch = false
 			if should_switch:
 				print("[LOBBY TRACE][SERVER] join_request result=SERVER_LOBBY_JOINED lobby_id=%d map=%s scene_switch_pending=true" % [
@@ -553,7 +553,7 @@ func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	client_target_map_id = str(normalized.get("client_target_map_id", selected_map_id))
 	if _active_lobby_id > 0 and lobby_mode_by_id.has(_active_lobby_id):
 		client_target_game_mode = str(lobby_mode_by_id.get(_active_lobby_id, GAME_MODE_DEATHMATCH))
-		if client_target_game_mode == GAME_MODE_CTF and active_lobby_room_state.is_empty() and _is_client_connected():
+		if (client_target_game_mode == GAME_MODE_CTF or client_target_game_mode == GAME_MODE_TDTH) and active_lobby_room_state.is_empty() and _is_client_connected():
 			_rpc_request_spawn.rpc_id(1)
 	elif _active_lobby_id <= 0:
 		client_target_game_mode = selected_game_mode
@@ -577,6 +577,13 @@ func _rpc_lobby_room_state(_payload: Dictionary) -> void:
 		return
 	print("[CTF ROOM][CLIENT] room_state=%s" % str(_payload))
 	active_lobby_room_state = _payload.duplicate(true)
+	peer_team_by_peer.clear()
+	var raw_team_by_peer := _payload.get("team_by_peer", {}) as Dictionary
+	for peer_value in raw_team_by_peer.keys():
+		var peer_id := int(peer_value)
+		if peer_id == 0:
+			continue
+		peer_team_by_peer[peer_id] = int(raw_team_by_peer.get(peer_value, -1))
 	_refresh_ctf_room_ui()
 
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
@@ -587,7 +594,7 @@ func _rpc_lobby_set_team(_team_id: int) -> void:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	var lobby_id := _peer_lobby(peer_id)
-	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_ctf_lobby(lobby_id):
+	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_team_lobby(lobby_id):
 		return
 	print("[CTF ROOM][SERVER] team_request peer_id=%d lobby_id=%d team_id=%d" % [peer_id, lobby_id, _team_id])
 	if not lobby_service.set_peer_team(lobby_id, peer_id, _team_id):
@@ -606,7 +613,7 @@ func _rpc_lobby_start_match() -> void:
 		if not lobby.is_empty():
 			mode_id = map_flow_service.normalize_mode_id(str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)))
 	print("[LOBBY ROOM][SERVER] start_request peer_id=%d lobby_id=%d mode=%s" % [peer_id, lobby_id, mode_id])
-	if mode_id == GAME_MODE_CTF:
+	if mode_id == GAME_MODE_CTF or mode_id == GAME_MODE_TDTH:
 		_server_start_ctf_lobby_match(peer_id)
 		return
 	_server_start_deathmatch_lobby_match(peer_id)
@@ -645,7 +652,7 @@ func _server_start_deathmatch_lobby_match(peer_id: int) -> void:
 		return
 	var lobby_id := _peer_lobby(peer_id)
 	if lobby_id <= 0 or not lobby_service.is_deathmatch_lobby(lobby_id):
-		_server_send_lobby_action_result(peer_id, false, "Deathmatch lobby not found.", lobby_id, _lobby_map_id(lobby_id))
+		_server_send_lobby_action_result(peer_id, false, "FFA lobby not found.", lobby_id, _lobby_map_id(lobby_id))
 		return
 	if lobby_service.owner_peer_for_lobby(lobby_id) != peer_id:
 		_server_send_lobby_action_result(peer_id, false, "Only the host can start.", lobby_id, _lobby_map_id(lobby_id))

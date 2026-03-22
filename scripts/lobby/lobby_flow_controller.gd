@@ -97,15 +97,15 @@ func server_create_lobby(
 	var lobby_id := int(create_result.get("lobby_id", 0))
 	var lobby_name := str(create_result.get("lobby_name", "Lobby %d" % lobby_id))
 	var map_id := _lobby_map_id(lobby_id)
-	print("[LOBBY FLOW] server_create_lobby created lobby_id=%d lobby_name=%s map_id=%s is_ctf=%s" % [
+	print("[LOBBY FLOW] server_create_lobby created lobby_id=%d lobby_name=%s map_id=%s is_team=%s" % [
 		lobby_id,
 		lobby_name,
 		map_id,
-		str(lobby_service != null and lobby_service.is_ctf_lobby(lobby_id))
+		str(lobby_service != null and lobby_service.is_team_lobby(lobby_id))
 	])
-	if lobby_service != null and lobby_service.is_ctf_lobby(lobby_id):
+	if lobby_service != null and lobby_service.is_team_lobby(lobby_id):
 		lobby_service.auto_assign_team_for_peer(lobby_id, peer_id)
-		print("[LOBBY FLOW] server_create_lobby auto_assigned_ctf_team peer_id=%d teams=%s" % [peer_id, str(lobby_service.team_assignments_for_lobby(lobby_id))])
+		print("[LOBBY FLOW] server_create_lobby auto_assigned_team peer_id=%d teams=%s" % [peer_id, str(lobby_service.team_assignments_for_lobby(lobby_id))])
 	if server_spawn_peer_if_needed_cb.is_valid():
 		print("[LOBBY FLOW] server_create_lobby spawn_peer_if_needed peer_id=%d lobby_id=%d" % [peer_id, lobby_id])
 		server_spawn_peer_if_needed_cb.call(peer_id, lobby_id)
@@ -144,7 +144,7 @@ func server_join_lobby(peer_id: int, lobby_id: int) -> void:
 		members.append(peer_id)
 	lobby_service.set_lobby_members(lobby_id, members)
 	lobby_service.assign_peer_to_lobby(peer_id, lobby_id)
-	if lobby_service != null and lobby_service.is_ctf_lobby(lobby_id):
+	if lobby_service != null and lobby_service.is_team_lobby(lobby_id):
 		lobby_service.auto_assign_team_for_peer(lobby_id, peer_id)
 
 	if server_spawn_peer_if_needed_cb.is_valid():

@@ -100,7 +100,7 @@ func server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> v
 	player_stats[target_peer_id] = target_stats
 	server_sync_player_stats(target_peer_id)
 
-	if attacker_peer_id > 0 and attacker_peer_id != target_peer_id:
+	if attacker_peer_id != 0 and attacker_peer_id != target_peer_id:
 		var attacker_stats := ensure_player_stats(attacker_peer_id)
 		attacker_stats["kills"] = int(attacker_stats.get("kills", 0)) + 1
 		player_stats[attacker_peer_id] = attacker_stats
@@ -117,8 +117,8 @@ func _broadcast_kill_feed(attacker_peer_id: int, target_peer_id: int) -> void:
 		lobby_id = _peer_lobby(attacker_peer_id)
 	if not send_kill_feed_cb.is_valid():
 		return
-	var attacker_name := _player_display_name(attacker_peer_id) if attacker_peer_id > 0 else "Unknown"
-	var victim_name := _player_display_name(target_peer_id)
+	var attacker_name := _player_display_name(attacker_peer_id) if attacker_peer_id != 0 else "Unknown"
+	var victim_name := _player_display_name(target_peer_id) if target_peer_id != 0 else "Unknown"
 	var recipients: Array = []
 	if lobby_id > 0:
 		recipients = _lobby_members(lobby_id)
@@ -386,6 +386,8 @@ func _lobby_members(lobby_id: int) -> Array:
 	return []
 
 func _player_display_name(peer_id: int) -> String:
+	if player_display_names.has(peer_id):
+		return str(player_display_names[peer_id])
 	if ensure_player_display_name_cb.is_valid():
 		return str(ensure_player_display_name_cb.call(peer_id))
 	return "Player %d" % peer_id

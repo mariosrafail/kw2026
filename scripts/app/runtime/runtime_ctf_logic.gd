@@ -16,7 +16,7 @@ func _refresh_ctf_room_ui() -> void:
 		ui_controller.hide_ctf_room()
 		return
 	var mode_id := map_flow_service.normalize_mode_id(str(active_lobby_room_state.get("mode_id", GAME_MODE_DEATHMATCH)))
-	if mode_id != GAME_MODE_CTF or bool(active_lobby_room_state.get("started", false)):
+	if not _is_team_mode_id(mode_id) or bool(active_lobby_room_state.get("started", false)):
 		ui_controller.hide_ctf_room()
 		return
 	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
@@ -51,30 +51,35 @@ func _request_ctf_team(team_id: int) -> void:
 func _request_ctf_start_match() -> void:
 	if not _is_client_connected() or client_lobby_id <= 0:
 		return
-	_set_lobby_status("Starting CTF match...")
+	var mode_id := map_flow_service.normalize_mode_id(str(active_lobby_room_state.get("mode_id", GAME_MODE_DEATHMATCH)))
+	_set_lobby_status("Starting %s match..." % ("CTF" if mode_id == GAME_MODE_CTF else "TDTH"))
 	_rpc_lobby_start_match.rpc_id(1)
 
 func _server_start_ctf_lobby_match(peer_id: int) -> void:
 	if lobby_service == null:
 		return
 	var lobby_id := _peer_lobby(peer_id)
-	if lobby_id <= 0 or not lobby_service.is_ctf_lobby(lobby_id):
-		_server_send_lobby_action_result(peer_id, false, "CTF lobby not found.", lobby_id, _lobby_map_id(lobby_id))
+	if lobby_id <= 0 or not lobby_service.is_team_lobby(lobby_id):
+		_server_send_lobby_action_result(peer_id, false, "Team lobby not found.", lobby_id, _lobby_map_id(lobby_id))
 		return
 	if lobby_service.owner_peer_for_lobby(lobby_id) != peer_id:
 		_server_send_lobby_action_result(peer_id, false, "Only the host can start.", lobby_id, _lobby_map_id(lobby_id))
 		return
 	if _uses_lobby_scene_flow():
-		if not lobby_service.can_start_ctf_lobby(lobby_id):
+		var can_start := lobby_service.can_start_ctf_lobby(lobby_id) if lobby_service.is_ctf_lobby(lobby_id) else lobby_service.can_start_tdth_lobby(lobby_id)
+		if not can_start:
 			_server_send_lobby_action_result(peer_id, false, "All other players must be READY.", lobby_id, _lobby_map_id(lobby_id))
 			return
 	_prepare_ctf_match_team_assignments(lobby_id)
-	_append_log("CTF start: lobby_id=%d teams=%s" % [lobby_id, str(lobby_service.team_assignments_for_lobby(lobby_id))])
+	_append_log("TEAM start: lobby_id=%d teams=%s" % [lobby_id, str(lobby_service.team_assignments_for_lobby(lobby_id))])
 	lobby_service.set_lobby_started(lobby_id, true)
 	_server_broadcast_lobby_room_state(lobby_id)
 	_server_switch_lobby_to_map_scene(lobby_id, _lobby_map_id(lobby_id), peer_id)
 
 func _ctf_enabled() -> bool:
+	return _is_team_mode_id(_active_game_mode())
+
+func _ctf_objective_enabled() -> bool:
 	return _active_game_mode() == GAME_MODE_CTF
 
 func _human_participant_count(lobby_id: int) -> int:
@@ -130,7 +135,7 @@ func _planned_ctf_team_assignments(lobby_id: int) -> Dictionary:
 func _ctf_room_holds_in_lobby(lobby_id: int) -> bool:
 	if lobby_service == null or lobby_id <= 0:
 		return false
-	return lobby_service.is_ctf_lobby(lobby_id) and not lobby_service.lobby_started(lobby_id)
+	return lobby_service.is_team_lobby(lobby_id) and not lobby_service.lobby_started(lobby_id)
 
 func _deathmatch_room_holds_in_lobby(lobby_id: int) -> bool:
 	if lobby_service == null or lobby_id <= 0:
@@ -138,7 +143,7 @@ func _deathmatch_room_holds_in_lobby(lobby_id: int) -> bool:
 	return lobby_service.is_deathmatch_lobby(lobby_id) and not lobby_service.lobby_started(lobby_id)
 
 func _prepare_ctf_match_team_assignments(lobby_id: int) -> void:
-	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_ctf_lobby(lobby_id):
+	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_team_lobby(lobby_id):
 		return
 	lobby_service.clear_non_member_teams(lobby_id)
 	if not lobby_service.add_bots_enabled(lobby_id):
@@ -232,7 +237,7 @@ func _team_for_peer(peer_id: int) -> int:
 	return int(peer_team_by_peer.get(peer_id, -1))
 
 func _bot_movement_goal_position(peer_id: int) -> Vector2:
-	if not _ctf_enabled() or ctf_match_controller == null:
+	if not _ctf_objective_enabled() or ctf_match_controller == null:
 		return Vector2.ZERO
 	var team_id := _team_for_peer(peer_id)
 	if team_id < 0:
@@ -264,6 +269,8 @@ func _player_world_position_or_flag(peer_id: int) -> Vector2:
 	return Vector2.ZERO
 
 func _sync_ctf_flag_to_clients() -> void:
+	if not _ctf_objective_enabled():
+		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null or ctf_match_controller == null:
 		return
 	ctf_flag_carrier_peer_id = ctf_match_controller.flag_carrier_peer_id()
@@ -304,6 +311,10 @@ func _lobby_members(_lobby_id: int) -> Array:
 
 func _append_log(_message: String) -> void:
 	pass
+
+func _is_team_mode_id(mode_id: String) -> bool:
+	var normalized := map_flow_service.normalize_mode_id(mode_id)
+	return normalized == GAME_MODE_CTF or normalized == GAME_MODE_TDTH
 
 func _set_lobby_status(_text: String) -> void:
 	pass

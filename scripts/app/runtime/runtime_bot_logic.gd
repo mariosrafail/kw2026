@@ -2,7 +2,7 @@ extends "res://scripts/app/runtime/runtime_ctf_logic.gd"
 
 func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	var death_position := player.global_position if player != null else Vector2.ZERO
-	if ctf_match_controller != null:
+	if ctf_match_controller != null and _ctf_objective_enabled():
 		ctf_match_controller.drop_flag_for_peer(peer_id, death_position)
 		_sync_ctf_flag_to_clients()
 	if _is_target_dummy_peer(peer_id):
@@ -79,6 +79,10 @@ func _server_ensure_bots_if_needed() -> void:
 			if should_exist and not players.has(controller.peer_id()):
 				_append_log("CTF bot spawn: peer_id=%d team=%d" % [controller.peer_id(), int(planned_teams.get(controller.peer_id(), -1))])
 				controller.ensure_spawned(PLAYER_SCENE, anchor_player.global_position)
+			if should_exist:
+				player_display_names[controller.peer_id()] = controller.display_name()
+				if player_replication != null:
+					player_replication.ensure_player_stats(controller.peer_id())
 			elif not should_exist and players.has(controller.peer_id()):
 				_server_remove_player(controller.peer_id(), [])
 			if should_exist:
@@ -93,7 +97,7 @@ func _server_ensure_bots_if_needed() -> void:
 		_configure_ctf_bot_targets(lobby_id)
 		_assign_ctf_teams(lobby_id)
 		if ctf_match_controller != null:
-			ctf_match_controller.server_tick(true, 0.0)
+			ctf_match_controller.server_tick(_ctf_objective_enabled(), 0.0)
 		return
 	var human_count := 0
 	for peer_value in players.keys():
@@ -117,6 +121,9 @@ func _server_ensure_bots_if_needed() -> void:
 		controller.set_lobby_id(lobby_id)
 		var should_exist := index < desired_bot_count
 		if should_exist:
+			player_display_names[controller.peer_id()] = controller.display_name()
+			if player_replication != null:
+				player_replication.ensure_player_stats(controller.peer_id())
 			if not players.has(controller.peer_id()):
 				controller.ensure_spawned(PLAYER_SCENE, anchor_player.global_position)
 			continue
@@ -132,8 +139,8 @@ func _server_tick_target_dummy_bot(delta: float) -> void:
 		if players.has(controller.peer_id()):
 			controller.tick(delta)
 	if ctf_match_controller != null:
-		ctf_match_controller.server_tick(_ctf_enabled(), delta)
-		if _ctf_enabled():
+		ctf_match_controller.server_tick(_ctf_objective_enabled(), delta)
+		if _ctf_objective_enabled():
 			_sync_ctf_flag_to_clients()
 
 func _target_dummy_lobby_id() -> int:

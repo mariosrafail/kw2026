@@ -302,7 +302,7 @@ func _resolve_server_host_port() -> Dictionary:
 	return resolved
 
 func _resolve_auth_api_host_port() -> Dictionary:
-	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://127.0.0.1:8090")).strip_edges()
+	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://127.0.0.1:8081/auth")).strip_edges()
 	if configured.is_empty():
 		return {"host": "", "port": 8080}
 	var scheme_idx := configured.find("://")
@@ -523,9 +523,9 @@ func _on_rpc_action_result(success: bool, message: String, active_lobby_id: int,
 		_status_label.text = message if success else "Failed: %s" % message
 	if success and active_lobby_id > 0:
 		var resolved_mode := _active_lobby_mode_id(active_lobby_id)
-		if resolved_mode == "ctf" or resolved_mode == "deathmatch":
+		if _is_team_mode_id(resolved_mode) or resolved_mode == "deathmatch":
 			if _status_label != null:
-				_status_label.text = "Entered CTF room. Pick a team and start." if resolved_mode == "ctf" else "Entered Deathmatch waiting room."
+				_status_label.text = "Entered Team room. Pick team and start." if _is_team_mode_id(resolved_mode) else "Entered FFA waiting room."
 			_pending_create_request = {}
 			_request_lobby_list_from_server()
 			_refresh_lobby_buttons_state()
@@ -556,7 +556,7 @@ func _on_rpc_room_state(payload: Dictionary) -> void:
 	if int(_ctf_room_state.get("lobby_id", 0)) != _joined_lobby_id:
 		return
 	var mode_id := _active_lobby_mode_id(_joined_lobby_id)
-	if mode_id == "ctf":
+	if _is_team_mode_id(mode_id):
 		_hide_dm_room()
 		_show_ctf_room(_ctf_room_state)
 		return
@@ -687,11 +687,11 @@ func _apply_room_button_selected_style(btn: Button, selected: bool) -> void:
 func _refresh_lobby_selection_summary() -> void:
 	if _selection_label == null:
 		return
-	if not _ctf_room_state.is_empty() and _active_lobby_mode_id(_joined_lobby_id) == "ctf":
-		_selection_label.text = "CTF room: %s" % _joined_room_name
+	if not _ctf_room_state.is_empty() and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id)):
+		_selection_label.text = "Team room: %s" % _joined_room_name
 		return
 	if not _ctf_room_state.is_empty() and _active_lobby_mode_id(_joined_lobby_id) == "deathmatch" and not bool(_ctf_room_state.get("started", false)):
-		_selection_label.text = "DM waiting room: %s" % _joined_room_name
+		_selection_label.text = "FFA waiting room: %s" % _joined_room_name
 		return
 	if _joined_room_name.is_empty():
 		if _room_entries.is_empty():
@@ -912,7 +912,7 @@ func _on_map_option_selected(index: int) -> void:
 func _refresh_lobby_buttons_state() -> void:
 	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
 	var in_waiting_room := not _ctf_room_state.is_empty() and _joined_lobby_id > 0 and not bool(_ctf_room_state.get("started", false))
-	var in_ctf_room := in_waiting_room and _active_lobby_mode_id(_joined_lobby_id) == "ctf"
+	var in_ctf_room := in_waiting_room and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id))
 	var in_dm_room := in_waiting_room and _active_lobby_mode_id(_joined_lobby_id) == "deathmatch"
 	var local_peer_id := _local_peer_id()
 	var is_owner := local_peer_id > 0 and local_peer_id == int(_ctf_room_state.get("owner_peer_id", 0))
@@ -1448,7 +1448,7 @@ func _ensure_overlay() -> void:
 	_dm_room_box = dm_room_box
 
 	var dm_title := Label.new()
-	dm_title.text = "DEATHMATCH ROOM"
+	dm_title.text = "FFA ROOM"
 	dm_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dm_title.add_theme_font_size_override("font_size", 11)
 	dm_room_box.add_child(dm_title)
@@ -1508,7 +1508,7 @@ func _ensure_overlay() -> void:
 	dm_start_btn.add_theme_font_size_override("font_size", 9)
 	dm_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dm_start_btn.pressed.connect(func() -> void:
-		_start_lobby_match("Starting Deathmatch...")
+		_start_lobby_match("Starting FFA...")
 	)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(dm_start_btn)
@@ -1546,11 +1546,13 @@ func _show_ctf_room(payload: Dictionary) -> void:
 		_mode_row.visible = false
 	if _waiting_room_title_label != null:
 		_waiting_room_title_label.visible = true
-		_waiting_room_title_label.text = "%s  |  CTF ROOM" % str(payload.get("name", "CTF Room"))
+		var mode_label := "CTF ROOM" if _active_lobby_mode_id(_joined_lobby_id) == "ctf" else "TDTH ROOM"
+		_waiting_room_title_label.text = "%s  |  %s" % [str(payload.get("name", "Team Room")), mode_label]
 	_ctf_room_box.visible = true
 	if _ctf_room_title != null:
 		_ctf_room_title.visible = false
-		_ctf_room_title.text = "%s  |  CTF ROOM" % str(payload.get("name", "CTF Room"))
+		var mode_title := "CTF ROOM" if _active_lobby_mode_id(_joined_lobby_id) == "ctf" else "TDTH ROOM"
+		_ctf_room_title.text = "%s  |  %s" % [str(payload.get("name", "Team Room")), mode_title]
 	var teams := payload.get("teams", {}) as Dictionary
 	if _ctf_room_red_label != null:
 		_ctf_room_red_label.text = _team_text("RED TEAM", teams.get("red", []) as Array)
@@ -1605,11 +1607,11 @@ func _show_dm_room(payload: Dictionary) -> void:
 		_mode_row.visible = false
 	if _waiting_room_title_label != null:
 		_waiting_room_title_label.visible = true
-		_waiting_room_title_label.text = "%s  |  DEATHMATCH WAITING ROOM" % str(payload.get("name", "DM Room"))
+		_waiting_room_title_label.text = "%s  |  FFA WAITING ROOM" % str(payload.get("name", "FFA Room"))
 	_dm_room_box.visible = true
 	if _dm_room_title != null:
 		_dm_room_title.visible = false
-		_dm_room_title.text = "%s  |  DEATHMATCH WAITING ROOM" % str(payload.get("name", "DM Room"))
+		_dm_room_title.text = "%s  |  FFA WAITING ROOM" % str(payload.get("name", "FFA Room"))
 	var members := payload.get("members", []) as Array
 	var lines := PackedStringArray()
 	for i in range(members.size()):
@@ -1669,6 +1671,10 @@ func _active_lobby_mode_id(lobby_id: int) -> String:
 	if not _ctf_room_state.is_empty() and int(_ctf_room_state.get("lobby_id", 0)) == lobby_id:
 		return _map_flow_service.normalize_mode_id(str(_ctf_room_state.get("mode_id", "deathmatch")))
 	return _map_flow_service.normalize_mode_id(_selected_mode_id)
+
+func _is_team_mode_id(mode_id: String) -> bool:
+	var normalized := _map_flow_service.normalize_mode_id(mode_id)
+	return normalized == "ctf" or normalized == "tdth"
 
 func _local_team_id() -> int:
 	if _ctf_room_state.is_empty():

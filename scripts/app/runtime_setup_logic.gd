@@ -25,7 +25,7 @@ func _init_services() -> void:
 		TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new(),
 		TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new()
 	]
-	ctf_match_controller = CTF_MATCH_CONTROLLER_SCRIPT.new()
+	ctf_match_controller = TEAM_MATCH_CONTROLLER_SCRIPT.new()
 	weapon_ui = WEAPON_UI_SCRIPT.new()
 
 func _init_weapons() -> void:
