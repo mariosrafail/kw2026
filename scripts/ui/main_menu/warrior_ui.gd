@@ -138,6 +138,17 @@ func warrior_preview_texture_for(warrior_id: String, skin_index: int) -> Texture
 func warrior_item_title_text(warrior_id: String, skin_index: int) -> String:
 	return "%s - %s" % [warrior_display_name(warrior_id), warrior_skin_label(warrior_id, skin_index)]
 
+func warrior_card_title_text(warrior_id: String, skin_index: int) -> String:
+	var normalized := warrior_id.strip_edges().to_lower()
+	var prefix := "WAR"
+	if normalized == "outrage":
+		prefix = "OUT"
+	elif normalized == "erebus":
+		prefix = "ERE"
+	elif normalized == "tasko":
+		prefix = "TSK"
+	return "%s-%s" % [prefix, warrior_skin_label(normalized, skin_index)]
+
 func warrior_is_locked(host: Object, warrior_id: String, skin_index: int) -> bool:
 	var normalized := warrior_id.strip_edges().to_lower()
 	if host == null or not host.has_method("_warrior_is_owned"):
@@ -210,13 +221,16 @@ func update_warrior_item_button(host: Object, btn: Button) -> void:
 	var icon := btn.get_node_or_null("Margin/VBox/IconSlot/Icon") as Sprite2D
 	var info_label := btn.get_node_or_null("Margin/VBox/Info") as Label
 	if name_label != null:
-		name_label.text = warrior_item_title_text(warrior_id, skin_index)
+		name_label.text = warrior_card_title_text(warrior_id, skin_index)
+		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if icon != null:
 		icon.texture = warrior_preview_texture_for(warrior_id, skin_index)
 		icon.centered = true
 		if icon_slot != null:
-			icon.position = icon_slot.size * 0.5 + Vector2(0, 3)
-		icon.scale = Vector2.ONE * 1.1
+			icon.position = icon_slot.size * 0.5 + Vector2(0, 2)
+		icon.scale = Vector2.ONE * 1.05
+		btn.set_meta("_base_icon_scale", icon.scale)
 	if info_label != null:
 		info_label.text = warrior_item_cost_text(host, warrior_id, skin_index)
 	btn.tooltip_text = "%s  (%s)" % [warrior_item_title_text(warrior_id, skin_index), warrior_item_status_text(host, warrior_id, skin_index)]
@@ -230,9 +244,10 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 		if created is Button:
 			btn = created as Button
 	btn.text = ""
-	btn.custom_minimum_size = Vector2(144, 58)
+	btn.custom_minimum_size = Vector2(122, 74)
 	btn.set_meta("warrior_id", warrior_id.strip_edges().to_lower())
 	btn.set_meta("skin_index", maxi(0, skin_index))
+	btn.set_meta("_anim_key", "%s:%d" % [warrior_id.strip_edges().to_lower(), maxi(0, skin_index)])
 	btn.pivot_offset = btn.custom_minimum_size * 0.5
 	btn.resized.connect(func() -> void:
 		btn.pivot_offset = btn.size * 0.5
@@ -241,10 +256,10 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 	var margin := MarginContainer.new()
 	margin.name = "Margin"
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 6)
-	margin.add_theme_constant_override("margin_right", 6)
-	margin.add_theme_constant_override("margin_top", 5)
-	margin.add_theme_constant_override("margin_bottom", 6)
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 20)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(margin)
 
@@ -253,23 +268,20 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 3)
+	vbox.add_theme_constant_override("separation", 4)
 	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(vbox)
 
 	var name := Label.new()
 	name.name = "Name"
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name.add_theme_font_size_override("font_size", 10)
+	name.add_theme_font_size_override("font_size", 12)
 	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(name)
 
 	var icon_slot := Control.new()
 	icon_slot.name = "IconSlot"
-	icon_slot.custom_minimum_size = Vector2(0, 26)
+	icon_slot.custom_minimum_size = Vector2(0, 34)
 	icon_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	icon_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -281,20 +293,126 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon_slot.add_child(icon)
 	icon_slot.resized.connect(func() -> void:
-		icon.position = icon_slot.size * 0.5 + Vector2(0, 3)
+		update_warrior_item_button(host, btn)
 	)
 
 	var info := Label.new()
 	info.name = "Info"
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info.add_theme_font_size_override("font_size", 9)
+	info.add_theme_font_size_override("font_size", 11)
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(info)
 
 	update_warrior_item_button(host, btn)
+	_install_shop_button_anim(btn)
 	return btn
+
+func _kill_meta_tween(btn: Node, key: String) -> void:
+	if btn == null or not btn.has_meta(key):
+		return
+	var v: Variant = btn.get_meta(key)
+	if v is Tween:
+		var t := v as Tween
+		if t != null:
+			t.kill()
+	btn.set_meta(key, null)
+
+func _start_idle_anim(btn: Button) -> void:
+	if btn == null:
+		return
+	_kill_meta_tween(btn, "_idle_tween")
+	_kill_meta_tween(btn, "_fx_tween")
+
+	var key := str(btn.get_meta("_anim_key")) if btn.has_meta("_anim_key") else ""
+	var h := int(key.hash()) if not key.is_empty() else int(btn.get_instance_id())
+	var phase := float(abs(h % 1000)) / 1000.0
+	var rot_a := deg_to_rad(lerpf(-1.25, -0.2, phase))
+	var rot_b := deg_to_rad(lerpf(0.2, 1.25, phase))
+	var s_hi := 1.0 + lerpf(0.010, 0.017, phase)
+	var s_lo := 1.0 - lerpf(0.006, 0.012, phase)
+	var d1 := lerpf(0.46, 0.62, phase)
+	var d2 := lerpf(0.52, 0.70, 1.0 - phase)
+
+	var tw := btn.create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(btn, "rotation", rot_a, d1)
+	tw.parallel().tween_property(btn, "scale", Vector2.ONE * s_hi, d1)
+	tw.tween_property(btn, "rotation", rot_b, d2)
+	tw.parallel().tween_property(btn, "scale", Vector2.ONE * s_lo, d2)
+	btn.set_meta("_idle_tween", tw)
+
+func _animate_state(btn: Button, state: String) -> void:
+	if btn == null:
+		return
+	_kill_meta_tween(btn, "_fx_tween")
+	if state != "idle":
+		_kill_meta_tween(btn, "_idle_tween")
+
+	var icon: Sprite2D = btn.get_node_or_null("Margin/VBox/IconSlot/Icon") as Sprite2D
+	var target_scale := Vector2.ONE
+	var target_rot := 0.0
+	var base_icon_scale := Vector2.ONE
+	if icon != null:
+		if btn.has_meta("_base_icon_scale") and btn.get_meta("_base_icon_scale") is Vector2:
+			base_icon_scale = btn.get_meta("_base_icon_scale") as Vector2
+		else:
+			base_icon_scale = icon.scale
+	var icon_scale := base_icon_scale
+	var dur := 0.08
+
+	if state == "hover":
+		target_scale = Vector2.ONE * 1.035
+		target_rot = 0.0
+		icon_scale = base_icon_scale * 1.03
+		dur = 0.08
+	elif state == "press":
+		target_scale = Vector2.ONE * 0.965
+		target_rot = deg_to_rad(-0.75)
+		icon_scale = base_icon_scale * 0.97
+		dur = 0.05
+
+	var tw := btn.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(btn, "scale", target_scale, dur)
+	tw.parallel().tween_property(btn, "rotation", target_rot, dur)
+	if icon != null:
+		tw.parallel().tween_property(icon, "scale", icon_scale, dur)
+	if state == "press":
+		tw.tween_property(btn, "scale", Vector2.ONE * 1.035, 0.10).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(btn, "rotation", 0.0, 0.10)
+		if icon != null:
+			tw.parallel().tween_property(icon, "scale", base_icon_scale * 1.03, 0.10)
+	btn.set_meta("_fx_tween", tw)
+	if state == "idle":
+		_start_idle_anim(btn)
+
+func _install_shop_button_anim(btn: Button) -> void:
+	if btn == null:
+		return
+	_start_idle_anim(btn)
+
+	btn.mouse_entered.connect(func() -> void:
+		_animate_state(btn, "hover")
+	)
+	btn.focus_entered.connect(func() -> void:
+		_animate_state(btn, "hover")
+	)
+	btn.mouse_exited.connect(func() -> void:
+		_animate_state(btn, "idle")
+	)
+	btn.focus_exited.connect(func() -> void:
+		_animate_state(btn, "idle")
+	)
+	btn.button_down.connect(func() -> void:
+		_animate_state(btn, "press")
+	)
+	btn.button_up.connect(func() -> void:
+		var local := btn.get_local_mouse_position()
+		if Rect2(Vector2.ZERO, btn.size).has_point(local):
+			_animate_state(btn, "hover")
+		else:
+			_animate_state(btn, "idle")
+	)
 
 func apply_warrior_menu_preview(player: Node, warrior_id: String, skin_index: int) -> void:
 	if player == null:

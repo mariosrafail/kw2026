@@ -9,7 +9,7 @@ var _client_skill_cd_q_max := 0.0
 var _client_skill_cd_e_max := 0.0
 var _skill_hud = null
 
-const RPC_ROOT_NODE_NAME := "Main3"
+const RPC_ROOT_NODE_NAME := "GameRoot"
 
 func _allows_scene_network_bootstrap() -> bool:
 	if _uses_lobby_scene_flow():

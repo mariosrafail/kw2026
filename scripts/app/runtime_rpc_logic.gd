@@ -86,6 +86,17 @@ func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 	}
 	_update_score_labels()
 
+func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
+	if ui_controller == null:
+		return
+	var attacker := _attacker_name.strip_edges()
+	var victim := _victim_name.strip_edges()
+	if attacker.is_empty():
+		attacker = "Unknown"
+	if victim.is_empty():
+		victim = "Unknown"
+	ui_controller.push_kill_feed(attacker, victim)
+
 func _rpc_submit_input(_axis: float, _jump_pressed: bool, _jump_held: bool, _aim_world: Vector2, _shoot_held: bool, _boost_damage: bool, _reported_rtt_ms: int) -> void:
 	if not multiplayer.is_server():
 		return
@@ -587,8 +598,83 @@ func _rpc_lobby_set_team(_team_id: int) -> void:
 func _rpc_lobby_start_match() -> void:
 	if not multiplayer.is_server():
 		return
-	print("[CTF ROOM][SERVER] start_request peer_id=%d" % multiplayer.get_remote_sender_id())
-	_server_start_ctf_lobby_match(multiplayer.get_remote_sender_id())
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	var mode_id := GAME_MODE_DEATHMATCH
+	if lobby_service != null and lobby_id > 0:
+		var lobby := lobby_service.get_lobby_data(lobby_id)
+		if not lobby.is_empty():
+			mode_id = map_flow_service.normalize_mode_id(str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)))
+	print("[LOBBY ROOM][SERVER] start_request peer_id=%d lobby_id=%d mode=%s" % [peer_id, lobby_id, mode_id])
+	if mode_id == GAME_MODE_CTF:
+		_server_start_ctf_lobby_match(peer_id)
+		return
+	_server_start_deathmatch_lobby_match(peer_id)
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_ready(_ready: bool) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_service == null or lobby_id <= 0:
+		return
+	if lobby_service.lobby_started(lobby_id):
+		return
+	if not lobby_service.set_peer_ready(lobby_id, peer_id, _ready):
+		return
+	_server_broadcast_lobby_room_state(lobby_id)
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_service == null or lobby_id <= 0:
+		return
+	if lobby_service.lobby_started(lobby_id):
+		return
+	if not lobby_service.set_add_bots_enabled(lobby_id, peer_id, _enabled):
+		_server_send_lobby_action_result(peer_id, false, "Only host can change bot setting.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	_server_broadcast_lobby_room_state(lobby_id)
+
+func _server_start_deathmatch_lobby_match(peer_id: int) -> void:
+	if lobby_service == null:
+		return
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_id <= 0 or not lobby_service.is_deathmatch_lobby(lobby_id):
+		_server_send_lobby_action_result(peer_id, false, "Deathmatch lobby not found.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	if lobby_service.owner_peer_for_lobby(lobby_id) != peer_id:
+		_server_send_lobby_action_result(peer_id, false, "Only the host can start.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	if not lobby_service.can_start_deathmatch_lobby(lobby_id):
+		_server_send_lobby_action_result(peer_id, false, "All other players must be READY.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	lobby_service.set_lobby_started(lobby_id, true)
+	_server_broadcast_lobby_room_state(lobby_id)
+	_server_apply_deathmatch_bot_fill(lobby_id)
+	_server_switch_lobby_to_map_scene(lobby_id, _lobby_map_id(lobby_id), peer_id)
+
+func _server_apply_deathmatch_bot_fill(lobby_id: int) -> void:
+	if lobby_service == null or lobby_id <= 0:
+		return
+	var should_add_bots := lobby_service.add_bots_enabled(lobby_id)
+	var members := _lobby_members(lobby_id)
+	var max_players := lobby_service.max_players_for_lobby(lobby_id)
+	var desired_bot_count := maxi(0, max_players - members.size()) if should_add_bots else 0
+	for index in range(bot_controllers.size()):
+		var controller := bot_controllers[index]
+		if controller == null:
+			continue
+		controller.set_lobby_id(lobby_id)
+		var should_exist := index < desired_bot_count
+		if should_exist:
+			continue
+		if players.has(controller.peer_id()):
+			_server_remove_player(controller.peer_id(), [])
 
 func _rpc_cast_skill1(_target_world: Vector2) -> void:
 	if not multiplayer.is_server():

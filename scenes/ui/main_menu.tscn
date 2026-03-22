@@ -290,6 +290,7 @@ position = Vector2(68, 118)
 scale = Vector2(2.2, 2.2)
 
 [node name="WarriorCaption" type="Label" parent="Screens/ScreenMain/WarriorArea" unique_id=1574571443]
+visible = false
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
@@ -360,6 +361,7 @@ position = Vector2(58, 50)
 texture = SubResource("AtlasTexture_ak_icon")
 
 [node name="WeaponCaption" type="Label" parent="Screens/ScreenMain/WeaponArea" unique_id=1588315105]
+visible = false
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5

@@ -19,15 +19,19 @@ var _panel: PanelContainer
 var _loading_box: PanelContainer
 var _loading_label: Label
 var _status_label: Label
+var _header_title: Label
+var _rooms_title_label: Label
 var _rooms_box: VBoxContainer
 var _selection_label: Label
 var _mode_row: HBoxContainer
+var _waiting_room_title_label: Label
 var _actions_row: HBoxContainer
 var _create_button: Button
 var _join_button: Button
 var _refresh_button: Button
 var _leave_button: Button
-var _mode_button: Button
+var _back_button: Button
+var _map_option: OptionButton
 var _ctf_room_box: VBoxContainer
 var _ctf_room_title: Label
 var _ctf_room_red_label: Label
@@ -35,7 +39,15 @@ var _ctf_room_blue_label: Label
 var _ctf_join_red_button: Button
 var _ctf_join_blue_button: Button
 var _ctf_start_button: Button
+var _ctf_ready_button: Button
+var _ctf_add_bots_check: CheckBox
 var _ctf_room_state: Dictionary = {}
+var _dm_room_box: VBoxContainer
+var _dm_room_title: Label
+var _dm_room_members_label: Label
+var _dm_ready_button: Button
+var _dm_start_button: Button
+var _dm_add_bots_check: CheckBox
 var _room_buttons: Array[Button] = []
 var _room_entries: Array = []
 var _selected_room_index := -1
@@ -91,8 +103,7 @@ func open(play_button: Control) -> void:
 	if _overlay == null:
 		return
 	_ensure_valid_map_selection()
-	if _mode_button != null:
-		_mode_button.text = _selected_map_button_text()
+	_refresh_map_dropdown_selection()
 	_lobby_list_ready = false
 	_pending_create_request = {}
 	_ctf_room_state.clear()
@@ -144,8 +155,8 @@ func _layout_overlay() -> void:
 	if _panel == null:
 		return
 	var viewport_size := _host.get_viewport_rect().size
-	var target_w := clampf(viewport_size.x * 0.52, 420.0, 620.0)
-	var target_h := clampf(viewport_size.y * 0.72, 320.0, 560.0)
+	var target_w := clampf(viewport_size.x * 0.50, 380.0, 620.0)
+	var target_h := clampf(viewport_size.y * 0.74, 320.0, 620.0)
 	_panel.custom_minimum_size = Vector2(target_w, target_h)
 	_panel.size = Vector2(target_w, target_h)
 	_panel.position = (viewport_size - _panel.size) * 0.5
@@ -155,11 +166,16 @@ func _show_lobby_rooms() -> void:
 		return
 	_log("show_lobby_rooms visible=%s" % str(_overlay.visible))
 	_lobby_list_ready = false
+	if _header_title != null:
+		_header_title.visible = true
+	if _rooms_title_label != null:
+		_rooms_title_label.visible = true
 	if _loading_box != null:
 		_loading_box.visible = false
 	if _rooms_box != null:
 		_rooms_box.visible = true
 	_hide_ctf_room()
+	_hide_dm_room()
 
 	_request_lobby_list_from_server()
 	_populate_lobby_room_list()
@@ -325,9 +341,15 @@ func _build_connect_candidates() -> Array[Dictionary]:
 	_log("connect candidates=%s" % str(out))
 	return out
 
-func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...") -> void:
+func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...", allow_while_connecting: bool = false) -> void:
 	if _rpc_bridge == null:
 		_log("begin_connect_attempt aborted rpc_bridge=null")
+		return
+	if not allow_while_connecting and not force_restart and bool(_rpc_bridge.call("is_connecting_to_server")):
+		_log("begin_connect_attempt skipped already connecting")
+		if _status_label != null:
+			_status_label.text = "Connecting to lobby server..."
+		_refresh_lobby_buttons_state()
 		return
 	if force_restart or _connect_candidates.is_empty():
 		_connect_candidates = _build_connect_candidates()
@@ -393,7 +415,7 @@ func _try_next_connect_candidate() -> void:
 		_refresh_lobby_selection_summary()
 		_refresh_lobby_buttons_state()
 		return
-	_begin_connect_attempt(false, "Retrying")
+	_begin_connect_attempt(false, "Retrying", true)
 
 func _request_lobby_list_from_server() -> void:
 	if _rpc_bridge == null:
@@ -403,6 +425,9 @@ func _request_lobby_list_from_server() -> void:
 		_log("request_lobby_list sending immediately")
 		_rpc_bridge.call("request_lobby_list")
 		_refresh_lobby_buttons_state()
+		return
+	if bool(_rpc_bridge.call("is_connecting_to_server")):
+		_log("request_lobby_list waiting existing connect attempt")
 		return
 	_log("request_lobby_list triggering connect first")
 	_begin_connect_attempt(false)
@@ -461,6 +486,7 @@ func _on_rpc_disconnected() -> void:
 	if _status_label != null:
 		_status_label.text = "Disconnected from server"
 	_hide_ctf_room()
+	_hide_dm_room()
 	_refresh_lobby_buttons_state()
 
 func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
@@ -476,6 +502,10 @@ func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 		if int(data.get("id", 0)) == _joined_lobby_id:
 			_joined_room_name = str(data.get("name", ""))
 			break
+	if _joined_lobby_id <= 0:
+		_ctf_room_state.clear()
+		_hide_ctf_room()
+		_hide_dm_room()
 	_populate_lobby_room_list()
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
@@ -493,10 +523,11 @@ func _on_rpc_action_result(success: bool, message: String, active_lobby_id: int,
 		_status_label.text = message if success else "Failed: %s" % message
 	if success and active_lobby_id > 0:
 		var resolved_mode := _active_lobby_mode_id(active_lobby_id)
-		if resolved_mode == "ctf":
+		if resolved_mode == "ctf" or resolved_mode == "deathmatch":
 			if _status_label != null:
-				_status_label.text = "Entered CTF room. Pick a team and start."
+				_status_label.text = "Entered CTF room. Pick a team and start." if resolved_mode == "ctf" else "Entered Deathmatch waiting room."
 			_pending_create_request = {}
+			_request_lobby_list_from_server()
 			_refresh_lobby_buttons_state()
 			return
 		_pending_create_request = {}
@@ -524,9 +555,20 @@ func _on_rpc_room_state(payload: Dictionary) -> void:
 	_log("room_state received payload=%s" % str(_ctf_room_state))
 	if int(_ctf_room_state.get("lobby_id", 0)) != _joined_lobby_id:
 		return
-	if _active_lobby_mode_id(_joined_lobby_id) != "ctf":
+	var mode_id := _active_lobby_mode_id(_joined_lobby_id)
+	if mode_id == "ctf":
+		_hide_dm_room()
+		_show_ctf_room(_ctf_room_state)
 		return
-	_show_ctf_room(_ctf_room_state)
+	if mode_id == "deathmatch":
+		_hide_ctf_room()
+		if bool(_ctf_room_state.get("started", false)):
+			_hide_dm_room()
+			return
+		_show_dm_room(_ctf_room_state)
+		return
+	_hide_ctf_room()
+	_hide_dm_room()
 
 func _begin_lobby_action(status_text: String) -> int:
 	_action_inflight = true
@@ -562,7 +604,7 @@ func _populate_lobby_room_list() -> void:
 	for i in range(_room_entries.size()):
 		var entry := _room_entries[i] as Dictionary
 		var btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
-		btn.custom_minimum_size = Vector2(0, 38)
+		btn.custom_minimum_size = Vector2(0, 30)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var lobby_id := int(entry.get("id", 0))
 		var room_name := str(entry.get("name", "Room"))
@@ -573,6 +615,7 @@ func _populate_lobby_room_list() -> void:
 		var in_room := lobby_id > 0 and lobby_id == _joined_lobby_id
 		var suffix := "  [IN]" if in_room else ""
 		btn.text = "#%d  %s   |   %d/%d   |   %s | %s%s" % [lobby_id, room_name, players, max_players, map_id, mode_id, suffix]
+		btn.set_meta("kw_room_base_text", btn.text)
 		btn.pressed.connect(func() -> void:
 			_select_lobby_room(i)
 		)
@@ -606,15 +649,49 @@ func _select_lobby_room(index: int) -> void:
 		var btn := _room_buttons[i]
 		if btn == null:
 			continue
-		btn.modulate = Color(1, 1, 1, 1) if i == index else Color(0.82, 0.84, 0.9, 0.9)
+		_apply_room_button_selected_style(btn, i == index)
 	if _join_button != null:
 		_join_button.disabled = false
+	_refresh_lobby_selection_summary()
+	_refresh_lobby_buttons_state()
+
+func _apply_room_button_selected_style(btn: Button, selected: bool) -> void:
+	if btn == null:
+		return
+	var base_text := str(btn.get_meta("kw_room_base_text", btn.text))
+	btn.text = ("> " + base_text) if selected else base_text
+	if selected:
+		btn.modulate = Color(1, 1, 1, 1)
+		btn.add_theme_color_override("font_color", Color(1.0, 0.95, 0.75, 1.0))
+		btn.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.75, 1.0))
+		var selected_style := StyleBoxFlat.new()
+		selected_style.bg_color = Color(0.24, 0.2, 0.12, 0.96)
+		selected_style.border_width_left = 2
+		selected_style.border_width_top = 2
+		selected_style.border_width_right = 2
+		selected_style.border_width_bottom = 2
+		selected_style.border_color = Color(0.9, 0.74, 0.27, 1.0)
+		btn.add_theme_stylebox_override("normal", selected_style)
+		btn.add_theme_stylebox_override("hover", selected_style)
+		btn.add_theme_stylebox_override("pressed", selected_style)
+		btn.add_theme_stylebox_override("focus", selected_style)
+		return
+	btn.modulate = Color(0.88, 0.9, 0.96, 0.96)
+	btn.remove_theme_color_override("font_color")
+	btn.remove_theme_color_override("font_hover_color")
+	btn.remove_theme_stylebox_override("normal")
+	btn.remove_theme_stylebox_override("hover")
+	btn.remove_theme_stylebox_override("pressed")
+	btn.remove_theme_stylebox_override("focus")
 
 func _refresh_lobby_selection_summary() -> void:
 	if _selection_label == null:
 		return
 	if not _ctf_room_state.is_empty() and _active_lobby_mode_id(_joined_lobby_id) == "ctf":
 		_selection_label.text = "CTF room: %s" % _joined_room_name
+		return
+	if not _ctf_room_state.is_empty() and _active_lobby_mode_id(_joined_lobby_id) == "deathmatch" and not bool(_ctf_room_state.get("started", false)):
+		_selection_label.text = "DM waiting room: %s" % _joined_room_name
 		return
 	if _joined_room_name.is_empty():
 		if _room_entries.is_empty():
@@ -678,7 +755,10 @@ func _create_lobby_room() -> void:
 		_pending_create_request = request.duplicate(true)
 		if _status_label != null:
 			_status_label.text = "Connecting to lobby server..."
-		_begin_connect_attempt(true, "Reconnecting")
+		if bool(_rpc_bridge.call("is_connecting_to_server")):
+			_log("create_lobby queued while connect attempt is in-flight")
+		else:
+			_begin_connect_attempt(true, "Reconnecting")
 		_refresh_lobby_buttons_state()
 		return
 	_send_create_lobby_request(request)
@@ -698,18 +778,22 @@ func _leave_lobby_room() -> void:
 		_request_lobby_list_from_server()
 	_ctf_room_state.clear()
 	_hide_ctf_room()
+	_hide_dm_room()
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
 func _start_ctf_match() -> void:
+	_start_lobby_match("Starting CTF match...")
+
+func _start_lobby_match(status_text: String = "Starting match...") -> void:
 	if _rpc_bridge == null:
 		return
 	if _joined_lobby_id <= 0:
 		return
-	_begin_lobby_action("Starting CTF match...")
+	_begin_lobby_action(status_text)
 	var sent_start := bool(_rpc_bridge.call("start_lobby_match"))
 	if _status_label != null:
-		_status_label.text = "Starting CTF match..." if sent_start else "Still connecting..."
+		_status_label.text = status_text if sent_start else "Still connecting..."
 	if not sent_start:
 		_action_inflight = false
 		_request_lobby_list_from_server()
@@ -779,6 +863,7 @@ func _ensure_valid_map_selection() -> void:
 	if map_ids.is_empty():
 		_selected_map_id = "classic"
 		_selected_mode_id = "deathmatch"
+		_refresh_map_dropdown_selection()
 		return
 	var fallback_map := _map_flow_service.normalize_map_id(_map_catalog, str(map_ids[0]))
 	var candidate := _selected_map_id
@@ -788,45 +873,84 @@ func _ensure_valid_map_selection() -> void:
 	if map_ids.find(_selected_map_id) < 0:
 		_selected_map_id = fallback_map
 	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
+	_refresh_map_dropdown_selection()
 
-func _selected_map_button_text() -> String:
-	_ensure_valid_map_selection()
-	var map_label := _map_flow_service.map_label_for_id(_map_catalog, _selected_map_id).to_upper()
-	var mode_label := _map_flow_service.mode_label_for_id(_selected_mode_id).to_upper()
-	return "MAP: %s (%s)" % [map_label, mode_label]
-
-func _cycle_selected_map() -> void:
-	_ensure_valid_map_selection()
-	var map_ids := _map_catalog.all_map_ids()
-	if map_ids.is_empty():
+func _populate_map_dropdown() -> void:
+	if _map_option == null:
 		return
-	var current_index := map_ids.find(_selected_map_id)
-	if current_index < 0:
-		current_index = 0
-	var next_index := (current_index + 1) % map_ids.size()
-	_selected_map_id = _map_flow_service.normalize_map_id(_map_catalog, str(map_ids[next_index]))
+	_map_option.clear()
+	for map_id_value in _map_catalog.all_map_ids():
+		var map_id := str(map_id_value)
+		var label := _map_flow_service.map_label_for_id(_map_catalog, map_id)
+		_map_option.add_item(label)
+		_map_option.set_item_metadata(_map_option.get_item_count() - 1, map_id)
+	_refresh_map_dropdown_selection()
+
+func _refresh_map_dropdown_selection() -> void:
+	if _map_option == null:
+		return
+	var idx := -1
+	for i in range(_map_option.get_item_count()):
+		if str(_map_option.get_item_metadata(i)) == _selected_map_id:
+			idx = i
+			break
+	if idx >= 0:
+		_map_option.select(idx)
+
+func _on_map_option_selected(index: int) -> void:
+	if _map_option == null:
+		return
+	if index < 0 or index >= _map_option.get_item_count():
+		return
+	var next_map_id := str(_map_option.get_item_metadata(index)).strip_edges()
+	if next_map_id.is_empty():
+		return
+	_selected_map_id = _map_flow_service.normalize_map_id(_map_catalog, next_map_id)
 	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
-	if _mode_button != null:
-		_mode_button.text = _selected_map_button_text()
-	_log("map_button cycled selected_map_id=%s selected_mode_id=%s" % [_selected_map_id, _selected_mode_id])
+	_log("map_dropdown selected_map_id=%s selected_mode_id=%s" % [_selected_map_id, _selected_mode_id])
 
 func _refresh_lobby_buttons_state() -> void:
 	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
-	var in_ctf_room := not _ctf_room_state.is_empty() and _active_lobby_mode_id(_joined_lobby_id) == "ctf"
+	var in_waiting_room := not _ctf_room_state.is_empty() and _joined_lobby_id > 0 and not bool(_ctf_room_state.get("started", false))
+	var in_ctf_room := in_waiting_room and _active_lobby_mode_id(_joined_lobby_id) == "ctf"
+	var in_dm_room := in_waiting_room and _active_lobby_mode_id(_joined_lobby_id) == "deathmatch"
+	var local_peer_id := _local_peer_id()
+	var is_owner := local_peer_id > 0 and local_peer_id == int(_ctf_room_state.get("owner_peer_id", 0))
 	if _create_button != null:
-		_create_button.disabled = _joined_lobby_id > 0 or _action_inflight or in_ctf_room
+		_create_button.visible = not in_waiting_room
+		_create_button.disabled = _joined_lobby_id > 0 or _action_inflight or in_waiting_room
 	if _join_button != null:
-		_join_button.disabled = not can_send or _selected_room_index < 0 or _action_inflight or in_ctf_room
+		_join_button.visible = not in_waiting_room
+		_join_button.disabled = not can_send or _selected_room_index < 0 or _action_inflight or in_waiting_room
 	if _refresh_button != null:
-		_refresh_button.disabled = _action_inflight or in_ctf_room
+		_refresh_button.visible = not in_waiting_room
+		_refresh_button.disabled = _action_inflight or in_waiting_room
 	if _leave_button != null:
+		_leave_button.visible = in_waiting_room
 		_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
+	if _back_button != null:
+		_back_button.visible = not in_waiting_room
+		_back_button.disabled = _action_inflight
 	if _ctf_join_red_button != null:
 		_ctf_join_red_button.disabled = not can_send or _action_inflight or _local_team_id() == 0
 	if _ctf_join_blue_button != null:
 		_ctf_join_blue_button.disabled = not can_send or _action_inflight or _local_team_id() == 1
 	if _ctf_start_button != null:
-		_ctf_start_button.disabled = not can_send or _action_inflight or _local_peer_id() != int(_ctf_room_state.get("owner_peer_id", 0))
+		_ctf_start_button.disabled = not can_send or _action_inflight or _local_peer_id() != int(_ctf_room_state.get("owner_peer_id", 0)) or not bool(_ctf_room_state.get("can_start", false))
+	if _ctf_ready_button != null:
+		_ctf_ready_button.visible = in_ctf_room and not is_owner
+		_ctf_ready_button.disabled = not can_send or _action_inflight or not in_ctf_room
+	if _ctf_add_bots_check != null:
+		_ctf_add_bots_check.visible = in_ctf_room and is_owner
+		_ctf_add_bots_check.disabled = not can_send or _action_inflight or not in_ctf_room or not is_owner
+	if _dm_ready_button != null:
+		_dm_ready_button.visible = in_dm_room and not is_owner
+		_dm_ready_button.disabled = not can_send or _action_inflight or not in_dm_room
+	if _dm_start_button != null:
+		_dm_start_button.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner or not bool(_ctf_room_state.get("can_start", false))
+	if _dm_add_bots_check != null:
+		_dm_add_bots_check.visible = in_dm_room and is_owner
+		_dm_add_bots_check.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner
 
 func _ensure_overlay() -> void:
 	if _overlay != null and is_instance_valid(_overlay):
@@ -851,7 +975,7 @@ func _ensure_overlay() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "Panel"
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.custom_minimum_size = Vector2(420, 270)
+	panel.custom_minimum_size = Vector2(380, 250)
 	panel.position = Vector2(40, 40)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.add_child(panel)
@@ -875,25 +999,26 @@ func _ensure_overlay() -> void:
 	panel.add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 6)
+	root.add_theme_constant_override("separation", 4)
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_child(root)
 
 	var title := Label.new()
 	title.text = "LOBBY ROOMS"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 14)
 	root.add_child(title)
+	_header_title = title
 
 	var status := Label.new()
 	status.text = "Status: Idle"
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status.add_theme_font_size_override("font_size", 12)
+	status.add_theme_font_size_override("font_size", 10)
 	root.add_child(status)
 	_status_label = status
 
 	var loading_box := PanelContainer.new()
-	loading_box.custom_minimum_size = Vector2(0, 90)
+	loading_box.custom_minimum_size = Vector2(0, 64)
 	root.add_child(loading_box)
 	_loading_box = loading_box
 
@@ -916,31 +1041,32 @@ func _ensure_overlay() -> void:
 
 	var loading_v := VBoxContainer.new()
 	loading_v.alignment = BoxContainer.ALIGNMENT_CENTER
-	loading_v.add_theme_constant_override("separation", 6)
+	loading_v.add_theme_constant_override("separation", 4)
 	loading_v.set_anchors_preset(Control.PRESET_FULL_RECT)
 	loading_margin.add_child(loading_v)
 
 	var loading_title := Label.new()
 	loading_title.text = "LOADING"
 	loading_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	loading_title.add_theme_font_size_override("font_size", 17)
+	loading_title.add_theme_font_size_override("font_size", 13)
 	loading_v.add_child(loading_title)
 	_loading_label = loading_title
 
 	var loading_sub := Label.new()
 	loading_sub.text = "Please wait..."
 	loading_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	loading_sub.add_theme_font_size_override("font_size", 11)
+	loading_sub.add_theme_font_size_override("font_size", 9)
 	loading_v.add_child(loading_sub)
 
 	var rooms_title := Label.new()
 	rooms_title.text = "Lobbies"
 	rooms_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	rooms_title.add_theme_font_size_override("font_size", 13)
+	rooms_title.add_theme_font_size_override("font_size", 11)
 	root.add_child(rooms_title)
+	_rooms_title_label = rooms_title
 
 	var rooms_box := VBoxContainer.new()
-	rooms_box.custom_minimum_size = Vector2(0, 78)
+	rooms_box.custom_minimum_size = Vector2(0, 64)
 	rooms_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rooms_box.add_theme_constant_override("separation", 4)
 	rooms_box.visible = false
@@ -950,42 +1076,126 @@ func _ensure_overlay() -> void:
 	var selection_label := Label.new()
 	selection_label.text = "Select a room and press JOIN"
 	selection_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	selection_label.add_theme_font_size_override("font_size", 11)
+	selection_label.add_theme_font_size_override("font_size", 9)
 	root.add_child(selection_label)
 	_selection_label = selection_label
 
 	var mode_row := HBoxContainer.new()
-	mode_row.add_theme_constant_override("separation", 8)
+	mode_row.add_theme_constant_override("separation", 6)
 	root.add_child(mode_row)
 	_mode_row = mode_row
 
+	var waiting_room_title := Label.new()
+	waiting_room_title.visible = false
+	waiting_room_title.text = ""
+	waiting_room_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	waiting_room_title.add_theme_font_size_override("font_size", 11)
+	root.add_child(waiting_room_title)
+	_waiting_room_title_label = waiting_room_title
+
 	var map_label := Label.new()
 	map_label.text = "Map"
-	map_label.add_theme_font_size_override("font_size", 11)
+	map_label.add_theme_font_size_override("font_size", 9)
 	mode_row.add_child(map_label)
 
-	var mode_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
-	mode_btn.text = _selected_map_button_text()
-	mode_btn.custom_minimum_size = Vector2(0, 24)
-	mode_btn.add_theme_font_size_override("font_size", 10)
-	mode_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mode_btn.pressed.connect(func() -> void:
-		_cycle_selected_map()
+	var map_option := OptionButton.new()
+	map_option.custom_minimum_size = Vector2(170, 18)
+	map_option.size_flags_horizontal = Control.SIZE_FILL
+	map_option.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	map_option.add_theme_font_size_override("font_size", 8)
+	map_option.add_theme_constant_override("arrow_margin", 4)
+	map_option.add_theme_constant_override("h_separation", 4)
+	map_option.add_theme_color_override("font_color", Color(0.94, 0.93, 0.9, 1))
+	map_option.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	map_option.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
+	var map_option_normal := StyleBoxFlat.new()
+	map_option_normal.bg_color = Color(0.11, 0.1, 0.16, 1.0)
+	map_option_normal.border_width_left = 2
+	map_option_normal.border_width_top = 2
+	map_option_normal.border_width_right = 2
+	map_option_normal.border_width_bottom = 2
+	map_option_normal.border_color = Color(0.29, 0.28, 0.4, 1)
+	map_option_normal.corner_radius_top_left = 0
+	map_option_normal.corner_radius_top_right = 0
+	map_option_normal.corner_radius_bottom_right = 0
+	map_option_normal.corner_radius_bottom_left = 0
+	map_option_normal.content_margin_left = 6
+	map_option_normal.content_margin_right = 6
+	map_option_normal.content_margin_top = 3
+	map_option_normal.content_margin_bottom = 3
+	var map_option_hover := map_option_normal.duplicate() as StyleBoxFlat
+	map_option_hover.bg_color = Color(0.17, 0.15, 0.22, 1.0)
+	map_option_hover.border_color = Color(0.9, 0.74, 0.27, 1.0)
+	map_option.add_theme_stylebox_override("normal", map_option_normal)
+	map_option.add_theme_stylebox_override("hover", map_option_hover)
+	map_option.add_theme_stylebox_override("pressed", map_option_hover)
+	map_option.add_theme_stylebox_override("focus", map_option_hover)
+	map_option.add_theme_icon_override("arrow", _make_pixel_dropdown_arrow())
+	var map_popup := map_option.get_popup()
+	var map_popup_panel := StyleBoxFlat.new()
+	map_popup_panel.bg_color = Color(0.1, 0.09, 0.15, 1.0)
+	map_popup_panel.border_width_left = 2
+	map_popup_panel.border_width_top = 2
+	map_popup_panel.border_width_right = 2
+	map_popup_panel.border_width_bottom = 2
+	map_popup_panel.border_color = Color(0.29, 0.28, 0.4, 1)
+	map_popup_panel.corner_radius_top_left = 0
+	map_popup_panel.corner_radius_top_right = 0
+	map_popup_panel.corner_radius_bottom_right = 0
+	map_popup_panel.corner_radius_bottom_left = 0
+	var map_popup_hover := StyleBoxFlat.new()
+	map_popup_hover.bg_color = Color(0.28, 0.22, 0.12, 1.0)
+	map_popup_hover.border_width_left = 1
+	map_popup_hover.border_width_top = 1
+	map_popup_hover.border_width_right = 1
+	map_popup_hover.border_width_bottom = 1
+	map_popup_hover.border_color = Color(0.9, 0.74, 0.27, 1.0)
+	map_popup_hover.corner_radius_top_left = 0
+	map_popup_hover.corner_radius_top_right = 0
+	map_popup_hover.corner_radius_bottom_right = 0
+	map_popup_hover.corner_radius_bottom_left = 0
+	var map_popup_separator := StyleBoxFlat.new()
+	map_popup_separator.bg_color = Color(0.27, 0.24, 0.35, 1.0)
+	map_popup_separator.content_margin_top = 1
+	map_popup_separator.content_margin_bottom = 1
+	map_popup.add_theme_stylebox_override("panel", map_popup_panel)
+	map_popup.add_theme_stylebox_override("hover", map_popup_hover)
+	map_popup.add_theme_stylebox_override("hover_pressed", map_popup_hover)
+	map_popup.add_theme_stylebox_override("selected", map_popup_hover)
+	map_popup.add_theme_stylebox_override("focus", map_popup_hover)
+	map_popup.add_theme_stylebox_override("item_hover", map_popup_hover)
+	map_popup.add_theme_stylebox_override("separator", map_popup_separator)
+	map_popup.add_theme_constant_override("v_separation", 2)
+	map_popup.add_theme_constant_override("h_separation", 6)
+	map_popup.add_theme_color_override("font_color", Color(0.92, 0.92, 0.9, 1))
+	map_popup.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	map_popup.add_theme_color_override("font_selected_color", Color(1, 1, 1, 1))
+	map_popup.add_theme_font_size_override("font_size", 8)
+	var map_popup_checked_icon := _make_pixel_popup_marker(true)
+	var map_popup_unchecked_icon := _make_pixel_popup_marker(false)
+	map_popup.add_theme_icon_override("checked", map_popup_checked_icon)
+	map_popup.add_theme_icon_override("unchecked", map_popup_unchecked_icon)
+	map_popup.add_theme_icon_override("radio_checked", map_popup_checked_icon)
+	map_popup.add_theme_icon_override("radio_unchecked", map_popup_unchecked_icon)
+	map_popup.about_to_popup.connect(func() -> void:
+		_position_option_popup_below(map_option, map_popup)
 	)
+	map_option.item_selected.connect(_on_map_option_selected)
 	if _add_hover_pop.is_valid():
-		_add_hover_pop.call(mode_btn)
-	mode_row.add_child(mode_btn)
-	_mode_button = mode_btn
+		_add_hover_pop.call(map_option)
+	mode_row.add_child(map_option)
+	_map_option = map_option
+	_populate_map_dropdown()
 
 	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 8)
+	actions.add_theme_constant_override("separation", 6)
 	root.add_child(actions)
 	_actions_row = actions
 
 	var create_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	create_btn.text = "CREATE"
-	create_btn.custom_minimum_size = Vector2(0, 26)
-	create_btn.add_theme_font_size_override("font_size", 10)
+	create_btn.custom_minimum_size = Vector2(0, 22)
+	create_btn.add_theme_font_size_override("font_size", 9)
 	create_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	create_btn.pressed.connect(_create_lobby_room)
 	if _add_hover_pop.is_valid():
@@ -995,8 +1205,8 @@ func _ensure_overlay() -> void:
 
 	var join_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	join_btn.text = "JOIN"
-	join_btn.custom_minimum_size = Vector2(0, 26)
-	join_btn.add_theme_font_size_override("font_size", 10)
+	join_btn.custom_minimum_size = Vector2(0, 22)
+	join_btn.add_theme_font_size_override("font_size", 9)
 	join_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	join_btn.disabled = true
 	join_btn.pressed.connect(_join_selected_lobby_room)
@@ -1007,8 +1217,8 @@ func _ensure_overlay() -> void:
 
 	var refresh_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	refresh_btn.text = "REFRESH"
-	refresh_btn.custom_minimum_size = Vector2(0, 26)
-	refresh_btn.add_theme_font_size_override("font_size", 10)
+	refresh_btn.custom_minimum_size = Vector2(0, 22)
+	refresh_btn.add_theme_font_size_override("font_size", 9)
 	refresh_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	refresh_btn.pressed.connect(func() -> void:
 		if _status_label != null:
@@ -1022,8 +1232,8 @@ func _ensure_overlay() -> void:
 
 	var leave_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	leave_btn.text = "LEAVE"
-	leave_btn.custom_minimum_size = Vector2(0, 26)
-	leave_btn.add_theme_font_size_override("font_size", 10)
+	leave_btn.custom_minimum_size = Vector2(0, 22)
+	leave_btn.add_theme_font_size_override("font_size", 9)
 	leave_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	leave_btn.disabled = true
 	leave_btn.pressed.connect(_leave_lobby_room)
@@ -1034,8 +1244,8 @@ func _ensure_overlay() -> void:
 
 	var back_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	back_btn.text = "BACK"
-	back_btn.custom_minimum_size = Vector2(0, 26)
-	back_btn.add_theme_font_size_override("font_size", 10)
+	back_btn.custom_minimum_size = Vector2(0, 22)
+	back_btn.add_theme_font_size_override("font_size", 9)
 	back_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back_btn.pressed.connect(func() -> void:
 		hide()
@@ -1043,42 +1253,125 @@ func _ensure_overlay() -> void:
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(back_btn)
 	actions.add_child(back_btn)
+	_back_button = back_btn
 
 	var ctf_room_box := VBoxContainer.new()
 	ctf_room_box.visible = false
-	ctf_room_box.add_theme_constant_override("separation", 8)
+	ctf_room_box.add_theme_constant_override("separation", 6)
 	root.add_child(ctf_room_box)
 	_ctf_room_box = ctf_room_box
 
 	var ctf_title := Label.new()
 	ctf_title.text = "CTF ROOM"
 	ctf_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ctf_title.add_theme_font_size_override("font_size", 11)
 	ctf_room_box.add_child(ctf_title)
 	_ctf_room_title = ctf_title
 
+	var teams_header := Label.new()
+	teams_header.text = "TEAMS"
+	teams_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	teams_header.add_theme_font_size_override("font_size", 9)
+	ctf_room_box.add_child(teams_header)
+
 	var teams_row := HBoxContainer.new()
-	teams_row.add_theme_constant_override("separation", 12)
+	teams_row.add_theme_constant_override("separation", 6)
 	ctf_room_box.add_child(teams_row)
+
+	var red_card := PanelContainer.new()
+	red_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	teams_row.add_child(red_card)
+	var red_style := StyleBoxFlat.new()
+	red_style.bg_color = Color(0.24, 0.11, 0.12, 0.9)
+	red_style.border_width_left = 2
+	red_style.border_width_top = 2
+	red_style.border_width_right = 2
+	red_style.border_width_bottom = 2
+	red_style.border_color = Color(0.8, 0.32, 0.32, 1)
+	red_card.add_theme_stylebox_override("panel", red_style)
+	var red_margin := MarginContainer.new()
+	red_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	red_margin.add_theme_constant_override("margin_left", 6)
+	red_margin.add_theme_constant_override("margin_top", 5)
+	red_margin.add_theme_constant_override("margin_right", 6)
+	red_margin.add_theme_constant_override("margin_bottom", 5)
+	red_card.add_child(red_margin)
 
 	var red_label := Label.new()
 	red_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	red_label.custom_minimum_size = Vector2(0, 68)
+	red_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	red_label.text = "RED TEAM"
-	teams_row.add_child(red_label)
+	red_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	red_label.add_theme_font_size_override("font_size", 9)
+	red_margin.add_child(red_label)
 	_ctf_room_red_label = red_label
+
+	var blue_card := PanelContainer.new()
+	blue_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	teams_row.add_child(blue_card)
+	var blue_style := StyleBoxFlat.new()
+	blue_style.bg_color = Color(0.1, 0.15, 0.26, 0.9)
+	blue_style.border_width_left = 2
+	blue_style.border_width_top = 2
+	blue_style.border_width_right = 2
+	blue_style.border_width_bottom = 2
+	blue_style.border_color = Color(0.35, 0.55, 0.95, 1)
+	blue_card.add_theme_stylebox_override("panel", blue_style)
+	var blue_margin := MarginContainer.new()
+	blue_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	blue_margin.add_theme_constant_override("margin_left", 6)
+	blue_margin.add_theme_constant_override("margin_top", 5)
+	blue_margin.add_theme_constant_override("margin_right", 6)
+	blue_margin.add_theme_constant_override("margin_bottom", 5)
+	blue_card.add_child(blue_margin)
 
 	var blue_label := Label.new()
 	blue_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	blue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	blue_label.custom_minimum_size = Vector2(0, 68)
+	blue_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	blue_label.text = "BLUE TEAM"
-	teams_row.add_child(blue_label)
+	blue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blue_label.add_theme_font_size_override("font_size", 9)
+	blue_margin.add_child(blue_label)
 	_ctf_room_blue_label = blue_label
 
-	var room_actions := HBoxContainer.new()
-	room_actions.add_theme_constant_override("separation", 8)
-	ctf_room_box.add_child(room_actions)
+	var controls_header := Label.new()
+	controls_header.text = "MATCH CONTROLS"
+	controls_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	controls_header.add_theme_font_size_override("font_size", 9)
+	ctf_room_box.add_child(controls_header)
+
+	var controls_card := PanelContainer.new()
+	ctf_room_box.add_child(controls_card)
+	var controls_style := StyleBoxFlat.new()
+	controls_style.bg_color = Color(0.12, 0.11, 0.17, 0.95)
+	controls_style.border_width_left = 2
+	controls_style.border_width_top = 2
+	controls_style.border_width_right = 2
+	controls_style.border_width_bottom = 2
+	controls_style.border_color = Color(0.29, 0.28, 0.4, 1)
+	controls_card.add_theme_stylebox_override("panel", controls_style)
+	var controls_margin := MarginContainer.new()
+	controls_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	controls_margin.add_theme_constant_override("margin_left", 6)
+	controls_margin.add_theme_constant_override("margin_top", 6)
+	controls_margin.add_theme_constant_override("margin_right", 6)
+	controls_margin.add_theme_constant_override("margin_bottom", 6)
+	controls_card.add_child(controls_margin)
+
+	var room_actions := VBoxContainer.new()
+	room_actions.add_theme_constant_override("separation", 5)
+	controls_margin.add_child(room_actions)
+
+	var team_actions := HBoxContainer.new()
+	team_actions.add_theme_constant_override("separation", 6)
+	room_actions.add_child(team_actions)
 
 	var join_red_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	join_red_btn.text = "JOIN RED"
+	join_red_btn.custom_minimum_size = Vector2(0, 22)
+	join_red_btn.add_theme_font_size_override("font_size", 9)
 	join_red_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	join_red_btn.pressed.connect(func() -> void:
 		if _rpc_bridge != null:
@@ -1086,11 +1379,13 @@ func _ensure_overlay() -> void:
 	)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(join_red_btn)
-	room_actions.add_child(join_red_btn)
+	team_actions.add_child(join_red_btn)
 	_ctf_join_red_button = join_red_btn
 
 	var join_blue_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	join_blue_btn.text = "JOIN BLUE"
+	join_blue_btn.custom_minimum_size = Vector2(0, 22)
+	join_blue_btn.add_theme_font_size_override("font_size", 9)
 	join_blue_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	join_blue_btn.pressed.connect(func() -> void:
 		if _rpc_bridge != null:
@@ -1098,17 +1393,138 @@ func _ensure_overlay() -> void:
 	)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(join_blue_btn)
-	room_actions.add_child(join_blue_btn)
+	team_actions.add_child(join_blue_btn)
 	_ctf_join_blue_button = join_blue_btn
+
+	var match_actions := HBoxContainer.new()
+	match_actions.add_theme_constant_override("separation", 6)
+	room_actions.add_child(match_actions)
 
 	var start_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	start_btn.text = "START MATCH"
+	start_btn.custom_minimum_size = Vector2(0, 22)
+	start_btn.add_theme_font_size_override("font_size", 9)
 	start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_btn.pressed.connect(_start_ctf_match)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(start_btn)
-	room_actions.add_child(start_btn)
+	var ready_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	ready_btn.text = "READY"
+	ready_btn.custom_minimum_size = Vector2(0, 22)
+	ready_btn.add_theme_font_size_override("font_size", 9)
+	ready_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ready_btn.pressed.connect(func() -> void:
+		if _rpc_bridge == null:
+			return
+		if _ctf_room_state.is_empty():
+			return
+		var ready_by_peer := _ctf_room_state.get("ready_by_peer", {}) as Dictionary
+		var local_ready := bool(ready_by_peer.get(_local_peer_id(), false))
+		_rpc_bridge.call("set_lobby_ready", not local_ready)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(ready_btn)
+	match_actions.add_child(ready_btn)
+	_ctf_ready_button = ready_btn
+
+	match_actions.add_child(start_btn)
 	_ctf_start_button = start_btn
+
+	var ctf_add_bots_check := CheckBox.new()
+	ctf_add_bots_check.text = "Add Bots"
+	ctf_add_bots_check.add_theme_font_size_override("font_size", 9)
+	ctf_add_bots_check.button_pressed = false
+	ctf_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_add_bots", toggled_on)
+	)
+	ctf_room_box.add_child(ctf_add_bots_check)
+	_ctf_add_bots_check = ctf_add_bots_check
+
+	var dm_room_box := VBoxContainer.new()
+	dm_room_box.visible = false
+	dm_room_box.add_theme_constant_override("separation", 6)
+	root.add_child(dm_room_box)
+	_dm_room_box = dm_room_box
+
+	var dm_title := Label.new()
+	dm_title.text = "DEATHMATCH ROOM"
+	dm_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dm_title.add_theme_font_size_override("font_size", 11)
+	dm_room_box.add_child(dm_title)
+	_dm_room_title = dm_title
+
+	var dm_members_card := PanelContainer.new()
+	dm_room_box.add_child(dm_members_card)
+	var dm_members_style := StyleBoxFlat.new()
+	dm_members_style.bg_color = Color(0.12, 0.11, 0.17, 0.95)
+	dm_members_style.border_width_left = 2
+	dm_members_style.border_width_top = 2
+	dm_members_style.border_width_right = 2
+	dm_members_style.border_width_bottom = 2
+	dm_members_style.border_color = Color(0.29, 0.28, 0.4, 1)
+	dm_members_card.add_theme_stylebox_override("panel", dm_members_style)
+	var dm_members_margin := MarginContainer.new()
+	dm_members_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dm_members_margin.add_theme_constant_override("margin_left", 6)
+	dm_members_margin.add_theme_constant_override("margin_top", 6)
+	dm_members_margin.add_theme_constant_override("margin_right", 6)
+	dm_members_margin.add_theme_constant_override("margin_bottom", 6)
+	dm_members_card.add_child(dm_members_margin)
+
+	var dm_members := Label.new()
+	dm_members.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dm_members.text = "Waiting for players..."
+	dm_members.add_theme_font_size_override("font_size", 9)
+	dm_members_margin.add_child(dm_members)
+	_dm_room_members_label = dm_members
+
+	var dm_actions := HBoxContainer.new()
+	dm_actions.add_theme_constant_override("separation", 6)
+	dm_room_box.add_child(dm_actions)
+
+	var dm_ready_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	dm_ready_btn.text = "READY"
+	dm_ready_btn.custom_minimum_size = Vector2(0, 20)
+	dm_ready_btn.add_theme_font_size_override("font_size", 9)
+	dm_ready_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_ready_btn.pressed.connect(func() -> void:
+		if _rpc_bridge == null:
+			return
+		if _ctf_room_state.is_empty():
+			return
+		var ready_by_peer := _ctf_room_state.get("ready_by_peer", {}) as Dictionary
+		var local_ready := bool(ready_by_peer.get(_local_peer_id(), false))
+		_rpc_bridge.call("set_lobby_ready", not local_ready)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(dm_ready_btn)
+	dm_actions.add_child(dm_ready_btn)
+	_dm_ready_button = dm_ready_btn
+
+	var dm_start_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	dm_start_btn.text = "START MATCH"
+	dm_start_btn.custom_minimum_size = Vector2(0, 20)
+	dm_start_btn.add_theme_font_size_override("font_size", 9)
+	dm_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_start_btn.pressed.connect(func() -> void:
+		_start_lobby_match("Starting Deathmatch...")
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(dm_start_btn)
+	dm_actions.add_child(dm_start_btn)
+	_dm_start_button = dm_start_btn
+
+	var dm_add_bots_check := CheckBox.new()
+	dm_add_bots_check.text = "Add Bots"
+	dm_add_bots_check.add_theme_font_size_override("font_size", 9)
+	dm_add_bots_check.button_pressed = false
+	dm_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_add_bots", toggled_on)
+	)
+	dm_room_box.add_child(dm_add_bots_check)
+	_dm_add_bots_check = dm_add_bots_check
 
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
@@ -1116,30 +1532,131 @@ func _ensure_overlay() -> void:
 func _show_ctf_room(payload: Dictionary) -> void:
 	if _ctf_room_box == null:
 		return
+	if _header_title != null:
+		_header_title.visible = false
+	if _rooms_title_label != null:
+		_rooms_title_label.visible = false
+	if _status_label != null:
+		_status_label.visible = false
+	if _selection_label != null:
+		_selection_label.visible = false
 	if _rooms_box != null:
 		_rooms_box.visible = false
-	if _selection_label != null:
-		_selection_label.visible = true
 	if _mode_row != null:
 		_mode_row.visible = false
+	if _waiting_room_title_label != null:
+		_waiting_room_title_label.visible = true
+		_waiting_room_title_label.text = "%s  |  CTF ROOM" % str(payload.get("name", "CTF Room"))
 	_ctf_room_box.visible = true
 	if _ctf_room_title != null:
+		_ctf_room_title.visible = false
 		_ctf_room_title.text = "%s  |  CTF ROOM" % str(payload.get("name", "CTF Room"))
 	var teams := payload.get("teams", {}) as Dictionary
 	if _ctf_room_red_label != null:
 		_ctf_room_red_label.text = _team_text("RED TEAM", teams.get("red", []) as Array)
 	if _ctf_room_blue_label != null:
 		_ctf_room_blue_label.text = _team_text("BLUE TEAM", teams.get("blue", []) as Array)
+	var ready_by_peer := payload.get("ready_by_peer", {}) as Dictionary
+	var local_ready := bool(ready_by_peer.get(_local_peer_id(), false))
+	if _ctf_ready_button != null:
+		_ctf_ready_button.text = "UNREADY" if local_ready else "READY"
+	if _ctf_add_bots_check != null:
+		var add_bots := bool(payload.get("add_bots", false))
+		if _ctf_add_bots_check.button_pressed != add_bots:
+			if _ctf_add_bots_check.has_method("set_pressed_no_signal"):
+				_ctf_add_bots_check.call("set_pressed_no_signal", add_bots)
+			else:
+				_ctf_add_bots_check.button_pressed = add_bots
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
 func _hide_ctf_room() -> void:
 	if _ctf_room_box != null:
 		_ctf_room_box.visible = false
+	if _header_title != null:
+		_header_title.visible = true
+	if _rooms_title_label != null:
+		_rooms_title_label.visible = true
+	if _status_label != null:
+		_status_label.visible = true
+	if _selection_label != null:
+		_selection_label.visible = true
 	if _rooms_box != null:
 		_rooms_box.visible = true
 	if _mode_row != null:
 		_mode_row.visible = true
+	if _waiting_room_title_label != null:
+		_waiting_room_title_label.visible = false
+
+func _show_dm_room(payload: Dictionary) -> void:
+	if _dm_room_box == null:
+		return
+	if _header_title != null:
+		_header_title.visible = false
+	if _rooms_title_label != null:
+		_rooms_title_label.visible = false
+	if _status_label != null:
+		_status_label.visible = false
+	if _selection_label != null:
+		_selection_label.visible = false
+	if _rooms_box != null:
+		_rooms_box.visible = false
+	if _mode_row != null:
+		_mode_row.visible = false
+	if _waiting_room_title_label != null:
+		_waiting_room_title_label.visible = true
+		_waiting_room_title_label.text = "%s  |  DEATHMATCH WAITING ROOM" % str(payload.get("name", "DM Room"))
+	_dm_room_box.visible = true
+	if _dm_room_title != null:
+		_dm_room_title.visible = false
+		_dm_room_title.text = "%s  |  DEATHMATCH WAITING ROOM" % str(payload.get("name", "DM Room"))
+	var members := payload.get("members", []) as Array
+	var lines := PackedStringArray()
+	for i in range(members.size()):
+		if not (members[i] is Dictionary):
+			continue
+		var member := members[i] as Dictionary
+		var display := str(member.get("display_name", "Player"))
+		var ready := bool(member.get("ready", false))
+		lines.append("%d. %s  [%s]" % [i + 1, display, "READY" if ready else "NOT READY"])
+	var max_players := int(payload.get("max_players", members.size()))
+	for i in range(members.size(), max_players):
+		lines.append("%d. [EMPTY]" % (i + 1))
+	if lines.is_empty():
+		lines.append("Waiting for players...")
+	if _dm_room_members_label != null:
+		_dm_room_members_label.text = "\n".join(lines)
+	var ready_by_peer := payload.get("ready_by_peer", {}) as Dictionary
+	var local_ready := bool(ready_by_peer.get(_local_peer_id(), false))
+	if _dm_ready_button != null:
+		_dm_ready_button.text = "UNREADY" if local_ready else "READY"
+	if _dm_add_bots_check != null:
+		var add_bots := bool(payload.get("add_bots", false))
+		if _dm_add_bots_check.button_pressed != add_bots:
+			if _dm_add_bots_check.has_method("set_pressed_no_signal"):
+				_dm_add_bots_check.call("set_pressed_no_signal", add_bots)
+			else:
+				_dm_add_bots_check.button_pressed = add_bots
+	_refresh_lobby_selection_summary()
+	_refresh_lobby_buttons_state()
+
+func _hide_dm_room() -> void:
+	if _dm_room_box != null:
+		_dm_room_box.visible = false
+	if _header_title != null:
+		_header_title.visible = true
+	if _rooms_title_label != null:
+		_rooms_title_label.visible = true
+	if _status_label != null:
+		_status_label.visible = true
+	if _selection_label != null:
+		_selection_label.visible = true
+	if _rooms_box != null:
+		_rooms_box.visible = true
+	if _mode_row != null:
+		_mode_row.visible = true
+	if _waiting_room_title_label != null:
+		_waiting_room_title_label.visible = false
 
 func _active_lobby_mode_id(lobby_id: int) -> String:
 	for entry in _room_entries:
@@ -1166,7 +1683,51 @@ func _team_text(title: String, members: Array) -> String:
 	for slot in range(2):
 		if slot < members.size() and members[slot] is Dictionary:
 			var entry := members[slot] as Dictionary
-			lines.append("%d. %s" % [slot + 1, str(entry.get("display_name", "Player"))])
+			var display := str(entry.get("display_name", "Player"))
+			var ready := bool(entry.get("ready", false))
+			lines.append("%d. %s [%s]" % [slot + 1, display, "R" if ready else "-"])
 		else:
 			lines.append("%d. [EMPTY]" % (slot + 1))
 	return "\n".join(lines)
+
+func _position_option_popup_below(option: OptionButton, popup: PopupMenu) -> void:
+	if option == null or popup == null:
+		return
+	var origin := option.get_screen_position()
+	var popup_x := int(round(origin.x))
+	var popup_y := int(round(origin.y + option.size.y + 2.0))
+	popup.position = Vector2i(popup_x, popup_y)
+
+func _make_pixel_popup_marker(active: bool) -> Texture2D:
+	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var border := Color(0.32, 0.3, 0.44, 1.0)
+	var fill := Color(0.08, 0.08, 0.12, 1.0)
+	for y in range(9):
+		for x in range(9):
+			var on_border := x == 0 or x == 8 or y == 0 or y == 8
+			img.set_pixel(x, y, border if on_border else fill)
+	if active:
+		var accent := Color(0.9, 0.74, 0.27, 1.0)
+		for y in range(2, 7):
+			for x in range(2, 7):
+				img.set_pixel(x, y, accent)
+	var tex := ImageTexture.create_from_image(img)
+	return tex
+
+func _make_pixel_dropdown_arrow() -> Texture2D:
+	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var color := Color(0.9, 0.74, 0.27, 1.0)
+	# Down-facing chunky pixel arrow.
+	var rows := {
+		2: PackedInt32Array([2, 3, 4, 5, 6]),
+		3: PackedInt32Array([3, 4, 5]),
+		4: PackedInt32Array([3, 4, 5]),
+		5: PackedInt32Array([4]),
+	}
+	for y in rows.keys():
+		var xs := rows[y] as PackedInt32Array
+		for x in xs:
+			img.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(img)

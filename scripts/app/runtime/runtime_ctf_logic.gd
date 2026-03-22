@@ -64,6 +64,10 @@ func _server_start_ctf_lobby_match(peer_id: int) -> void:
 	if lobby_service.owner_peer_for_lobby(lobby_id) != peer_id:
 		_server_send_lobby_action_result(peer_id, false, "Only the host can start.", lobby_id, _lobby_map_id(lobby_id))
 		return
+	if _uses_lobby_scene_flow():
+		if not lobby_service.can_start_ctf_lobby(lobby_id):
+			_server_send_lobby_action_result(peer_id, false, "All other players must be READY.", lobby_id, _lobby_map_id(lobby_id))
+			return
 	_prepare_ctf_match_team_assignments(lobby_id)
 	_append_log("CTF start: lobby_id=%d teams=%s" % [lobby_id, str(lobby_service.team_assignments_for_lobby(lobby_id))])
 	lobby_service.set_lobby_started(lobby_id, true)
@@ -128,10 +132,18 @@ func _ctf_room_holds_in_lobby(lobby_id: int) -> bool:
 		return false
 	return lobby_service.is_ctf_lobby(lobby_id) and not lobby_service.lobby_started(lobby_id)
 
+func _deathmatch_room_holds_in_lobby(lobby_id: int) -> bool:
+	if lobby_service == null or lobby_id <= 0:
+		return false
+	return lobby_service.is_deathmatch_lobby(lobby_id) and not lobby_service.lobby_started(lobby_id)
+
 func _prepare_ctf_match_team_assignments(lobby_id: int) -> void:
 	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_ctf_lobby(lobby_id):
 		return
 	lobby_service.clear_non_member_teams(lobby_id)
+	if not lobby_service.add_bots_enabled(lobby_id):
+		lobby_service.clear_bot_team_assignments(lobby_id)
+		return
 	var teams := lobby_service.team_assignments_for_lobby(lobby_id)
 	var human_members := _lobby_members(lobby_id)
 	var red_count := 0

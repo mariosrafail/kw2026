@@ -13,63 +13,63 @@
     {
       "id": "default",
       "index": 0,
-      "name": "Default",
+      "name": "Street Zero",
       "unlock_type": "free",
       "cost": 0
     },
     {
       "id": "skin_01",
       "index": 1,
-      "name": "Skin 01",
+      "name": "Neon Riot",
       "unlock_type": "shop",
       "cost": 370
     },
     {
       "id": "skin_02",
       "index": 2,
-      "name": "Skin 02",
+      "name": "Rustline",
       "unlock_type": "shop",
       "cost": 490
     },
     {
       "id": "skin_03",
       "index": 3,
-      "name": "Skin 03",
+      "name": "Ashfang",
       "unlock_type": "shop",
       "cost": 610
     },
     {
       "id": "skin_04",
       "index": 4,
-      "name": "Skin 04",
+      "name": "Volt Drip",
       "unlock_type": "shop",
       "cost": 730
     },
     {
       "id": "skin_05",
       "index": 5,
-      "name": "Skin 05",
+      "name": "Ghost Tape",
       "unlock_type": "shop",
       "cost": 850
     },
     {
       "id": "skin_06",
       "index": 6,
-      "name": "Skin 06",
+      "name": "Toxic Mint",
       "unlock_type": "shop",
       "cost": 970
     },
     {
       "id": "skin_07",
       "index": 7,
-      "name": "Skin 07",
+      "name": "Midnight Jam",
       "unlock_type": "shop",
       "cost": 1090
     },
     {
       "id": "skin_08",
       "index": 8,
-      "name": "Skin 08",
+      "name": "Blazewire",
       "unlock_type": "shop",
       "cost": 1210
     }

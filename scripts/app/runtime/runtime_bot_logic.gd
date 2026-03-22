@@ -95,11 +95,33 @@ func _server_ensure_bots_if_needed() -> void:
 		if ctf_match_controller != null:
 			ctf_match_controller.server_tick(true, 0.0)
 		return
-	if target_dummy_bot_controller == null:
-		return
-	target_dummy_bot_controller.set_lobby_id(lobby_id)
-	if not players.has(target_dummy_bot_controller.peer_id()):
-		target_dummy_bot_controller.ensure_spawned(PLAYER_SCENE, anchor_player.global_position)
+	var human_count := 0
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		if _is_target_dummy_peer(peer_id):
+			continue
+		human_count += 1
+	var max_players := 2
+	var add_bots := true
+	if lobby_service != null and lobby_id > 0 and lobby_service.has_lobby(lobby_id):
+		max_players = lobby_service.max_players_for_lobby(lobby_id)
+		add_bots = lobby_service.add_bots_enabled(lobby_id)
+	var desired_bot_count := 0
+	if add_bots:
+		desired_bot_count = maxi(0, max_players - human_count)
+	desired_bot_count = mini(desired_bot_count, bot_controllers.size())
+	for index in range(bot_controllers.size()):
+		var controller := bot_controllers[index]
+		if controller == null:
+			continue
+		controller.set_lobby_id(lobby_id)
+		var should_exist := index < desired_bot_count
+		if should_exist:
+			if not players.has(controller.peer_id()):
+				controller.ensure_spawned(PLAYER_SCENE, anchor_player.global_position)
+			continue
+		if players.has(controller.peer_id()):
+			_server_remove_player(controller.peer_id(), [])
 
 func _server_tick_target_dummy_bot(delta: float) -> void:
 	if role != Role.SERVER:

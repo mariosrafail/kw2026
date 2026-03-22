@@ -104,6 +104,7 @@ func _server_sync_player_stats(peer_id: int) -> void:
 
 func _server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> void:
 	if _is_target_dummy_peer(attacker_peer_id) or _is_target_dummy_peer(target_peer_id):
+		player_replication.server_emit_kill_feed(attacker_peer_id, target_peer_id)
 		return
 	player_replication.server_register_kill_death(attacker_peer_id, target_peer_id)
 	_update_score_labels()

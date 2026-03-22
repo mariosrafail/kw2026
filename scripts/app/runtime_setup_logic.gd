@@ -176,6 +176,7 @@ func _configure_services() -> void:
 			"send_despawn_player_to_peer": Callable(self, "_send_despawn_player_rpc_to_peer"),
 			"send_sync_player_state": Callable(self, "_send_sync_player_state_rpc"),
 			"send_sync_player_stats": Callable(self, "_send_sync_player_stats_rpc"),
+			"send_kill_feed": Callable(self, "_send_kill_feed_rpc"),
 			"append_log": Callable(self, "_append_log")
 		},
 		{

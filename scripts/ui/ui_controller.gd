@@ -1,6 +1,8 @@
 extends RefCounted
 class_name UiController
 
+const KILL_FEED_FONT := preload("res://assets/fonts/kwfont.ttf")
+
 var start_server_button: Button
 var stop_button: Button
 var connect_button: Button
@@ -33,6 +35,9 @@ var _ctf_join_red_button: Button
 var _ctf_join_blue_button: Button
 var _ctf_start_button: Button
 var _ctf_room_callbacks: Dictionary = {}
+var _kill_feed_root: VBoxContainer
+var _kill_feed_max_entries: int = 4
+var _kill_feed_lifetime_sec: float = 2.4
 
 func configure(refs: Dictionary) -> void:
 	start_server_button = refs.get("start_server_button", null) as Button
@@ -60,6 +65,7 @@ func configure(refs: Dictionary) -> void:
 	lobby_room_bg = refs.get("lobby_room_bg", null) as ColorRect
 	lobby_room_title = refs.get("lobby_room_title", null) as Label
 	_ensure_ctf_room_ui()
+	_ensure_kill_feed_ui()
 
 func update_buttons(
 	has_active_session: bool,
@@ -440,3 +446,97 @@ func _display_order_for_peer(peer_id: int, player_display_names: Dictionary) -> 
 		if suffix.is_valid_int():
 			return int(suffix)
 	return 9999 + peer_id
+
+func push_kill_feed(attacker_name: String, victim_name: String) -> void:
+	_ensure_kill_feed_ui()
+	if _kill_feed_root == null or not is_instance_valid(_kill_feed_root):
+		return
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(430.0, 40.0)
+	panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	panel.scale = Vector2(0.72, 0.72)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.07, 0.15, 0.93)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.border_color = Color(0.16, 0.88, 1.0, 1.0)
+	style.corner_radius_top_left = 2
+	style.corner_radius_top_right = 2
+	style.corner_radius_bottom_right = 2
+	style.corner_radius_bottom_left = 2
+	panel.add_theme_stylebox_override("panel", style)
+
+	var label := Label.new()
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	label.add_theme_font_override("font", KILL_FEED_FONT)
+	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_color_override("font_color", Color(0.94, 0.98, 1.0, 1.0))
+	label.text = "%s has killed %s" % [attacker_name, victim_name]
+	panel.add_child(label)
+
+	_kill_feed_root.add_child(panel)
+	_kill_feed_root.move_child(panel, 0)
+	panel.resized.connect(func() -> void:
+		panel.pivot_offset = panel.size * 0.5
+	, CONNECT_ONE_SHOT)
+
+	while _kill_feed_root.get_child_count() > _kill_feed_max_entries:
+		var old_entry := _kill_feed_root.get_child(_kill_feed_root.get_child_count() - 1)
+		if old_entry != null:
+			old_entry.queue_free()
+
+	var tween := panel.create_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(panel, "modulate:a", 1.0, 0.08)
+	tween.parallel().tween_property(panel, "scale", Vector2(1.08, 1.08), 0.10)
+	tween.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.08)
+	tween.tween_interval(_kill_feed_lifetime_sec)
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(panel, "modulate:a", 0.0, 0.20)
+	tween.tween_callback(panel.queue_free)
+
+func _kill_feed_host_canvas() -> CanvasItem:
+	if ping_label != null and is_instance_valid(ping_label):
+		var ping_parent := ping_label.get_parent()
+		if ping_parent is CanvasItem:
+			return ping_parent as CanvasItem
+	if kd_label != null and is_instance_valid(kd_label):
+		var kd_parent := kd_label.get_parent()
+		if kd_parent is CanvasItem:
+			return kd_parent as CanvasItem
+	if scoreboard_label != null and is_instance_valid(scoreboard_label):
+		var score_parent := scoreboard_label.get_parent()
+		if score_parent is CanvasItem:
+			return score_parent as CanvasItem
+	return null
+
+func _ensure_kill_feed_ui() -> void:
+	if _kill_feed_root != null and is_instance_valid(_kill_feed_root):
+		return
+	var host := _kill_feed_host_canvas()
+	if (host == null or not is_instance_valid(host)) and ping_label != null and is_instance_valid(ping_label):
+		host = ping_label
+	if host == null or not is_instance_valid(host):
+		return
+
+	var root := VBoxContainer.new()
+	root.name = "KillFeedRoot"
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.z_index = 200
+	root.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	root.offset_left = 0.0
+	root.offset_top = 12.0
+	root.offset_right = 0.0
+	root.offset_bottom = 180.0
+	root.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_theme_constant_override("separation", 6)
+	host.add_child(root)
+	_kill_feed_root = root

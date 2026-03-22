@@ -1,5 +1,7 @@
 extends Node
 
+@export var enable_background_motion := false
+
 @onready var sky := $"../Sky" as Sprite2D
 @onready var bg1 := $"../MapBG1" as Sprite2D
 @onready var bg2 := $"../MapBG2" as Sprite2D
@@ -47,11 +49,14 @@ func _process(delta: float) -> void:
 		camera_pos = camera.global_position
 	var drift := camera_pos - _anchor_camera
 	var intro_shift := (1.0 - _intro_weight) * 24.0
+	if not enable_background_motion:
+		drift = Vector2.ZERO
+		intro_shift = 0.0
 
-	_update_sprite("sky", sky, drift, 0.018, Vector2(sin(_time_sec * 0.11) * 14.0, cos(_time_sec * 0.09) * 7.0 - intro_shift * 0.35))
-	_update_sprite("bg3", bg3, drift, 0.032, Vector2(cos(_time_sec * 0.17) * 10.0, sin(_time_sec * 0.13) * 5.0 - intro_shift * 0.6))
-	_update_sprite("bg2", bg2, drift, 0.05, Vector2(sin(_time_sec * 0.21) * 7.0, cos(_time_sec * 0.16) * 4.0 - intro_shift * 0.85))
-	_update_sprite("bg1", bg1, drift, 0.08, Vector2(cos(_time_sec * 0.12) * 4.0, -intro_shift))
+	_update_sprite("sky", sky, drift, 0.018 if enable_background_motion else 0.0, Vector2(sin(_time_sec * 0.11) * 14.0, cos(_time_sec * 0.09) * 7.0 - intro_shift * 0.35) if enable_background_motion else Vector2.ZERO)
+	_update_sprite("bg3", bg3, drift, 0.032 if enable_background_motion else 0.0, Vector2(cos(_time_sec * 0.17) * 10.0, sin(_time_sec * 0.13) * 5.0 - intro_shift * 0.6) if enable_background_motion else Vector2.ZERO)
+	_update_sprite("bg2", bg2, drift, 0.05 if enable_background_motion else 0.0, Vector2(sin(_time_sec * 0.21) * 7.0, cos(_time_sec * 0.16) * 4.0 - intro_shift * 0.85) if enable_background_motion else Vector2.ZERO)
+	_update_sprite("bg1", bg1, drift, 0.08 if enable_background_motion else 0.0, Vector2(cos(_time_sec * 0.12) * 4.0, -intro_shift) if enable_background_motion else Vector2.ZERO)
 	_update_sprite("front", map_front, Vector2.ZERO, 0.0, Vector2.ZERO)
 
 	_update_layer_modulates()

@@ -81,6 +81,12 @@ func _send_sync_player_stats_rpc(target_peer_id: int, peer_id: int, kills: int, 
 		return
 	_rpc_sync_player_stats.rpc_id(target_peer_id, peer_id, kills, deaths)
 
+func _send_kill_feed_rpc(target_peer_id: int, attacker_name: String, victim_name: String) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		_rpc_kill_feed(attacker_name, victim_name)
+		return
+	_rpc_kill_feed.rpc_id(target_peer_id, attacker_name, victim_name)
+
 func _send_input_rpc(axis: float, jump_pressed: bool, jump_held: bool, aim_world: Vector2, shoot_held: bool, boost_damage: bool, reported_rtt_ms: int) -> void:
 	_rpc_submit_input.rpc_id(1, axis, jump_pressed, jump_held, aim_world, shoot_held, boost_damage, reported_rtt_ms)
 

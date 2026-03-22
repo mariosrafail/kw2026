@@ -14,9 +14,9 @@ static var _runtime_session_api_base_url := ""
 
 func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	resolve_auth_profile(host)
-	host.set("_auth_api_base_url", str(ProjectSettings.get_setting("kw/auth_api_base_url", api_base_url_default)).strip_edges())
+	host.set("_auth_api_base_url", _normalize_api_base_url(str(ProjectSettings.get_setting("kw/auth_api_base_url", api_base_url_default)).strip_edges()))
 	if str(host.get("_auth_api_base_url")).is_empty():
-		host.set("_auth_api_base_url", api_base_url_default)
+		host.set("_auth_api_base_url", _normalize_api_base_url(api_base_url_default))
 	if str(host.get("_auth_api_base_url")).ends_with("/"):
 		var trimmed := str(host.get("_auth_api_base_url"))
 		host.set("_auth_api_base_url", trimmed.substr(0, trimmed.length() - 1))
@@ -651,7 +651,7 @@ func auth_restore_runtime_session(host: Control) -> bool:
 			auth_user_input.text = username
 	var api_base := str(_runtime_session_api_base_url).strip_edges()
 	if not api_base.is_empty():
-		host.set("_auth_api_base_url", api_base)
+		host.set("_auth_api_base_url", _normalize_api_base_url(api_base))
 		auth_rebuild_login_base_candidates(host)
 	return true
 
@@ -699,7 +699,7 @@ func auth_restore_persisted_session(host: Control) -> bool:
 		return false
 	_runtime_session_token = token
 	_runtime_session_username = str(payload.get("username", "")).strip_edges()
-	_runtime_session_api_base_url = str(payload.get("api_base_url", "")).strip_edges()
+	_runtime_session_api_base_url = _normalize_api_base_url(str(payload.get("api_base_url", "")).strip_edges())
 	return auth_restore_runtime_session(host)
 
 func auth_save_persisted_session(host: Control) -> void:
@@ -730,6 +730,14 @@ func auth_clear_persisted_session(host: Control) -> void:
 	var path := session_path(host)
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+func _normalize_api_base_url(raw: String) -> String:
+	var api_base := raw.strip_edges().trim_suffix("/")
+	if api_base.is_empty():
+		return api_base
+	if api_base == "http://127.0.0.1:8090" or api_base == "http://localhost:8090":
+		return "http://127.0.0.1:8081/auth"
+	return api_base
 
 func copy_weapon_skins_dict(src: Dictionary) -> Dictionary:
 	var out: Dictionary = {}

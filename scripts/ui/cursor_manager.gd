@@ -49,7 +49,8 @@ var _shoot_feedback_until_msec := 0
 var _pixel_tex: Texture2D
 
 func _ready() -> void:
-	layer = 200
+	# Keep custom cursor above all regular UI/game canvas content.
+	layer = 10000
 	_process(true)
 	_setup_crosshair()
 	_hide_system_cursor_if_visible()

@@ -149,7 +149,7 @@ func _server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 	if effective_lobby <= 0:
 		return
 	if _uses_lobby_scene_flow():
-		if _ctf_room_holds_in_lobby(effective_lobby):
+		if _ctf_room_holds_in_lobby(effective_lobby) or _deathmatch_room_holds_in_lobby(effective_lobby):
 			_server_send_lobby_room_state_to_peer(peer_id, effective_lobby)
 			return
 		var lobby_map_id := _lobby_map_id(effective_lobby)
@@ -157,6 +157,9 @@ func _server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 			lobby_map_id = selected_map_id
 		_server_switch_lobby_to_map_scene(effective_lobby, lobby_map_id, peer_id)
 		return
+	if _ctf_enabled():
+		# Ensure CTF team mapping is loaded before selecting spawn positions.
+		_assign_ctf_teams(effective_lobby)
 	combat_flow_service.server_spawn_peer_if_needed(peer_id, effective_lobby)
 	if _ctf_enabled() and peer_id > 0:
 		for controller in bot_controllers:
@@ -214,8 +217,11 @@ func _server_send_lobby_list_to_peer(peer_id: int) -> void:
 		active_lobby_id = 0
 	if peer_id == multiplayer.get_unique_id():
 		_rpc_lobby_list(packed_entries, active_lobby_id)
-		return
-	_rpc_lobby_list.rpc_id(peer_id, packed_entries, active_lobby_id)
+	else:
+		_rpc_lobby_list.rpc_id(peer_id, packed_entries, active_lobby_id)
+	if _uses_lobby_scene_flow() and active_lobby_id > 0:
+		if _ctf_room_holds_in_lobby(active_lobby_id) or _deathmatch_room_holds_in_lobby(active_lobby_id):
+			_server_send_lobby_room_state_to_peer(peer_id, active_lobby_id)
 
 func _server_broadcast_lobby_list() -> void:
 	for peer_id in multiplayer.get_peers():

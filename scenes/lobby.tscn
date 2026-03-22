@@ -179,7 +179,7 @@ border_color = Color(0.13, 0.34, 0.4, 0.72)
 shadow_color = Color(0, 0.03, 0.05, 0.22)
 shadow_size = 3
 
-[node name="Main3" type="Control" unique_id=1687769045]
+[node name="GameRoot" type="Control" unique_id=1687769045]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

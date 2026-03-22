@@ -14,7 +14,7 @@ const UI_ANIMATOR_SCRIPT := preload("res://scripts/ui/main_menu/ui_animator.gd")
 const MENU_TRANSITION_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/menu_transition_controller.gd")
 const IDLE_ANIMATOR_SCRIPT := preload("res://scripts/ui/main_menu/idle_animator.gd")
 const SHOP_CONTROLLER_SCRIPT := preload("res://scripts/ui/main_menu/shop_controller.gd")
-const AUTH_API_BASE_URL_DEFAULT := "http://85.75.243.92:8081/auth"
+const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8081/auth"
 
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
@@ -612,22 +612,29 @@ func _input(event: InputEvent) -> void:
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE:
 			if _confirm_overlay_ui != null and _confirm_overlay_ui.visible:
 				_confirm_overlay_ui.visible = false
+				get_viewport().set_input_as_handled()
 				return
 			if _lobby_overlay_ctrl != null and _lobby_overlay_ctrl.is_visible():
 				_lobby_overlay_ctrl.hide()
+				get_viewport().set_input_as_handled()
 				return
 			if _current_screen == screen_weapons:
-				_close_weapons_menu()
+				_on_weapons_back_pressed()
+				get_viewport().set_input_as_handled()
 				return
 			if _current_screen == screen_warriors:
-				_close_warriors_menu()
+				_on_warriors_back_pressed()
+				get_viewport().set_input_as_handled()
 				return
 			if _current_screen == screen_options:
-				_switch_to(screen_main, -1)
+				_on_options_back_pressed()
+				get_viewport().set_input_as_handled()
 				return
+			get_viewport().set_input_as_handled()
 			get_tree().quit()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_F4:
 			_toggle_fullscreen()
+			get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Fallback in case UI consumes events on some editor runs.
@@ -669,6 +676,7 @@ func _play_intro_animation_safe() -> void:
 
 func _ensure_auth_logout_button() -> void:
 	if _auth_logout_button != null and is_instance_valid(_auth_logout_button):
+		_layout_auth_logout_button()
 		return
 	if screen_main == null:
 		return
@@ -679,13 +687,13 @@ func _ensure_auth_logout_button() -> void:
 	btn.z_index = 210
 	btn.custom_minimum_size = Vector2(172, 30)
 	btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	btn.offset_left = 10.0
-	btn.offset_top = 60.0
-	btn.offset_right = 182.0
-	btn.offset_bottom = 90.0
+	btn.offset_left = 0.0
+	btn.offset_top = 0.0
+	btn.offset_right = 0.0
+	btn.offset_bottom = 0.0
 	screen_main.add_child(btn)
-	_center_pivot(btn)
 	_auth_logout_button = btn
+	_layout_auth_logout_button()
 
 func _connect_signals() -> void:
 	warrior_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -709,12 +717,9 @@ func _connect_signals() -> void:
 	warrior_button.pressed.connect(_open_warriors_menu)
 	weapon_button.pressed.connect(_open_weapons_menu)
 
-	options_back_button.pressed.connect(func() -> void:
-		_button_press_anim(options_back_button)
-		_switch_to(screen_main, -1)
-	)
-	warriors_back_button.pressed.connect(_close_warriors_menu)
-	weapons_back_button.pressed.connect(_close_weapons_menu)
+	options_back_button.pressed.connect(_on_options_back_pressed)
+	warriors_back_button.pressed.connect(_on_warriors_back_pressed)
+	weapons_back_button.pressed.connect(_on_weapons_back_pressed)
 
 	warrior_action_button.pressed.connect(_on_warrior_action_pressed)
 	weapon_action_button.pressed.connect(_on_weapon_action_pressed)
@@ -758,6 +763,39 @@ func _on_exit_pressed() -> void:
 
 func _on_auth_logout_pressed() -> void:
 	_auth_flow.auth_on_logout_pressed(self)
+
+func _on_options_back_pressed() -> void:
+	_button_press_anim(options_back_button)
+	_switch_to(screen_main, -1)
+
+func _on_warriors_back_pressed() -> void:
+	_button_press_anim(warriors_back_button)
+	_close_warriors_menu()
+
+func _on_weapons_back_pressed() -> void:
+	_button_press_anim(weapons_back_button)
+	_close_weapons_menu()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_layout_auth_logout_button()
+
+func _layout_auth_logout_button() -> void:
+	if _auth_logout_button == null or not is_instance_valid(_auth_logout_button):
+		return
+	if screen_main == null:
+		return
+	var btn_size := _auth_logout_button.size
+	if btn_size.x <= 0.0 or btn_size.y <= 0.0:
+		btn_size = _auth_logout_button.custom_minimum_size
+	if btn_size.x <= 0.0 or btn_size.y <= 0.0:
+		call_deferred("_layout_auth_logout_button")
+		return
+	var margin_bottom: float = 14.0
+	var x: float = floorf((screen_main.size.x - btn_size.x) * 0.5)
+	var y: float = floorf(screen_main.size.y - btn_size.y - margin_bottom)
+	_auth_logout_button.position = Vector2(maxf(0.0, x), maxf(0.0, y))
+	_center_pivot(_auth_logout_button)
 
 func _switch_to(target: Control, direction: int) -> void:
 	if target == null:
@@ -855,6 +893,8 @@ func _open_warriors_menu_stage2() -> void:
 	_menu_transition_ctrl.open_warriors_menu_stage2(warriors_menu_preview_scale_mult, _warrior_shop_preview_base_scale)
 
 func _close_warriors_menu() -> void:
+	if _current_screen != screen_warriors:
+		return
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
@@ -873,6 +913,8 @@ func _open_weapons_menu_stage2() -> void:
 	_menu_transition_ctrl.open_weapons_menu_stage2(_pending_weapon_id, _pending_weapon_skin, WEAPON_UZI)
 
 func _close_weapons_menu() -> void:
+	if _current_screen != screen_weapons:
+		return
 	_sync_visible_weapon_from_preview()
 	_pending_weapon_id = _visible_weapon_id
 	_pending_weapon_skin = _visible_weapon_skin

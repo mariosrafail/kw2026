@@ -32,7 +32,7 @@ func ensure_attached(tree: SceneTree) -> void:
 	if get_parent() != root:
 		if get_parent() != null:
 			get_parent().remove_child(self)
-		name = "Main3"
+		name = "GameRoot"
 		root.add_child(self)
 	_log("ensure_attached parent=%s" % str(get_parent()))
 	_bind_multiplayer_signals()
@@ -84,6 +84,11 @@ func is_connected_to_server() -> bool:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return false
 	return multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+
+func is_connecting_to_server() -> bool:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return false
+	return multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING
 
 func request_lobby_list() -> bool:
 	if not _can_send_server_rpc():
@@ -182,6 +187,22 @@ func set_lobby_team(team_id: int) -> bool:
 		return false
 	_log("set_lobby_team rpc_id(1) team_id=%d" % team_id)
 	_rpc_lobby_set_team.rpc_id(1, team_id)
+	return true
+
+func set_lobby_ready(ready: bool) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_lobby_ready blocked can_send=false")
+		return false
+	_log("set_lobby_ready rpc_id(1) ready=%s" % str(ready))
+	_rpc_lobby_set_ready.rpc_id(1, ready)
+	return true
+
+func set_lobby_add_bots(enabled: bool) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_lobby_add_bots blocked can_send=false")
+		return false
+	_log("set_lobby_add_bots rpc_id(1) enabled=%s" % str(enabled))
+	_rpc_lobby_set_add_bots.rpc_id(1, enabled)
 	return true
 
 func start_lobby_match() -> bool:
@@ -285,6 +306,10 @@ func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity
 
 @rpc("authority", "reliable")
 func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
 	pass
 
 @rpc("any_peer", "unreliable_ordered")
@@ -461,6 +486,14 @@ func _rpc_lobby_set_team(_team_id: int) -> void:
 	pass
 
 @rpc("any_peer", "reliable")
+func _rpc_lobby_set_ready(_ready: bool) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
 func _rpc_lobby_start_match() -> void:
 	pass
 
@@ -519,5 +552,5 @@ func _complete_rpc_root_handoff() -> void:
 		tree.process_frame.connect(Callable(self, "_complete_rpc_root_handoff"), CONNECT_ONE_SHOT)
 		return
 	name = "LobbyRpcBridge"
-	current.name = "Main3"
+	current.name = "GameRoot"
 	queue_free()

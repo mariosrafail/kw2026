@@ -140,6 +140,8 @@ func create_lobby(
 		"mode_id": mode_id,
 		"owner_peer_id": peer_id,
 		"started": false,
+		"ready_by_peer": {peer_id: false},
+		"add_bots": false,
 		"team_by_peer": {peer_id: TEAM_RED} if mode_id == "ctf" else {}
 	}
 	_global_peer_lobby_by_peer[peer_id] = lobby_id
@@ -168,6 +170,12 @@ func is_ctf_lobby(lobby_id: int) -> bool:
 		return false
 	return str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower() == "ctf"
 
+func is_deathmatch_lobby(lobby_id: int) -> bool:
+	var lobby := get_lobby_data(lobby_id)
+	if lobby.is_empty():
+		return false
+	return str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower() == "deathmatch"
+
 func lobby_started(lobby_id: int) -> bool:
 	var lobby := get_lobby_data(lobby_id)
 	if lobby.is_empty():
@@ -180,6 +188,91 @@ func set_lobby_started(lobby_id: int, started: bool) -> void:
 	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
 	lobby["started"] = started
 	_global_server_lobbies[lobby_id] = lobby
+
+func ready_for_peer(lobby_id: int, peer_id: int) -> bool:
+	if peer_id <= 0:
+		return false
+	var lobby := get_lobby_data(lobby_id)
+	if lobby.is_empty():
+		return false
+	var ready_by_peer := lobby.get("ready_by_peer", {}) as Dictionary
+	return bool(ready_by_peer.get(peer_id, false))
+
+func set_peer_ready(lobby_id: int, peer_id: int, ready: bool) -> bool:
+	if peer_id <= 0:
+		return false
+	if not _global_server_lobbies.has(lobby_id):
+		return false
+	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
+	var members := get_lobby_members(lobby_id)
+	if not members.has(peer_id):
+		return false
+	var ready_by_peer := (lobby.get("ready_by_peer", {}) as Dictionary).duplicate(true)
+	ready_by_peer[peer_id] = bool(ready)
+	lobby["ready_by_peer"] = ready_by_peer
+	_global_server_lobbies[lobby_id] = lobby
+	return true
+
+func all_humans_ready(lobby_id: int) -> bool:
+	var members := get_lobby_members(lobby_id)
+	if members.is_empty():
+		return false
+	for member_value in members:
+		var peer_id := int(member_value)
+		if peer_id <= 0:
+			continue
+		if not ready_for_peer(lobby_id, peer_id):
+			return false
+	return true
+
+func all_non_owner_humans_ready(lobby_id: int) -> bool:
+	var members := get_lobby_members(lobby_id)
+	if members.is_empty():
+		return false
+	var owner_peer_id := owner_peer_for_lobby(lobby_id)
+	for member_value in members:
+		var peer_id := int(member_value)
+		if peer_id <= 0:
+			continue
+		if peer_id == owner_peer_id:
+			continue
+		if not ready_for_peer(lobby_id, peer_id):
+			return false
+	return true
+
+func set_add_bots_enabled(lobby_id: int, owner_peer_id: int, enabled: bool) -> bool:
+	if not _global_server_lobbies.has(lobby_id):
+		return false
+	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
+	if int(lobby.get("owner_peer_id", 0)) != owner_peer_id:
+		return false
+	lobby["add_bots"] = bool(enabled)
+	_global_server_lobbies[lobby_id] = lobby
+	return true
+
+func add_bots_enabled(lobby_id: int) -> bool:
+	var lobby := get_lobby_data(lobby_id)
+	if lobby.is_empty():
+		return false
+	return bool(lobby.get("add_bots", false))
+
+func can_start_deathmatch_lobby(lobby_id: int) -> bool:
+	if not is_deathmatch_lobby(lobby_id):
+		return false
+	if lobby_started(lobby_id):
+		return false
+	if not all_non_owner_humans_ready(lobby_id):
+		return false
+	return get_lobby_members(lobby_id).size() > 0
+
+func can_start_ctf_lobby(lobby_id: int) -> bool:
+	if not is_ctf_lobby(lobby_id):
+		return false
+	if lobby_started(lobby_id):
+		return false
+	if not all_non_owner_humans_ready(lobby_id):
+		return false
+	return get_lobby_members(lobby_id).size() > 0
 
 func team_assignments_for_lobby(lobby_id: int) -> Dictionary:
 	var lobby := get_lobby_data(lobby_id)
@@ -281,30 +374,54 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 		return {
 			"lobby_id": 0,
 			"mode_id": "deathmatch",
+			"ready_by_peer": {},
+			"members": [],
+			"all_ready": false,
+			"can_start": false,
+			"add_bots": false,
+			"human_count": 0,
+			"max_players": 0,
 			"teams": {"red": [], "blue": []}
 		}
 	var members := get_lobby_members(lobby_id)
 	var teams := team_assignments_for_lobby(lobby_id)
+	var ready_by_peer := (lobby.get("ready_by_peer", {}) as Dictionary).duplicate(true)
 	var red_members: Array = []
 	var blue_members: Array = []
+	var member_entries: Array = []
 	for member_value in members:
 		var peer_id := int(member_value)
 		var entry := {
 			"peer_id": peer_id,
 			"display_name": get_peer_display_name(peer_id, "P%d" % peer_id),
-			"team_id": team_for_peer(lobby_id, peer_id)
+			"team_id": team_for_peer(lobby_id, peer_id),
+			"ready": bool(ready_by_peer.get(peer_id, false))
 		}
+		member_entries.append(entry)
 		if int(entry.get("team_id", -1)) == TEAM_BLUE:
 			blue_members.append(entry)
 		else:
 			red_members.append(entry)
+	var mode_id := str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower()
+	var can_start := false
+	if mode_id == "deathmatch":
+		can_start = can_start_deathmatch_lobby(lobby_id)
+	elif mode_id == "ctf":
+		can_start = can_start_ctf_lobby(lobby_id)
 	return {
 		"lobby_id": lobby_id,
 		"name": str(lobby.get("name", "Lobby %d" % lobby_id)),
 		"map_id": str(lobby.get("map_id", "classic")).strip_edges().to_lower(),
-		"mode_id": str(lobby.get("mode_id", "deathmatch")).strip_edges().to_lower(),
+		"mode_id": mode_id,
 		"owner_peer_id": int(lobby.get("owner_peer_id", 0)),
 		"started": bool(lobby.get("started", false)),
+		"ready_by_peer": ready_by_peer,
+		"members": member_entries,
+		"all_ready": all_non_owner_humans_ready(lobby_id),
+		"can_start": can_start,
+		"add_bots": bool(lobby.get("add_bots", false)),
+		"human_count": members.size(),
+		"max_players": max_players_for_lobby(lobby_id),
 		"team_by_peer": teams,
 		"teams": {
 			"red": red_members,
@@ -460,6 +577,16 @@ func set_lobby_members(lobby_id: int, members: Array) -> void:
 			continue
 		teams.erase(peer_id)
 	lobby["team_by_peer"] = teams
+	var ready_by_peer := (lobby.get("ready_by_peer", {}) as Dictionary).duplicate(true)
+	for peer_value in ready_by_peer.keys():
+		var peer_id := int(peer_value)
+		if members.has(peer_id):
+			continue
+		ready_by_peer.erase(peer_id)
+	for member_value in members:
+		var member_id := int(member_value)
+		ready_by_peer[member_id] = false
+	lobby["ready_by_peer"] = ready_by_peer
 	_global_server_lobbies[lobby_id] = lobby
 
 func remove_lobby(lobby_id: int) -> void:

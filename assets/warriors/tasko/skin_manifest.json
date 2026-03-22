@@ -13,28 +13,28 @@
     {
       "id": "default",
       "index": 0,
-      "name": "Default",
+      "name": "Forge Base",
       "unlock_type": "free",
       "cost": 0
     },
     {
       "id": "skin_01",
       "index": 1,
-      "name": "Skin 01",
+      "name": "Iron Bloom",
       "unlock_type": "shop",
       "cost": 420
     },
     {
       "id": "skin_02",
       "index": 2,
-      "name": "Skin 02",
+      "name": "Sand Spark",
       "unlock_type": "shop",
       "cost": 560
     },
     {
       "id": "skin_03",
       "index": 3,
-      "name": "Skin 03",
+      "name": "Copper Storm",
       "unlock_type": "shop",
       "cost": 720
     }

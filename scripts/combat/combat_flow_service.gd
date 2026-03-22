@@ -44,7 +44,7 @@ var broadcast_player_state_cb: Callable = Callable()
 var max_reported_rtt_ms := 300
 var snapshot_rate := 30.0
 var weapon_id_ak47 := "ak47"
-var max_input_stale_ms := 120
+var max_input_stale_ms := 40
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary

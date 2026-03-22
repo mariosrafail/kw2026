@@ -2,6 +2,7 @@ extends RefCounted
 class_name RuntimeAuthFlow
 
 const AUTH_SESSION_PATH := "user://auth_session.json"
+const MAIN_MENU_AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_API_BASE_URL_SETTING := "kw/auth_api_base_url"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
@@ -105,17 +106,21 @@ func auth_logout_best_effort(host: Node) -> void:
 		host.set("_auth_logout_token", "")
 
 func auth_api_base_url(host: Node) -> String:
-	var configured := str(ProjectSettings.get_setting(AUTH_API_BASE_URL_SETTING, "http://85.75.243.92:8081/auth")).strip_edges()
+	var configured := str(ProjectSettings.get_setting(AUTH_API_BASE_URL_SETTING, "http://127.0.0.1:8081/auth")).strip_edges()
 	if configured.is_empty():
-		configured = "http://85.75.243.92:8081/auth"
+		configured = "http://127.0.0.1:8081/auth"
 	return configured.trim_suffix("/")
 
 func load_auth_session(host: Node) -> void:
 	var path := session_path(host)
 	if not FileAccess.file_exists(path):
-		host.set("auth_token", "")
-		host.set("auth_username", "")
-		return
+		var main_menu_path := _main_menu_session_path(host)
+		if FileAccess.file_exists(main_menu_path):
+			path = main_menu_path
+		else:
+			host.set("auth_token", "")
+			host.set("auth_username", "")
+			return
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return
@@ -163,6 +168,11 @@ func session_path(host: Node) -> String:
 	if str(host.get("_auth_profile")) == "default":
 		return AUTH_SESSION_PATH
 	return "user://auth_session_%s.json" % str(host.get("_auth_profile"))
+
+func _main_menu_session_path(host: Node) -> String:
+	if str(host.get("_auth_profile")) == "default":
+		return MAIN_MENU_AUTH_SESSION_PATH
+	return "user://main_menu_auth_session_%s.json" % str(host.get("_auth_profile"))
 
 func auth_me(host: Node) -> void:
 	if bool(host.get("_auth_inflight")):

@@ -17,6 +17,8 @@ var local_reconcile_snap_distance := 180.0
 var local_reconcile_vertical_snap_distance := 6.0
 var local_reconcile_pos_blend := 0.18
 var local_reconcile_vel_blend := 0.35
+var local_reconcile_stop_x_threshold := 1.0
+var local_reconcile_hard_stop_no_input := true
 
 var get_peer_lobby_cb: Callable = Callable()
 var get_lobby_members_cb: Callable = Callable()
@@ -30,6 +32,7 @@ var send_despawn_player_all_cb: Callable = Callable()
 var send_despawn_player_to_peer_cb: Callable = Callable()
 var send_sync_player_state_cb: Callable = Callable()
 var send_sync_player_stats_cb: Callable = Callable()
+var send_kill_feed_cb: Callable = Callable()
 var append_log_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
@@ -55,6 +58,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_despawn_player_to_peer_cb = callbacks.get("send_despawn_player_to_peer", Callable()) as Callable
 	send_sync_player_state_cb = callbacks.get("send_sync_player_state", Callable()) as Callable
 	send_sync_player_stats_cb = callbacks.get("send_sync_player_stats", Callable()) as Callable
+	send_kill_feed_cb = callbacks.get("send_kill_feed", Callable()) as Callable
 	append_log_cb = callbacks.get("append_log", Callable()) as Callable
 
 	max_input_packets_per_sec = int(config.get("max_input_packets_per_sec", max_input_packets_per_sec))
@@ -63,6 +67,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	local_reconcile_vertical_snap_distance = float(config.get("local_reconcile_vertical_snap_distance", local_reconcile_vertical_snap_distance))
 	local_reconcile_pos_blend = float(config.get("local_reconcile_pos_blend", local_reconcile_pos_blend))
 	local_reconcile_vel_blend = float(config.get("local_reconcile_vel_blend", local_reconcile_vel_blend))
+	local_reconcile_stop_x_threshold = float(config.get("local_reconcile_stop_x_threshold", local_reconcile_stop_x_threshold))
+	local_reconcile_hard_stop_no_input = bool(config.get("local_reconcile_hard_stop_no_input", local_reconcile_hard_stop_no_input))
 
 func ensure_player_stats(peer_id: int) -> Dictionary:
 	if player_stats.has(peer_id):
@@ -99,6 +105,30 @@ func server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> v
 		attacker_stats["kills"] = int(attacker_stats.get("kills", 0)) + 1
 		player_stats[attacker_peer_id] = attacker_stats
 		server_sync_player_stats(attacker_peer_id)
+
+	_broadcast_kill_feed(attacker_peer_id, target_peer_id)
+
+func server_emit_kill_feed(attacker_peer_id: int, target_peer_id: int) -> void:
+	_broadcast_kill_feed(attacker_peer_id, target_peer_id)
+
+func _broadcast_kill_feed(attacker_peer_id: int, target_peer_id: int) -> void:
+	var lobby_id := _peer_lobby(target_peer_id)
+	if lobby_id <= 0 and attacker_peer_id > 0:
+		lobby_id = _peer_lobby(attacker_peer_id)
+	if not send_kill_feed_cb.is_valid():
+		return
+	var attacker_name := _player_display_name(attacker_peer_id) if attacker_peer_id > 0 else "Unknown"
+	var victim_name := _player_display_name(target_peer_id)
+	var recipients: Array = []
+	if lobby_id > 0:
+		recipients = _lobby_members(lobby_id)
+	if recipients.is_empty():
+		recipients = players.keys()
+	for member_value in recipients:
+		var recipient_peer_id := int(member_value)
+		if recipient_peer_id <= 0:
+			continue
+		send_kill_feed_cb.call(recipient_peer_id, attacker_name, victim_name)
 
 func server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 	if not send_sync_player_state_cb.is_valid():
@@ -313,6 +343,14 @@ func client_apply_state_snapshot(
 		else:
 			player.global_position = player.global_position.lerp(new_position, local_reconcile_pos_blend)
 			player.velocity = player.velocity.lerp(new_velocity, local_reconcile_vel_blend)
+		# Prevent horizontal "micro-slide" after release during local reconciliation.
+		if absf(new_velocity.x) <= local_reconcile_stop_x_threshold:
+			player.velocity.x = 0.0
+		if local_reconcile_hard_stop_no_input:
+			var local_axis := Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
+			if absf(local_axis) <= 0.001 and absf(new_velocity.x) <= local_reconcile_stop_x_threshold:
+				player.velocity.x = 0.0
+				player.global_position.x = new_position.x
 		var applied_delta := player.global_position - prev_position
 		if applied_delta.length_squared() > 0.0001:
 			if new_velocity.y < -1.0:

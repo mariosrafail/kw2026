@@ -264,6 +264,10 @@ func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity
 func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 	pass
 
+@rpc("authority", "reliable")
+func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
+	pass
+
 @rpc("any_peer", "unreliable_ordered")
 func _rpc_submit_input(_axis: float, _jump_pressed: bool, _jump_held: bool, _aim_world: Vector2, _shoot_held: bool, _boost_damage: bool, _reported_rtt_ms: int) -> void:
 	pass
@@ -398,6 +402,14 @@ func _rpc_scene_switch_to_map(_map_id: String) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_lobby_set_team(_team_id: int) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_ready(_ready: bool) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
 	pass
 
 @rpc("any_peer", "reliable")

@@ -46,13 +46,33 @@ func get_spawn_slot_for_peer(peer_id: int) -> int:
 			used_slots[int(spawn_slots[other_peer_id])] = true
 
 	var slot_count := maxi(1, spawn_points.size())
-	var assigned_slot := 0
-	for i in range(slot_count):
-		if not used_slots.has(i):
-			assigned_slot = i
-			break
+	var assigned_slot := _best_available_slot(used_slots, slot_count)
 	spawn_slots[peer_id] = assigned_slot
 	return assigned_slot
+
+func _best_available_slot(used_slots: Dictionary, slot_count: int) -> int:
+	if slot_count <= 0:
+		return 0
+	# First participant in lobby keeps deterministic slot 0.
+	if used_slots.is_empty():
+		return 0
+	# Choose the available spawn that is farthest from already used spawns.
+	# This prevents 1v1 opponents from spawning side-by-side.
+	var best_slot := 0
+	var best_score := -1.0
+	for candidate in range(slot_count):
+		if used_slots.has(candidate):
+			continue
+		var candidate_pos := spawn_position_for_slot(candidate)
+		var min_dist_sq := INF
+		for used_value in used_slots.keys():
+			var used_slot := int(used_value)
+			var used_pos := spawn_position_for_slot(used_slot)
+			min_dist_sq = minf(min_dist_sq, candidate_pos.distance_squared_to(used_pos))
+		if min_dist_sq > best_score:
+			best_score = min_dist_sq
+			best_slot = candidate
+	return best_slot
 
 func ensure_player_display_name(peer_id: int) -> String:
 	if player_display_names.has(peer_id):
