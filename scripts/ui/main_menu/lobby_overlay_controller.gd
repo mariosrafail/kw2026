@@ -441,7 +441,26 @@ func _try_next_connect_candidate() -> void:
 	_connect_candidate_index += 1
 	_log("try_next_connect_candidate next_index=%d total=%d" % [_connect_candidate_index, _connect_candidates.size()])
 	if _connect_candidate_index >= _connect_candidates.size():
-		var had_pending_create := not _pending_create_request.is_empty()
+		var pending_request := _pending_create_request.duplicate(true)
+		var had_pending_create := not pending_request.is_empty()
+		if had_pending_create and _rpc_bridge != null:
+			var map_id := str(pending_request.get("map_id", "")).strip_edges().to_lower()
+			var mode_id := str(pending_request.get("mode_id", "deathmatch")).strip_edges().to_lower()
+			_log("all connect candidates exhausted; pending create -> LOCAL fallback map=%s mode=%s" % [map_id, mode_id])
+			var hosted_local := bool(_rpc_bridge.call("host_local_match", map_id, mode_id))
+			_log("local fallback host_local_match hosted=%s" % str(hosted_local))
+			if hosted_local:
+				_pending_create_request = {}
+				_action_inflight = false
+				_lobby_list_ready = true
+				_connect_nonce += 1
+				if _overlay != null:
+					_overlay.visible = false
+				set_interaction_enabled(true)
+				if _on_closed.is_valid():
+					_on_closed.call()
+				_refresh_lobby_buttons_state()
+				return
 		_pending_create_request = {}
 		_action_inflight = false
 		_lobby_list_ready = true

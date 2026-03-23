@@ -3,12 +3,24 @@ extends "res://scripts/app/runtime_world_logic.gd"
 
 const PIXEL_FONT := preload("res://assets/fonts/kwfont.ttf")
 const RUNTIME_AUTH_FLOW_SCRIPT := preload("res://scripts/app/runtime_auth_flow.gd")
+const RUNTIME_SESSION_AUTH_UI_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_auth_ui_controller.gd")
+const RUNTIME_SESSION_AUTH_RESPONSE_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_auth_response_controller.gd")
+const RUNTIME_SESSION_PROFILE_WALLET_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_profile_wallet_controller.gd")
+const RUNTIME_SESSION_DROPDOWN_THEME_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_dropdown_theme_controller.gd")
+const RUNTIME_SESSION_LOBBY_CONNECTION_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_lobby_connection_controller.gd")
+const RUNTIME_SESSION_PURCHASE_FLOW_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_purchase_flow_controller.gd")
+const RUNTIME_SESSION_LOBBY_ACTIONS_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_lobby_actions_controller.gd")
+const RUNTIME_SESSION_LOBBY_SELECTION_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_lobby_selection_controller.gd")
 
-var _pixel_popup_panel_stylebox: StyleBoxFlat = null
-var _pixel_popup_hover_stylebox: StyleBoxFlat = null
-var _pixel_popup_separator_stylebox: StyleBoxFlat = null
-var _pixel_empty_icon_texture: Texture2D = null
-var _runtime_auth_flow = RUNTIME_AUTH_FLOW_SCRIPT.new()
+var _runtime_auth_flow: Object = RUNTIME_AUTH_FLOW_SCRIPT.new()
+var _runtime_session_auth_ui_controller: Object = RUNTIME_SESSION_AUTH_UI_CONTROLLER_SCRIPT.new()
+var _runtime_session_auth_response_controller: Object = RUNTIME_SESSION_AUTH_RESPONSE_CONTROLLER_SCRIPT.new()
+var _runtime_session_profile_wallet_controller: Object = RUNTIME_SESSION_PROFILE_WALLET_CONTROLLER_SCRIPT.new()
+var _runtime_session_dropdown_theme_controller: Object = RUNTIME_SESSION_DROPDOWN_THEME_CONTROLLER_SCRIPT.new()
+var _runtime_session_lobby_connection_controller: Object = RUNTIME_SESSION_LOBBY_CONNECTION_CONTROLLER_SCRIPT.new()
+var _runtime_session_purchase_flow_controller: Object = RUNTIME_SESSION_PURCHASE_FLOW_CONTROLLER_SCRIPT.new()
+var _runtime_session_lobby_actions_controller: Object = RUNTIME_SESSION_LOBBY_ACTIONS_CONTROLLER_SCRIPT.new()
+var _runtime_session_lobby_selection_controller: Object = RUNTIME_SESSION_LOBBY_SELECTION_CONTROLLER_SCRIPT.new()
 
 var _auth_inflight := false
 var _auth_pending_action := ""
@@ -114,46 +126,13 @@ func _configure_auth_ui_for_login_only() -> void:
 	_runtime_auth_flow.configure_auth_ui_for_login_only(self)
 
 func _try_dev_auto_login_if_needed() -> bool:
-	if not dev_auto_login_on_autostart:
-		return false
-	if auth_request == null:
-		return false
-	if _auth_inflight:
-		return false
-	if _dev_auto_login_attempts >= maxi(1, dev_auto_login_max_attempts):
-		return false
-
-	_dev_auto_login_active = true
-	_dev_auto_login_attempts += 1
-	var username := dev_auto_login_username.strip_edges()
-	if username.is_empty():
-		var suffix := "%06d" % int(randi() % 1000000)
-		username = ("auto_%s" % suffix).strip_edges()
-	var password := str(dev_auto_login_password)
-	if password.length() < 4:
-		password = "test"
-
-	if auth_username_input != null:
-		auth_username_input.text = username
-	if auth_password_input != null:
-		auth_password_input.text = password
-	_show_auth_panel(true)
-	_set_auth_status("Auth: auto-login %s..." % username)
-	_set_auth_buttons_enabled(false)
-	call_deferred("_auth_submit_credentials", "login", username, password)
-	return true
+	return _runtime_session_auth_ui_controller.try_dev_auto_login_if_needed(self)
 
 func _ensure_auth_request_node() -> void:
 	_runtime_auth_flow.ensure_auth_request_node(self)
 
 func _show_auth_panel(show: bool) -> void:
-	_runtime_auth_flow.show_auth_panel(self, show)
-	if lobby_panel != null:
-		lobby_panel.visible = not show
-	_show_esc_menu(false)
-	_show_purchase_menu(false)
-	if show:
-		_set_loading(false)
+	_runtime_session_auth_ui_controller.show_auth_panel(self, show)
 
 func _set_auth_status(text: String) -> void:
 	_runtime_auth_flow.set_auth_status(self, text)
@@ -165,24 +144,7 @@ func _on_logout_pressed() -> void:
 	_logout_to_login()
 
 func _logout_to_login() -> void:
-	if _is_client_connected():
-		session_controller.disconnect_client()
-	_auth_logout_best_effort()
-	_clear_auth_session()
-	_set_wallet(0, 0)
-	owned_skins_by_character.clear()
-	if auth_username_input != null:
-		auth_username_input.text = "mario"
-	if auth_password_input != null:
-		auth_password_input.text = "1234"
-	if lobby_service != null and multiplayer != null and multiplayer.multiplayer_peer != null:
-		var local_peer_id := multiplayer.get_unique_id()
-		if local_peer_id > 0 and lobby_service.has_method("set_peer_display_name"):
-			lobby_service.call("set_peer_display_name", local_peer_id, "")
-	_show_auth_panel(true)
-	_set_auth_status("Auth: login required")
-	_set_auth_buttons_enabled(true)
-	_update_ui_visibility()
+	_runtime_session_auth_ui_controller.logout_to_login(self)
 
 func _on_esc_logout_pressed() -> void:
 	_show_esc_menu(false)
@@ -356,212 +318,29 @@ func _auth_input_username() -> String:
 	return _runtime_auth_flow.auth_input_username(self)
 
 func _on_auth_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
-	var action := _auth_pending_action
-	var wallet_before_coins := wallet_coins
-	var wallet_before_clk := wallet_clk
-	_auth_inflight = false
-	_auth_pending_action = ""
-	_set_loading(false)
-
-	var text := body.get_string_from_utf8()
-	var trimmed_text := text.strip_edges()
-	var payload: Dictionary = {}
-	if trimmed_text.begins_with("{") or trimmed_text.begins_with("["):
-		var parsed: Variant = JSON.parse_string(trimmed_text)
-		if parsed is Dictionary:
-			payload = parsed as Dictionary
-
-	var detail := str(payload.get("detail", "")).strip_edges()
-	if detail.is_empty() and response_code == 0:
-		detail = "no response (result=%d; auth API offline/unreachable?)" % result
-	if detail.is_empty() and not trimmed_text.is_empty() and trimmed_text.length() <= 200:
-		detail = trimmed_text
-	if detail.is_empty():
-		detail = "HTTP %d" % response_code
-	if action == "profile" or action == "purchase_skin":
-		_append_log("[AUTH][%s] response code=%d user=%s detail=%s" % [action, response_code, auth_username, detail])
-
-	if action == "logout":
-		_auth_logout_token = ""
-		return
-
-	if response_code < 200 or response_code >= 300:
-		if _dev_auto_login_active and action == "login" and (response_code == 401 or response_code == 404):
-			var login_username := _auth_input_username()
-			_append_log("[AUTH] Auto-login failed, trying auto-register for %s" % login_username)
-			_auth_submit_credentials("register", login_username, str(dev_auto_login_password))
-			return
-		if _dev_auto_login_active and action == "register" and response_code == 409 and not dev_auto_login_username.strip_edges().is_empty():
-			var fixed_username := _auth_input_username()
-			_append_log("[AUTH] Auto-register conflict, retrying login for %s" % fixed_username)
-			_auth_submit_credentials("login", fixed_username, str(dev_auto_login_password))
-			return
-		if _dev_auto_login_active and action == "register" and response_code == 409 and _dev_auto_login_attempts < maxi(1, dev_auto_login_max_attempts):
-			_append_log("[AUTH] Auto-register conflict, retrying with a different username.")
-			_dev_auto_login_active = false
-			_try_dev_auto_login_if_needed()
-			return
-		if _dev_auto_login_active:
-			_dev_auto_login_active = false
-		if action == "profile":
-			# Don't block login if the server is on an older version without /profile yet.
-			_set_wallet(9999, 9999)
-			owned_skins_by_character.clear()
-			var starter := PackedInt32Array([1])
-			owned_skins_by_character["outrage"] = starter
-			_update_wallet_label()
-			_setup_skin_picker()
-			_set_lobby_status("Shop unavailable: %s (restart auth API)" % detail)
-			return
-		if action == "purchase_skin":
-			_purchase_inflight = false
-			_set_loading(false)
-			if purchase_text != null:
-				purchase_text.text = "%s\n\nFailed: %s" % [_purchase_pending_skin_name, detail]
-			if purchase_buy_button != null:
-				purchase_buy_button.disabled = false
-			return
-		_show_auth_panel(true)
-		_set_auth_status("Auth failed: %s" % detail)
-		_set_auth_buttons_enabled(true)
-		return
-
-	if action == "profile":
-		_apply_profile_payload(payload)
-		_append_log("[AUTH][profile] wallet %d/%d -> %d/%d" % [wallet_before_coins, wallet_before_clk, wallet_coins, wallet_clk])
-		return
-
-	if action == "purchase_skin":
-		_purchase_inflight = false
-		if not _purchase_pending_character_id.is_empty() and _purchase_pending_skin_index > 0:
-			_persist_local_skin_selection(_purchase_pending_character_id, _purchase_pending_skin_index)
-		_apply_profile_payload(payload)
-		_append_log("[AUTH][purchase_skin] user=%s char=%s skin=%d wallet %d/%d -> %d/%d" % [auth_username, _purchase_pending_character_id, _purchase_pending_skin_index, wallet_before_coins, wallet_before_clk, wallet_coins, wallet_clk])
-		_api_profile()
-		_show_purchase_menu(false)
-		_set_lobby_status("Purchased: %s" % _purchase_pending_skin_name)
-		if _purchase_pending_character_id == CHARACTER_ID_OUTRAGE and _purchase_pending_skin_index > 0 and _is_client_connected():
-			_rpc_lobby_set_skin.rpc_id(1, _purchase_pending_skin_index)
-		_purchase_pending_character_id = ""
-		_purchase_pending_skin_index = 0
-		_purchase_pending_skin_name = ""
-		return
-
-	if action == "me":
-		var username := str(payload.get("username", "")).strip_edges()
-		if username.is_empty():
-			_show_auth_panel(true)
-			_set_auth_status("Auth failed: invalid session")
-			_clear_auth_session()
-			_set_auth_buttons_enabled(true)
-			return
-		auth_username = username
-		_show_auth_panel(false)
-		_set_auth_status("")
-		_set_auth_buttons_enabled(true)
-		_after_auth_success()
-		return
-
-	var token := str(payload.get("token", "")).strip_edges()
-	var username2 := str(payload.get("username", "")).strip_edges()
-	if token.is_empty() or username2.is_empty():
-		_show_auth_panel(true)
-		_set_auth_status("Auth failed: invalid response")
-		return
-
-	auth_token = token
-	auth_username = username2
-	_save_auth_session()
-	_show_auth_panel(false)
-	_set_auth_status("")
-	_set_auth_buttons_enabled(true)
-	_dev_auto_login_active = false
-	_after_auth_success()
+	_runtime_session_auth_response_controller.on_auth_request_completed(self, result, response_code, body)
 
 func _after_auth_success() -> void:
-	_refresh_lobby_buttons()
-	_update_ui_visibility()
-	_update_peer_labels()
-	_ensure_lobby_connection_after_auth()
-	if not _has_active_runtime_peer():
-		_maybe_dev_auto_create_lobby()
-	_api_profile()
+	_runtime_session_lobby_connection_controller.after_auth_success(self, role == Role.CLIENT)
 
 func _ensure_lobby_connection_after_auth() -> void:
-	if not _uses_lobby_scene_flow():
-		if _has_active_runtime_peer():
-			return
-		if _should_dev_auto_create_lobby_on_autostart():
-			session_controller.start_client(host_input.text.strip_edges(), int(port_spin.value), true, false)
-		return
-	if session_controller == null:
-		return
-	if multiplayer != null and multiplayer.multiplayer_peer != null and role == Role.CLIENT:
-		var status := multiplayer.multiplayer_peer.get_connection_status()
-		if status == MultiplayerPeer.CONNECTION_CONNECTED:
-			if not auth_username.strip_edges().is_empty():
-				_rpc_lobby_set_display_name.rpc_id(1, auth_username)
-			_request_lobby_list()
-			return
-		if status == MultiplayerPeer.CONNECTION_CONNECTING:
-			_set_lobby_status("Connecting to server...")
-			return
-	session_controller.start_client(host_input.text.strip_edges(), int(port_spin.value), true, true)
+	_runtime_session_lobby_connection_controller.ensure_lobby_connection_after_auth(self, role == Role.CLIENT)
 
 func _has_active_runtime_peer() -> bool:
-	if multiplayer == null or multiplayer.multiplayer_peer == null:
-		return false
-	return multiplayer.is_server() or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_DISCONNECTED
+	return _runtime_session_lobby_connection_controller.has_active_runtime_peer(self)
 
 func _should_dev_auto_create_lobby_on_autostart() -> bool:
-	return OS.has_feature("editor") and dev_auto_login_on_autostart and dev_auto_create_lobby_on_autostart and not _uses_lobby_scene_flow()
+	return _runtime_session_lobby_connection_controller.should_dev_auto_create_lobby_on_autostart(self)
 
 func _maybe_dev_auto_create_lobby() -> void:
-	if not _should_dev_auto_create_lobby_on_autostart():
-		return
-	if _dev_auto_lobby_create_attempted:
-		return
-	if not _is_client_connected():
-		return
-	if client_lobby_id > 0:
-		_dev_auto_lobby_create_attempted = true
-		return
-	call_deferred("_dev_auto_create_lobby_if_ready")
+	_runtime_session_lobby_connection_controller.maybe_dev_auto_create_lobby(self)
 
 func _dev_auto_create_lobby_if_ready() -> void:
-	if not _should_dev_auto_create_lobby_on_autostart():
-		return
-	if _dev_auto_lobby_create_attempted:
-		return
-	if not _is_client_connected():
-		return
-	if lobby_auto_action_inflight or client_lobby_id > 0:
-		return
-	selected_map_id = MAP_ID_CLASSIC
-	client_target_map_id = MAP_ID_CLASSIC
-	selected_game_mode = GAME_MODE_DEATHMATCH
-	client_target_game_mode = GAME_MODE_DEATHMATCH
-	_persist_local_weapon_selection()
-	_persist_local_character_selection()
-	_persist_local_outage_skin_if_needed()
-	if not auth_username.strip_edges().is_empty():
-		_rpc_lobby_set_display_name.rpc_id(1, auth_username)
-	var lobby_name := dev_auto_create_lobby_name.strip_edges()
-	if lobby_name.is_empty():
-		lobby_name = "%s lobby" % (auth_username if not auth_username.strip_edges().is_empty() else "mario")
-	lobby_auto_action_inflight = true
-	_dev_auto_lobby_create_attempted = true
-	_refresh_lobby_buttons()
-	_set_lobby_status("Creating dev lobby...")
-	var payload := map_flow_service.encode_create_lobby_payload(
-		map_catalog,
-		Callable(self, "_normalize_weapon_id"),
-		selected_weapon_id,
-		selected_map_id,
-		selected_character_id,
-		selected_game_mode
+	_runtime_session_lobby_connection_controller.dev_auto_create_lobby_if_ready(
+		self,
+		MAP_ID_CLASSIC,
+		GAME_MODE_DEATHMATCH
 	)
-	_rpc_lobby_create.rpc_id(1, lobby_name, payload)
 
 func _api_profile() -> void:
 	if _auth_inflight:
@@ -584,124 +363,34 @@ func _api_profile() -> void:
 		_set_loading(false)
 
 func _apply_profile_payload(payload: Dictionary) -> void:
-	var coins := int(payload.get("coins", 0))
-	var clk := int(payload.get("clk", 0))
-	_set_wallet(coins, clk)
-
-	owned_skins_by_character.clear()
-	var owned_raw := payload.get("owned_skins", []) as Array
-	for item in owned_raw:
-		if not (item is Dictionary):
-			continue
-		var entry := item as Dictionary
-		var character_id := _normalize_character_id(str(entry.get("character_id", "")))
-		var skin_index := int(entry.get("skin_index", 0))
-		if character_id.is_empty() or skin_index <= 0:
-			continue
-		var arr := owned_skins_by_character.get(character_id, PackedInt32Array()) as PackedInt32Array
-		if not arr.has(skin_index):
-			arr.append(skin_index)
-		owned_skins_by_character[character_id] = arr
-
-	_update_wallet_label()
-	_setup_skin_picker()
+	_runtime_session_profile_wallet_controller.apply_profile_payload(self, payload)
 
 func _set_wallet(coins: int, clk: int) -> void:
-	wallet_coins = maxi(0, coins)
-	wallet_clk = maxi(0, clk)
-	_update_wallet_label()
+	_runtime_session_profile_wallet_controller.set_wallet(self, coins, clk)
 
 func _update_wallet_label() -> void:
-	if wallet_label == null:
-		return
-	wallet_label.text = "Coins: %d | CLK: %d" % [wallet_coins, wallet_clk]
+	_runtime_session_profile_wallet_controller.update_wallet_label(self)
 
 func _normalize_character_id(raw: String) -> String:
-	var normalized := raw.strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko":
-		normalized = "outrage"
-	return normalized
+	return _runtime_session_profile_wallet_controller.normalize_character_id(raw)
 
 func _is_skin_owned(character_id: String, skin_index: int) -> bool:
-	if skin_index <= 1:
-		return true
-	var normalized := _normalize_character_id(character_id)
-	var arr := owned_skins_by_character.get(normalized, PackedInt32Array()) as PackedInt32Array
-	return arr.has(skin_index)
+	return _runtime_session_profile_wallet_controller.is_skin_owned(self, character_id, skin_index)
 
 func _skin_cost_coins(character_id: String, skin_index: int) -> int:
-	# Must match auth API pricing (tools/auth_api/app.py::_skin_cost_coins).
-	var normalized := _normalize_character_id(character_id)
-	if skin_index <= 1:
-		return 0
-	if normalized == "outrage":
-		return 10
-	return 10
+	return _runtime_session_profile_wallet_controller.skin_cost_coins(character_id, skin_index)
 
 func _prompt_purchase_skin(character_id: String, skin_index: int, skin_label: String) -> void:
-	if auth_token.strip_edges().is_empty():
-		_show_auth_panel(true)
-		_set_auth_status("Auth: login first")
-		return
-	_purchase_pending_character_id = _normalize_character_id(character_id)
-	_purchase_pending_skin_index = maxi(0, skin_index)
-	var cleaned := skin_label.replace(" [LOCKED]", "")
-	var paren := cleaned.find(" (")
-	if paren >= 0:
-		cleaned = cleaned.substr(0, paren)
-	cleaned = cleaned.strip_edges()
-	_purchase_pending_skin_name = cleaned
-	if purchase_text != null:
-		var cost := _skin_cost_coins(character_id, skin_index)
-		purchase_text.text = "Skin: %s\nCost: %d Coins" % [_purchase_pending_skin_name, cost]
-	if purchase_buy_button != null:
-		purchase_buy_button.disabled = false
-	_show_purchase_menu(true)
+	_runtime_session_purchase_flow_controller.prompt_purchase_skin(self, character_id, skin_index, skin_label)
 
 func _on_purchase_buy_pressed() -> void:
-	if _purchase_inflight:
-		return
-	if _purchase_pending_character_id.is_empty() or _purchase_pending_skin_index <= 0:
-		return
-	_api_purchase_skin(_purchase_pending_character_id, _purchase_pending_skin_index)
+	_runtime_session_purchase_flow_controller.on_purchase_buy_pressed(self)
 
 func _on_purchase_cancel_pressed() -> void:
-	_purchase_pending_character_id = ""
-	_purchase_pending_skin_index = 0
-	_purchase_pending_skin_name = ""
-	_show_purchase_menu(false)
+	_runtime_session_purchase_flow_controller.on_purchase_cancel_pressed(self)
 
 func _api_purchase_skin(character_id: String, skin_index: int) -> void:
-	if _auth_inflight:
-		return
-	if auth_request == null:
-		return
-	var token := auth_token.strip_edges()
-	if token.is_empty():
-		return
-
-	_purchase_inflight = true
-	if purchase_buy_button != null:
-		purchase_buy_button.disabled = true
-	_set_loading(true, "PROCESSING...")
-
-	_auth_inflight = true
-	_auth_pending_action = "purchase_skin"
-	var url := "%s/purchase/skin" % _auth_api_base_url()
-	_append_log("[AUTH][purchase_skin] request user=%s char=%s skin=%d coins_ui=%d" % [auth_username, character_id, skin_index, wallet_coins])
-	var headers := PackedStringArray([
-		"Authorization: Bearer %s" % token,
-		"Content-Type: application/json"
-	])
-	var body := JSON.stringify({"character_id": character_id, "skin_index": skin_index})
-	var err := auth_request.request(url, headers, HTTPClient.METHOD_POST, body)
-	if err != OK:
-		_purchase_inflight = false
-		_auth_inflight = false
-		_auth_pending_action = ""
-		_set_loading(false)
-		if purchase_buy_button != null:
-			purchase_buy_button.disabled = false
+	_runtime_session_purchase_flow_controller.api_purchase_skin(self, character_id, skin_index)
 
 func _setup_weapon_picker() -> void:
 	if lobby_weapon_option == null:
@@ -868,289 +557,77 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_update_score_labels()
 
 func _can_issue_lobby_actions() -> bool:
-	if _is_client_connected():
-		return true
-	if multiplayer != null and multiplayer.multiplayer_peer != null and multiplayer.is_server():
-		return true
-	return false
+	return _runtime_session_lobby_actions_controller.can_issue_lobby_actions(self)
 
 func _on_lobby_create_pressed() -> void:
-	if not _can_issue_lobby_actions() or lobby_auto_action_inflight:
-		return
-	_persist_local_weapon_selection()
-	_persist_local_character_selection()
-	_persist_local_outage_skin_if_needed()
-	if not auth_username.strip_edges().is_empty():
-		_rpc_lobby_set_display_name.rpc_id(1, auth_username)
-	lobby_auto_action_inflight = true
-	_refresh_lobby_buttons()
-	_set_lobby_status("Creating lobby...")
-	var payload := map_flow_service.encode_create_lobby_payload(
-		map_catalog,
-		Callable(self, "_normalize_weapon_id"),
-		selected_weapon_id,
-		selected_map_id,
-		selected_character_id,
-		selected_game_mode
-	)
-	_rpc_lobby_create.rpc_id(1, _lobby_name_value(), payload)
+	_runtime_session_lobby_actions_controller.on_lobby_create_pressed(self)
 
 func _on_lobby_join_pressed() -> void:
-	if not _can_issue_lobby_actions() or lobby_auto_action_inflight:
-		return
-	_persist_local_weapon_selection()
-	_persist_local_character_selection()
-	_persist_local_outage_skin_if_needed()
-	if not auth_username.strip_edges().is_empty():
-		_rpc_lobby_set_display_name.rpc_id(1, auth_username)
-	var lobby_id := ui_controller.selected_lobby_id()
-	if lobby_id <= 0:
-		_set_lobby_status("Select a lobby first.")
-		return
-	lobby_auto_action_inflight = true
-	_refresh_lobby_buttons()
-	_set_lobby_status("Joining lobby...")
-	print("[DBG CHAR] JOIN pressed -> lobby_id=%d weapon=%s character=%s" % [lobby_id, selected_weapon_id, selected_character_id])
-	_rpc_lobby_join.rpc_id(1, lobby_id, selected_weapon_id, selected_character_id)
+	_runtime_session_lobby_actions_controller.on_lobby_join_pressed(self)
 
 func _on_lobby_refresh_pressed() -> void:
-	if not _can_issue_lobby_actions():
-		return
-	_request_lobby_list()
+	_runtime_session_lobby_actions_controller.on_lobby_refresh_pressed(self)
 
 func _on_lobby_leave_pressed() -> void:
-	if not _can_issue_lobby_actions() or lobby_auto_action_inflight:
-		return
-	lobby_auto_action_inflight = true
-	_refresh_lobby_buttons()
-	_set_lobby_status("Leaving lobby...")
-	_rpc_lobby_leave.rpc_id(1)
+	_runtime_session_lobby_actions_controller.on_lobby_leave_pressed(self)
 
 func _on_lobby_list_item_selected(_index: int) -> void:
-	_refresh_lobby_buttons()
+	_runtime_session_lobby_actions_controller.on_lobby_list_item_selected(self, _index)
 
 func _on_lobby_list_empty_clicked(_position: Vector2, _button_index: int) -> void:
-	_refresh_lobby_buttons()
+	_runtime_session_lobby_actions_controller.on_lobby_list_empty_clicked(self, _position, _button_index)
 
 func _on_lobby_weapon_selected(index: int) -> void:
-	if lobby_weapon_option == null:
-		return
-	selected_weapon_id = _normalize_weapon_id(str(lobby_weapon_option.get_item_metadata(index)))
-	_persist_local_weapon_selection()
-	if _is_client_connected() and client_lobby_id > 0:
-		_rpc_lobby_set_weapon.rpc_id(1, selected_weapon_id)
+	_runtime_session_lobby_selection_controller.on_lobby_weapon_selected(self, index)
 
 func _on_lobby_character_selected(index: int) -> void:
-	if lobby_character_option == null:
-		return
-	if index < 0 or index >= lobby_character_option.item_count:
-		print("[DBG CHAR] Invalid character index: %d (item_count: %d)" % [index, lobby_character_option.item_count])
-		return
-	var metadata = lobby_character_option.get_item_metadata(index)
-	if metadata == null:
-		print("[DBG CHAR] Character metadata at index %d is null!" % index)
-		return
-	selected_character_id = _normalize_character_id(str(metadata))
-	print("[DBG CHAR] ===>>> SELECTED CHARACTER: %s (index: %d, metadata: %s, client_lobby_id: %d)" % [selected_character_id, index, metadata, client_lobby_id])
-	_persist_local_character_selection()
-	_setup_skin_picker()
-	if _is_client_connected() and client_lobby_id > 0:
-		print("[DBG CHAR] Sending RPC to server for character: %s" % selected_character_id)
-		_rpc_lobby_set_character.rpc_id(1, selected_character_id)
-	else:
-		print("[DBG CHAR] Not sending RPC yet (connected=%s, lobby_id=%d)" % [_is_client_connected(), client_lobby_id])
+	_runtime_session_lobby_selection_controller.on_lobby_character_selected(self, index)
 
 func _on_lobby_skin_selected(index: int) -> void:
-	if lobby_skin_option == null:
-		return
-	if selected_character_id != CHARACTER_ID_OUTRAGE:
-		return
-	if index < 0 or index >= lobby_skin_option.item_count:
-		return
-	var meta: Variant = lobby_skin_option.get_item_metadata(index)
-	if meta == null:
-		return
-	var skin_index: int = int(meta)
-	if not _is_skin_owned(selected_character_id, skin_index):
-		var previous := 1
-		if lobby_service != null:
-			previous = int(lobby_service.get_local_selected_skin(selected_character_id, 1))
-		if not _is_skin_owned(selected_character_id, previous):
-			previous = 1
-		for i in range(lobby_skin_option.item_count):
-			if int(lobby_skin_option.get_item_metadata(i)) == previous:
-				lobby_skin_option.select(i)
-				break
-		_prompt_purchase_skin(selected_character_id, skin_index, lobby_skin_option.get_item_text(index))
-		return
-	_persist_local_skin_selection(selected_character_id, skin_index)
-	if _can_issue_lobby_actions():
-		_rpc_lobby_set_skin.rpc_id(1, skin_index)
+	_runtime_session_lobby_selection_controller.on_lobby_skin_selected(self, index, CHARACTER_ID_OUTRAGE)
 
 func _on_lobby_map_selected(index: int) -> void:
-	if lobby_map_option == null:
-		return
-	selected_map_id = map_flow_service.normalize_map_id(map_catalog, str(lobby_map_option.get_item_metadata(index)))
-	selected_game_mode = map_flow_service.select_mode_for_map(map_catalog, selected_map_id, selected_game_mode)
-	_setup_mode_picker()
-	if client_lobby_id <= 0:
-		client_target_map_id = selected_map_id
-		client_target_game_mode = selected_game_mode
+	_runtime_session_lobby_selection_controller.on_lobby_map_selected(self, index)
 
 func _on_lobby_mode_selected(index: int) -> void:
-	if lobby_mode_option == null:
-		return
-	selected_game_mode = map_flow_service.select_mode_for_map(map_catalog, selected_map_id, str(lobby_mode_option.get_item_metadata(index)))
-	if client_lobby_id <= 0:
-		client_target_game_mode = selected_game_mode
+	_runtime_session_lobby_selection_controller.on_lobby_mode_selected(self, index)
 
 func _persist_local_weapon_selection() -> void:
-	if lobby_service == null:
-		return
-	lobby_service.set_local_selected_weapon(selected_weapon_id)
-	if multiplayer == null or multiplayer.multiplayer_peer == null:
-		return
-	var local_peer_id := multiplayer.get_unique_id()
-	if local_peer_id <= 0:
-		return
-	lobby_service.set_peer_weapon(local_peer_id, selected_weapon_id)
+	_runtime_session_lobby_selection_controller.persist_local_weapon_selection(self)
 
 func _persist_local_character_selection() -> void:
-	if lobby_service == null:
-		return
-	lobby_service.set_local_selected_character(selected_character_id)
-	if multiplayer == null or multiplayer.multiplayer_peer == null:
-		return
-	var local_peer_id := multiplayer.get_unique_id()
-	if local_peer_id <= 0:
-		return
-	lobby_service.set_peer_character(local_peer_id, selected_character_id)
+	_runtime_session_lobby_selection_controller.persist_local_character_selection(self)
 
 func _persist_local_skin_selection(character_id: String, skin_index: int) -> void:
-	if lobby_service == null:
-		return
-	lobby_service.set_local_selected_skin(character_id, skin_index)
-	if multiplayer == null or multiplayer.multiplayer_peer == null:
-		return
-	var local_peer_id := multiplayer.get_unique_id()
-	if local_peer_id <= 0:
-		return
-	lobby_service.set_peer_skin(local_peer_id, skin_index)
+	_runtime_session_lobby_selection_controller.persist_local_skin_selection(self, character_id, skin_index)
 
 func _persist_local_outage_skin_if_needed() -> void:
-	if selected_character_id != CHARACTER_ID_OUTRAGE:
-		return
-	var skin_index: int = 1
-	if lobby_skin_option != null and lobby_skin_option.item_count > 0:
-		var selected_index := int(lobby_skin_option.selected)
-		if selected_index >= 0 and selected_index < lobby_skin_option.item_count:
-			var meta: Variant = lobby_skin_option.get_item_metadata(selected_index)
-			if meta != null:
-				skin_index = int(meta)
-	_persist_local_skin_selection(selected_character_id, skin_index)
-	if _can_issue_lobby_actions():
-		_rpc_lobby_set_skin.rpc_id(1, skin_index)
+	_runtime_session_lobby_selection_controller.persist_local_outage_skin_if_needed(self, CHARACTER_ID_OUTRAGE)
 
 func _apply_pixel_dropdown_popups() -> void:
-	_apply_pixel_dropdown_popup(lobby_weapon_option)
-	_apply_pixel_dropdown_popup(lobby_character_option)
-	_apply_pixel_dropdown_popup(lobby_skin_option)
-	_apply_pixel_dropdown_popup(lobby_map_option)
-	_apply_pixel_dropdown_popup(lobby_mode_option)
+	_runtime_session_dropdown_theme_controller.apply_pixel_dropdown_popups(
+		lobby_weapon_option,
+		lobby_character_option,
+		lobby_skin_option,
+		lobby_map_option,
+		lobby_mode_option,
+		PIXEL_FONT
+	)
 
 func _apply_pixel_dropdown_popup(option: OptionButton) -> void:
-	if option == null:
-		return
-	var popup := option.get_popup()
-	if popup == null:
-		return
-
-	popup.add_theme_stylebox_override("panel", _pixel_popup_panel())
-	popup.add_theme_stylebox_override("hover", _pixel_popup_hover())
-	popup.add_theme_stylebox_override("hover_pressed", _pixel_popup_hover())
-	popup.add_theme_stylebox_override("selected", _pixel_popup_hover())
-	popup.add_theme_stylebox_override("focus", _pixel_popup_hover())
-	popup.add_theme_stylebox_override("item_hover", _pixel_popup_hover())
-	popup.add_theme_stylebox_override("separator", _pixel_popup_separator())
-
-	# Hide the default radio/check icons (the "dots" on the left).
-	var empty_icon := _pixel_empty_icon()
-	popup.add_theme_icon_override("checked", empty_icon)
-	popup.add_theme_icon_override("unchecked", empty_icon)
-	popup.add_theme_icon_override("radio_checked", empty_icon)
-	popup.add_theme_icon_override("radio_unchecked", empty_icon)
-	popup.add_theme_constant_override("check_margin", 0)
-	_disable_popup_checkmarks(popup)
-
-	popup.add_theme_font_override("font", PIXEL_FONT)
-	popup.add_theme_font_size_override("font_size", 16)
-
-	popup.add_theme_color_override("font_color", Color(0.98, 0.97, 0.95, 1))
-	popup.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	popup.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
-	popup.add_theme_color_override("font_disabled_color", Color(0.62, 0.65, 0.7, 0.9))
-	popup.add_theme_constant_override("outline_size", 0)
-	popup.add_theme_constant_override("v_separation", 2)
-	popup.add_theme_constant_override("h_separation", 10)
-	popup.add_theme_constant_override("item_start_padding", 10)
-	popup.add_theme_constant_override("item_end_padding", 10)
+	_runtime_session_dropdown_theme_controller.apply_pixel_dropdown_popup(option, PIXEL_FONT)
 
 func _disable_popup_checkmarks(popup: PopupMenu) -> void:
-	if popup == null:
-		return
-	var count := int(popup.item_count)
-	for i in range(count):
-		if popup.has_method("set_item_as_radio_checkable"):
-			popup.call("set_item_as_radio_checkable", i, false)
-		if popup.has_method("set_item_as_checkable"):
-			popup.call("set_item_as_checkable", i, false)
-		if popup.has_method("set_item_checked"):
-			popup.call("set_item_checked", i, false)
+	_runtime_session_dropdown_theme_controller.disable_popup_checkmarks(popup)
 
 func _pixel_popup_panel() -> StyleBoxFlat:
-	if _pixel_popup_panel_stylebox != null:
-		return _pixel_popup_panel_stylebox
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.12, 0.11, 0.16, 0.98)
-	sb.border_width_left = 4
-	sb.border_width_top = 4
-	sb.border_width_right = 4
-	sb.border_width_bottom = 4
-	sb.border_color = Color(0.06, 0.05, 0.08, 1)
-	sb.content_margin_left = 6.0
-	sb.content_margin_top = 6.0
-	sb.content_margin_right = 6.0
-	sb.content_margin_bottom = 6.0
-	sb.shadow_size = 6
-	sb.shadow_color = Color(0, 0, 0, 0.45)
-	_pixel_popup_panel_stylebox = sb
-	return sb
+	return _runtime_session_dropdown_theme_controller.pixel_popup_panel()
 
 func _pixel_popup_hover() -> StyleBoxFlat:
-	if _pixel_popup_hover_stylebox != null:
-		return _pixel_popup_hover_stylebox
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.25, 0.6, 0.85, 0.45)
-	sb.border_width_left = 2
-	sb.border_width_top = 2
-	sb.border_width_right = 2
-	sb.border_width_bottom = 2
-	sb.border_color = Color(0.9, 0.74, 0.27, 0.9)
-	_pixel_popup_hover_stylebox = sb
-	return sb
+	return _runtime_session_dropdown_theme_controller.pixel_popup_hover()
 
 func _pixel_popup_separator() -> StyleBoxFlat:
-	if _pixel_popup_separator_stylebox != null:
-		return _pixel_popup_separator_stylebox
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.05, 0.08, 1)
-	_pixel_popup_separator_stylebox = sb
-	return sb
+	return _runtime_session_dropdown_theme_controller.pixel_popup_separator()
 
 func _pixel_empty_icon() -> Texture2D:
-	if _pixel_empty_icon_texture != null:
-		return _pixel_empty_icon_texture
-	var img := Image.create(1, 1, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	_pixel_empty_icon_texture = ImageTexture.create_from_image(img)
-	return _pixel_empty_icon_texture
+	return _runtime_session_dropdown_theme_controller.pixel_empty_icon()

@@ -1,0 +1,112 @@
+extends RefCounted
+class_name LobbyOverlayUiStyle
+
+func position_option_popup_below(option: OptionButton, popup: PopupMenu) -> void:
+	if option == null or popup == null:
+		return
+	var origin := option.get_screen_position()
+	var popup_x := int(round(origin.x))
+	var popup_y := int(round(origin.y + option.size.y + 2.0))
+	popup.position = Vector2i(popup_x, popup_y)
+
+func remove_popup_left_markers(popup: PopupMenu) -> void:
+	if popup == null:
+		return
+	for i in range(popup.item_count):
+		popup.set_item_as_checkable(i, false)
+		popup.set_item_as_radio_checkable(i, false)
+		popup.set_item_icon(i, null)
+
+func make_pixel_dropdown_arrow() -> Texture2D:
+	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var color := Color(0.9, 0.74, 0.27, 1.0)
+	var rows := {
+		2: PackedInt32Array([2, 3, 4, 5, 6]),
+		3: PackedInt32Array([3, 4, 5]),
+		4: PackedInt32Array([3, 4, 5]),
+		5: PackedInt32Array([4]),
+	}
+	for y in rows.keys():
+		var xs := rows[y] as PackedInt32Array
+		for x in xs:
+			img.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(img)
+
+func make_pixel_checkbox_icon(checked: bool) -> Texture2D:
+	var img := Image.create(11, 11, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var border := Color(0.9294, 0.9686, 0.7412, 1.0)
+	var fill := Color(0.5216, 0.7804, 0.6039, 1.0)
+	for y in range(11):
+		for x in range(11):
+			var on_border := x == 0 or x == 10 or y == 0 or y == 10
+			img.set_pixel(x, y, border if on_border else fill)
+	if checked:
+		var accent := Color(0.9, 0.74, 0.27, 1.0)
+		for y in range(2, 9):
+			for x in range(2, 9):
+				img.set_pixel(x, y, accent)
+	return ImageTexture.create_from_image(img)
+
+func apply_pixel_checkbox_style(check: CheckBox) -> void:
+	if check == null:
+		return
+	check.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	check.add_theme_constant_override("h_separation", 6)
+	check.add_theme_color_override("font_color", Color(0.94, 0.93, 0.9, 1.0))
+	check.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	check.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
+	check.add_theme_color_override("font_disabled_color", Color(0.66, 0.66, 0.7, 1.0))
+	var unchecked := make_pixel_checkbox_icon(false)
+	var checked := make_pixel_checkbox_icon(true)
+	check.add_theme_icon_override("unchecked", unchecked)
+	check.add_theme_icon_override("checked", checked)
+	check.add_theme_icon_override("unchecked_disabled", unchecked)
+	check.add_theme_icon_override("checked_disabled", checked)
+	check.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+func apply_button_palette(btn: Button, normal_bg: Color, border: Color) -> void:
+	if btn == null:
+		return
+	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := btn.get_theme_stylebox(sb_name)
+		if not (sb is StyleBoxFlat):
+			continue
+		var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		if sb_name == "hover":
+			flat.bg_color = _tinted_color(normal_bg, 0.06)
+		elif sb_name == "pressed":
+			flat.bg_color = _tinted_color(normal_bg, -0.07)
+		elif sb_name == "disabled":
+			flat.bg_color = Color(normal_bg.r, normal_bg.g, normal_bg.b, 0.42)
+		else:
+			flat.bg_color = normal_bg
+		flat.border_color = Color(border.r, border.g, border.b, 0.48) if sb_name == "disabled" else border
+		btn.add_theme_stylebox_override(sb_name, flat)
+	btn.add_theme_color_override("font_color", Color(0.98, 0.98, 0.98, 1.0))
+	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
+	btn.add_theme_color_override("font_disabled_color", Color(0.84, 0.84, 0.84, 0.9))
+
+func apply_ready_button_state_style(btn: Button, is_ready: bool, ready_bg: Color, ready_border: Color, idle_bg: Color, idle_border: Color) -> void:
+	if btn == null:
+		return
+	if is_ready:
+		apply_button_palette(btn, ready_bg, ready_border)
+	else:
+		apply_button_palette(btn, idle_bg, idle_border)
+
+func set_rooms_list_visible(rooms_box: VBoxContainer, rooms_list_panel: PanelContainer, visible: bool) -> void:
+	if rooms_box != null:
+		rooms_box.visible = visible
+	if rooms_list_panel != null:
+		rooms_list_panel.visible = visible
+
+func _tinted_color(color: Color, amount: float) -> Color:
+	return Color(
+		clampf(color.r + amount, 0.0, 1.0),
+		clampf(color.g + amount, 0.0, 1.0),
+		clampf(color.b + amount, 0.0, 1.0),
+		color.a
+	)
