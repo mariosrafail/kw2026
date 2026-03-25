@@ -1,8 +1,9 @@
 extends RefCounted
 class_name SkullFfaMatchIntroController
 
-const TOUR_SLOT_COUNT := 5
 const PLAYER_FOCUS_OFFSET := Vector2(0.0, -28.0)
+const COUNTDOWN_SECONDS := 3.0
+const LOCAL_FOCUS_MOVE_SECONDS := 1.0
 
 var _host: Node
 var _main_camera: Camera2D
@@ -23,10 +24,13 @@ func configure(host: Node, main_camera: Camera2D, players: Dictionary) -> void:
 func is_active() -> bool:
 	return _active
 
+func recommended_duration_sec(participant_count: int) -> float:
+	var normalized_count := maxi(1, participant_count)
+	return float(normalized_count * 2 + 3)
+
 func start(participant_peer_ids: Array, local_peer_id: int, duration_sec: float = 13.0) -> void:
 	_ensure_countdown_label()
 	_local_peer_id = local_peer_id
-	_duration_sec = maxf(1.0, duration_sec)
 	_elapsed_sec = 0.0
 	_active = true
 	_tour_peer_ids.clear()
@@ -44,12 +48,9 @@ func start(participant_peer_ids: Array, local_peer_id: int, duration_sec: float 
 		_hide_countdown()
 		return
 
-	var fallback_peer_id := filtered_ids[filtered_ids.size() - 1]
-	for index in range(TOUR_SLOT_COUNT):
-		var slot_peer_id := fallback_peer_id
-		if index < filtered_ids.size():
-			slot_peer_id = filtered_ids[index]
-		_tour_peer_ids.append(slot_peer_id)
+	for peer_id in filtered_ids:
+		_tour_peer_ids.append(int(peer_id))
+	_duration_sec = maxf(recommended_duration_sec(_tour_peer_ids.size()), duration_sec)
 
 	_hide_countdown()
 
@@ -80,26 +81,22 @@ func _camera_position_for_elapsed(elapsed_sec: float) -> Vector2:
 
 	if slot_positions.is_empty():
 		return local_focus
+	var segment_start := 0.0
+	var current_focus := slot_positions[0]
 	if elapsed_sec < 1.0:
-		return slot_positions[0]
-	if elapsed_sec < 2.0:
-		return slot_positions[0].lerp(slot_positions[1], elapsed_sec - 1.0)
-	if elapsed_sec < 3.0:
-		return slot_positions[1]
-	if elapsed_sec < 4.0:
-		return slot_positions[1].lerp(slot_positions[2], elapsed_sec - 3.0)
-	if elapsed_sec < 5.0:
-		return slot_positions[2]
-	if elapsed_sec < 6.0:
-		return slot_positions[2].lerp(slot_positions[3], elapsed_sec - 5.0)
-	if elapsed_sec < 7.0:
-		return slot_positions[3]
-	if elapsed_sec < 8.0:
-		return slot_positions[3].lerp(slot_positions[4], elapsed_sec - 7.0)
-	if elapsed_sec < 9.0:
-		return slot_positions[4]
-	if elapsed_sec < 10.0:
-		return slot_positions[4].lerp(local_focus, elapsed_sec - 9.0)
+		return current_focus
+	segment_start = 1.0
+	for index in range(1, slot_positions.size()):
+		var next_focus := slot_positions[index]
+		if elapsed_sec < segment_start + 1.0:
+			return current_focus.lerp(next_focus, elapsed_sec - segment_start)
+		segment_start += 1.0
+		if elapsed_sec < segment_start + 1.0:
+			return next_focus
+		segment_start += 1.0
+		current_focus = next_focus
+	if elapsed_sec < segment_start + LOCAL_FOCUS_MOVE_SECONDS:
+		return current_focus.lerp(local_focus, (elapsed_sec - segment_start) / LOCAL_FOCUS_MOVE_SECONDS)
 	return local_focus
 
 func _focus_position_for_peer(peer_id: int, fallback: Vector2) -> Vector2:
@@ -111,13 +108,14 @@ func _focus_position_for_peer(peer_id: int, fallback: Vector2) -> Vector2:
 func _update_countdown(elapsed_sec: float) -> void:
 	if _countdown_label == null:
 		return
-	if elapsed_sec < 10.0 or elapsed_sec >= 13.0:
+	var countdown_start_sec := _duration_sec - COUNTDOWN_SECONDS
+	if elapsed_sec < countdown_start_sec or elapsed_sec >= _duration_sec:
 		_hide_countdown()
 		return
 	_countdown_label.visible = true
-	if elapsed_sec < 11.0:
+	if elapsed_sec < countdown_start_sec + 1.0:
 		_countdown_label.text = "3"
-	elif elapsed_sec < 12.0:
+	elif elapsed_sec < countdown_start_sec + 2.0:
 		_countdown_label.text = "2"
 	else:
 		_countdown_label.text = "1"

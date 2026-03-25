@@ -8,8 +8,6 @@ const FIGHT_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/fight_soundtrack.
 const FIGHT_SOUNDTRACK_FALLBACK := preload("res://assets/sounds/soundtrack/fight_soundtrack.MP3")
 const MENU_STATE_PATH := "user://main_menu_shop_state.json"
 const SKULL_FFA_MAP_ID := "skull_ffa"
-const SKULL_FFA_MATCH_INTRO_SEC := 13.0
-
 var _client_skill_cd_q_remaining := 0.0
 var _client_skill_cd_e_remaining := 0.0
 var _client_skill_cd_q_max := 0.0
@@ -459,10 +457,13 @@ func _maybe_server_begin_skull_match_intro() -> void:
 	var ordered_peer_ids := _ordered_skull_intro_peer_ids(lobby_id)
 	if ordered_peer_ids.is_empty():
 		return
+	var intro_duration_sec := 13.0
+	if _skull_intro != null and _skull_intro.has_method("recommended_duration_sec"):
+		intro_duration_sec = float(_skull_intro.call("recommended_duration_sec", ordered_peer_ids.size()))
 	_skull_match_intro_sent = true
-	_activate_gameplay_lock(SKULL_FFA_MATCH_INTRO_SEC)
+	_activate_gameplay_lock(intro_duration_sec)
 	for member_value in _lobby_members(lobby_id):
-		_rpc_skull_match_intro.rpc_id(int(member_value), ordered_peer_ids, SKULL_FFA_MATCH_INTRO_SEC)
+		_rpc_skull_match_intro.rpc_id(int(member_value), ordered_peer_ids, intro_duration_sec)
 
 @rpc("authority", "reliable")
 func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) -> void:
