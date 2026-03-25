@@ -21,6 +21,7 @@ var player_replication: PlayerReplication
 
 var send_skill_cast_cb: Callable = Callable()  # Generic skill callback
 var warrior_id_for_peer_cb: Callable = Callable()
+var is_gameplay_locked_cb: Callable = Callable()
 
 var get_world_2d_cb: Callable = Callable()
 var get_peer_lobby_cb: Callable = Callable()
@@ -81,6 +82,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	broadcast_player_state_cb = callbacks.get("broadcast_player_state", Callable()) as Callable
 	send_skill_cast_cb = callbacks.get("send_skill_cast", Callable()) as Callable
 	warrior_id_for_peer_cb = callbacks.get("warrior_id_for_peer", Callable()) as Callable
+	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
 
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
 	snapshot_rate = float(config.get("snapshot_rate", snapshot_rate))
@@ -90,6 +92,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	_init_warriors()
 
 func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
+	if _is_gameplay_locked():
+		return
 	var warrior_id = _warrior_id_for_peer(caster_peer_id)
 	var warrior = warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior != null:
@@ -160,6 +164,8 @@ func server_broadcast_reload_audio(peer_id: int, weapon_id: String) -> void:
 			send_reload_sfx_cb.call(int(member_value), peer_id, weapon_id)
 
 func server_begin_reload(peer_id: int, weapon_profile: WeaponProfile) -> void:
+	if _is_gameplay_locked():
+		return
 	if weapon_profile == null:
 		weapon_profile = _weapon_profile_for_id(weapon_id_ak47)
 	var existing := float(reload_remaining_by_peer.get(peer_id, 0.0))
@@ -436,6 +442,7 @@ func server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 			server_sync_player_ammo(int(member_value), peer_id)
 
 func server_simulate(delta: float, snapshot_accumulator: float) -> float:
+	var gameplay_locked := _is_gameplay_locked()
 	for key in players.keys():
 		var peer_id := int(key)
 		if _peer_lobby(peer_id) <= 0:
@@ -447,6 +454,11 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 		var now_msec := Time.get_ticks_msec()
 		var last_packet_msec := int(state.get("last_packet_msec", 0))
 		if last_packet_msec > 0 and now_msec - last_packet_msec > max_input_stale_ms:
+			state["axis"] = 0.0
+			state["jump_pressed"] = false
+			state["jump_held"] = false
+			state["shoot_held"] = false
+		if gameplay_locked:
 			state["axis"] = 0.0
 			state["jump_pressed"] = false
 			state["jump_held"] = false
@@ -483,7 +495,7 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				ammo_by_peer[peer_id] = ammo
 				server_sync_player_ammo(peer_id)
 
-		if bool(state.get("shoot_held", false)) and cooldown <= 0.0 and reload_remaining <= 0.0:
+		if not gameplay_locked and bool(state.get("shoot_held", false)) and cooldown <= 0.0 and reload_remaining <= 0.0:
 			if ammo > 0:
 				server_fire_projectile(peer_id, player, weapon_profile)
 				ammo -= 1
@@ -512,6 +524,11 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				broadcast_player_state_cb.call(peer_id, player)
 
 	return snapshot_accumulator
+
+func _is_gameplay_locked() -> bool:
+	if is_gameplay_locked_cb.is_valid():
+		return is_gameplay_locked_cb.call() == true
+	return false
 
 func _post_shot_reload_delay(weapon_profile: WeaponProfile) -> float:
 	if weapon_profile == null:

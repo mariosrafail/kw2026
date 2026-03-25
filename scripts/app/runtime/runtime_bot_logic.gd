@@ -126,6 +126,14 @@ func _server_ensure_bots_if_needed() -> void:
 				player_replication.ensure_player_stats(controller.peer_id())
 			if not players.has(controller.peer_id()):
 				controller.ensure_spawned(PLAYER_SCENE, anchor_player.global_position)
+			var spawn_position := _spawn_position_for_peer(controller.peer_id())
+			if spawn_position != Vector2.ZERO:
+				var previous_spawn := controller.get_spawn_position()
+				controller.set_spawn_position(spawn_position)
+				var bot_player := players.get(controller.peer_id(), null) as NetPlayer
+				if bot_player != null and (previous_spawn == Vector2.ZERO or previous_spawn.distance_squared_to(spawn_position) > 1.0):
+					controller.setup_spawned_player(bot_player, spawn_position, false)
+					bot_player.force_respawn(spawn_position)
 			continue
 		if players.has(controller.peer_id()):
 			_server_remove_player(controller.peer_id(), [])

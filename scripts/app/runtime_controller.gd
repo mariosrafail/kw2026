@@ -2,10 +2,13 @@ extends "res://scripts/app/runtime_rpc_logic.gd"
 
 const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
 const SKILL_HUD_SCRIPT := preload("res://scripts/ui/skill_hud.gd")
+const SKULL_FFA_INTRO_CONTROLLER_SCRIPT := preload("res://scripts/world/skull_ffa_match_intro_controller.gd")
 const CURSOR_MANAGER_NAME := "CursorManager"
 const FIGHT_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/fight_soundtrack.MP3"
 const FIGHT_SOUNDTRACK_FALLBACK := preload("res://assets/sounds/soundtrack/fight_soundtrack.MP3")
 const MENU_STATE_PATH := "user://main_menu_shop_state.json"
+const SKULL_FFA_MAP_ID := "skull_ffa"
+const SKULL_FFA_MATCH_INTRO_SEC := 13.0
 
 var _client_skill_cd_q_remaining := 0.0
 var _client_skill_cd_e_remaining := 0.0
@@ -13,6 +16,9 @@ var _client_skill_cd_q_max := 0.0
 var _client_skill_cd_e_max := 0.0
 var _skill_hud = null
 var _fight_music_player: AudioStreamPlayer = null
+var _skull_intro = SKULL_FFA_INTRO_CONTROLLER_SCRIPT.new()
+var _gameplay_locked_until_msec := 0
+var _skull_match_intro_sent := false
 
 const RPC_ROOT_NODE_NAME := "GameRoot"
 
@@ -47,6 +53,7 @@ func _ready() -> void:
 	_connect_local_signals()
 	_setup_ui_defaults()
 	_ensure_skill_hud()
+	_configure_skull_intro_controller()
 
 	var startup_defaults := _load_startup_network_defaults()
 	port_spin.value = int(startup_defaults.get("port", DEFAULT_PORT))
@@ -172,6 +179,7 @@ func _physics_process(delta: float) -> void:
 		if not _uses_lobby_scene_flow():
 			client_input_controller.local_host_apply_input(delta, damage_boost_enabled, input_states)
 		_server_ensure_bots_if_needed()
+		_maybe_server_begin_skull_match_intro()
 		_server_tick_target_dummy_bot(delta)
 		snapshot_accumulator = combat_flow_service.server_simulate(delta, snapshot_accumulator)
 		combat_flow_service.server_tick_projectiles(delta)
@@ -189,7 +197,10 @@ func _physics_process(delta: float) -> void:
 		ctf_match_controller.visual_tick(_ctf_objective_enabled())
 
 	if multiplayer.multiplayer_peer != null:
-		client_input_controller.follow_local_player_camera(delta)
+		if _skull_intro != null and _skull_intro.has_method("is_active") and _skull_intro.call("is_active") == true:
+			_skull_intro.call("visual_tick", delta)
+		else:
+			client_input_controller.follow_local_player_camera(delta)
 
 func _ensure_skill_hud() -> void:
 	if cooldown_label != null:
@@ -281,6 +292,8 @@ func _input(event: InputEvent) -> void:
 			_update_ui_visibility()
 
 func _try_cast_skill1() -> void:
+	if _is_gameplay_locked():
+		return
 	if role != Role.CLIENT and role != Role.SERVER:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
@@ -295,6 +308,8 @@ func _try_cast_skill1() -> void:
 	_rpc_cast_skill1.rpc_id(1, target_world)
 
 func _try_cast_skill2() -> void:
+	if _is_gameplay_locked():
+		return
 	if role != Role.CLIENT and role != Role.SERVER:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
@@ -309,6 +324,8 @@ func _try_cast_skill2() -> void:
 	_rpc_cast_skill2.rpc_id(1, target_world)
 
 func _try_reload() -> void:
+	if _is_gameplay_locked():
+		return
 	if role != Role.CLIENT and role != Role.SERVER:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
@@ -357,6 +374,105 @@ func _load_startup_network_defaults() -> Dictionary:
 			defaults["port"] = config_port
 		_append_log("Launcher defaults loaded: host=%s port=%d" % [str(defaults["host"]), int(defaults["port"])])
 	return defaults
+
+func _configure_skull_intro_controller() -> void:
+	if _skull_intro == null:
+		return
+	if _skull_intro.has_method("configure"):
+		_skull_intro.call("configure", self, main_camera, players)
+
+func _is_skull_ffa_match_scene() -> bool:
+	if map_controller != null and map_controller.normalized_map_id() == SKULL_FFA_MAP_ID:
+		return true
+	return selected_map_id == SKULL_FFA_MAP_ID
+
+func _is_gameplay_locked() -> bool:
+	return _gameplay_locked_until_msec > Time.get_ticks_msec()
+
+func _activate_gameplay_lock(duration_sec: float) -> void:
+	_gameplay_locked_until_msec = maxi(_gameplay_locked_until_msec, Time.get_ticks_msec() + int(round(duration_sec * 1000.0)))
+
+func _active_match_lobby_id() -> int:
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		if _is_target_dummy_peer(peer_id):
+			continue
+		var lobby_id := _peer_lobby(peer_id)
+		if lobby_id > 0:
+			return lobby_id
+	return _target_dummy_lobby_id()
+
+func _ordered_skull_intro_peer_ids(lobby_id: int) -> Array:
+	var ordered: Array = []
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		if _is_target_dummy_peer(peer_id):
+			var controller := _bot_controller_for_peer(peer_id)
+			if controller == null or controller.get_lobby_id() != lobby_id:
+				continue
+		elif _peer_lobby(peer_id) != lobby_id:
+			continue
+		var player := players.get(peer_id, null) as NetPlayer
+		if player == null:
+			continue
+		ordered.append({
+			"peer_id": peer_id,
+			"x": player.global_position.x,
+			"y": player.global_position.y
+		})
+	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ax := float(a.get("x", 0.0))
+		var bx := float(b.get("x", 0.0))
+		if absf(ax - bx) > 0.01:
+			return ax < bx
+		return float(a.get("y", 0.0)) < float(b.get("y", 0.0))
+	)
+	var out: Array = []
+	for entry_value in ordered:
+		var entry := entry_value as Dictionary
+		out.append(int(entry.get("peer_id", 0)))
+	return out
+
+func _maybe_server_begin_skull_match_intro() -> void:
+	if not multiplayer.is_server():
+		return
+	if _skull_match_intro_sent:
+		return
+	if not _is_skull_ffa_match_scene():
+		return
+	var lobby_id := _active_match_lobby_id()
+	if lobby_id <= 0:
+		return
+	var human_member_count := _lobby_members(lobby_id).size()
+	if human_member_count <= 0:
+		return
+	var max_players := human_member_count
+	var should_add_bots := false
+	if lobby_service != null and lobby_service.has_lobby(lobby_id):
+		max_players = lobby_service.max_players_for_lobby(lobby_id)
+		should_add_bots = lobby_service.add_bots_enabled(lobby_id)
+	var expected_total := human_member_count
+	if should_add_bots:
+		expected_total = max_players
+	if _active_match_participant_count(lobby_id) < expected_total:
+		return
+	var ordered_peer_ids := _ordered_skull_intro_peer_ids(lobby_id)
+	if ordered_peer_ids.is_empty():
+		return
+	_skull_match_intro_sent = true
+	_activate_gameplay_lock(SKULL_FFA_MATCH_INTRO_SEC)
+	for member_value in _lobby_members(lobby_id):
+		_rpc_skull_match_intro.rpc_id(int(member_value), ordered_peer_ids, SKULL_FFA_MATCH_INTRO_SEC)
+
+@rpc("authority", "reliable")
+func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) -> void:
+	if multiplayer.is_server() and role != Role.CLIENT:
+		return
+	if not _is_skull_ffa_match_scene():
+		return
+	_activate_gameplay_lock(_duration_sec)
+	if _skull_intro != null and _skull_intro.has_method("start") and multiplayer != null:
+		_skull_intro.call("start", _participant_peer_ids, multiplayer.get_unique_id(), _duration_sec)
 
 func _read_launcher_config_defaults() -> Dictionary:
 	var candidate_paths := PackedStringArray()

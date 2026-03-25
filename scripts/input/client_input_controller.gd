@@ -7,6 +7,7 @@ var main_camera: Camera2D
 var camera_shake: CameraShake
 
 var submit_input_cb: Callable = Callable()
+var is_gameplay_locked_cb: Callable = Callable()
 var input_send_rate := 60.0
 
 var _input_send_accumulator := 0.0
@@ -32,6 +33,7 @@ func configure(refs: Dictionary, callbacks: Dictionary, config: Dictionary = {})
 	camera_shake = refs.get("camera_shake", null) as CameraShake
 
 	submit_input_cb = callbacks.get("submit_input", Callable()) as Callable
+	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
 	input_send_rate = float(config.get("input_send_rate", input_send_rate))
 
 func reset() -> void:
@@ -175,6 +177,15 @@ func _camera_mouse_look_axis(value: float) -> float:
 
 func _read_local_input_state(damage_boost_enabled: bool) -> Dictionary:
 	var mouse_world := main_camera.get_global_mouse_position() if main_camera != null else Vector2.ZERO
+	if is_gameplay_locked_cb.is_valid() and is_gameplay_locked_cb.call() == true:
+		return {
+			"axis": 0.0,
+			"jump_pressed": false,
+			"jump_held": false,
+			"aim_world": mouse_world,
+			"shoot_held": false,
+			"boost_damage": false
+		}
 	var left_pressed := Input.is_action_pressed("move_left")
 	var right_pressed := Input.is_action_pressed("move_right")
 	if Input.is_action_just_pressed("move_left"):

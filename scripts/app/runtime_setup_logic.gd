@@ -20,11 +20,11 @@ func _init_services() -> void:
 	camera_shake = CAMERA_SHAKE_SCRIPT.new()
 	dropped_mag_service = DROPPED_MAG_SERVICE_SCRIPT.new()
 	target_dummy_bot_controller = TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new()
-	bot_controllers = [
-		target_dummy_bot_controller,
-		TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new(),
-		TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new()
-	]
+	bot_controllers.clear()
+	target_dummy_bot_controller = TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new()
+	bot_controllers.append(target_dummy_bot_controller)
+	for _i in range(maxi(0, MAX_CLIENTS - 2)):
+		bot_controllers.append(TARGET_DUMMY_BOT_CONTROLLER_SCRIPT.new())
 	ctf_match_controller = TEAM_MATCH_CONTROLLER_SCRIPT.new()
 	weapon_ui = WEAPON_UI_SCRIPT.new()
 
@@ -269,8 +269,8 @@ func _configure_services() -> void:
 				"spawn_points": spawn_points,
 				"bot_peer_id": -1001 - index,
 				"bot_name": "BOT %d" % (index + 1),
-				"bot_color": Color(1.0, 0.48 + 0.12 * float(index), 0.48, 1.0),
-				"spawn_point_index": mini(index + 1, 3)
+				"bot_color": Color(1.0, minf(0.96, 0.48 + 0.08 * float(index)), 0.48, 1.0),
+				"spawn_point_index": mini(index + 1, maxi(0, spawn_points.size() - 1))
 			}
 		)
 
@@ -310,7 +310,8 @@ func _configure_services() -> void:
 			"send_despawn_projectile": Callable(self, "_send_despawn_projectile_rpc"),
 			"broadcast_player_state": Callable(self, "_server_broadcast_player_state"),
 			"send_skill_cast": Callable(self, "_send_skill_cast_rpc"),
-			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer")
+			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer"),
+			"is_gameplay_locked": Callable(self, "_is_gameplay_locked")
 		},
 		{
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,
@@ -348,7 +349,8 @@ func _configure_services() -> void:
 			"camera_shake": camera_shake
 		},
 		{
-			"submit_input": Callable(self, "_send_input_rpc")
+			"submit_input": Callable(self, "_send_input_rpc"),
+			"is_gameplay_locked": Callable(self, "_is_gameplay_locked")
 		},
 		{
 			"input_send_rate": INPUT_SEND_RATE
