@@ -11,6 +11,20 @@
 default_font = ExtResource("1_font")
 default_font_size = 18
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wallet_panel"]
+content_margin_left = 7.0
+content_margin_top = 5.0
+content_margin_right = 7.0
+content_margin_bottom = 5.0
+bg_color = Color(0.1216, 0.1569, 0.2549, 0.9)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 3
+border_color = Color(0.9294, 0.9686, 0.7412, 0.95)
+shadow_color = Color(0.06, 0.05, 0.08, 0.5)
+shadow_size = 6
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
 content_margin_left = 14.0
 content_margin_top = 8.0
@@ -118,26 +132,23 @@ grow_vertical = 2
 texture = ExtResource("3_bullet")
 stretch_mode = 1
 
-[node name="WalletPanel" type="Control" parent="." unique_id=1498568740]
-z_index = 200
+[node name="WalletPanel" type="PanelContainer" parent="." unique_id=1498568740]
+z_index = 3000
+z_as_relative = false
 layout_mode = 1
-anchors_preset = 0
 offset_left = 10.0
 offset_top = 10.0
-offset_right = 182.0
-offset_bottom = 56.0
+offset_right = 144.0
+offset_bottom = 54.0
 mouse_filter = 1
+theme_override_styles/panel = SubResource("StyleBoxFlat_wallet_panel")
 
 [node name="Margin" type="MarginContainer" parent="WalletPanel" unique_id=387552268]
-layout_mode = 0
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/margin_left = 0
-theme_override_constants/margin_top = 0
-theme_override_constants/margin_right = 0
-theme_override_constants/margin_bottom = 0
+layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 3
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 3
 
 [node name="WalletBox" type="VBoxContainer" parent="WalletPanel/Margin" unique_id=773927424]
 layout_mode = 2
@@ -149,7 +160,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 12
 text = "Coins: 0"
 
 [node name="ClkLabel" type="Label" parent="WalletPanel/Margin/WalletBox" unique_id=2039175208]
@@ -158,17 +169,12 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 12
 text = "CLK: 0"
 
 [node name="WalletClick" type="Button" parent="WalletPanel" unique_id=577705213]
 unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 2
 focus_mode = 0
 flat = true
 
@@ -755,7 +761,8 @@ columns = 2
 
 [node name="Intro" type="Control" parent="." unique_id=1964588908]
 unique_name_in_owner = true
-z_index = 1000
+z_index = 4095
+z_as_relative = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0

@@ -784,6 +784,7 @@ func _play_intro_animation_safe() -> void:
 	_intro_fx.intro_fx_enabled = intro_fx_enabled
 	_intro_fx.play_intro_animation_safe()
 	enable_intro_animation = _intro_fx.enable_intro_animation
+	_refresh_global_overlay_ui_state()
 
 func _ensure_auth_logout_button() -> void:
 	_meta_ui.ensure_auth_logout_button(self)
@@ -858,6 +859,7 @@ func _open_lobby_menu_flow() -> void:
 	if _lobby_overlay_ctrl != null:
 		_lobby_overlay_ctrl.open(play_button)
 	_sync_lobby_overlay_interaction_state()
+	_refresh_global_overlay_ui_state()
 	_refresh_meta_ui_visibility()
 
 func _run_play_lobby_transition() -> void:
@@ -933,8 +935,6 @@ func _cache_play_lobby_fade_targets() -> void:
 	var targets: Array[CanvasItem] = []
 	# Keep menu background visible during lobby transition to avoid
 	# revealing the engine's default gray clear color.
-	if wallet_panel != null:
-		targets.append(wallet_panel)
 	if play_button != null:
 		targets.append(play_button)
 	if options_button != null:
@@ -1033,6 +1033,7 @@ func _on_lobby_overlay_closed() -> void:
 	await _run_play_lobby_reverse_transition()
 	_restore_play_lobby_fade_targets()
 	_sync_lobby_overlay_interaction_state()
+	_refresh_global_overlay_ui_state()
 	_refresh_meta_ui_visibility()
 
 func _on_exit_pressed() -> void:
@@ -1252,8 +1253,17 @@ func _close_weapons_menu_stage2() -> void:
 func _set_current_screen_ref(target: Control) -> void:
 	_current_screen = target
 	_sync_lobby_overlay_interaction_state()
+	_refresh_global_overlay_ui_state()
 	_refresh_warrior_username_label()
 	_refresh_auth_footer()
+
+func _refresh_global_overlay_ui_state() -> void:
+	if wallet_panel != null:
+		wallet_panel.visible = true
+		wallet_panel.z_as_relative = false
+		wallet_panel.z_index = 3000
+	set("_meta_force_immediate_visibility", true)
+	_refresh_meta_ui_visibility()
 
 func _sync_lobby_overlay_interaction_state() -> void:
 	if _lobby_overlay_ctrl == null:
@@ -2078,8 +2088,8 @@ func _set_sound_buses_volume_linear(value: float) -> void:
 		if target_names.has(bus_name):
 			AudioServer.set_bus_volume_db(i, db)
 
-func _ensure_audio_bus(name: String, send_to: String = "Master") -> int:
-	var wanted := name.strip_edges()
+func _ensure_audio_bus(bus_name: String, send_to: String = "Master") -> int:
+	var wanted := bus_name.strip_edges()
 	if wanted.is_empty():
 		return -1
 	for i in range(AudioServer.get_bus_count()):

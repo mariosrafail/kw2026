@@ -95,9 +95,11 @@ func abort_intro_animation() -> void:
 		_intro_tween.kill()
 		_intro_tween = null
 	if _intro != null:
+		_intro.top_level = false
 		_intro.visible = false
 		_intro.modulate = Color(1, 1, 1, 0)
 	_restore_menu_cursor_after_intro()
+	_notify_host_intro_visibility_changed()
 
 func _play_intro_animation() -> void:
 	if _intro == null or _intro_fade == null or _intro_plate == null or _intro_label == null:
@@ -109,9 +111,12 @@ func _play_intro_animation() -> void:
 	_intro_fade.mouse_filter = Control.MOUSE_FILTER_STOP
 	_intro_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_intro_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro.top_level = true
+	_intro.z_index = 4095
 	_hide_menu_cursor_for_intro()
 	_intro.visible = true
 	_intro.modulate = Color(1, 1, 1, 1)
+	_notify_host_intro_visibility_changed()
 	_intro_fade.color = INTRO_OVERLAY_TINT
 	_set_intro_reveal_radius(0.0)
 
@@ -180,6 +185,7 @@ func _play_intro_animation() -> void:
 	t.parallel().tween_method(Callable(self, "_set_intro_reveal_radius"), 0.0, 1.25, 0.92).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	t.tween_callback(func() -> void:
 		_start_menu_soundtrack_fade_in()
+		_intro.top_level = false
 		_intro.visible = false
 		_intro_label.position = base_label_pos
 		_intro_label.scale = Vector2.ONE
@@ -194,7 +200,12 @@ func _play_intro_animation() -> void:
 		_intro_plate.modulate = Color(1, 1, 1, 1)
 		_set_intro_reveal_radius(0.0)
 		_restore_menu_cursor_after_intro()
+		_notify_host_intro_visibility_changed()
 	)
+
+func _notify_host_intro_visibility_changed() -> void:
+	if _host != null and _host.has_method("_refresh_global_overlay_ui_state"):
+		_host.call("_refresh_global_overlay_ui_state")
 
 func _set_intro_chars(v: float) -> void:
 	if _intro_label == null:

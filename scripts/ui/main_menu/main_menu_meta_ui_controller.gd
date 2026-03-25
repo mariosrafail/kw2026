@@ -96,17 +96,17 @@ func refresh_auth_footer(host: Control) -> void:
 	var footer_panel := host.get("_auth_footer_panel") as PanelContainer
 	if footer_panel == null or not is_instance_valid(footer_panel):
 		return
-	var logged := bool(host.get("_auth_logged_in"))
+	var logged: bool = host.get("_auth_logged_in") == true
 	var logout_button := host.get("_auth_logout_button") as Button
 	if logout_button != null and is_instance_valid(logout_button):
 		logout_button.visible = logged
 	var footer_label := host.get("_auth_footer_label") as Label
 	if footer_label != null and is_instance_valid(footer_label):
 		if logged:
-			var name := str(host.get("player_username")).strip_edges()
-			if name.is_empty():
-				name = "Player"
-			footer_label.text = "Logged in: %s" % name
+			var username_text := str(host.get("player_username")).strip_edges()
+			if username_text.is_empty():
+				username_text = "Player"
+			footer_label.text = "Logged in: %s" % username_text
 		else:
 			footer_label.text = "Not logged in"
 	layout_auth_logout_button(host)
@@ -122,14 +122,24 @@ func refresh_meta_ui_visibility(host: Control) -> void:
 
 func apply_meta_ui_visibility(host: Control, show_on_main: bool) -> void:
 	var lobby: Object = host.get("_lobby_overlay_ctrl") as Object
-	var lobby_visible := lobby != null and lobby.has_method("is_visible") and bool(lobby.call("is_visible"))
-	tween_meta_visibility(host, host.get("_warrior_username_label") as CanvasItem, show_on_main, "_meta_username_tween")
-	tween_meta_visibility(
-		host,
-		host.get("_auth_footer_panel") as CanvasItem,
-		bool(host.get("_auth_logged_in")) and show_on_main and not lobby_visible,
-		"_meta_footer_tween"
-	)
+	var lobby_visible: bool = lobby != null and lobby.has_method("is_visible") and lobby.call("is_visible") == true
+	var warrior_button := host.get("warrior_button") as BaseButton
+	var warrior_button_visible := warrior_button != null and warrior_button.is_visible_in_tree()
+	var show_username: bool = show_on_main and warrior_button_visible
+	var show_footer: bool = host.get("_auth_logged_in") == true and show_on_main and not lobby_visible
+	host.set("_meta_force_immediate_visibility", false)
+	apply_meta_visibility_immediate(host, host.get("_warrior_username_label") as CanvasItem, show_username, "_meta_username_tween")
+	apply_meta_visibility_immediate(host, host.get("_auth_footer_panel") as CanvasItem, show_footer, "_meta_footer_tween")
+
+func apply_meta_visibility_immediate(host: Control, item: CanvasItem, should_show: bool, tween_slot: String) -> void:
+	if item == null or not is_instance_valid(item):
+		return
+	var active_tween := host.get(tween_slot) as Tween
+	if active_tween != null:
+		active_tween.kill()
+	host.set(tween_slot, null)
+	item.visible = should_show
+	item.modulate.a = 1.0 if should_show else 0.0
 
 func tween_meta_visibility(host: Control, item: CanvasItem, should_show: bool, tween_slot: String) -> void:
 	if item == null or not is_instance_valid(item):
@@ -169,7 +179,8 @@ func ensure_warrior_username_label(host: Control) -> void:
 		return
 	var label := Label.new()
 	label.name = "WarriorUsername"
-	label.z_index = 20
+	label.z_as_relative = false
+	label.z_index = 1500
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.anchors_preset = Control.PRESET_CENTER_TOP
 	label.anchor_left = 0.5

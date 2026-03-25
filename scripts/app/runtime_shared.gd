@@ -126,7 +126,7 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var lobby_name_input: LineEdit = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyNameRow/LobbyNameInput") as LineEdit
 @onready var lobby_list: ItemList = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyList") as ItemList
 @onready var lobby_status_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyStatusLabel") as Label
-@onready var wallet_label: Label = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/WalletLabel") as Label
+@onready var wallet_label: Label = get_node_or_null("ModalUi/WalletPanel/Margin/WalletLabel") as Label
 @onready var lobby_create_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyNameRow/LobbyCreateButton") as Button
 @onready var lobby_join_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyJoinButton") as Button
 @onready var lobby_refresh_button: Button = get_node_or_null("LobbyUi/LobbyPanel/Margin/VBox/LobbyActionsRow/LobbyRefreshButton") as Button
