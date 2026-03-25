@@ -4,6 +4,7 @@ const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
 const SKILL_HUD_SCRIPT := preload("res://scripts/ui/skill_hud.gd")
 const CURSOR_MANAGER_NAME := "CursorManager"
 const FIGHT_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/fight_soundtrack.MP3"
+const FIGHT_SOUNDTRACK_FALLBACK := preload("res://assets/sounds/soundtrack/fight_soundtrack.MP3")
 const MENU_STATE_PATH := "user://main_menu_shop_state.json"
 
 var _client_skill_cd_q_remaining := 0.0
@@ -434,7 +435,12 @@ func _load_fight_soundtrack_stream() -> AudioStream:
 			mp3.data = data
 			mp3.loop = true
 			return mp3
-	return null
+	var fallback := FIGHT_SOUNDTRACK_FALLBACK.duplicate(true) as AudioStream
+	if fallback is AudioStreamMP3:
+		(fallback as AudioStreamMP3).loop = true
+	elif fallback is AudioStreamWAV:
+		(fallback as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+	return fallback
 
 func _load_music_volume_linear_from_menu_state() -> float:
 	if not FileAccess.file_exists(MENU_STATE_PATH):

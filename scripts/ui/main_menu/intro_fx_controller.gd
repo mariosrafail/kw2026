@@ -4,8 +4,9 @@ const TYPEWRITER_SFX := preload("res://assets/sounds/sfx/menu_placeholders/keybo
 const EXPLOSION_SFX := preload("res://assets/sounds/sfx/menu_placeholders/explosion.mp3")
 const EXPLOSION_LAYER_SFX := preload("res://assets/sounds/sfx/guns/grenade/launcher_boom.wav")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
-const MENU_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/menu_soundtrack.mp3"
-const MENU_SOUNDTRACK_MP3_FALLBACK := preload("res://assets/sounds/soundtrack/menu_soundtrack.mp3")
+const MENU_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/menu_soundtrack.MP3"
+const MENU_SOUNDTRACK_MP3_FALLBACK := preload("res://assets/sounds/soundtrack/menu_soundtrack.MP3")
+const LOBBY_SOUNDTRACK_FALLBACK := preload("res://assets/sounds/soundtrack/lobby_soundratck.MP3")
 const LOBBY_SOUNDTRACK_CANDIDATES := [
 	"res://assets/sounds/soundtrack/lobby_soundratck.MP3",
 	"res://assets/sounds/soundtrack/lobby_soundratck.mp3",
@@ -358,7 +359,12 @@ func _load_lobby_soundtrack_stream() -> AudioStream:
 				mp3.data = data
 				mp3.loop = true
 				return mp3
-	return null
+	var fallback := LOBBY_SOUNDTRACK_FALLBACK.duplicate(true) as AudioStream
+	if fallback is AudioStreamMP3:
+		(fallback as AudioStreamMP3).loop = true
+	elif fallback is AudioStreamWAV:
+		(fallback as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+	return fallback
 
 func _on_menu_music_finished() -> void:
 	if _menu_music_player == null or not is_instance_valid(_menu_music_player):
