@@ -1,6 +1,7 @@
 extends RefCounted
 class_name MainMenuAuthFlow
 
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const AUTH_REQUEST_TIMEOUT_SEC := 8.0
 const DEFAULT_AUTH_USERNAME := "BLACKSHADOW"
 const DEFAULT_AUTH_PASSWORD := "1234"
@@ -50,7 +51,7 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.3059, 0.5529, 0.6118, 0.34)
+	bg.color = MENU_PALETTE.accent(0.34)
 	overlay.add_child(bg)
 
 	var panel := PanelContainer.new()
@@ -58,12 +59,12 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-220, -120)
 	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.96)
+	panel_style.bg_color = MENU_PALETTE.accent(0.96)
 	panel_style.border_width_left = 3
 	panel_style.border_width_top = 3
 	panel_style.border_width_right = 3
 	panel_style.border_width_bottom = 3
-	panel_style.border_color = Color(0.9294, 0.9686, 0.7412, 0.92)
+	panel_style.border_color = MENU_PALETTE.highlight(0.92)
 	panel_style.corner_radius_top_left = 0
 	panel_style.corner_radius_top_right = 0
 	panel_style.corner_radius_bottom_left = 0
@@ -88,22 +89,22 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	title.text = "LOGIN"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color(0.9294, 0.9686, 0.7412, 1.0))
+	title.add_theme_color_override("font_color", MENU_PALETTE.highlight(1.0))
 	box.add_child(title)
 
 	var field_style := StyleBoxFlat.new()
-	field_style.bg_color = Color(0.5216, 0.7804, 0.6039, 0.82)
+	field_style.bg_color = MENU_PALETTE.hot(0.82)
 	field_style.border_width_left = 2
 	field_style.border_width_top = 2
 	field_style.border_width_right = 2
 	field_style.border_width_bottom = 2
-	field_style.border_color = Color(0.9294, 0.9686, 0.7412, 0.85)
+	field_style.border_color = MENU_PALETTE.highlight(0.85)
 	field_style.corner_radius_top_left = 0
 	field_style.corner_radius_top_right = 0
 	field_style.corner_radius_bottom_left = 0
 	field_style.corner_radius_bottom_right = 0
 	var field_focus_style := field_style.duplicate() as StyleBoxFlat
-	field_focus_style.border_color = Color(0.9294, 0.9686, 0.7412, 1.0)
+	field_focus_style.border_color = MENU_PALETTE.highlight(1.0)
 
 	var user_input := LineEdit.new()
 	user_input.placeholder_text = "Username or Email"
@@ -111,9 +112,9 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	user_input.custom_minimum_size = Vector2(0, 34)
 	user_input.add_theme_stylebox_override("normal", field_style)
 	user_input.add_theme_stylebox_override("focus", field_focus_style)
-	user_input.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 1.0))
-	user_input.add_theme_color_override("font_placeholder_color", Color(0.58, 0.65, 0.77, 0.95))
-	user_input.add_theme_color_override("caret_color", Color(0.83, 0.97, 1.0, 1.0))
+	user_input.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	user_input.add_theme_color_override("font_placeholder_color", MENU_PALETTE.text_dark(0.78))
+	user_input.add_theme_color_override("caret_color", MENU_PALETTE.highlight(1.0))
 	box.add_child(user_input)
 	host.set("_auth_user_input", user_input)
 
@@ -124,9 +125,9 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	pass_input.custom_minimum_size = Vector2(0, 34)
 	pass_input.add_theme_stylebox_override("normal", field_style)
 	pass_input.add_theme_stylebox_override("focus", field_focus_style)
-	pass_input.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 1.0))
-	pass_input.add_theme_color_override("font_placeholder_color", Color(0.58, 0.65, 0.77, 0.95))
-	pass_input.add_theme_color_override("caret_color", Color(0.83, 0.97, 1.0, 1.0))
+	pass_input.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	pass_input.add_theme_color_override("font_placeholder_color", MENU_PALETTE.text_dark(0.78))
+	pass_input.add_theme_color_override("caret_color", MENU_PALETTE.highlight(1.0))
 	box.add_child(pass_input)
 	host.set("_auth_pass_input", pass_input)
 
@@ -143,7 +144,7 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.add_theme_font_size_override("font_size", 12)
-	status.add_theme_color_override("font_color", Color(0.9294, 0.9686, 0.7412, 0.95))
+	status.add_theme_color_override("font_color", MENU_PALETTE.highlight(0.95))
 	box.add_child(status)
 	host.set("_auth_status_label", status)
 

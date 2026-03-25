@@ -1,8 +1,9 @@
 extends RefCounted
 class_name MainMenuMetaUiController
 
-const MENU_CLR_ACCENT := Color(0.3059, 0.5529, 0.6118, 1.0) # 4E8D9C
-const MENU_CLR_HIGHLIGHT := Color(0.9294, 0.9686, 0.7412, 1.0) # EDF7BD
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
+var MENU_CLR_ACCENT := MENU_PALETTE.accent()
+var MENU_CLR_TEXT_PRIMARY := MENU_PALETTE.text_primary()
 
 func ensure_auth_logout_button(host: Control) -> void:
 	var footer_panel := host.get("_auth_footer_panel") as PanelContainer
@@ -21,7 +22,7 @@ func ensure_auth_logout_button(host: Control) -> void:
 	panel.visible = false
 	panel.z_index = 210
 	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.92)
+	panel_style.bg_color = MENU_PALETTE.accent(0.92)
 	panel_style.border_width_left = 2
 	panel_style.border_width_top = 2
 	panel_style.border_width_right = 2
@@ -53,7 +54,7 @@ func ensure_auth_logout_button(host: Control) -> void:
 	info.name = "AuthFooterLabel"
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_font_size_override("font_size", 11)
-	info.add_theme_color_override("font_color", MENU_CLR_HIGHLIGHT)
+	info.add_theme_color_override("font_color", MENU_CLR_TEXT_PRIMARY)
 	info.text = "Not logged in"
 	row.add_child(info)
 	host.set("_auth_footer_label", info)
@@ -112,16 +113,23 @@ func refresh_auth_footer(host: Control) -> void:
 	refresh_meta_ui_visibility(host)
 
 func is_main_menu_meta_ui_visible(host: Control) -> bool:
-	var lobby: Object = host.get("_lobby_overlay_ctrl") as Object
-	var lobby_visible := lobby != null and lobby.has_method("is_visible") and bool(lobby.call("is_visible"))
-	return host.get("_current_screen") == host.get("screen_main") and not lobby_visible
+	# Keep meta UI visible on main screen even when lobby overlay is open,
+	# so username stays above the warrior during lobby browsing.
+	return host.get("_current_screen") == host.get("screen_main")
 
 func refresh_meta_ui_visibility(host: Control) -> void:
 	apply_meta_ui_visibility(host, is_main_menu_meta_ui_visible(host))
 
 func apply_meta_ui_visibility(host: Control, show_on_main: bool) -> void:
+	var lobby: Object = host.get("_lobby_overlay_ctrl") as Object
+	var lobby_visible := lobby != null and lobby.has_method("is_visible") and bool(lobby.call("is_visible"))
 	tween_meta_visibility(host, host.get("_warrior_username_label") as CanvasItem, show_on_main, "_meta_username_tween")
-	tween_meta_visibility(host, host.get("_auth_footer_panel") as CanvasItem, bool(host.get("_auth_logged_in")) and show_on_main, "_meta_footer_tween")
+	tween_meta_visibility(
+		host,
+		host.get("_auth_footer_panel") as CanvasItem,
+		bool(host.get("_auth_logged_in")) and show_on_main and not lobby_visible,
+		"_meta_footer_tween"
+	)
 
 func tween_meta_visibility(host: Control, item: CanvasItem, should_show: bool, tween_slot: String) -> void:
 	if item == null or not is_instance_valid(item):
@@ -175,8 +183,8 @@ func ensure_warrior_username_label(host: Control) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", Color(0.98, 0.97, 0.95, 1))
-	label.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
+	label.add_theme_color_override("font_color", Color(0, 0, 0, 1))
+	label.add_theme_color_override("font_outline_color", MENU_PALETTE.text_dark(1.0))
 	label.add_theme_constant_override("outline_size", 0)
 	warrior_area.add_child(label)
 	host.set("_warrior_username_label", label)

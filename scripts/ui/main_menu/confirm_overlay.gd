@@ -1,4 +1,5 @@
 extends Control
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 
 var _make_button: Callable
 var _set_weapon_icon: Callable
@@ -22,23 +23,23 @@ func _make_menu_panel_style() -> StyleBoxFlat:
 	sb.content_margin_top = 12.0
 	sb.content_margin_right = 14.0
 	sb.content_margin_bottom = 12.0
-	sb.bg_color = Color(0.3059, 0.5529, 0.6118, 0.96)
+	sb.bg_color = MENU_PALETTE.accent(0.96)
 	sb.border_width_left = 4
 	sb.border_width_top = 4
 	sb.border_width_right = 4
 	sb.border_width_bottom = 4
-	sb.border_color = Color(0.9294, 0.9686, 0.7412, 0.92)
-	sb.shadow_color = Color(0.1569, 0.1098, 0.3490, 0.22)
+	sb.border_color = MENU_PALETTE.highlight(0.92)
+	sb.shadow_color = MENU_PALETTE.base(0.22)
 	sb.shadow_size = 6
 	return sb
 
 func _normalize_confirm_button_theme(btn: Button) -> void:
 	if btn == null:
 		return
-	btn.add_theme_color_override("font_color", Color(0.9294, 0.9686, 0.7412, 1))
-	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
-	btn.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.08, 1))
+	btn.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
+	btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
+	btn.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
+	btn.add_theme_color_override("font_outline_color", MENU_PALETTE.text_dark(1.0))
 	btn.add_theme_constant_override("outline_size", 0)
 
 func _install_button_anim(btn: Button) -> void:
@@ -70,7 +71,7 @@ func _ready() -> void:
 	var bg := ColorRect.new()
 	bg.name = "Bg"
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.3059, 0.5529, 0.6118, 0.34)
+	bg.color = MENU_PALETTE.accent(0.34)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	bg.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
@@ -127,8 +128,8 @@ func _ready() -> void:
 	weapon_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	weapon_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var weapon_sb := StyleBoxFlat.new()
-	weapon_sb.bg_color = Color(0.5216, 0.7804, 0.6039, 0.82)
-	weapon_sb.border_color = Color(0.9294, 0.9686, 0.7412, 0.85)
+	weapon_sb.bg_color = MENU_PALETTE.hot(0.82)
+	weapon_sb.border_color = MENU_PALETTE.highlight(0.85)
 	weapon_sb.border_width_left = 2
 	weapon_sb.border_width_right = 2
 	weapon_sb.border_width_top = 2

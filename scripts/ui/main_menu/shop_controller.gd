@@ -13,6 +13,8 @@ func select_warrior_skin(host: Control, warrior_id: String, skin_index: int, sil
 	host.call("_refresh_warrior_filter_button_state")
 	refresh_warrior_grid_texts(host)
 	refresh_warrior_action(host)
+	if host != null and host.has_method("_refresh_selection_context_visuals"):
+		host.call("_refresh_selection_context_visuals")
 	if not silent:
 		host.call("_pop", host.get("warrior_shop_preview"))
 
@@ -36,6 +38,8 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 	host.call("_refresh_warrior_filter_button_state")
 	refresh_warrior_grid_texts(host)
 	refresh_warrior_action(host)
+	if host != null and host.has_method("_refresh_selection_context_visuals"):
+		host.call("_refresh_selection_context_visuals")
 	host.call("_pop", host.get("warrior_shop_preview"))
 
 func buy_warrior_if_needed(host: Control, warrior_id: String) -> bool:
@@ -207,6 +211,8 @@ func select_weapon_skin(host: Control, weapon_id: String, skin_index: int, silen
 	if weapon_name_label != null:
 		weapon_name_label.text = "%s - %s" % [weapon_ui.weapon_display_name(str(host.get("_pending_weapon_id"))), str(host.call("_weapon_skin_label", str(host.get("_pending_weapon_id")), int(host.get("_pending_weapon_skin"))))]
 	refresh_weapon_grid_texts(host)
+	if host != null and host.has_method("_refresh_selection_context_visuals"):
+		host.call("_refresh_selection_context_visuals")
 	if not silent:
 		host.call("_pop", host.get("weapon_shop_preview"))
 
@@ -229,6 +235,8 @@ func equip_weapon_item(host: Control, weapon_id: String, skin_index: int) -> voi
 	host.call("_save_state")
 	host.call("_auth_sync_wallet")
 	refresh_weapon_grid_texts(host)
+	if host != null and host.has_method("_refresh_selection_context_visuals"):
+		host.call("_refresh_selection_context_visuals")
 	host.call("_pop", host.get("main_weapon_icon"))
 	host.call("_pop", host.get("weapon_shop_preview"))
 

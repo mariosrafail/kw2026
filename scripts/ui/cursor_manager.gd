@@ -55,12 +55,16 @@ var _cursor_context := "game" # game|menu
 var _menu_cursor_default_scaled: Texture2D
 var _menu_cursor_hover_scaled: Texture2D
 var _menu_cursor_text_scaled: Texture2D
+var _menu_cursor_pressed_scaled: Texture2D
 var _menu_hover_blocked := false
+var _menu_click_active := false
 
 func _ready() -> void:
 	# Keep custom cursor above all regular UI/game canvas content.
 	layer = 10000
 	_process(true)
+	set_process_input(true)
+	set_process_unhandled_input(true)
 	_setup_crosshair()
 	set_cursor_context(_cursor_context)
 
@@ -138,6 +142,7 @@ func set_cursor_context(context: String) -> void:
 	if normalized != "menu" and normalized != "game":
 		normalized = "game"
 	_cursor_context = normalized
+	_menu_click_active = false
 	if _cursor_context == "menu":
 		_show_system_cursor_if_hidden()
 		_apply_menu_cursor_shapes()
@@ -159,6 +164,12 @@ func set_menu_hover_blocked(blocked: bool) -> void:
 		_apply_menu_cursor_shapes()
 
 func _apply_menu_cursor_shapes() -> void:
+	if _menu_click_active:
+		var pressed_tex := _menu_cursor_texture_pressed_x4()
+		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_ARROW, Vector2.ZERO)
+		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_POINTING_HAND, Vector2.ZERO)
+		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_IBEAM, Vector2.ZERO)
+		return
 	var default_tex := _menu_cursor_texture_default_x4()
 	Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_ARROW, Vector2.ZERO)
 	if _menu_hover_blocked:
@@ -186,6 +197,12 @@ func _menu_cursor_texture_text_x4() -> Texture2D:
 	_menu_cursor_text_scaled = _menu_cursor_texture_cell_scaled_x4(2)
 	return _menu_cursor_text_scaled
 
+func _menu_cursor_texture_pressed_x4() -> Texture2D:
+	if _menu_cursor_pressed_scaled != null:
+		return _menu_cursor_pressed_scaled
+	_menu_cursor_pressed_scaled = _menu_cursor_texture_cell_scaled_x4(3)
+	return _menu_cursor_pressed_scaled
+
 func _menu_cursor_texture_cell_scaled_x4(cell_index: int) -> Texture2D:
 	if MENU_CURSOR_TEXTURE == null:
 		return null
@@ -206,7 +223,22 @@ func _menu_cursor_texture_cell_scaled_x4(cell_index: int) -> Texture2D:
 	cell.resize(maxi(1, cell.get_width() * MENU_CURSOR_SCALE), maxi(1, cell.get_height() * MENU_CURSOR_SCALE), Image.INTERPOLATE_NEAREST)
 	return ImageTexture.create_from_image(cell)
 
+func _input(event: InputEvent) -> void:
+	if _cursor_context != "menu":
+		return
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			_menu_click_active = mb.pressed
+			_apply_menu_cursor_shapes()
+
 func _unhandled_input(event: InputEvent) -> void:
+	if _cursor_context == "menu" and event is InputEventMouseButton:
+		var menu_mb := event as InputEventMouseButton
+		if menu_mb.button_index == MOUSE_BUTTON_LEFT:
+			_menu_click_active = menu_mb.pressed
+			_apply_menu_cursor_shapes()
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:

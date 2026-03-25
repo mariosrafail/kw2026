@@ -19,12 +19,13 @@ const MENU_LOADING_OVERLAY_SCRIPT := preload("res://scripts/ui/main_menu/loading
 const MENU_THEME_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_theme_controller.gd")
 const MENU_META_UI_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_meta_ui_controller.gd")
 const MENU_NAV_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_navigation_controller.gd")
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8081/auth"
 const ENABLE_MENU_LOADING_OVERLAY := false
-const MENU_CLR_BASE := Color(0.1569, 0.1098, 0.3490, 1.0) # 281C59
-const MENU_CLR_ACCENT := Color(0.3059, 0.5529, 0.6118, 1.0) # 4E8D9C
-const MENU_CLR_HOT := Color(0.5216, 0.7804, 0.6039, 1.0) # 85C79A
-const MENU_CLR_HIGHLIGHT := Color(0.9294, 0.9686, 0.7412, 1.0) # EDF7BD
+var MENU_CLR_BASE := MENU_PALETTE.base()
+var MENU_CLR_ACCENT := MENU_PALETTE.accent()
+var MENU_CLR_HOT := MENU_PALETTE.hot()
+var MENU_CLR_HIGHLIGHT := MENU_PALETTE.highlight()
 
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
@@ -100,12 +101,16 @@ var logo_node: Node = null
 
 @onready var warrior_grid: GridContainer = %WarriorGrid
 @onready var warrior_scroll: ScrollContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorScroll
+@onready var warriors_panel: PanelContainer = $Screens/ScreenWarriors/WarriorsPanel
+@onready var warriors_body_row: HBoxContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow
 @onready var warrior_shop_preview: Node = %WarriorShopPreview
 @onready var warrior_name_label: Label = %WarriorNameLabel
 @onready var warrior_action_button: Button = %WarriorActionButton
 
 @onready var weapon_grid: GridContainer = %WeaponGrid
 @onready var weapon_scroll: ScrollContainer = $Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/ListCol/WeaponScroll
+@onready var weapons_panel: PanelContainer = $Screens/ScreenWeapons/WeaponsPanel
+@onready var weapons_body_row: HBoxContainer = $Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow
 @onready var weapon_shop_preview: Sprite2D = %WeaponShopPreview
 @onready var weapon_name_label: Label = %WeaponNameLabel
 @onready var weapon_action_button: Button = %WeaponActionButton
@@ -152,6 +157,9 @@ var _weapon_filter_weapon_buttons: Dictionary = {}
 var _weapon_filter_category_buttons: Dictionary = {}
 var _warrior_filter_warrior_id := ""
 var _warrior_filter_warrior_buttons: Dictionary = {}
+var _warrior_filters_row: HBoxContainer
+var _warrior_filters_bridge_holder: Control
+var _warrior_filters_bridge: Panel
 
 var _current_screen: Control
 var _transition_tween: Tween
@@ -237,6 +245,8 @@ func _ready() -> void:
 	_intro_fx.enable_intro_animation = enable_intro_animation
 	_intro_fx.intro_timeout_sec = intro_timeout_sec
 	_intro_fx.intro_fx_enabled = intro_fx_enabled
+	_on_music_slider_changed(music_slider.value if music_slider != null else 1.0)
+	_on_sfx_slider_changed(sfx_slider.value if sfx_slider != null else 1.0)
 
 	logo_node = get_node_or_null("Screens/ScreenMain/LogoSlot/Logo")
 	if logo_node == null:
@@ -277,22 +287,29 @@ func _ready() -> void:
 		{
 			"host": self,
 			"screen_main": screen_main,
+			"screen_warriors": screen_warriors,
+			"screen_weapons": screen_weapons,
 			"main_weapon_icon": main_weapon_icon,
 			"warrior_area": warrior_area,
 			"weapon_area": weapon_area,
 			"play_button": play_button,
 			"bg_noise": $BgNoise,
 			"logo_node": logo_node,
+			"warrior_shop_preview": warrior_shop_preview,
+			"weapon_shop_preview": weapon_shop_preview,
 		}
 	)
 
 	_logo_base_pos = _idle_anim.node_pos(logo_node)
 	_warrior_area_base_pos = warrior_area.position
 	_weapon_area_base_pos = weapon_area.position
+	var warrior_shop_preview_base_pos := _idle_anim.node_pos(warrior_shop_preview)
+	var weapon_shop_preview_base_pos := _idle_anim.node_pos(weapon_shop_preview)
 	var bg := $BgNoise as CanvasItem
 	if bg != null:
 		_bgnoise_base_alpha = bg.modulate.a
 	_idle_anim.set_base_state(_logo_base_pos, _warrior_area_base_pos, _weapon_area_base_pos, _bgnoise_base_alpha)
+	_idle_anim.set_shop_base_state(warrior_shop_preview_base_pos, weapon_shop_preview_base_pos)
 
 	call_deferred("_apply_center_pivots")
 	_apply_pixel_slider_style(music_slider)
@@ -301,6 +318,9 @@ func _ready() -> void:
 	_apply_pixel_scroll_style(weapon_scroll)
 	_apply_grid_spacing(warrior_grid)
 	_apply_grid_spacing(weapon_grid)
+	if warrior_grid != null:
+		warrior_grid.add_theme_constant_override("h_separation", 6)
+		warrior_grid.add_theme_constant_override("v_separation", 6)
 	_ensure_auth_logout_button()
 	if warrior_action_button != null:
 		warrior_action_button.visible = false
@@ -308,11 +328,6 @@ func _ready() -> void:
 	if weapon_action_button != null:
 		weapon_action_button.visible = false
 		weapon_action_button.disabled = true
-	# Temporarily disable the intro logo animation without removing the implementation.
-	enable_intro_animation = false
-	if intro != null:
-		intro.visible = false
-
 	_prepare_player_preview(main_warrior_preview)
 	_prepare_player_preview(warrior_shop_preview)
 
@@ -340,11 +355,14 @@ func _ready() -> void:
 
 	_select_warrior_skin(selected_warrior_id, selected_warrior_skin, true)
 	_select_weapon_skin(selected_weapon_id, selected_weapon_skin, true)
+	_refresh_selection_context_visuals()
 
 	_connect_signals()
 	_setup_auth_gate()
+	_play_intro_animation_safe()
 	_apply_uniform_button_outlines(self, 0)
 	_apply_main_category_button_brightness()
+	_apply_runtime_palette()
 	if _auth_logged_in:
 		_start_idle_loop()
 
@@ -353,6 +371,29 @@ func _auth_url(path: String) -> String:
 
 func _apply_menu_background_palette() -> void:
 	_menu_theme.apply_menu_background_palette(self)
+
+func _apply_runtime_palette(root: Node = null) -> void:
+	_menu_theme.apply_runtime_palette(self, root)
+
+func _refresh_selection_context_visuals() -> void:
+	# Keep warriors/weapons panels on their native theme style (hex-driven),
+	# without extra per-selection panel tint/bridge overlays.
+	_clear_panel_selection_style(warriors_panel)
+	_clear_panel_selection_style(weapons_panel)
+	_remove_selection_bridge(warriors_body_row)
+	_remove_selection_bridge(weapons_body_row)
+
+func _clear_panel_selection_style(panel: PanelContainer) -> void:
+	if panel == null:
+		return
+	panel.remove_theme_stylebox_override("panel")
+
+func _remove_selection_bridge(row: HBoxContainer) -> void:
+	if row == null:
+		return
+	var bridge := row.get_node_or_null("SelectionBridge") as Panel
+	if bridge != null and is_instance_valid(bridge):
+		bridge.queue_free()
 
 func _auth_login_current_base_url() -> String:
 	return _auth_flow.auth_login_current_base_url(self)
@@ -705,9 +746,13 @@ func _apply_menu_cursor_context() -> void:
 	_menu_nav.apply_menu_cursor_context(self, CURSOR_MANAGER_NAME)
 
 func _input(event: InputEvent) -> void:
+	if intro != null and intro.visible:
+		return
 	_menu_nav.handle_input(self, event)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if intro != null and intro.visible:
+		return
 	_menu_nav.handle_unhandled_input(self, event)
 
 func _toggle_fullscreen() -> void:
@@ -790,6 +835,14 @@ func _connect_signals() -> void:
 	warrior_button.mouse_exited.connect(func() -> void: _hover_area(warrior_area, false))
 	weapon_button.mouse_entered.connect(func() -> void: _hover_area(weapon_area, true))
 	weapon_button.mouse_exited.connect(func() -> void: _hover_area(weapon_area, false))
+	if music_slider != null:
+		var music_cb := Callable(self, "_on_music_slider_changed")
+		if not music_slider.value_changed.is_connected(music_cb):
+			music_slider.value_changed.connect(music_cb)
+	if sfx_slider != null:
+		var sfx_cb := Callable(self, "_on_sfx_slider_changed")
+		if not sfx_slider.value_changed.is_connected(sfx_cb):
+			sfx_slider.value_changed.connect(sfx_cb)
 
 func _on_play_pressed() -> void:
 	if _play_lobby_transition_running:
@@ -800,6 +853,8 @@ func _on_play_pressed() -> void:
 	_fade_out_play_lobby_transition()
 
 func _open_lobby_menu_flow() -> void:
+	if _intro_fx != null and _intro_fx.has_method("set_lobby_music_active"):
+		_intro_fx.call("set_lobby_music_active", true, 0.55)
 	if _lobby_overlay_ctrl != null:
 		_lobby_overlay_ctrl.open(play_button)
 	_sync_lobby_overlay_interaction_state()
@@ -824,7 +879,7 @@ func _run_play_lobby_transition() -> void:
 	panel.size = source_rect.size
 
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1569, 0.1098, 0.3490, 0.2)
+	style.bg_color = Color(MENU_CLR_BASE.r, MENU_CLR_BASE.g, MENU_CLR_BASE.b, 0.0)
 	style.border_color = MENU_CLR_HIGHLIGHT
 	style.border_width_left = 3
 	style.border_width_top = 3
@@ -843,7 +898,7 @@ func _run_play_lobby_transition() -> void:
 	_play_lobby_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_play_lobby_tween.parallel().tween_property(panel, "global_position", viewport_rect.position, duration)
 	_play_lobby_tween.parallel().tween_property(panel, "size", viewport_rect.size, duration)
-	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(0.3059, 0.5529, 0.6118, 0.42), duration * 0.75)
+	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(MENU_CLR_ACCENT.r, MENU_CLR_ACCENT.g, MENU_CLR_ACCENT.b, 0.0), duration * 0.75)
 	for target in _play_lobby_fade_targets:
 		if target == null or not is_instance_valid(target):
 			continue
@@ -876,13 +931,8 @@ func _cache_play_lobby_fade_targets() -> void:
 	_play_lobby_fade_targets.clear()
 	_play_lobby_fade_base_alpha.clear()
 	var targets: Array[CanvasItem] = []
-
-	var background := get_node_or_null("Background") as CanvasItem
-	var bg_noise := get_node_or_null("BgNoise") as CanvasItem
-	if background != null:
-		targets.append(background)
-	if bg_noise != null:
-		targets.append(bg_noise)
+	# Keep menu background visible during lobby transition to avoid
+	# revealing the engine's default gray clear color.
 	if wallet_panel != null:
 		targets.append(wallet_panel)
 	if play_button != null:
@@ -936,7 +986,7 @@ func _run_play_lobby_reverse_transition() -> void:
 	panel.size = viewport_rect.size
 
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.42)
+	style.bg_color = Color(MENU_CLR_ACCENT.r, MENU_CLR_ACCENT.g, MENU_CLR_ACCENT.b, 0.0)
 	style.border_color = MENU_CLR_HIGHLIGHT
 	style.border_width_left = 3
 	style.border_width_top = 3
@@ -955,7 +1005,7 @@ func _run_play_lobby_reverse_transition() -> void:
 	_play_lobby_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	_play_lobby_tween.parallel().tween_property(panel, "global_position", target_rect.position, duration)
 	_play_lobby_tween.parallel().tween_property(panel, "size", target_rect.size, duration)
-	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(0.1569, 0.1098, 0.3490, 0.2), duration * 0.86)
+	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(MENU_CLR_BASE.r, MENU_CLR_BASE.g, MENU_CLR_BASE.b, 0.0), duration * 0.86)
 
 	for target in _play_lobby_fade_targets:
 		if target == null or not is_instance_valid(target):
@@ -977,6 +1027,8 @@ func _run_lobby_menu_loading_sequence() -> void:
 		_hide_menu_loading_overlay()
 
 func _on_lobby_overlay_closed() -> void:
+	if _intro_fx != null and _intro_fx.has_method("set_lobby_music_active"):
+		_intro_fx.call("set_lobby_music_active", false, 0.55)
 	_hide_menu_loading_overlay()
 	await _run_play_lobby_reverse_transition()
 	_restore_play_lobby_fade_targets()
@@ -1113,6 +1165,8 @@ func _switch_to(target: Control, direction: int) -> void:
 			_sync_lobby_overlay_interaction_state()
 			_refresh_warrior_username_label()
 			_refresh_auth_footer()
+			if _current_screen == screen_main:
+				_start_idle_loop()
 		)
 		return
 
@@ -1146,7 +1200,7 @@ func _switch_to(target: Control, direction: int) -> void:
 		_sync_lobby_overlay_interaction_state()
 		_refresh_warrior_username_label()
 		_refresh_auth_footer()
-		if _current_screen == screen_main:
+		if _current_screen == screen_main or _current_screen == screen_warriors or _current_screen == screen_weapons:
 			_start_idle_loop()
 	)
 
@@ -1260,7 +1314,7 @@ func _make_filter_button(text: String) -> Button:
 func _set_filter_btn_selected(btn: Button, selected: bool) -> void:
 	if btn == null:
 		return
-	btn.modulate = Color(1, 1, 1, 1) if selected else Color(0.86, 0.82, 0.95, 0.9)
+	btn.modulate = Color(1, 1, 1, 1) if selected else Color(1, 1, 1, 0.9)
 
 func _refresh_weapon_filter_button_state() -> void:
 	for key in _weapon_filter_weapon_buttons.keys():
@@ -1276,12 +1330,7 @@ func _refresh_weapon_filter_button_state() -> void:
 		if wid.is_empty():
 			btn.text = "ALL"
 			continue
-		var wname := _weapon_ui.weapon_display_name(wid)
-		if not _weapon_is_owned(wid):
-			btn.text = "%s  (LOCKED)" % wname
-			continue
-		var eq := _equipped_weapon_skin(wid)
-		btn.text = "%s - %s  (OWNED)" % [wname, _weapon_skin_label(wid, eq)]
+		btn.text = _weapon_ui.weapon_display_name(wid)
 
 func _ensure_weapon_filter_ui() -> void:
 	if weapon_scroll == null:
@@ -1308,11 +1357,11 @@ func _ensure_weapon_filter_ui() -> void:
 	_weapon_filter_weapon_buttons = {}
 	var weapon_items := [
 		{"label": "ALL", "id": ""},
-		{"label": "UZI", "id": WEAPON_UZI},
-		{"label": "AK47", "id": WEAPON_AK47},
-		{"label": "KAR", "id": WEAPON_KAR},
-		{"label": "SHOTGUN", "id": WEAPON_SHOTGUN},
-		{"label": "GRENADE", "id": WEAPON_GRENADE},
+		{"label": _weapon_ui.weapon_display_name(WEAPON_UZI), "id": WEAPON_UZI},
+		{"label": _weapon_ui.weapon_display_name(WEAPON_AK47), "id": WEAPON_AK47},
+		{"label": _weapon_ui.weapon_display_name(WEAPON_KAR), "id": WEAPON_KAR},
+		{"label": _weapon_ui.weapon_display_name(WEAPON_SHOTGUN), "id": WEAPON_SHOTGUN},
+		{"label": _weapon_ui.weapon_display_name(WEAPON_GRENADE), "id": WEAPON_GRENADE},
 	]
 	for it in weapon_items:
 		var wid := str(it.get("id", ""))
@@ -1451,10 +1500,10 @@ func _copy_button_look(src: Button, dst: Button) -> void:
 			dst.add_theme_font_override("font", f)
 
 	# Ensure readable text even if the source doesn't override all states.
-	dst.add_theme_color_override("font_color", MENU_CLR_HIGHLIGHT)
-	dst.add_theme_color_override("font_hover_color", Color(1, 0.98, 0.86, 1))
-	dst.add_theme_color_override("font_pressed_color", Color(1, 0.96, 0.78, 1))
-	dst.add_theme_color_override("font_disabled_color", Color(0.78, 0.72, 0.88, 0.9))
+	dst.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
+	dst.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
+	dst.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
+	dst.add_theme_color_override("font_disabled_color", MENU_PALETTE.text_dark(0.9))
 	dst.add_theme_constant_override("outline_size", 0)
 	_normalize_button_outline(dst, 0)
 
@@ -1551,12 +1600,40 @@ func _ensure_warrior_filter_ui() -> void:
 	var list_col := warrior_scroll.get_parent() as Control
 	if list_col == null or list_col.get_node_or_null("WarriorFilters") != null:
 		return
+	if list_col is VBoxContainer:
+		(list_col as VBoxContainer).add_theme_constant_override("separation", 0)
 	var filters := HBoxContainer.new()
 	filters.name = "WarriorFilters"
 	filters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	filters.add_theme_constant_override("separation", 6)
+	filters.add_theme_constant_override("separation", 4)
 	list_col.add_child(filters)
 	list_col.move_child(filters, 0)
+	_warrior_filters_row = filters
+
+	var bridge_holder := Control.new()
+	bridge_holder.name = "WarriorFiltersBridgeHolder"
+	bridge_holder.custom_minimum_size = Vector2(0, 6)
+	bridge_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bridge_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	list_col.add_child(bridge_holder)
+	list_col.move_child(bridge_holder, 1)
+	_warrior_filters_bridge_holder = bridge_holder
+
+	var bridge := Panel.new()
+	bridge.name = "WarriorFiltersBridge"
+	bridge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bridge_style := StyleBoxFlat.new()
+	bridge_style.bg_color = MENU_PALETTE.with_alpha(MENU_CLR_ACCENT, 1.0)
+	bridge_style.border_width_left = 1
+	bridge_style.border_width_top = 0
+	bridge_style.border_width_right = 1
+	bridge_style.border_width_bottom = 1
+	bridge_style.border_color = MENU_PALETTE.with_alpha(MENU_CLR_ACCENT, 1.0)
+	bridge.add_theme_stylebox_override("panel", bridge_style)
+	bridge_holder.add_child(bridge)
+	_warrior_filters_bridge = bridge
+	filters.resized.connect(_update_warrior_filter_bridge)
+	bridge_holder.resized.connect(_update_warrior_filter_bridge)
 	_warrior_filter_warrior_buttons = {}
 	var all_btn := _make_filter_button("ALL")
 	all_btn.pressed.connect(func() -> void:
@@ -1578,6 +1655,7 @@ func _ensure_warrior_filter_ui() -> void:
 		filters.add_child(btn)
 		_warrior_filter_warrior_buttons[wid] = btn
 	_refresh_warrior_filter_button_state()
+	call_deferred("_update_warrior_filter_bridge")
 
 func _refresh_warrior_filter_button_state() -> void:
 	for key in _warrior_filter_warrior_buttons.keys():
@@ -1590,13 +1668,32 @@ func _refresh_warrior_filter_button_state() -> void:
 			continue
 		var wid := str(key)
 		var title := _warrior_ui.warrior_display_name(wid).to_upper()
-		if not _warrior_is_owned(wid):
-			btn.text = "%s  (LOCKED)" % title
-			continue
-		btn.text = "%s - %s" % [title, _warrior_ui.warrior_skin_label(wid, _equipped_warrior_skin(wid))]
+		btn.text = title
+	call_deferred("_update_warrior_filter_bridge")
+
+func _update_warrior_filter_bridge() -> void:
+	if _warrior_filters_bridge_holder == null or not is_instance_valid(_warrior_filters_bridge_holder):
+		return
+	if _warrior_filters_bridge == null or not is_instance_valid(_warrior_filters_bridge):
+		return
+	if _warrior_filters_row == null or not is_instance_valid(_warrior_filters_row):
+		return
+	var key := _warrior_filter_warrior_id
+	if not _warrior_filter_warrior_buttons.has(key):
+		key = ""
+	var selected_btn := _warrior_filter_warrior_buttons.get(key, null) as Button
+	if selected_btn == null or not is_instance_valid(selected_btn):
+		_warrior_filters_bridge.visible = false
+		return
+	_warrior_filters_bridge.visible = true
+	var x := _warrior_filters_row.position.x + selected_btn.position.x
+	var w := selected_btn.size.x
+	_warrior_filters_bridge.position = Vector2(x, 0)
+	_warrior_filters_bridge.size = Vector2(maxf(1.0, w), _warrior_filters_bridge_holder.size.y)
 
 func _select_warrior_skin(warrior_id: String, skin_index: int, silent: bool) -> void:
 	_shop_controller.select_warrior_skin(self, warrior_id, skin_index, silent)
+	_refresh_selection_context_visuals()
 
 func _equip_warrior_item(warrior_id: String, skin_index: int) -> void:
 	_shop_controller.equip_warrior_item(self, warrior_id, skin_index)
@@ -1670,6 +1767,7 @@ func _weapon_item_button_text(weapon_id: String, skin_index: int) -> String:
 
 func _select_weapon_skin(weapon_id: String, skin_index: int, silent: bool) -> void:
 	_shop_controller.select_weapon_skin(self, weapon_id, skin_index, silent)
+	_refresh_selection_context_visuals()
 
 func _equip_weapon_item(weapon_id: String, skin_index: int) -> void:
 	_shop_controller.equip_weapon_item(self, weapon_id, skin_index)
@@ -1712,6 +1810,13 @@ func _pixel_burst_at(global_pos: Vector2, color: Color) -> void:
 	var count := maxi(0, intro_fx_particles_per_burst)
 	if count <= 0:
 		return
+	var intro_active := intro != null and intro.visible
+	var px_size := 24.0 if intro_active else 6.0
+	var drift_min := 34.0 if intro_active else 18.0
+	var drift_max := 220.0 if intro_active else 70.0
+	var jitter := 28.0 if intro_active else 10.0
+	var tween_time := 0.62 if intro_active else 0.5
+	var scale_target := Vector2(4.0, 4.0) if intro_active else Vector2(1.8, 1.8)
 	# Guard against runaway node creation if something goes wrong.
 	if _fx_layer.get_child_count() > 400:
 		push_error("FxLayer overflow during intro (children=%d). Disabling FX." % int(_fx_layer.get_child_count()))
@@ -1724,21 +1829,21 @@ func _pixel_burst_at(global_pos: Vector2, color: Color) -> void:
 		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		p.texture = DATA.BULLET_TEXTURE
 		p.modulate = Color(color.r, color.g, color.b, 0.9)
-		p.custom_minimum_size = Vector2(6, 6)
-		p.size = Vector2(6, 6)
+		p.custom_minimum_size = Vector2(px_size, px_size)
+		p.size = Vector2(px_size, px_size)
 		p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		_fx_layer.add_child(p)
-		p.global_position = global_pos - Vector2(3, 3)
+		p.global_position = global_pos - Vector2(px_size * 0.5, px_size * 0.5)
 
 		var angle := randf() * TAU
-		var dist := randf_range(18.0, 70.0)
-		var drift := Vector2(cos(angle), sin(angle)) * dist + Vector2(randf_range(-10, 10), randf_range(-10, 10))
+		var dist := randf_range(drift_min, drift_max)
+		var drift := Vector2(cos(angle), sin(angle)) * dist + Vector2(randf_range(-jitter, jitter), randf_range(-jitter, jitter))
 
 		var t := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		t.parallel().tween_property(p, "global_position", p.global_position + drift, 0.5)
-		t.parallel().tween_property(p, "modulate:a", 0.0, 0.5)
-		t.parallel().tween_property(p, "rotation", randf_range(-2.5, 2.5), 0.5)
-		t.parallel().tween_property(p, "scale", Vector2(1.8, 1.8), 0.5)
+		t.parallel().tween_property(p, "global_position", p.global_position + drift, tween_time)
+		t.parallel().tween_property(p, "modulate:a", 0.0, tween_time)
+		t.parallel().tween_property(p, "rotation", randf_range(-2.5, 2.5), tween_time)
+		t.parallel().tween_property(p, "scale", scale_target, tween_time)
 		t.tween_callback(func() -> void: p.queue_free())
 
 func _load_state_or_defaults() -> void:
@@ -1752,6 +1857,8 @@ func _load_state_or_defaults() -> void:
 	var defaults := {
 		"coins": 1000000,
 		"clk": 50000,
+		"music_volume": 0.8,
+		"sfx_volume": 0.4,
 		"username": fallback_username,
 		"owned_warriors": Array(default_owned_warriors),
 		"owned_warrior_skins": [0],
@@ -1766,6 +1873,10 @@ func _load_state_or_defaults() -> void:
 		"selected_weapon_skin": 0,
 	}
 	var st := _state_store.load_state_or_defaults(DATA.SHOP_STATE_PATH, defaults, WEAPON_UZI)
+	if music_slider != null:
+		music_slider.value = clampf(float(st.get("music_volume", 0.8)), 0.0, 1.0)
+	if sfx_slider != null:
+		sfx_slider.value = clampf(float(st.get("sfx_volume", 0.4)), 0.0, 1.0)
 
 	wallet_coins = int(st.get("coins", 0))
 	wallet_clk = int(st.get("clk", 0))
@@ -1881,6 +1992,8 @@ func _save_state() -> void:
 	var d := {
 		"coins": wallet_coins,
 		"clk": wallet_clk,
+		"music_volume": music_slider.value if music_slider != null else 0.8,
+		"sfx_volume": sfx_slider.value if sfx_slider != null else 0.4,
 		"username": player_username,
 		"owned_warriors": owned_warriors_list,
 		"owned_warrior_skins": owned_warrior_skin_list,
@@ -1932,6 +2045,52 @@ func _bind_menu_sfx_option(option: OptionButton) -> void:
 	if _menu_sfx == null:
 		return
 	_menu_sfx.bind_option(option)
+
+func _on_music_slider_changed(value: float) -> void:
+	if _intro_fx == null:
+		return
+	if _intro_fx.has_method("set_menu_music_volume_linear"):
+		_intro_fx.call("set_menu_music_volume_linear", clampf(value, 0.0, 1.0))
+	_save_state()
+
+func _on_sfx_slider_changed(value: float) -> void:
+	var clamped := clampf(value, 0.0, 1.0)
+	_set_sound_buses_volume_linear(clamped)
+	if _menu_sfx != null and _menu_sfx.has_method("set_output_volume_linear"):
+		_menu_sfx.call("set_output_volume_linear", clamped)
+	if _intro_fx != null and _intro_fx.has_method("set_menu_sfx_volume_linear"):
+		_intro_fx.call("set_menu_sfx_volume_linear", clamped)
+	_save_state()
+
+func _set_sound_buses_volume_linear(value: float) -> void:
+	var db := -80.0 if value <= 0.001 else linear_to_db(value)
+	var sfx_idx := _ensure_audio_bus("SFX", "Master")
+	if sfx_idx >= 0:
+		AudioServer.set_bus_volume_db(sfx_idx, db)
+	var target_names := {
+		"sounds": true,
+		"gamesfx": true,
+		"game_sfx": true,
+		"gameplay_sfx": true,
+	}
+	for i in range(AudioServer.get_bus_count()):
+		var bus_name := AudioServer.get_bus_name(i).to_lower()
+		if target_names.has(bus_name):
+			AudioServer.set_bus_volume_db(i, db)
+
+func _ensure_audio_bus(name: String, send_to: String = "Master") -> int:
+	var wanted := name.strip_edges()
+	if wanted.is_empty():
+		return -1
+	for i in range(AudioServer.get_bus_count()):
+		if AudioServer.get_bus_name(i).to_lower() == wanted.to_lower():
+			return i
+	AudioServer.add_bus(AudioServer.get_bus_count())
+	var idx := AudioServer.get_bus_count() - 1
+	AudioServer.set_bus_name(idx, wanted)
+	if not send_to.strip_edges().is_empty():
+		AudioServer.set_bus_send(idx, send_to)
+	return idx
 
 func _hover_area(area: Control, hovered: bool) -> void:
 	_ui_anim.hover_area(area, hovered)

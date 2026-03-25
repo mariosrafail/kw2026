@@ -77,6 +77,7 @@ const COMMON_WEAPON_SKINS := [
 	{"skin": 18, "name": "Gold", "category": "colors", "kind": "tint", "tint": Color(1.0, 0.9, 0.25, 1), "cost": 900},
 	{"skin": 19, "name": "Neon", "category": "colors", "kind": "tint", "tint": Color(0.25, 1.0, 0.85, 1), "cost": 1100},
 	{"skin": 20, "name": "Rainbow", "category": "colors", "kind": "tint", "tint": Color(1, 1, 1, 1), "cost": 0, "rainbow": true},
+	{"skin": 21, "name": "total black", "category": "colors", "kind": "tint", "tint": Color(0, 0, 0, 1), "cost": 500},
 ]
 
 const WEAPON_SKINS_BY_ID := {

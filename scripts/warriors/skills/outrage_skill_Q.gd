@@ -144,6 +144,7 @@ func client_spawn_bomb(caster_peer_id: int, world_position: Vector2, fuse_sec: f
 
 	var bomb_audio := AudioStreamPlayer2D.new()
 	bomb_audio.stream = BOMB_SFX
+	bomb_audio.bus = "SFX"
 	bomb_audio.max_polyphony = 2
 	bomb_node.add_child(bomb_audio)
 	bomb_audio.play()

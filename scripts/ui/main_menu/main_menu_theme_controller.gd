@@ -1,18 +1,36 @@
 extends RefCounted
 class_name MainMenuThemeController
 
-const MENU_CLR_BASE := Color(0.1569, 0.1098, 0.3490, 1.0) # 281C59
-const MENU_CLR_ACCENT := Color(0.3059, 0.5529, 0.6118, 1.0) # 4E8D9C
-const MENU_CLR_HOT := Color(0.5216, 0.7804, 0.6039, 1.0) # 85C79A
-const MENU_CLR_HIGHLIGHT := Color(0.9294, 0.9686, 0.7412, 1.0) # EDF7BD
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
+
+var MENU_CLR_BASE: Color = Color.WHITE
+var MENU_CLR_ACCENT: Color = Color.WHITE
+var MENU_CLR_HOT: Color = Color.WHITE
+var MENU_CLR_HIGHLIGHT: Color = Color.WHITE
+var MENU_CLR_TEXT_PRIMARY: Color = Color.WHITE
+var MENU_CLR_TEXT_DARK: Color = Color.BLACK
+
+func _init() -> void:
+	MENU_CLR_BASE = MENU_PALETTE.base()
+	MENU_CLR_ACCENT = MENU_PALETTE.accent()
+	MENU_CLR_HOT = MENU_PALETTE.hot()
+	MENU_CLR_HIGHLIGHT = MENU_PALETTE.highlight()
+	MENU_CLR_TEXT_PRIMARY = MENU_PALETTE.text_primary()
+	MENU_CLR_TEXT_DARK = MENU_PALETTE.text_dark()
+
+static func color_from_hex(hex: String, alpha: float = 1.0) -> Color:
+	return MENU_PALETTE.color_from_hex(hex, alpha)
+
+static func with_alpha(c: Color, alpha: float) -> Color:
+	return MENU_PALETTE.with_alpha(c, alpha)
 
 func apply_menu_background_palette(host: Control) -> void:
 	var bg := host.get_node_or_null("Background") as ColorRect
 	if bg != null:
-		bg.color = Color(0.3059, 0.5529, 0.6118, 1.0)
+		bg.color = MENU_CLR_ACCENT
 	var noise := host.get_node_or_null("BgNoise") as TextureRect
 	if noise != null:
-		noise.modulate = Color(0.5216, 0.7804, 0.6039, 0.18)
+		noise.modulate = with_alpha(MENU_CLR_HOT, 0.18)
 		host.set("_bgnoise_base_alpha", noise.modulate.a)
 
 func apply_uniform_button_outlines(host: Control, root: Node, border_width: int = 0) -> void:
@@ -125,7 +143,7 @@ func apply_pixel_slider_style(host: Control, slider: HSlider) -> void:
 	slider.add_theme_icon_override("grabber_highlight", host.get("_slider_grabber_hi"))
 
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.3059, 0.5529, 0.6118, 0.82)
+	track.bg_color = with_alpha(MENU_CLR_ACCENT, 0.82)
 	track.border_width_left = 3
 	track.border_width_top = 3
 	track.border_width_right = 3
@@ -138,21 +156,21 @@ func apply_pixel_slider_style(host: Control, slider: HSlider) -> void:
 	slider.add_theme_stylebox_override("slider", track)
 
 	var area := StyleBoxFlat.new()
-	area.bg_color = Color(0.3059, 0.5529, 0.6118, 0.28)
+	area.bg_color = with_alpha(MENU_CLR_ACCENT, 0.28)
 	area.border_width_left = 2
 	area.border_width_top = 2
 	area.border_width_right = 2
 	area.border_width_bottom = 2
-	area.border_color = Color(0.9294, 0.9686, 0.7412, 0.62)
+	area.border_color = with_alpha(MENU_CLR_HIGHLIGHT, 0.62)
 	slider.add_theme_stylebox_override("grabber_area_highlight", area)
 
 	var focus := StyleBoxFlat.new()
-	focus.bg_color = Color(0.5216, 0.7804, 0.6039, 0.2)
+	focus.bg_color = with_alpha(MENU_CLR_HOT, 0.2)
 	focus.border_width_left = 2
 	focus.border_width_top = 2
 	focus.border_width_right = 2
 	focus.border_width_bottom = 2
-	focus.border_color = Color(0.5216, 0.7804, 0.6039, 0.55)
+	focus.border_color = with_alpha(MENU_CLR_HOT, 0.55)
 	slider.add_theme_stylebox_override("focus", focus)
 
 func ensure_slider_grabbers(host: Control) -> void:
@@ -200,12 +218,12 @@ func apply_pixel_scroll_style(host: Control, scroll: ScrollContainer) -> void:
 		apply_pixel_scrollbar(host, hsb)
 
 	var panel := StyleBoxFlat.new()
-	panel.bg_color = Color(0.3059, 0.5529, 0.6118, 0.40)
+	panel.bg_color = with_alpha(MENU_CLR_ACCENT, 0.40)
 	panel.border_width_left = 2
 	panel.border_width_top = 2
 	panel.border_width_right = 2
 	panel.border_width_bottom = 2
-	panel.border_color = Color(0.3059, 0.5529, 0.6118, 0.9)
+	panel.border_color = with_alpha(MENU_CLR_ACCENT, 0.9)
 	panel.content_margin_left = 6.0
 	panel.content_margin_top = 6.0
 	panel.content_margin_right = 6.0
@@ -234,7 +252,7 @@ func ensure_scrollbar_styleboxes(host: Control) -> void:
 	var border := MENU_CLR_ACCENT
 
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.3059, 0.5529, 0.6118, 0.88)
+	track.bg_color = with_alpha(MENU_CLR_ACCENT, 0.88)
 	track.border_width_left = 3
 	track.border_width_top = 3
 	track.border_width_right = 3
@@ -247,7 +265,7 @@ func ensure_scrollbar_styleboxes(host: Control) -> void:
 	host.set("_scroll_sb", track)
 
 	var grab := StyleBoxFlat.new()
-	grab.bg_color = Color(0.3059, 0.5529, 0.6118, 1)
+	grab.bg_color = with_alpha(MENU_CLR_ACCENT, 1.0)
 	grab.border_width_left = 3
 	grab.border_width_top = 3
 	grab.border_width_right = 3
@@ -256,7 +274,7 @@ func ensure_scrollbar_styleboxes(host: Control) -> void:
 	host.set("_scroll_grabber", grab)
 
 	var grab_hi := StyleBoxFlat.new()
-	grab_hi.bg_color = Color(0.5216, 0.7804, 0.6039, 1)
+	grab_hi.bg_color = with_alpha(MENU_CLR_HOT, 1.0)
 	grab_hi.border_width_left = 3
 	grab_hi.border_width_top = 3
 	grab_hi.border_width_right = 3
@@ -265,7 +283,7 @@ func ensure_scrollbar_styleboxes(host: Control) -> void:
 	host.set("_scroll_grabber_hi", grab_hi)
 
 	var grab_pressed := StyleBoxFlat.new()
-	grab_pressed.bg_color = Color(0.1569, 0.1098, 0.3490, 1)
+	grab_pressed.bg_color = with_alpha(MENU_CLR_BASE, 1.0)
 	grab_pressed.border_width_left = 3
 	grab_pressed.border_width_top = 3
 	grab_pressed.border_width_right = 3
@@ -277,3 +295,100 @@ func pixel_empty_icon() -> Texture2D:
 	var img := Image.create(1, 1, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	return ImageTexture.create_from_image(img)
+
+func apply_runtime_palette(host: Control, root: Node = null) -> void:
+	var start: Node = root if root != null else host
+	if start == null:
+		return
+	_apply_palette_node_recursive(start)
+
+func _apply_palette_node_recursive(node: Node) -> void:
+	if node == null:
+		return
+	if node is Control:
+		_apply_palette_to_control(node as Control)
+	for child in node.get_children():
+		if child is Node:
+			_apply_palette_node_recursive(child as Node)
+
+func _apply_palette_to_control(ctrl: Control) -> void:
+	if ctrl == null:
+		return
+	for color_name in [
+		"font_color",
+		"font_hover_color",
+		"font_pressed_color",
+		"font_disabled_color",
+		"font_focus_color",
+		"font_outline_color",
+		"font_placeholder_color",
+		"caret_color"
+	]:
+		if ctrl.has_theme_color_override(color_name):
+			var c := ctrl.get_theme_color(color_name)
+			ctrl.add_theme_color_override(color_name, _remap_legacy_color(c))
+
+	for sb_name in [
+		"normal",
+		"hover",
+		"pressed",
+		"focus",
+		"disabled",
+		"panel",
+		"slider",
+		"grabber_area_highlight",
+		"scroll",
+		"scroll_focus",
+		"grabber",
+		"grabber_highlight",
+		"grabber_pressed"
+	]:
+		var sb := ctrl.get_theme_stylebox(sb_name)
+		if not (sb is StyleBoxFlat):
+			continue
+		var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		flat.bg_color = _remap_legacy_color(flat.bg_color)
+		flat.border_color = _remap_legacy_color(flat.border_color)
+		flat.shadow_color = _remap_legacy_color(flat.shadow_color)
+		ctrl.add_theme_stylebox_override(sb_name, flat)
+
+	if ctrl is ColorRect:
+		var cr := ctrl as ColorRect
+		cr.color = _remap_legacy_color(cr.color)
+	if ctrl is CanvasItem:
+		var ci := ctrl as CanvasItem
+		ci.modulate = _remap_legacy_color(ci.modulate)
+
+func _remap_legacy_color(c: Color) -> Color:
+	var a := c.a
+	if _is_near(c, Color(0.1569, 0.1098, 0.3490, a)):
+		return with_alpha(MENU_CLR_BASE, a)
+	if _is_near(c, Color(0.3059, 0.5529, 0.6118, a)):
+		return with_alpha(MENU_CLR_ACCENT, a)
+	if _is_near(c, Color(0.5216, 0.7804, 0.6039, a)):
+		return with_alpha(MENU_CLR_HOT, a)
+	if _is_near(c, Color(0.9294, 0.9686, 0.7412, a)):
+		return with_alpha(MENU_CLR_HIGHLIGHT, a)
+	if _is_near(c, Color(0.98, 0.97, 0.95, a)):
+		return with_alpha(MENU_CLR_TEXT_PRIMARY, a)
+	if _is_near(c, Color(0.94, 0.93, 0.9, a)):
+		return with_alpha(MENU_CLR_TEXT_PRIMARY, a)
+	if _is_near(c, Color(0.92, 0.95, 0.98, a)):
+		return with_alpha(MENU_CLR_TEXT_DARK, a)
+	if _is_near(c, Color(0.88, 0.9, 0.96, a)):
+		return with_alpha(MENU_CLR_TEXT_DARK, a)
+	if _is_near(c, Color(0.84, 0.84, 0.84, a)):
+		return with_alpha(MENU_CLR_TEXT_DARK, a)
+	if _is_near(c, Color(0.66, 0.66, 0.7, a)):
+		return with_alpha(MENU_CLR_TEXT_DARK, a)
+	if _is_near(c, Color(0.06, 0.05, 0.08, a)):
+		return with_alpha(MENU_CLR_TEXT_DARK, a)
+	if _is_near(c, Color(0.90, 0.74, 0.27, a)):
+		return with_alpha(MENU_CLR_HIGHLIGHT, a)
+	if _is_near(c, Color(0.5248462, 0.7325527, 0.7741166, a)):
+		return with_alpha(mix_to_color(MENU_CLR_ACCENT, MENU_CLR_HOT, 0.34), a)
+	return c
+
+func _is_near(a: Color, b: Color, eps: float = 0.02) -> bool:
+	return absf(a.r - b.r) <= eps and absf(a.g - b.g) <= eps and absf(a.b - b.b) <= eps
+

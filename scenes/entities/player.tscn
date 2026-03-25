@@ -96,11 +96,13 @@ region_rect = Rect2(114, 15, 20, 32)
 stream = ExtResource("5_ifk0o")
 volume_db = -1.0
 max_polyphony = 6
+bus = &"SFX"
 
 [node name="ReloadAudio" type="AudioStreamPlayer2D" parent="VisualRoot/GunPivot" unique_id=1976295601]
 stream = ExtResource("7_ak_reload")
 volume_db = -2.0
 max_polyphony = 3
+bus = &"SFX"
 
 [node name="Gun" type="Sprite2D" parent="VisualRoot/GunPivot" unique_id=220643217]
 z_index = 1
@@ -182,6 +184,8 @@ shape = SubResource("CapsuleShape2D_0vb8o")
 stream = ExtResource("6_6oc35")
 volume_db = 2.0
 max_polyphony = 2
+bus = &"SFX"
 
 [node name="FootstepAudio" type="AudioStreamPlayer2D" parent="." unique_id=1197630042]
 max_polyphony = 2
+bus = &"SFX"

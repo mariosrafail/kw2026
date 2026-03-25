@@ -61,6 +61,15 @@ border_width_right = 2
 border_width_bottom = 4
 border_color = Color(0.9294, 0.9686, 0.7412, 0.95)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_soft_white_glow"]
+bg_color = Color(1, 1, 1, 0.04)
+corner_radius_top_left = 999
+corner_radius_top_right = 999
+corner_radius_bottom_right = 999
+corner_radius_bottom_left = 999
+shadow_color = Color(1, 1, 1, 0.34)
+shadow_size = 18
+
 [sub_resource type="AtlasTexture" id="AtlasTexture_ak_icon"]
 atlas = ExtResource("5_guns")
 region = Rect2(31, 12, 50, 12)
@@ -96,7 +105,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.3059, 0.5529, 0.6118, 1)
+color = Color(0.5248462, 0.7325527, 0.7741166, 1)
 
 [node name="BgNoise" type="TextureRect" parent="." unique_id=36156868]
 modulate = Color(1, 1, 1, 0.06)
@@ -270,6 +279,22 @@ offset_bottom = 112.0
 grow_horizontal = 2
 grow_vertical = 2
 
+[node name="WarriorGlow" type="Panel" parent="Screens/ScreenMain/WarriorArea" unique_id=1893127784]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -56.0
+offset_top = -56.0
+offset_right = 56.0
+offset_bottom = 56.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_soft_white_glow")
+
 [node name="WarriorButton" type="Button" parent="Screens/ScreenMain/WarriorArea" unique_id=1368013766]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0)
@@ -324,6 +349,22 @@ offset_right = 290.0
 offset_bottom = 112.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="WeaponGlow" type="Panel" parent="Screens/ScreenMain/WeaponArea" unique_id=327241956]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -56.0
+offset_top = -56.0
+offset_right = 56.0
+offset_bottom = 56.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_soft_white_glow")
 
 [node name="WeaponButton" type="Button" parent="Screens/ScreenMain/WeaponArea" unique_id=902510389]
 unique_name_in_owner = true
@@ -447,7 +488,7 @@ theme_override_constants/separation = 10
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
-text = "SFX"
+text = "Sounds"
 
 [node name="SfxSlider" type="HSlider" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox/SfxRow" unique_id=26115757]
 unique_name_in_owner = true
@@ -586,7 +627,7 @@ horizontal_scroll_mode = 0
 [node name="WarriorGrid" type="GridContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorScroll" unique_id=1221873478]
 unique_name_in_owner = true
 layout_mode = 2
-columns = 2
+columns = 4
 
 [node name="ScreenWeapons" type="Control" parent="Screens" unique_id=1598157277]
 unique_name_in_owner = true
@@ -766,6 +807,9 @@ theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
 theme_override_font_sizes/font_size = 26
-text = "KEYBOARD WARRIORS"
+text = "KEYBOARD WARRIORS B*TCH"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="MenuSoundtrackPlayer" type="AudioStreamPlayer" parent="." unique_id=140889762]
+volume_db = -12.0

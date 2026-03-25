@@ -86,6 +86,7 @@ func client_spawn_boost(peer_id: int, duration_sec: float) -> void:
 
 	var boost_audio := AudioStreamPlayer2D.new()
 	boost_audio.stream = BOOST_SFX
+	boost_audio.bus = "SFX"
 	boost_audio.max_polyphony = 1
 	boost_audio.volume_db = -1.0
 	vfx.add_child(boost_audio)

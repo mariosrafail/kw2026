@@ -328,6 +328,7 @@ func play_splash_hit_sfx(impact_position: Vector2) -> void:
 	var player := AudioStreamPlayer2D.new()
 	player.stream = splash_hit_sfx
 	player.global_position = impact_position
+	player.bus = "SFX"
 	player.volume_db = SPLASH_HIT_VOLUME_DB
 	player.pitch_scale = randf_range(0.94, 1.05)
 	player.max_polyphony = 2
@@ -342,6 +343,7 @@ func play_death_sfx(impact_position: Vector2) -> void:
 	var player := AudioStreamPlayer2D.new()
 	player.stream = death_hit_sfx
 	player.global_position = impact_position
+	player.bus = "SFX"
 	player.volume_db = 5.0
 	player.pitch_scale = randf_range(0.98, 1.04)
 	player.max_polyphony = 2
@@ -401,6 +403,7 @@ func _play_positional_sfx(stream: AudioStream, world_position: Vector2, volume_d
 	var player := AudioStreamPlayer2D.new()
 	player.stream = stream
 	player.global_position = world_position
+	player.bus = "SFX"
 	player.volume_db = volume_db
 	player.pitch_scale = pitch_scale
 	player.max_polyphony = max_polyphony

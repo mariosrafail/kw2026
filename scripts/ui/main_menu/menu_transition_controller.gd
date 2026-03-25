@@ -87,6 +87,8 @@ func open_warriors_menu_stage2(warriors_menu_preview_scale_mult: float, warrior_
 				_set_current_screen.call(_screen_warriors)
 			if dst_preview != null:
 				dst_preview.visible = true
+			if _start_idle_loop.is_valid():
+				_start_idle_loop.call()
 		)
 		return
 
@@ -126,12 +128,16 @@ func open_warriors_menu_stage2(warriors_menu_preview_scale_mult: float, warrior_
 		if dst_preview != null:
 			dst_preview.scale = warrior_shop_preview_base_scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
 			dst_preview.visible = true
+		if _start_idle_loop.is_valid():
+			_start_idle_loop.call()
 	)
 
 func close_warriors_menu() -> void:
 	if _screen_warriors == null or _screen_main == null:
 		return
 	abort_transitions()
+	if _stop_idle_loop.is_valid():
+		_stop_idle_loop.call()
 	if _warrior_shop_preview != null and _warrior_shop_preview is CanvasItem:
 		(_warrior_shop_preview as CanvasItem).visible = true
 	if _host != null:
@@ -238,6 +244,8 @@ func open_weapons_menu_stage2(pending_weapon_id: String, pending_weapon_skin: in
 				_set_current_screen.call(_screen_weapons)
 			if dst_icon != null:
 				dst_icon.visible = true
+			if _start_idle_loop.is_valid():
+				_start_idle_loop.call()
 		)
 		return
 
@@ -290,12 +298,16 @@ func open_weapons_menu_stage2(pending_weapon_id: String, pending_weapon_skin: in
 				_apply_weapon_skin_visual.call(dst_icon, pending_weapon_id, pending_weapon_skin)
 			dst_icon.visible = true
 			dst_icon.modulate.a = 1.0
+		if _start_idle_loop.is_valid():
+			_start_idle_loop.call()
 	)
 
 func close_weapons_menu() -> void:
 	if _screen_weapons == null or _screen_main == null:
 		return
 	abort_transitions()
+	if _stop_idle_loop.is_valid():
+		_stop_idle_loop.call()
 	if _weapon_shop_preview != null:
 		_weapon_shop_preview.visible = true
 		_weapon_shop_preview.modulate.a = 1.0

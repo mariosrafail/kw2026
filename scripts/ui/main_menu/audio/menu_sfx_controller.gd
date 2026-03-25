@@ -7,18 +7,23 @@ const CHANGE_SFX := preload("res://assets/sounds/sfx/menu_placeholders/menu_chan
 const META_BOUND_BUTTON := "kw_menu_sfx_button_bound"
 const META_BOUND_SLIDER := "kw_menu_sfx_slider_bound"
 const META_BOUND_OPTION := "kw_menu_sfx_option_bound"
+const BASE_HOVER_DB := -12.0
+const BASE_CLICK_DB := -10.0
+const BASE_CHANGE_DB := -11.0
 
 var _host: Node
 var _hover_player: AudioStreamPlayer
 var _click_player: AudioStreamPlayer
 var _change_player: AudioStreamPlayer
 var _last_slider_tick_msec := 0
+var _volume_linear := 1.0
 
 func configure(host: Node) -> void:
 	_host = host
-	_hover_player = _ensure_player("MenuSfxHover", HOVER_SFX, -12.0)
-	_click_player = _ensure_player("MenuSfxClick", CLICK_SFX, -10.0)
-	_change_player = _ensure_player("MenuSfxChange", CHANGE_SFX, -11.0)
+	_hover_player = _ensure_player("MenuSfxHover", HOVER_SFX, BASE_HOVER_DB)
+	_click_player = _ensure_player("MenuSfxClick", CLICK_SFX, BASE_CLICK_DB)
+	_change_player = _ensure_player("MenuSfxChange", CHANGE_SFX, BASE_CHANGE_DB)
+	set_output_volume_linear(_volume_linear)
 
 func bind_button(btn: BaseButton) -> void:
 	if btn == null:
@@ -85,18 +90,37 @@ func _ensure_player(name: String, stream: AudioStream, volume_db: float) -> Audi
 	if existing != null:
 		if stream != null:
 			existing.stream = stream
-		existing.volume_db = volume_db
+		existing.volume_db = _scaled_db(volume_db)
+		existing.set_meta("kw_base_db", volume_db)
 		existing.max_polyphony = 8
-		existing.bus = "Master"
+		existing.bus = "SFX"
 		return existing
 	var p := AudioStreamPlayer.new()
 	p.name = name
 	p.stream = stream
-	p.volume_db = volume_db
+	p.volume_db = _scaled_db(volume_db)
+	p.set_meta("kw_base_db", volume_db)
 	p.max_polyphony = 8
-	p.bus = "Master"
+	p.bus = "SFX"
 	_host.add_child(p)
 	return p
+
+func set_output_volume_linear(value: float) -> void:
+	_volume_linear = clampf(value, 0.0, 1.0)
+	_apply_scaled_volume(_hover_player)
+	_apply_scaled_volume(_click_player)
+	_apply_scaled_volume(_change_player)
+
+func _apply_scaled_volume(player: AudioStreamPlayer) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	var base_db := float(player.get_meta("kw_base_db", 0.0))
+	player.volume_db = _scaled_db(base_db)
+
+func _scaled_db(base_db: float) -> float:
+	if _volume_linear <= 0.001:
+		return -80.0
+	return clampf(base_db + linear_to_db(_volume_linear), -80.0, 12.0)
 
 func _play(player: AudioStreamPlayer) -> void:
 	if player == null or player.stream == null:

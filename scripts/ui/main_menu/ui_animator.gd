@@ -2,6 +2,7 @@ extends RefCounted
 
 const HOVER_FILL_NODE := "KwHoverFill"
 const HOVER_FILL_TWEEN_META := "kw_hover_fill_tween"
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 
 func add_hover_pop(btn: Button) -> void:
 	if btn == null:
@@ -117,7 +118,7 @@ func _ensure_hover_fill(btn: Button) -> void:
 		fill = ColorRect.new()
 		fill.name = HOVER_FILL_NODE
 		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		fill.color = Color(0.9, 0.74, 0.27, 0.22)
+		fill.color = MENU_PALETTE.highlight(0.22)
 		fill.set_anchors_preset(Control.PRESET_LEFT_WIDE)
 		fill.anchor_left = 0.0
 		fill.anchor_top = 0.0
@@ -151,3 +152,4 @@ func _tween_hover_fill(btn: Button, hovered: bool) -> void:
 	var dur := 0.16 if hovered else 0.12
 	t.tween_property(fill, "size:x", target_w, dur)
 	btn.set_meta(HOVER_FILL_TWEEN_META, t)
+

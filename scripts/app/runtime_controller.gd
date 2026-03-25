@@ -3,12 +3,15 @@ extends "res://scripts/app/runtime_rpc_logic.gd"
 const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
 const SKILL_HUD_SCRIPT := preload("res://scripts/ui/skill_hud.gd")
 const CURSOR_MANAGER_NAME := "CursorManager"
+const FIGHT_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/fight_soundtrack.MP3"
+const MENU_STATE_PATH := "user://main_menu_shop_state.json"
 
 var _client_skill_cd_q_remaining := 0.0
 var _client_skill_cd_e_remaining := 0.0
 var _client_skill_cd_q_max := 0.0
 var _client_skill_cd_e_max := 0.0
 var _skill_hud = null
+var _fight_music_player: AudioStreamPlayer = null
 
 const RPC_ROOT_NODE_NAME := "GameRoot"
 
@@ -31,6 +34,8 @@ func _has_cmdline_network_boot_override() -> bool:
 func _ready() -> void:
 	_ensure_rpc_root_node_name()
 	_ensure_cursor_manager()
+	if scene_file_path != _lobby_scene_path():
+		_start_fight_soundtrack()
 	randomize()
 	_ensure_input_actions()
 	_init_services()
@@ -378,3 +383,73 @@ func _read_launcher_config_defaults() -> Dictionary:
 		}
 
 	return {"found": false}
+
+func _start_fight_soundtrack() -> void:
+	_ensure_fight_music_player()
+	if _fight_music_player == null:
+		return
+	if _fight_music_player.stream == null:
+		_fight_music_player.stream = _load_fight_soundtrack_stream()
+	if _fight_music_player.stream == null:
+		return
+	var vol_linear := _load_music_volume_linear_from_menu_state()
+	_fight_music_player.volume_db = _music_db_from_linear(vol_linear)
+	_fight_music_player.stream_paused = false
+	_fight_music_player.play(0.0)
+
+func _ensure_fight_music_player() -> void:
+	if _fight_music_player != null and is_instance_valid(_fight_music_player):
+		return
+	var existing := get_node_or_null("FightSoundtrackPlayer") as AudioStreamPlayer
+	if existing != null:
+		_fight_music_player = existing
+	else:
+		var p := AudioStreamPlayer.new()
+		p.name = "FightSoundtrackPlayer"
+		add_child(p)
+		_fight_music_player = p
+	if _fight_music_player == null:
+		return
+	_fight_music_player.bus = "Master"
+	_fight_music_player.autoplay = false
+	_fight_music_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_fight_music_player.max_polyphony = 1
+	if _fight_music_player.stream is AudioStreamWAV:
+		(_fight_music_player.stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+	elif _fight_music_player.stream is AudioStreamMP3:
+		(_fight_music_player.stream as AudioStreamMP3).loop = true
+
+func _load_fight_soundtrack_stream() -> AudioStream:
+	var imported := load(FIGHT_SOUNDTRACK_PATH) as AudioStream
+	if imported != null:
+		if imported is AudioStreamWAV:
+			(imported as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+		elif imported is AudioStreamMP3:
+			(imported as AudioStreamMP3).loop = true
+		return imported
+	if FileAccess.file_exists(FIGHT_SOUNDTRACK_PATH):
+		var data := FileAccess.get_file_as_bytes(FIGHT_SOUNDTRACK_PATH)
+		if data.size() > 0:
+			var mp3 := AudioStreamMP3.new()
+			mp3.data = data
+			mp3.loop = true
+			return mp3
+	return null
+
+func _load_music_volume_linear_from_menu_state() -> float:
+	if not FileAccess.file_exists(MENU_STATE_PATH):
+		return 0.8
+	var raw := FileAccess.get_file_as_string(MENU_STATE_PATH)
+	if raw.is_empty():
+		return 0.8
+	var parsed: Variant = JSON.parse_string(raw)
+	if not (parsed is Dictionary):
+		return 0.8
+	var state := parsed as Dictionary
+	return clampf(float(state.get("music_volume", 0.8)), 0.0, 1.0)
+
+func _music_db_from_linear(value: float, base_db: float = 0.0) -> float:
+	var clamped := clampf(value, 0.0, 1.0)
+	if clamped <= 0.001:
+		return -80.0
+	return clampf(base_db + linear_to_db(clamped), -80.0, 12.0)

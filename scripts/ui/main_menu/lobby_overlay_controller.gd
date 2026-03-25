@@ -4,13 +4,15 @@ const LOBBY_RPC_BRIDGE_SCRIPT := preload("res://scripts/ui/main_menu/lobby_rpc_b
 const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const CONNECT_WATCHDOG_TIMEOUT_SEC := 8.0
-const BTN_RED_BG := Color(0.1569, 0.1098, 0.3490, 0.96) # 281C59
-const BTN_RED_BORDER := Color(0.9294, 0.9686, 0.7412, 1.0) # EDF7BD
-const BTN_GREEN_BG := Color(0.3059, 0.5529, 0.6118, 0.96) # 4E8D9C
-const BTN_GREEN_BORDER := Color(0.9294, 0.9686, 0.7412, 1.0) # EDF7BD
-const BTN_YELLOW_BG := Color(0.5216, 0.7804, 0.6039, 0.96) # 85C79A
-const BTN_YELLOW_BORDER := Color(0.9294, 0.9686, 0.7412, 1.0) # EDF7BD
+const ALLOW_LOCALHOST_LOBBY_CONNECT := true
+var BTN_RED_BG := MENU_PALETTE.base(0.96)
+var BTN_RED_BORDER := MENU_PALETTE.highlight(1.0)
+var BTN_GREEN_BG := MENU_PALETTE.accent(0.96)
+var BTN_GREEN_BORDER := MENU_PALETTE.highlight(1.0)
+var BTN_YELLOW_BG := MENU_PALETTE.hot(0.96)
+var BTN_YELLOW_BORDER := MENU_PALETTE.highlight(1.0)
 
 var _host: Control
 var _make_button: Callable
@@ -147,6 +149,8 @@ func open(play_button: Control) -> void:
 	_pending_create_request = {}
 	_ctf_room_state.clear()
 	_layout_overlay()
+	if _host != null and _host.has_method("_apply_runtime_palette"):
+		_host.call("_apply_runtime_palette", _overlay)
 
 	_overlay.visible = true
 	_overlay.modulate = Color(1, 1, 1, 0)
@@ -164,7 +168,7 @@ func open(play_button: Control) -> void:
 	fade.tween_property(_overlay, "modulate:a", 1.0, 0.22)
 
 	if play_button != null and _pixel_burst_at.is_valid() and _center_of.is_valid():
-		_pixel_burst_at.call(_center_of.call(play_button), Color(0.9, 0.74, 0.27, 1))
+		_pixel_burst_at.call(_center_of.call(play_button), MENU_PALETTE.highlight(1.0))
 
 	_host.call_deferred("_run_lobby_menu_loading_sequence")
 
@@ -194,7 +198,7 @@ func _layout_overlay() -> void:
 	if _panel == null:
 		return
 	var viewport_size := _host.get_viewport_rect().size
-	var target_w := clampf(viewport_size.x * 0.50, 380.0, 620.0)
+	var target_w := clampf(viewport_size.x * 0.32, 280.0, 500.0)
 	var target_h := clampf(viewport_size.y * 0.74, 320.0, 620.0)
 	_panel.custom_minimum_size = Vector2(target_w, target_h)
 	_panel.size = Vector2(target_w, target_h)
@@ -362,14 +366,19 @@ func _resolve_auth_api_host_port() -> Dictionary:
 func _build_connect_candidates() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var seen := {}
-	for endpoint in [
-		_resolve_server_host_port(),
-		_resolve_server_host_port_from_args("127.0.0.1", 8080),
-		_resolve_server_host_port_from_args("localhost", 8080),
-	]:
+	var resolved_primary := _resolve_server_host_port()
+	var from_args := _resolve_server_host_port_from_args(
+		str(resolved_primary.get("host", "")).strip_edges(),
+		int(resolved_primary.get("port", 8080))
+	)
+	for endpoint in [resolved_primary, from_args]:
 		var host := str(endpoint.get("host", "")).strip_edges()
 		var port := int(endpoint.get("port", 8080))
 		if host.is_empty() or port < 1 or port > 65535:
+			continue
+		var host_lc := host.to_lower()
+		var is_localhost := host_lc == "localhost" or host_lc == "127.0.0.1" or host_lc == "::1"
+		if is_localhost and not ALLOW_LOCALHOST_LOBBY_CONNECT:
 			continue
 		var key := "%s:%d" % [host, port]
 		if seen.has(key):
@@ -441,26 +450,7 @@ func _try_next_connect_candidate() -> void:
 	_connect_candidate_index += 1
 	_log("try_next_connect_candidate next_index=%d total=%d" % [_connect_candidate_index, _connect_candidates.size()])
 	if _connect_candidate_index >= _connect_candidates.size():
-		var pending_request := _pending_create_request.duplicate(true)
-		var had_pending_create := not pending_request.is_empty()
-		if had_pending_create and _rpc_bridge != null:
-			var map_id := str(pending_request.get("map_id", "")).strip_edges().to_lower()
-			var mode_id := str(pending_request.get("mode_id", "deathmatch")).strip_edges().to_lower()
-			_log("all connect candidates exhausted; pending create -> LOCAL fallback map=%s mode=%s" % [map_id, mode_id])
-			var hosted_local := bool(_rpc_bridge.call("host_local_match", map_id, mode_id))
-			_log("local fallback host_local_match hosted=%s" % str(hosted_local))
-			if hosted_local:
-				_pending_create_request = {}
-				_action_inflight = false
-				_lobby_list_ready = true
-				_connect_nonce += 1
-				if _overlay != null:
-					_overlay.visible = false
-				set_interaction_enabled(true)
-				if _on_closed.is_valid():
-					_on_closed.call()
-				_refresh_lobby_buttons_state()
-				return
+		var had_pending_create := not _pending_create_request.is_empty()
 		_pending_create_request = {}
 		_action_inflight = false
 		_lobby_list_ready = true
@@ -719,21 +709,21 @@ func _apply_room_button_selected_style(btn: Button, selected: bool) -> void:
 	btn.text = ("> " + base_text) if selected else base_text
 	if selected:
 		btn.modulate = Color(1, 1, 1, 1)
-		btn.add_theme_color_override("font_color", Color(0.9294, 0.9686, 0.7412, 1.0))
-		btn.add_theme_color_override("font_hover_color", Color(0.9294, 0.9686, 0.7412, 1.0))
+		btn.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
+		btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
 		var selected_style := StyleBoxFlat.new()
-		selected_style.bg_color = Color(0.5216, 0.7804, 0.6039, 0.96)
+		selected_style.bg_color = MENU_PALETTE.hot(0.96)
 		selected_style.border_width_left = 2
 		selected_style.border_width_top = 2
 		selected_style.border_width_right = 2
 		selected_style.border_width_bottom = 2
-		selected_style.border_color = Color(0.9294, 0.9686, 0.7412, 1.0)
+		selected_style.border_color = MENU_PALETTE.highlight(1.0)
 		btn.add_theme_stylebox_override("normal", selected_style)
 		btn.add_theme_stylebox_override("hover", selected_style)
 		btn.add_theme_stylebox_override("pressed", selected_style)
 		btn.add_theme_stylebox_override("focus", selected_style)
 		return
-	btn.modulate = Color(0.88, 0.9, 0.96, 0.96)
+	btn.modulate = MENU_PALETTE.text_dark(0.96)
 	btn.remove_theme_color_override("font_color")
 	btn.remove_theme_color_override("font_hover_color")
 	btn.remove_theme_stylebox_override("normal")
@@ -1034,7 +1024,7 @@ func _ensure_overlay() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "Panel"
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.custom_minimum_size = Vector2(380, 250)
+	panel.custom_minimum_size = Vector2(280, 250)
 	panel.position = Vector2(40, 40)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.add_child(panel)
@@ -1083,12 +1073,12 @@ func _ensure_overlay() -> void:
 	_loading_box = loading_box
 
 	var loading_style := StyleBoxFlat.new()
-	loading_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.96)
+	loading_style.bg_color = MENU_PALETTE.accent(0.96)
 	loading_style.border_width_left = 3
 	loading_style.border_width_top = 3
 	loading_style.border_width_right = 3
 	loading_style.border_width_bottom = 3
-	loading_style.border_color = Color(0.3059, 0.5529, 0.6118, 1)
+	loading_style.border_color = MENU_PALETTE.accent(1.0)
 	loading_box.add_theme_stylebox_override("panel", loading_style)
 
 	var loading_margin := MarginContainer.new()
@@ -1130,12 +1120,12 @@ func _ensure_overlay() -> void:
 	rooms_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rooms_panel.visible = false
 	var rooms_panel_style := StyleBoxFlat.new()
-	rooms_panel_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.92)
+	rooms_panel_style.bg_color = MENU_PALETTE.accent(0.92)
 	rooms_panel_style.border_width_left = 2
 	rooms_panel_style.border_width_top = 2
 	rooms_panel_style.border_width_right = 2
 	rooms_panel_style.border_width_bottom = 2
-	rooms_panel_style.border_color = Color(0.3059, 0.5529, 0.6118, 1.0)
+	rooms_panel_style.border_color = MENU_PALETTE.accent(1.0)
 	rooms_panel.add_theme_stylebox_override("panel", rooms_panel_style)
 	root.add_child(rooms_panel)
 	_rooms_list_panel = rooms_panel
@@ -1194,16 +1184,16 @@ func _ensure_overlay() -> void:
 	map_option.add_theme_font_size_override("font_size", 8)
 	map_option.add_theme_constant_override("arrow_margin", 4)
 	map_option.add_theme_constant_override("h_separation", 4)
-	map_option.add_theme_color_override("font_color", Color(0.94, 0.93, 0.9, 1))
-	map_option.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	map_option.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
+	map_option.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
+	map_option.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
+	map_option.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
 	var map_option_normal := StyleBoxFlat.new()
-	map_option_normal.bg_color = Color(0.3059, 0.5529, 0.6118, 1.0)
+	map_option_normal.bg_color = MENU_PALETTE.accent(1.0)
 	map_option_normal.border_width_left = 2
 	map_option_normal.border_width_top = 2
 	map_option_normal.border_width_right = 2
 	map_option_normal.border_width_bottom = 2
-	map_option_normal.border_color = Color(0.3059, 0.5529, 0.6118, 1)
+	map_option_normal.border_color = MENU_PALETTE.accent(1.0)
 	map_option_normal.corner_radius_top_left = 0
 	map_option_normal.corner_radius_top_right = 0
 	map_option_normal.corner_radius_bottom_right = 0
@@ -1213,8 +1203,8 @@ func _ensure_overlay() -> void:
 	map_option_normal.content_margin_top = 3
 	map_option_normal.content_margin_bottom = 3
 	var map_option_hover := map_option_normal.duplicate() as StyleBoxFlat
-	map_option_hover.bg_color = Color(0.3059, 0.5529, 0.6118, 1.0)
-	map_option_hover.border_color = Color(0.9294, 0.9686, 0.7412, 1.0)
+	map_option_hover.bg_color = MENU_PALETTE.accent(1.0)
+	map_option_hover.border_color = MENU_PALETTE.highlight(1.0)
 	map_option.add_theme_stylebox_override("normal", map_option_normal)
 	map_option.add_theme_stylebox_override("hover", map_option_hover)
 	map_option.add_theme_stylebox_override("pressed", map_option_hover)
@@ -1222,29 +1212,29 @@ func _ensure_overlay() -> void:
 	map_option.add_theme_icon_override("arrow", _make_pixel_dropdown_arrow())
 	var map_popup := map_option.get_popup()
 	var map_popup_panel := StyleBoxFlat.new()
-	map_popup_panel.bg_color = Color(0.3059, 0.5529, 0.6118, 1.0)
+	map_popup_panel.bg_color = MENU_PALETTE.accent(1.0)
 	map_popup_panel.border_width_left = 2
 	map_popup_panel.border_width_top = 2
 	map_popup_panel.border_width_right = 2
 	map_popup_panel.border_width_bottom = 2
-	map_popup_panel.border_color = Color(0.3059, 0.5529, 0.6118, 1)
+	map_popup_panel.border_color = MENU_PALETTE.accent(1.0)
 	map_popup_panel.corner_radius_top_left = 0
 	map_popup_panel.corner_radius_top_right = 0
 	map_popup_panel.corner_radius_bottom_right = 0
 	map_popup_panel.corner_radius_bottom_left = 0
 	var map_popup_hover := StyleBoxFlat.new()
-	map_popup_hover.bg_color = Color(0.5216, 0.7804, 0.6039, 1.0)
+	map_popup_hover.bg_color = MENU_PALETTE.hot(1.0)
 	map_popup_hover.border_width_left = 1
 	map_popup_hover.border_width_top = 1
 	map_popup_hover.border_width_right = 1
 	map_popup_hover.border_width_bottom = 1
-	map_popup_hover.border_color = Color(0.9294, 0.9686, 0.7412, 1.0)
+	map_popup_hover.border_color = MENU_PALETTE.highlight(1.0)
 	map_popup_hover.corner_radius_top_left = 0
 	map_popup_hover.corner_radius_top_right = 0
 	map_popup_hover.corner_radius_bottom_right = 0
 	map_popup_hover.corner_radius_bottom_left = 0
 	var map_popup_separator := StyleBoxFlat.new()
-	map_popup_separator.bg_color = Color(0.5216, 0.7804, 0.6039, 1.0)
+	map_popup_separator.bg_color = MENU_PALETTE.hot(1.0)
 	map_popup_separator.content_margin_top = 1
 	map_popup_separator.content_margin_bottom = 1
 	map_popup.add_theme_stylebox_override("panel", map_popup_panel)
@@ -1256,9 +1246,9 @@ func _ensure_overlay() -> void:
 	map_popup.add_theme_stylebox_override("separator", map_popup_separator)
 	map_popup.add_theme_constant_override("v_separation", 2)
 	map_popup.add_theme_constant_override("h_separation", 6)
-	map_popup.add_theme_color_override("font_color", Color(0.92, 0.92, 0.9, 1))
-	map_popup.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	map_popup.add_theme_color_override("font_selected_color", Color(1, 1, 1, 1))
+	map_popup.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
+	map_popup.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
+	map_popup.add_theme_color_override("font_selected_color", MENU_PALETTE.text_dark(1.0))
 	map_popup.add_theme_font_size_override("font_size", 8)
 	map_popup.about_to_popup.connect(func() -> void:
 		_remove_popup_left_markers(map_popup)
@@ -1369,12 +1359,12 @@ func _ensure_overlay() -> void:
 	red_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	teams_row.add_child(red_card)
 	var red_style := StyleBoxFlat.new()
-	red_style.bg_color = Color(0.5216, 0.7804, 0.6039, 0.75)
+	red_style.bg_color = MENU_PALETTE.hot(0.75)
 	red_style.border_width_left = 2
 	red_style.border_width_top = 2
 	red_style.border_width_right = 2
 	red_style.border_width_bottom = 2
-	red_style.border_color = Color(0.9294, 0.9686, 0.7412, 1)
+	red_style.border_color = MENU_PALETTE.highlight(1.0)
 	red_card.add_theme_stylebox_override("panel", red_style)
 	var red_margin := MarginContainer.new()
 	red_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1398,12 +1388,12 @@ func _ensure_overlay() -> void:
 	blue_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	teams_row.add_child(blue_card)
 	var blue_style := StyleBoxFlat.new()
-	blue_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.78)
+	blue_style.bg_color = MENU_PALETTE.accent(0.78)
 	blue_style.border_width_left = 2
 	blue_style.border_width_top = 2
 	blue_style.border_width_right = 2
 	blue_style.border_width_bottom = 2
-	blue_style.border_color = Color(0.9294, 0.9686, 0.7412, 1)
+	blue_style.border_color = MENU_PALETTE.highlight(1.0)
 	blue_card.add_theme_stylebox_override("panel", blue_style)
 	var blue_margin := MarginContainer.new()
 	blue_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1432,12 +1422,12 @@ func _ensure_overlay() -> void:
 	var controls_card := PanelContainer.new()
 	ctf_room_box.add_child(controls_card)
 	var controls_style := StyleBoxFlat.new()
-	controls_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.86)
+	controls_style.bg_color = MENU_PALETTE.accent(0.86)
 	controls_style.border_width_left = 2
 	controls_style.border_width_top = 2
 	controls_style.border_width_right = 2
 	controls_style.border_width_bottom = 2
-	controls_style.border_color = Color(0.9294, 0.9686, 0.7412, 1)
+	controls_style.border_color = MENU_PALETTE.highlight(1.0)
 	controls_card.add_theme_stylebox_override("panel", controls_style)
 	var controls_margin := MarginContainer.new()
 	controls_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1549,12 +1539,12 @@ func _ensure_overlay() -> void:
 	var dm_members_card := PanelContainer.new()
 	dm_room_box.add_child(dm_members_card)
 	var dm_members_style := StyleBoxFlat.new()
-	dm_members_style.bg_color = Color(0.3059, 0.5529, 0.6118, 0.86)
+	dm_members_style.bg_color = MENU_PALETTE.accent(0.86)
 	dm_members_style.border_width_left = 2
 	dm_members_style.border_width_top = 2
 	dm_members_style.border_width_right = 2
 	dm_members_style.border_width_bottom = 2
-	dm_members_style.border_color = Color(0.9294, 0.9686, 0.7412, 1)
+	dm_members_style.border_color = MENU_PALETTE.highlight(1.0)
 	dm_members_card.add_theme_stylebox_override("panel", dm_members_style)
 	var dm_members_margin := MarginContainer.new()
 	dm_members_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1810,7 +1800,7 @@ func _remove_popup_left_markers(popup: PopupMenu) -> void:
 func _make_pixel_dropdown_arrow() -> Texture2D:
 	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	var color := Color(0.9, 0.74, 0.27, 1.0)
+	var color := MENU_PALETTE.highlight(1.0)
 	# Down-facing chunky pixel arrow.
 	var rows := {
 		2: PackedInt32Array([2, 3, 4, 5, 6]),
@@ -1827,14 +1817,14 @@ func _make_pixel_dropdown_arrow() -> Texture2D:
 func _make_pixel_checkbox_icon(checked: bool) -> Texture2D:
 	var img := Image.create(11, 11, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	var border := Color(0.9294, 0.9686, 0.7412, 1.0)
-	var fill := Color(0.5216, 0.7804, 0.6039, 1.0)
+	var border := MENU_PALETTE.highlight(1.0)
+	var fill := MENU_PALETTE.hot(1.0)
 	for y in range(11):
 		for x in range(11):
 			var on_border := x == 0 or x == 10 or y == 0 or y == 10
 			img.set_pixel(x, y, border if on_border else fill)
 	if checked:
-		var accent := Color(0.9, 0.74, 0.27, 1.0)
+		var accent := MENU_PALETTE.highlight(1.0)
 		for y in range(2, 9):
 			for x in range(2, 9):
 				img.set_pixel(x, y, accent)
@@ -1845,10 +1835,10 @@ func _apply_pixel_checkbox_style(check: CheckBox) -> void:
 		return
 	check.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	check.add_theme_constant_override("h_separation", 6)
-	check.add_theme_color_override("font_color", Color(0.94, 0.93, 0.9, 1.0))
-	check.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	check.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
-	check.add_theme_color_override("font_disabled_color", Color(0.66, 0.66, 0.7, 1.0))
+	check.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
+	check.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
+	check.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
+	check.add_theme_color_override("font_disabled_color", MENU_PALETTE.text_dark(0.74))
 	var unchecked := _make_pixel_checkbox_icon(false)
 	var checked := _make_pixel_checkbox_icon(true)
 	check.add_theme_icon_override("unchecked", unchecked)
@@ -1883,10 +1873,10 @@ func _apply_button_palette(btn: Button, normal_bg: Color, border: Color) -> void
 			flat.bg_color = normal_bg
 		flat.border_color = Color(border.r, border.g, border.b, 0.48) if sb_name == "disabled" else border
 		btn.add_theme_stylebox_override(sb_name, flat)
-	btn.add_theme_color_override("font_color", Color(0.98, 0.98, 0.98, 1.0))
-	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
-	btn.add_theme_color_override("font_disabled_color", Color(0.84, 0.84, 0.84, 0.9))
+	btn.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
+	btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
+	btn.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
+	btn.add_theme_color_override("font_disabled_color", MENU_PALETTE.text_dark(0.9))
 
 func _apply_ready_button_state_style(btn: Button, is_ready: bool) -> void:
 	if btn == null:

@@ -7,6 +7,7 @@ const WARRIOR_MANIFEST_PATHS := {
 	"erebus": "res://assets/warriors/erebus/skin_manifest.json",
 	"tasko": "res://assets/warriors/tasko/skin_manifest.json",
 }
+const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 
 var _manifest_cache: Dictionary = {}
 var _texture_cache: Dictionary = {}
@@ -139,15 +140,7 @@ func warrior_item_title_text(warrior_id: String, skin_index: int) -> String:
 	return "%s - %s" % [warrior_display_name(warrior_id), warrior_skin_label(warrior_id, skin_index)]
 
 func warrior_card_title_text(warrior_id: String, skin_index: int) -> String:
-	var normalized := warrior_id.strip_edges().to_lower()
-	var prefix := "WAR"
-	if normalized == "outrage":
-		prefix = "OUT"
-	elif normalized == "erebus":
-		prefix = "ERE"
-	elif normalized == "tasko":
-		prefix = "TSK"
-	return "%s-%s" % [prefix, warrior_skin_label(normalized, skin_index)]
+	return warrior_skin_label(warrior_id, skin_index)
 
 func warrior_is_locked(host: Object, warrior_id: String, skin_index: int) -> bool:
 	var normalized := warrior_id.strip_edges().to_lower()
@@ -220,10 +213,16 @@ func update_warrior_item_button(host: Object, btn: Button) -> void:
 	var icon_slot := btn.get_node_or_null("Margin/VBox/IconSlot") as Control
 	var icon := btn.get_node_or_null("Margin/VBox/IconSlot/Icon") as Sprite2D
 	var info_label := btn.get_node_or_null("Margin/VBox/Info") as Label
+	var selected := false
+	if host != null:
+		var pending_id := str(host.get("_pending_warrior_id")).strip_edges().to_lower()
+		var pending_skin := int(host.get("_pending_warrior_skin"))
+		selected = pending_id == warrior_id and pending_skin == skin_index
 	if name_label != null:
 		name_label.text = warrior_card_title_text(warrior_id, skin_index)
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
 	if icon != null:
 		icon.texture = warrior_preview_texture_for(warrior_id, skin_index)
 		icon.centered = true
@@ -233,9 +232,51 @@ func update_warrior_item_button(host: Object, btn: Button) -> void:
 		btn.set_meta("_base_icon_scale", icon.scale)
 	if info_label != null:
 		info_label.text = warrior_item_cost_text(host, warrior_id, skin_index)
+		info_label.add_theme_color_override("font_color", MENU_PALETTE.text_dark(0.9))
 	btn.tooltip_text = "%s  (%s)" % [warrior_item_title_text(warrior_id, skin_index), warrior_item_status_text(host, warrior_id, skin_index)]
 	var locked := warrior_is_locked(host, warrior_id, skin_index)
+	_apply_selected_button_visual(btn, selected and not locked)
 	btn.modulate = Color(0.65, 0.67, 0.72, 0.75) if locked else Color(1, 1, 1, 1)
+
+func _ensure_button_style_cache(btn: Button) -> void:
+	if btn == null:
+		return
+	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var key := "_base_sb_%s" % sb_name
+		if btn.has_meta(key):
+			continue
+		var sb := btn.get_theme_stylebox(sb_name)
+		if sb is StyleBoxFlat:
+			btn.set_meta(key, (sb as StyleBoxFlat).duplicate())
+
+func _apply_selected_button_visual(btn: Button, selected: bool) -> void:
+	if btn == null:
+		return
+	_ensure_button_style_cache(btn)
+	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var key := "_base_sb_%s" % sb_name
+		if not btn.has_meta(key):
+			continue
+		var base: Variant = btn.get_meta(key)
+		if not (base is StyleBoxFlat):
+			continue
+		var flat := (base as StyleBoxFlat).duplicate()
+		if selected:
+			flat.border_width_left = maxi(flat.border_width_left, 3)
+			flat.border_width_top = maxi(flat.border_width_top, 3)
+			flat.border_width_right = maxi(flat.border_width_right, 3)
+			flat.border_width_bottom = maxi(flat.border_width_bottom, 5)
+			flat.border_color = MENU_PALETTE.highlight(1.0)
+			flat.shadow_color = MENU_PALETTE.highlight(0.45)
+			flat.shadow_size = maxi(flat.shadow_size, 18)
+			var target := MENU_PALETTE.hot(1.0)
+			flat.bg_color = Color(
+				lerpf(flat.bg_color.r, target.r, 0.24),
+				lerpf(flat.bg_color.g, target.g, 0.24),
+				lerpf(flat.bg_color.b, target.b, 0.24),
+				clampf(flat.bg_color.a + 0.05, 0.0, 1.0)
+			)
+		btn.add_theme_stylebox_override(sb_name, flat)
 
 func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_id: String, skin_index: int) -> Button:
 	var btn := Button.new()
@@ -244,7 +285,7 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 		if created is Button:
 			btn = created as Button
 	btn.text = ""
-	btn.custom_minimum_size = Vector2(122, 74)
+	btn.custom_minimum_size = Vector2(84, 62)
 	btn.set_meta("warrior_id", warrior_id.strip_edges().to_lower())
 	btn.set_meta("skin_index", maxi(0, skin_index))
 	btn.set_meta("_anim_key", "%s:%d" % [warrior_id.strip_edges().to_lower(), maxi(0, skin_index)])
@@ -256,10 +297,10 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 	var margin := MarginContainer.new()
 	margin.name = "Margin"
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_bottom", 20)
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_bottom", 12)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(margin)
 
@@ -275,13 +316,13 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 	var name := Label.new()
 	name.name = "Name"
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_font_size_override("font_size", 12)
+	name.add_theme_font_size_override("font_size", 11)
 	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(name)
 
 	var icon_slot := Control.new()
 	icon_slot.name = "IconSlot"
-	icon_slot.custom_minimum_size = Vector2(0, 34)
+	icon_slot.custom_minimum_size = Vector2(0, 24)
 	icon_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	icon_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -299,7 +340,7 @@ func make_warrior_item_button(host: Object, make_shop_button: Callable, warrior_
 	var info := Label.new()
 	info.name = "Info"
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info.add_theme_font_size_override("font_size", 11)
+	info.add_theme_font_size_override("font_size", 10)
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
