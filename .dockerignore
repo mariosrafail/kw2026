@@ -1,6 +1,8 @@
 .git
 .gitignore
-.godot
+# Keep imported Godot artifacts in the server image so headless runtime
+# can load fonts, textures, and audio resources without re-importing.
+# .godot
 .vscode
 .claude
 build

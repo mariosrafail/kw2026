@@ -13,19 +13,18 @@ const SKULL_BR_MAP_ID := "skull_br"
 const BATTLE_ROYALE_ZONE_SYNC_INTERVAL_SEC := 0.1
 const BATTLE_ROYALE_ZONE_DAMAGE_INTERVAL_SEC := 1.0
 const BATTLE_ROYALE_ZONE_DAMAGE := 20
-const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
-var _client_skill_cd_q_remaining := 0.0
-var _client_skill_cd_e_remaining := 0.0
-var _client_skill_cd_q_max := 0.0
-var _client_skill_cd_e_max := 0.0
-var _minimap_hud = null
-var _skill_hud = null
-var _fight_music_player: AudioStreamPlayer = null
-var _skull_intro = null
-var _gameplay_locked_until_msec := 0
-var _skull_match_intro_sent := false
-var _battle_royale_zone_sync_accumulator := 0.0
-var _battle_royale_zone_damage_accumulator := 0.0
+var _rt_client_skill_cd_q_remaining := 0.0
+var _rt_client_skill_cd_e_remaining := 0.0
+var _rt_client_skill_cd_q_max := 0.0
+var _rt_client_skill_cd_e_max := 0.0
+var _rt_minimap_hud = null
+var _rt_skill_hud = null
+var _rt_fight_music_player: AudioStreamPlayer = null
+var _rt_skull_intro = null
+var _rt_gameplay_locked_until_msec := 0
+var _rt_skull_match_intro_sent := false
+var _rt_battle_royale_zone_sync_accumulator := 0.0
+var _rt_battle_royale_zone_damage_accumulator := 0.0
 
 const RPC_ROOT_NODE_NAME := "GameRoot"
 
@@ -140,10 +139,10 @@ func _ensure_cursor_manager() -> void:
 		if existing.has_method("set_cursor_context"):
 			existing.call("set_cursor_context", "game")
 		return
-	var cursor_script := load(CURSOR_MANAGER_SCRIPT_PATH)
+	var cursor_script: GDScript = load(CURSOR_MANAGER_SCRIPT_PATH) as GDScript
 	if cursor_script == null:
 		return
-	var cm := cursor_script.new()
+	var cm: Node = cursor_script.new() as Node
 	cm.name = CURSOR_MANAGER_NAME
 	root.call_deferred("add_child", cm)
 	call_deferred("_apply_game_cursor_context")
@@ -210,8 +209,8 @@ func _physics_process(delta: float) -> void:
 		ctf_match_controller.visual_tick(_ctf_objective_enabled())
 
 	if multiplayer.multiplayer_peer != null:
-		if _skull_intro != null and _skull_intro.has_method("is_active") and _skull_intro.call("is_active") == true:
-			_skull_intro.call("visual_tick", delta)
+		if _rt_skull_intro != null and _rt_skull_intro.has_method("is_active") and _rt_skull_intro.call("is_active") == true:
+			_rt_skull_intro.call("visual_tick", delta)
 		else:
 			client_input_controller.follow_local_player_camera(delta)
 
@@ -227,16 +226,16 @@ func _ensure_skill_hud() -> void:
 		return
 	var existing := hud_layer.get_node_or_null("SkillHud")
 	if existing != null and existing.has_method("set_character_id") and existing.has_method("update_cooldowns"):
-		_skill_hud = existing
+		_rt_skill_hud = existing
 		return
 	if existing != null:
 		existing.queue_free()
 	var skill_hud_script := load(SKILL_HUD_SCRIPT_PATH)
 	if skill_hud_script == null:
 		return
-	_skill_hud = skill_hud_script.new()
-	_skill_hud.name = "SkillHud"
-	hud_layer.add_child(_skill_hud)
+	_rt_skill_hud = skill_hud_script.new()
+	_rt_skill_hud.name = "SkillHud"
+	hud_layer.add_child(_rt_skill_hud)
 
 func _ensure_minimap_hud() -> void:
 	var hud_layer := get_node_or_null("ClientHud") as CanvasLayer
@@ -244,18 +243,18 @@ func _ensure_minimap_hud() -> void:
 		return
 	var existing := hud_layer.get_node_or_null("MiniMapHud")
 	if existing != null and existing.has_method("configure"):
-		_minimap_hud = existing
+		_rt_minimap_hud = existing
 	else:
 		if existing != null:
 			existing.queue_free()
 		var minimap_hud_script := load(MINIMAP_HUD_SCRIPT_PATH)
 		if minimap_hud_script == null:
 			return
-		_minimap_hud = minimap_hud_script.new()
-		_minimap_hud.name = "MiniMapHud"
-		hud_layer.add_child(_minimap_hud)
-	if _minimap_hud != null and _minimap_hud.has_method("configure"):
-		_minimap_hud.call(
+		_rt_minimap_hud = minimap_hud_script.new()
+		_rt_minimap_hud.name = "MiniMapHud"
+		hud_layer.add_child(_rt_minimap_hud)
+	if _rt_minimap_hud != null and _rt_minimap_hud.has_method("configure"):
+		_rt_minimap_hud.call(
 			"configure",
 			get_world_2d(),
 			Callable(self, "_minimap_focus_position"),
@@ -300,28 +299,28 @@ func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
 	if local_peer_id <= 0 or not players.has(local_peer_id):
 		_update_skill_cooldowns_hud(0.0, 0.0)
-		if _skill_hud != null:
-			_skill_hud.visible = false
+		if _rt_skill_hud != null:
+			_rt_skill_hud.visible = false
 		return
 
-	_client_skill_cd_q_remaining = maxf(0.0, _client_skill_cd_q_remaining - delta)
-	_client_skill_cd_e_remaining = maxf(0.0, _client_skill_cd_e_remaining - delta)
-	_update_skill_cooldowns_hud(_client_skill_cd_q_remaining, _client_skill_cd_e_remaining)
+	_rt_client_skill_cd_q_remaining = maxf(0.0, _rt_client_skill_cd_q_remaining - delta)
+	_rt_client_skill_cd_e_remaining = maxf(0.0, _rt_client_skill_cd_e_remaining - delta)
+	_update_skill_cooldowns_hud(_rt_client_skill_cd_q_remaining, _rt_client_skill_cd_e_remaining)
 	var local_player := players.get(local_peer_id, null) as NetPlayer
 	if local_player != null and local_player.has_method("set_skill_cooldown_bars"):
 		local_player.call("set_skill_cooldown_bars", 1.0, 1.0, false)
-	if _skill_hud != null:
-		_skill_hud.visible = role == Role.CLIENT and _is_local_player_spawned()
-		_skill_hud.set_character_id(_warrior_id_for_peer(local_peer_id))
+	if _rt_skill_hud != null:
+		_rt_skill_hud.visible = role == Role.CLIENT and _is_local_player_spawned()
+		_rt_skill_hud.set_character_id(_warrior_id_for_peer(local_peer_id))
 		if local_player != null and local_player.has_method("get_torso_dominant_color"):
 			var torso_color_value: Variant = local_player.call("get_torso_dominant_color")
 			if torso_color_value is Color:
-				_skill_hud.set_tint(torso_color_value as Color)
-		_skill_hud.update_cooldowns(
-			_client_skill_cd_q_remaining,
-			_client_skill_cd_q_max,
-			_client_skill_cd_e_remaining,
-			_client_skill_cd_e_max
+				_rt_skill_hud.set_tint(torso_color_value as Color)
+		_rt_skill_hud.update_cooldowns(
+			_rt_client_skill_cd_q_remaining,
+			_rt_client_skill_cd_q_max,
+			_rt_client_skill_cd_e_remaining,
+			_rt_client_skill_cd_e_max
 		)
 
 func _begin_client_skill_cooldown(skill_number: int) -> void:
@@ -332,19 +331,19 @@ func _begin_client_skill_cooldown(skill_number: int) -> void:
 		return
 	if combat_flow_service == null:
 		return
-	if skill_number == 1 and _client_skill_cd_q_remaining > 0.0:
+	if skill_number == 1 and _rt_client_skill_cd_q_remaining > 0.0:
 		return
-	if skill_number == 2 and _client_skill_cd_e_remaining > 0.0:
+	if skill_number == 2 and _rt_client_skill_cd_e_remaining > 0.0:
 		return
 	var max_cd := combat_flow_service.skill_cooldown_max_for_peer(local_peer_id, skill_number)
 	if max_cd <= 0.0:
 		return
 	if skill_number == 1:
-		_client_skill_cd_q_max = max_cd
-		_client_skill_cd_q_remaining = max_cd
+		_rt_client_skill_cd_q_max = max_cd
+		_rt_client_skill_cd_q_remaining = max_cd
 	elif skill_number == 2:
-		_client_skill_cd_e_max = max_cd
-		_client_skill_cd_e_remaining = max_cd
+		_rt_client_skill_cd_e_max = max_cd
+		_rt_client_skill_cd_e_remaining = max_cd
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -448,14 +447,14 @@ func _load_startup_network_defaults() -> Dictionary:
 	return defaults
 
 func _configure_skull_intro_controller() -> void:
-	if _skull_intro == null:
+	if _rt_skull_intro == null:
 		var intro_script := load(SKULL_FFA_INTRO_CONTROLLER_SCRIPT_PATH)
 		if intro_script != null:
-			_skull_intro = intro_script.new()
-	if _skull_intro == null:
+			_rt_skull_intro = intro_script.new()
+	if _rt_skull_intro == null:
 		return
-	if _skull_intro.has_method("configure"):
-		_skull_intro.call("configure", self, main_camera, players)
+	if _rt_skull_intro.has_method("configure"):
+		_rt_skull_intro.call("configure", self, main_camera, players)
 
 func _configure_battle_royale_zone_controller() -> void:
 	if battle_royale_zone_controller == null:
@@ -480,10 +479,10 @@ func _is_battle_royale_match_scene() -> bool:
 	return _active_game_mode() == GAME_MODE_BATTLE_ROYALE
 
 func _is_gameplay_locked() -> bool:
-	return _gameplay_locked_until_msec > Time.get_ticks_msec()
+	return _rt_gameplay_locked_until_msec > Time.get_ticks_msec()
 
 func _activate_gameplay_lock(duration_sec: float) -> void:
-	_gameplay_locked_until_msec = maxi(_gameplay_locked_until_msec, Time.get_ticks_msec() + int(round(duration_sec * 1000.0)))
+	_rt_gameplay_locked_until_msec = maxi(_rt_gameplay_locked_until_msec, Time.get_ticks_msec() + int(round(duration_sec * 1000.0)))
 
 func _active_match_lobby_id() -> int:
 	for peer_value in players.keys():
@@ -535,13 +534,13 @@ func _server_tick_battle_royale_zone(delta: float) -> void:
 		return
 	if battle_royale_zone_controller.has_method("server_tick"):
 		battle_royale_zone_controller.call("server_tick", delta)
-	_battle_royale_zone_sync_accumulator += delta
-	_battle_royale_zone_damage_accumulator += delta
-	if _battle_royale_zone_sync_accumulator >= BATTLE_ROYALE_ZONE_SYNC_INTERVAL_SEC:
-		_battle_royale_zone_sync_accumulator = 0.0
+	_rt_battle_royale_zone_sync_accumulator += delta
+	_rt_battle_royale_zone_damage_accumulator += delta
+	if _rt_battle_royale_zone_sync_accumulator >= BATTLE_ROYALE_ZONE_SYNC_INTERVAL_SEC:
+		_rt_battle_royale_zone_sync_accumulator = 0.0
 		_server_broadcast_battle_royale_zone_state()
-	if _battle_royale_zone_damage_accumulator >= BATTLE_ROYALE_ZONE_DAMAGE_INTERVAL_SEC:
-		_battle_royale_zone_damage_accumulator = 0.0
+	if _rt_battle_royale_zone_damage_accumulator >= BATTLE_ROYALE_ZONE_DAMAGE_INTERVAL_SEC:
+		_rt_battle_royale_zone_damage_accumulator = 0.0
 		_server_apply_battle_royale_zone_damage()
 
 func _server_broadcast_battle_royale_zone_state() -> void:
@@ -592,7 +591,7 @@ func _server_apply_battle_royale_zone_damage() -> void:
 func _maybe_server_begin_skull_match_intro() -> void:
 	if not multiplayer.is_server():
 		return
-	if _skull_match_intro_sent:
+	if _rt_skull_match_intro_sent:
 		return
 	if not _is_skull_intro_match_scene():
 		return
@@ -620,9 +619,9 @@ func _maybe_server_begin_skull_match_intro() -> void:
 	if ordered_peer_ids.is_empty():
 		return
 	var intro_duration_sec := 13.0
-	if _skull_intro != null and _skull_intro.has_method("recommended_duration_sec"):
-		intro_duration_sec = float(_skull_intro.call("recommended_duration_sec", ordered_peer_ids.size()))
-	_skull_match_intro_sent = true
+	if _rt_skull_intro != null and _rt_skull_intro.has_method("recommended_duration_sec"):
+		intro_duration_sec = float(_rt_skull_intro.call("recommended_duration_sec", ordered_peer_ids.size()))
+	_rt_skull_match_intro_sent = true
 	_activate_gameplay_lock(intro_duration_sec)
 	for member_value in _lobby_members(lobby_id):
 		_rpc_skull_match_intro.rpc_id(int(member_value), ordered_peer_ids, intro_duration_sec)
@@ -634,8 +633,8 @@ func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) 
 	if not _is_skull_intro_match_scene():
 		return
 	_activate_gameplay_lock(_duration_sec)
-	if _skull_intro != null and _skull_intro.has_method("start") and multiplayer != null:
-		_skull_intro.call("start", _participant_peer_ids, multiplayer.get_unique_id(), _duration_sec)
+	if _rt_skull_intro != null and _rt_skull_intro.has_method("start") and multiplayer != null:
+		_rt_skull_intro.call("start", _participant_peer_ids, multiplayer.get_unique_id(), _duration_sec)
 
 func _read_launcher_config_defaults() -> Dictionary:
 	var candidate_paths := PackedStringArray()
@@ -666,38 +665,38 @@ func _read_launcher_config_defaults() -> Dictionary:
 
 func _start_fight_soundtrack() -> void:
 	_ensure_fight_music_player()
-	if _fight_music_player == null:
+	if _rt_fight_music_player == null:
 		return
-	if _fight_music_player.stream == null:
-		_fight_music_player.stream = _load_fight_soundtrack_stream()
-	if _fight_music_player.stream == null:
+	if _rt_fight_music_player.stream == null:
+		_rt_fight_music_player.stream = _load_fight_soundtrack_stream()
+	if _rt_fight_music_player.stream == null:
 		return
 	var vol_linear := _load_music_volume_linear_from_menu_state()
-	_fight_music_player.volume_db = _music_db_from_linear(vol_linear)
-	_fight_music_player.stream_paused = false
-	_fight_music_player.play(0.0)
+	_rt_fight_music_player.volume_db = _music_db_from_linear(vol_linear)
+	_rt_fight_music_player.stream_paused = false
+	_rt_fight_music_player.play(0.0)
 
 func _ensure_fight_music_player() -> void:
-	if _fight_music_player != null and is_instance_valid(_fight_music_player):
+	if _rt_fight_music_player != null and is_instance_valid(_rt_fight_music_player):
 		return
 	var existing := get_node_or_null("FightSoundtrackPlayer") as AudioStreamPlayer
 	if existing != null:
-		_fight_music_player = existing
+		_rt_fight_music_player = existing
 	else:
 		var p := AudioStreamPlayer.new()
 		p.name = "FightSoundtrackPlayer"
 		add_child(p)
-		_fight_music_player = p
-	if _fight_music_player == null:
+		_rt_fight_music_player = p
+	if _rt_fight_music_player == null:
 		return
-	_fight_music_player.bus = "Master"
-	_fight_music_player.autoplay = false
-	_fight_music_player.process_mode = Node.PROCESS_MODE_ALWAYS
-	_fight_music_player.max_polyphony = 1
-	if _fight_music_player.stream is AudioStreamWAV:
-		(_fight_music_player.stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
-	elif _fight_music_player.stream is AudioStreamMP3:
-		(_fight_music_player.stream as AudioStreamMP3).loop = true
+	_rt_fight_music_player.bus = "Master"
+	_rt_fight_music_player.autoplay = false
+	_rt_fight_music_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_rt_fight_music_player.max_polyphony = 1
+	if _rt_fight_music_player.stream is AudioStreamWAV:
+		(_rt_fight_music_player.stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+	elif _rt_fight_music_player.stream is AudioStreamMP3:
+		(_rt_fight_music_player.stream as AudioStreamMP3).loop = true
 
 func _load_fight_soundtrack_stream() -> AudioStream:
 	var imported := load(FIGHT_SOUNDTRACK_PATH) as AudioStream

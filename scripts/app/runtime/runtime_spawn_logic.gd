@@ -1,5 +1,7 @@
 extends "res://scripts/app/runtime/runtime_weapon_logic.gd"
 
+const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
+
 func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if _uses_lobby_scene_flow():
 		return
