@@ -4,6 +4,7 @@ class_name MapCatalog
 const MAIN_FFA_MAP_CONTROLLER := preload("res://scripts/world/main_ffa_map_controller.gd")
 const MAIN_TDTH_MAP_CONTROLLER := preload("res://scripts/world/main_tdth_map_controller.gd")
 const MAIN_CTF_MAP_CONTROLLER := preload("res://scripts/world/main_ctf_map_controller.gd")
+const SKULL_BR_MAP_CONTROLLER := preload("res://scripts/world/skull_br_map_controller.gd")
 const SKULL_FFA_MAP_CONTROLLER := preload("res://scripts/world/skull_ffa_map_controller.gd")
 
 var _maps_by_id: Dictionary = {}
@@ -12,6 +13,7 @@ var _default_map_id := "skull_ffa"
 
 func _init() -> void:
 	_register_controller(SKULL_FFA_MAP_CONTROLLER.new())
+	_register_controller(SKULL_BR_MAP_CONTROLLER.new())
 	_register_controller(MAIN_FFA_MAP_CONTROLLER.new())
 	_register_controller(MAIN_TDTH_MAP_CONTROLLER.new())
 	_register_controller(MAIN_CTF_MAP_CONTROLLER.new())

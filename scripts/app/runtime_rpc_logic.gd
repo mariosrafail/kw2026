@@ -62,6 +62,15 @@ func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: S
 	_spawn_player_local(peer_id, spawn_position)
 	_append_log("Spawn sync: player %d" % peer_id)
 
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_battle_royale_zone(_center: Vector2, _radius: float) -> void:
+	if multiplayer.is_server():
+		return
+	if battle_royale_zone_controller == null:
+		return
+	if battle_royale_zone_controller.has_method("apply_synced_state"):
+		battle_royale_zone_controller.call("apply_synced_state", _center, _radius)
+
 func _rpc_despawn_player(_peer_id: int) -> void:
 	_remove_player_local(_peer_id)
 	_update_score_labels()
@@ -647,17 +656,35 @@ func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
 		return
 	_server_broadcast_lobby_room_state(lobby_id)
 
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_show_starting_animation(_enabled: bool) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_service == null or lobby_id <= 0:
+		return
+	if lobby_service.lobby_started(lobby_id):
+		return
+	if not lobby_service.set_show_starting_animation_enabled(lobby_id, peer_id, _enabled):
+		_server_send_lobby_action_result(peer_id, false, "Only host can change intro setting.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	_server_broadcast_lobby_room_state(lobby_id)
+
 func _server_start_deathmatch_lobby_match(peer_id: int) -> void:
 	if lobby_service == null:
 		return
 	var lobby_id := _peer_lobby(peer_id)
-	if lobby_id <= 0 or not lobby_service.is_deathmatch_lobby(lobby_id):
-		_server_send_lobby_action_result(peer_id, false, "FFA lobby not found.", lobby_id, _lobby_map_id(lobby_id))
+	var is_deathmatch := lobby_service.is_deathmatch_lobby(lobby_id)
+	var is_battle_royale := lobby_service.is_battle_royale_lobby(lobby_id)
+	if lobby_id <= 0 or (not is_deathmatch and not is_battle_royale):
+		_server_send_lobby_action_result(peer_id, false, "FFA/BR lobby not found.", lobby_id, _lobby_map_id(lobby_id))
 		return
 	if lobby_service.owner_peer_for_lobby(lobby_id) != peer_id:
 		_server_send_lobby_action_result(peer_id, false, "Only the host can start.", lobby_id, _lobby_map_id(lobby_id))
 		return
-	if not lobby_service.can_start_deathmatch_lobby(lobby_id):
+	var can_start := lobby_service.can_start_deathmatch_lobby(lobby_id) if is_deathmatch else lobby_service.can_start_battle_royale_lobby(lobby_id)
+	if not can_start:
 		_server_send_lobby_action_result(peer_id, false, "All other players must be READY.", lobby_id, _lobby_map_id(lobby_id))
 		return
 	lobby_service.set_lobby_started(lobby_id, true)

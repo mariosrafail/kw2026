@@ -2,7 +2,6 @@ extends Node
 
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
-
 signal connected_to_lobby_server
 signal lobby_connection_failed
 signal lobby_server_disconnected
@@ -203,6 +202,14 @@ func set_lobby_add_bots(enabled: bool) -> bool:
 		return false
 	_log("set_lobby_add_bots rpc_id(1) enabled=%s" % str(enabled))
 	_rpc_lobby_set_add_bots.rpc_id(1, enabled)
+	return true
+
+func set_lobby_show_starting_animation(enabled: bool) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_lobby_show_starting_animation blocked can_send=false")
+		return false
+	_log("set_lobby_show_starting_animation rpc_id(1) enabled=%s" % str(enabled))
+	_rpc_lobby_set_show_starting_animation.rpc_id(1, enabled)
 	return true
 
 func start_lobby_match() -> bool:
@@ -476,6 +483,10 @@ func _rpc_scene_switch_to_map(_map_id: String) -> void:
 		tree.call_deferred("change_scene_to_file", scene_path)
 		_begin_rpc_root_handoff()
 
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_battle_royale_zone(_center: Vector2, _radius: float) -> void:
+	pass
+
 @rpc("authority", "reliable")
 func _rpc_lobby_room_state(_payload: Dictionary) -> void:
 	_log("rpc lobby_room_state payload=%s" % str(_payload))
@@ -491,6 +502,10 @@ func _rpc_lobby_set_ready(_ready: bool) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_show_starting_animation(_enabled: bool) -> void:
 	pass
 
 @rpc("any_peer", "reliable")
@@ -527,6 +542,10 @@ func _rpc_spawn_tasko_invis_field(_caster_peer_id: int, _world_position: Vector2
 
 @rpc("authority", "reliable")
 func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) -> void:
 	pass
 
 func _begin_rpc_root_handoff() -> void:

@@ -5,6 +5,7 @@ const TEAM_RED := 0
 const TEAM_BLUE := 1
 const TEAM_SIZE_LIMIT := 2
 const GAME_MODE_DEATHMATCH := "deathmatch"
+const GAME_MODE_BATTLE_ROYALE := "battle_royale"
 const GAME_MODE_CTF := "ctf"
 const GAME_MODE_TDTH := "tdth"
 
@@ -128,7 +129,7 @@ func create_lobby(
 	if map_id.is_empty():
 		map_id = "classic"
 	var mode_id := requested_mode_id.strip_edges().to_lower()
-	if mode_id != GAME_MODE_CTF and mode_id != GAME_MODE_TDTH:
+	if mode_id != GAME_MODE_CTF and mode_id != GAME_MODE_TDTH and mode_id != GAME_MODE_BATTLE_ROYALE:
 		mode_id = GAME_MODE_DEATHMATCH
 	var max_players := requested_max_players
 	if max_players <= 0:
@@ -145,6 +146,7 @@ func create_lobby(
 		"started": false,
 		"ready_by_peer": {peer_id: false},
 		"add_bots": false,
+		"show_starting_animation": false,
 		"team_by_peer": {peer_id: TEAM_RED} if _is_team_mode(mode_id) else {}
 	}
 	_global_peer_lobby_by_peer[peer_id] = lobby_id
@@ -172,6 +174,12 @@ func is_ctf_lobby(lobby_id: int) -> bool:
 	if lobby.is_empty():
 		return false
 	return str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower() == GAME_MODE_CTF
+
+func is_battle_royale_lobby(lobby_id: int) -> bool:
+	var lobby := get_lobby_data(lobby_id)
+	if lobby.is_empty():
+		return false
+	return str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower() == GAME_MODE_BATTLE_ROYALE
 
 func is_deathmatch_lobby(lobby_id: int) -> bool:
 	var lobby := get_lobby_data(lobby_id)
@@ -268,8 +276,33 @@ func add_bots_enabled(lobby_id: int) -> bool:
 		return false
 	return bool(lobby.get("add_bots", false))
 
+func set_show_starting_animation_enabled(lobby_id: int, owner_peer_id: int, enabled: bool) -> bool:
+	if not _global_server_lobbies.has(lobby_id):
+		return false
+	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
+	if int(lobby.get("owner_peer_id", 0)) != owner_peer_id:
+		return false
+	lobby["show_starting_animation"] = bool(enabled)
+	_global_server_lobbies[lobby_id] = lobby
+	return true
+
+func show_starting_animation_enabled(lobby_id: int) -> bool:
+	var lobby := get_lobby_data(lobby_id)
+	if lobby.is_empty():
+		return false
+	return bool(lobby.get("show_starting_animation", false))
+
 func can_start_deathmatch_lobby(lobby_id: int) -> bool:
 	if not is_deathmatch_lobby(lobby_id):
+		return false
+	if lobby_started(lobby_id):
+		return false
+	if not all_non_owner_humans_ready(lobby_id):
+		return false
+	return get_lobby_members(lobby_id).size() > 0
+
+func can_start_battle_royale_lobby(lobby_id: int) -> bool:
+	if not is_battle_royale_lobby(lobby_id):
 		return false
 	if lobby_started(lobby_id):
 		return false
@@ -400,6 +433,7 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 			"all_ready": false,
 			"can_start": false,
 			"add_bots": false,
+			"show_starting_animation": false,
 			"human_count": 0,
 			"max_players": 0,
 			"teams": {"red": [], "blue": []}
@@ -427,6 +461,8 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 	var can_start := false
 	if mode_id == GAME_MODE_DEATHMATCH:
 		can_start = can_start_deathmatch_lobby(lobby_id)
+	elif mode_id == GAME_MODE_BATTLE_ROYALE:
+		can_start = can_start_battle_royale_lobby(lobby_id)
 	elif mode_id == GAME_MODE_CTF:
 		can_start = can_start_ctf_lobby(lobby_id)
 	elif mode_id == GAME_MODE_TDTH:
@@ -443,6 +479,7 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 		"all_ready": all_non_owner_humans_ready(lobby_id),
 		"can_start": can_start,
 		"add_bots": bool(lobby.get("add_bots", false)),
+		"show_starting_animation": bool(lobby.get("show_starting_animation", false)),
 		"human_count": members.size(),
 		"max_players": max_players_for_lobby(lobby_id),
 		"team_by_peer": teams,

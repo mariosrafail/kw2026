@@ -88,18 +88,18 @@ func _update_sprite(key: String, sprite: Sprite2D, drift: Vector2, parallax: flo
 func _update_material_time(canvas_item: CanvasItem, parameter_name: String = "time_sec") -> void:
 	if canvas_item == null:
 		return
-	var material := canvas_item.material as ShaderMaterial
-	if material == null:
+	var shader_material := canvas_item.material as ShaderMaterial
+	if shader_material == null:
 		return
-	material.set_shader_parameter(parameter_name, _time_sec)
+	shader_material.set_shader_parameter(parameter_name, _time_sec)
 
 func _update_overlay_material(rect: ColorRect, parameter_name: String = "time_sec") -> void:
 	if rect == null:
 		return
-	var material := rect.material as ShaderMaterial
-	if material == null:
+	var shader_material := rect.material as ShaderMaterial
+	if shader_material == null:
 		return
-	material.set_shader_parameter(parameter_name, _time_sec)
+	shader_material.set_shader_parameter(parameter_name, _time_sec)
 
 func _update_layer_modulates() -> void:
 	if sky != null:

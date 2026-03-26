@@ -3,6 +3,8 @@ class_name MapFlowService
 
 func normalize_mode_id(mode_id: String) -> String:
 	var normalized := mode_id.strip_edges().to_lower()
+	if normalized == "battle_royale":
+		return "battle_royale"
 	if normalized == "ctf":
 		return "ctf"
 	if normalized == "tdth":
@@ -11,6 +13,8 @@ func normalize_mode_id(mode_id: String) -> String:
 
 func mode_label_for_id(mode_id: String) -> String:
 	var normalized := normalize_mode_id(mode_id)
+	if normalized == "battle_royale":
+		return "Battle Royale"
 	if normalized == "ctf":
 		return "Capture The Flag"
 	if normalized == "tdth":

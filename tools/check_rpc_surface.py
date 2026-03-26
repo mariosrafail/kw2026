@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_PATH = ROOT / "scripts" / "app" / "runtime_shared.gd"
 RUNTIME_PATH = ROOT / "scripts" / "app" / "runtime_rpc_logic.gd"
+RUNTIME_CONTROLLER_PATH = ROOT / "scripts" / "app" / "runtime_controller.gd"
 BRIDGE_PATH = ROOT / "scripts" / "ui" / "main_menu" / "lobby_rpc_bridge.gd"
 MAIN_PATH = ROOT / "scripts" / "main.gd"
 
@@ -81,12 +82,15 @@ def check_main_is_thin(path: Path) -> list[str]:
 def main() -> int:
     canonical = parse_rpc_methods(CANONICAL_PATH)
     runtime = parse_rpc_methods(RUNTIME_PATH)
+    runtime_controller = parse_rpc_methods(RUNTIME_CONTROLLER_PATH)
     bridge = parse_rpc_methods(BRIDGE_PATH)
+    gameplay_root = dict(canonical)
+    gameplay_root.update(runtime_controller)
 
     errors: list[str] = []
     errors.extend(compare_signature_sets("runtime_rpc_logic.gd", canonical, runtime))
-    errors.extend(compare_signature_sets("lobby_rpc_bridge.gd", canonical, bridge))
-    errors.extend(compare_rpc_annotations("lobby_rpc_bridge.gd", canonical, bridge))
+    errors.extend(compare_signature_sets("lobby_rpc_bridge.gd", gameplay_root, bridge))
+    errors.extend(compare_rpc_annotations("lobby_rpc_bridge.gd", gameplay_root, bridge))
     errors.extend(check_main_is_thin(MAIN_PATH))
 
     if errors:

@@ -1,22 +1,31 @@
 extends "res://scripts/app/runtime_rpc_logic.gd"
 
-const CURSOR_MANAGER_SCRIPT := preload("res://scripts/ui/cursor_manager.gd")
-const SKILL_HUD_SCRIPT := preload("res://scripts/ui/skill_hud.gd")
-const SKULL_FFA_INTRO_CONTROLLER_SCRIPT := preload("res://scripts/world/skull_ffa_match_intro_controller.gd")
+const CURSOR_MANAGER_SCRIPT_PATH := "res://scripts/ui/cursor_manager.gd"
+const MINIMAP_HUD_SCRIPT_PATH := "res://scripts/ui/minimap/minimap_hud.gd"
+const SKILL_HUD_SCRIPT_PATH := "res://scripts/ui/skill_hud.gd"
+const SKULL_FFA_INTRO_CONTROLLER_SCRIPT_PATH := "res://scripts/world/skull_ffa_match_intro_controller.gd"
 const CURSOR_MANAGER_NAME := "CursorManager"
 const FIGHT_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/fight_soundtrack.MP3"
 const FIGHT_SOUNDTRACK_FALLBACK := preload("res://assets/sounds/soundtrack/fight_soundtrack.MP3")
 const MENU_STATE_PATH := "user://main_menu_shop_state.json"
 const SKULL_FFA_MAP_ID := "skull_ffa"
+const SKULL_BR_MAP_ID := "skull_br"
+const BATTLE_ROYALE_ZONE_SYNC_INTERVAL_SEC := 0.1
+const BATTLE_ROYALE_ZONE_DAMAGE_INTERVAL_SEC := 1.0
+const BATTLE_ROYALE_ZONE_DAMAGE := 20
+const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
 var _client_skill_cd_q_remaining := 0.0
 var _client_skill_cd_e_remaining := 0.0
 var _client_skill_cd_q_max := 0.0
 var _client_skill_cd_e_max := 0.0
+var _minimap_hud = null
 var _skill_hud = null
 var _fight_music_player: AudioStreamPlayer = null
-var _skull_intro = SKULL_FFA_INTRO_CONTROLLER_SCRIPT.new()
+var _skull_intro = null
 var _gameplay_locked_until_msec := 0
 var _skull_match_intro_sent := false
+var _battle_royale_zone_sync_accumulator := 0.0
+var _battle_royale_zone_damage_accumulator := 0.0
 
 const RPC_ROOT_NODE_NAME := "GameRoot"
 
@@ -51,7 +60,9 @@ func _ready() -> void:
 	_connect_local_signals()
 	_setup_ui_defaults()
 	_ensure_skill_hud()
+	_ensure_minimap_hud()
 	_configure_skull_intro_controller()
+	_configure_battle_royale_zone_controller()
 
 	var startup_defaults := _load_startup_network_defaults()
 	port_spin.value = int(startup_defaults.get("port", DEFAULT_PORT))
@@ -129,7 +140,10 @@ func _ensure_cursor_manager() -> void:
 		if existing.has_method("set_cursor_context"):
 			existing.call("set_cursor_context", "game")
 		return
-	var cm := CURSOR_MANAGER_SCRIPT.new()
+	var cursor_script := load(CURSOR_MANAGER_SCRIPT_PATH)
+	if cursor_script == null:
+		return
+	var cm := cursor_script.new()
 	cm.name = CURSOR_MANAGER_NAME
 	root.call_deferred("add_child", cm)
 	call_deferred("_apply_game_cursor_context")
@@ -177,6 +191,7 @@ func _physics_process(delta: float) -> void:
 		if not _uses_lobby_scene_flow():
 			client_input_controller.local_host_apply_input(delta, damage_boost_enabled, input_states)
 		_server_ensure_bots_if_needed()
+		_server_tick_battle_royale_zone(delta)
 		_maybe_server_begin_skull_match_intro()
 		_server_tick_target_dummy_bot(delta)
 		snapshot_accumulator = combat_flow_service.server_simulate(delta, snapshot_accumulator)
@@ -216,9 +231,68 @@ func _ensure_skill_hud() -> void:
 		return
 	if existing != null:
 		existing.queue_free()
-	_skill_hud = SKILL_HUD_SCRIPT.new()
+	var skill_hud_script := load(SKILL_HUD_SCRIPT_PATH)
+	if skill_hud_script == null:
+		return
+	_skill_hud = skill_hud_script.new()
 	_skill_hud.name = "SkillHud"
 	hud_layer.add_child(_skill_hud)
+
+func _ensure_minimap_hud() -> void:
+	var hud_layer := get_node_or_null("ClientHud") as CanvasLayer
+	if hud_layer == null:
+		return
+	var existing := hud_layer.get_node_or_null("MiniMapHud")
+	if existing != null and existing.has_method("configure"):
+		_minimap_hud = existing
+	else:
+		if existing != null:
+			existing.queue_free()
+		var minimap_hud_script := load(MINIMAP_HUD_SCRIPT_PATH)
+		if minimap_hud_script == null:
+			return
+		_minimap_hud = minimap_hud_script.new()
+		_minimap_hud.name = "MiniMapHud"
+		hud_layer.add_child(_minimap_hud)
+	if _minimap_hud != null and _minimap_hud.has_method("configure"):
+		_minimap_hud.call(
+			"configure",
+			get_world_2d(),
+			Callable(self, "_minimap_focus_position"),
+			Callable(self, "_play_bounds_rect"),
+			Callable(self, "_minimap_marker_payload")
+		)
+
+func _minimap_focus_position() -> Vector2:
+	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
+	if local_peer_id > 0:
+		var local_player := players.get(local_peer_id, null) as NetPlayer
+		if local_player != null:
+			return local_player.global_position
+	if main_camera != null:
+		return main_camera.global_position
+	return Vector2.ZERO
+
+func _minimap_marker_payload() -> Array:
+	var out: Array = []
+	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
+	var local_team := _team_for_peer(local_peer_id) if local_peer_id > 0 else -1
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		var player := players.get(peer_id, null) as NetPlayer
+		if player == null:
+			continue
+		var relation := "enemy"
+		if peer_id == local_peer_id:
+			relation = "self"
+		elif _ctf_enabled() and local_peer_id > 0 and _team_for_peer(peer_id) == local_team:
+			relation = "ally"
+		out.append({
+			"peer_id": peer_id,
+			"world_position": player.global_position,
+			"relation": relation
+		})
+	return out
 
 func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	if ui_controller == null:
@@ -375,14 +449,35 @@ func _load_startup_network_defaults() -> Dictionary:
 
 func _configure_skull_intro_controller() -> void:
 	if _skull_intro == null:
+		var intro_script := load(SKULL_FFA_INTRO_CONTROLLER_SCRIPT_PATH)
+		if intro_script != null:
+			_skull_intro = intro_script.new()
+	if _skull_intro == null:
 		return
 	if _skull_intro.has_method("configure"):
 		_skull_intro.call("configure", self, main_camera, players)
 
-func _is_skull_ffa_match_scene() -> bool:
-	if map_controller != null and map_controller.normalized_map_id() == SKULL_FFA_MAP_ID:
+func _configure_battle_royale_zone_controller() -> void:
+	if battle_royale_zone_controller == null:
+		return
+	if battle_royale_zone_controller.has_method("reset_match"):
+		battle_royale_zone_controller.call("reset_match")
+
+func _is_skull_intro_match_scene() -> bool:
+	if map_controller != null:
+		var map_id := map_controller.normalized_map_id()
+		if map_id == SKULL_FFA_MAP_ID or map_id == SKULL_BR_MAP_ID:
+			return true
+	if selected_map_id == SKULL_FFA_MAP_ID or selected_map_id == SKULL_BR_MAP_ID:
 		return true
-	return selected_map_id == SKULL_FFA_MAP_ID
+	return false
+
+func _is_battle_royale_match_scene() -> bool:
+	if map_controller != null and map_controller.normalized_map_id() == SKULL_BR_MAP_ID:
+		return true
+	if selected_map_id == SKULL_BR_MAP_ID:
+		return true
+	return _active_game_mode() == GAME_MODE_BATTLE_ROYALE
 
 func _is_gameplay_locked() -> bool:
 	return _gameplay_locked_until_msec > Time.get_ticks_msec()
@@ -427,16 +522,79 @@ func _ordered_skull_intro_peer_ids(lobby_id: int) -> Array:
 	)
 	var out: Array = []
 	for entry_value in ordered:
-		var entry := entry_value as Dictionary
+		var entry: Dictionary = entry_value as Dictionary
 		out.append(int(entry.get("peer_id", 0)))
 	return out
+
+func _server_tick_battle_royale_zone(delta: float) -> void:
+	if not multiplayer.is_server():
+		return
+	if not _is_battle_royale_match_scene():
+		return
+	if battle_royale_zone_controller == null:
+		return
+	if battle_royale_zone_controller.has_method("server_tick"):
+		battle_royale_zone_controller.call("server_tick", delta)
+	_battle_royale_zone_sync_accumulator += delta
+	_battle_royale_zone_damage_accumulator += delta
+	if _battle_royale_zone_sync_accumulator >= BATTLE_ROYALE_ZONE_SYNC_INTERVAL_SEC:
+		_battle_royale_zone_sync_accumulator = 0.0
+		_server_broadcast_battle_royale_zone_state()
+	if _battle_royale_zone_damage_accumulator >= BATTLE_ROYALE_ZONE_DAMAGE_INTERVAL_SEC:
+		_battle_royale_zone_damage_accumulator = 0.0
+		_server_apply_battle_royale_zone_damage()
+
+func _server_broadcast_battle_royale_zone_state() -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if battle_royale_zone_controller == null:
+		return
+	var center: Vector2 = Vector2(1552.0, 1552.0)
+	if battle_royale_zone_controller.has_method("current_center"):
+		center = battle_royale_zone_controller.call("current_center") as Vector2
+	var radius: float = 0.0
+	if battle_royale_zone_controller.has_method("current_radius"):
+		radius = float(battle_royale_zone_controller.call("current_radius"))
+	var lobby_id := _active_match_lobby_id()
+	var recipients := _lobby_members(lobby_id)
+	if recipients.is_empty():
+		recipients = multiplayer.get_peers()
+	for member_value in recipients:
+		var member_id := int(member_value)
+		if member_id <= 0 or member_id == multiplayer.get_unique_id():
+			continue
+		_rpc_sync_battle_royale_zone.rpc_id(member_id, center, radius)
+
+func _server_apply_battle_royale_zone_damage() -> void:
+	if battle_royale_zone_controller == null or hit_damage_resolver == null:
+		return
+	var center: Vector2 = Vector2(1552.0, 1552.0)
+	if battle_royale_zone_controller.has_method("current_center"):
+		center = battle_royale_zone_controller.call("current_center") as Vector2
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		var player := players.get(peer_id, null) as NetPlayer
+		if player == null or player.get_health() <= 0:
+			continue
+		var outside_zone := false
+		if battle_royale_zone_controller.has_method("is_outside"):
+			outside_zone = bool(battle_royale_zone_controller.call("is_outside", player.global_position))
+		if not outside_zone:
+			continue
+		hit_damage_resolver.server_apply_direct_damage(
+			0,
+			peer_id,
+			player,
+			BATTLE_ROYALE_ZONE_DAMAGE,
+			player.global_position - center
+		)
 
 func _maybe_server_begin_skull_match_intro() -> void:
 	if not multiplayer.is_server():
 		return
 	if _skull_match_intro_sent:
 		return
-	if not _is_skull_ffa_match_scene():
+	if not _is_skull_intro_match_scene():
 		return
 	var lobby_id := _active_match_lobby_id()
 	if lobby_id <= 0:
@@ -446,9 +604,13 @@ func _maybe_server_begin_skull_match_intro() -> void:
 		return
 	var max_players := human_member_count
 	var should_add_bots := false
+	var should_show_starting_animation := false
 	if lobby_service != null and lobby_service.has_lobby(lobby_id):
 		max_players = lobby_service.max_players_for_lobby(lobby_id)
 		should_add_bots = lobby_service.add_bots_enabled(lobby_id)
+		should_show_starting_animation = lobby_service.show_starting_animation_enabled(lobby_id)
+	if not should_show_starting_animation:
+		return
 	var expected_total := human_member_count
 	if should_add_bots:
 		expected_total = max_players
@@ -469,7 +631,7 @@ func _maybe_server_begin_skull_match_intro() -> void:
 func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:
 		return
-	if not _is_skull_ffa_match_scene():
+	if not _is_skull_intro_match_scene():
 		return
 	_activate_gameplay_lock(_duration_sec)
 	if _skull_intro != null and _skull_intro.has_method("start") and multiplayer != null:
@@ -568,11 +730,11 @@ func _load_music_volume_linear_from_menu_state() -> float:
 	var parsed: Variant = JSON.parse_string(raw)
 	if not (parsed is Dictionary):
 		return 0.8
-	var state := parsed as Dictionary
+	var state: Dictionary = parsed as Dictionary
 	return clampf(float(state.get("music_volume", 0.8)), 0.0, 1.0)
 
 func _music_db_from_linear(value: float, base_db: float = 0.0) -> float:
-	var clamped := clampf(value, 0.0, 1.0)
+	var clamped: float = clampf(value, 0.0, 1.0)
 	if clamped <= 0.001:
 		return -80.0
 	return clampf(base_db + linear_to_db(clamped), -80.0, 12.0)

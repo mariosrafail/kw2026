@@ -140,7 +140,10 @@ func _ctf_room_holds_in_lobby(lobby_id: int) -> bool:
 func _deathmatch_room_holds_in_lobby(lobby_id: int) -> bool:
 	if lobby_service == null or lobby_id <= 0:
 		return false
-	return lobby_service.is_deathmatch_lobby(lobby_id) and not lobby_service.lobby_started(lobby_id)
+	return (
+		(lobby_service.is_deathmatch_lobby(lobby_id) or lobby_service.is_battle_royale_lobby(lobby_id))
+		and not lobby_service.lobby_started(lobby_id)
+	)
 
 func _prepare_ctf_match_team_assignments(lobby_id: int) -> void:
 	if lobby_service == null or lobby_id <= 0 or not lobby_service.is_team_lobby(lobby_id):

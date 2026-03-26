@@ -426,6 +426,10 @@ func _broadcast_spawn(world_position: Vector2) -> void:
 		_broadcast_spawn_cb.call(bot_peer_id, bot_name, world_position)
 
 func _target_spawn_point(anchor_position: Vector2) -> Vector2:
+	if spawn_points.size() > spawn_point_index:
+		var indexed_spawn = spawn_points[spawn_point_index]
+		if indexed_spawn is Vector2:
+			return _snap_to_ground(indexed_spawn as Vector2)
 	if anchor_position != Vector2.ZERO and not spawn_points.is_empty():
 		var farthest_point := Vector2.ZERO
 		var farthest_distance_sq := -1.0
@@ -439,10 +443,6 @@ func _target_spawn_point(anchor_position: Vector2) -> Vector2:
 				farthest_point = candidate
 		if farthest_distance_sq >= 0.0:
 			return _snap_to_ground(farthest_point)
-	if spawn_points.size() > spawn_point_index:
-		var indexed_spawn = spawn_points[spawn_point_index]
-		if indexed_spawn is Vector2:
-			return _snap_to_ground(indexed_spawn as Vector2)
 	if spawn_points.size() >= 2:
 		var second_spawn = spawn_points[1]
 		if second_spawn is Vector2:

@@ -25,6 +25,7 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if player == null:
 		return
 	player.global_position = resolved_spawn
+	player.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
 	players_root.add_child(player)
 	player.configure(peer_id, _player_color(peer_id))
 	if _is_target_dummy_peer(peer_id):

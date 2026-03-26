@@ -121,8 +121,15 @@ const CHARACTERS := {
 
 const MAP_ID_CLASSIC := "classic"
 const MAP_ID_SKULL_FFA := "skull_ffa"
+const MAP_ID_SKULL_BR := "skull_br"
 
 const MAPS := {
+	MAP_ID_SKULL_BR: {
+		"name": "Skull BR",
+		"scene_path": "res://scenes/skull_br.tscn",
+		"max_players": 5,
+		"description": "Five-player battle royale skull arena"
+	},
 	MAP_ID_SKULL_FFA: {
 		"name": "Skull FFA",
 		"scene_path": "res://scenes/skull_ffa.tscn",

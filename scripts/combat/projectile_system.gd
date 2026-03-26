@@ -1,6 +1,8 @@
 extends RefCounted
 class_name ProjectileSystem
 
+const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
+
 var projectiles_root: Node2D
 var projectile_scene: PackedScene
 var resolve_owner_color: Callable = Callable()
@@ -114,6 +116,7 @@ func spawn_projectile(
 		return null
 
 	projectile.global_position = spawn_position
+	projectile.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
 	projectiles_root.add_child(projectile)
 	var visual_config := {}
 	var hit_radius := 8.0

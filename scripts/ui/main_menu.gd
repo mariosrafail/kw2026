@@ -242,6 +242,8 @@ func _ready() -> void:
 		Callable(self, "_on_lobby_overlay_closed")
 	)
 	_intro_fx.configure(self, intro, intro_fade, intro_plate, intro_label, Callable(self, "_pixel_burst_at"))
+	# Temporarily skip the "KEYBOARD WARRIORS" intro while testing.
+	enable_intro_animation = false
 	_intro_fx.enable_intro_animation = enable_intro_animation
 	_intro_fx.intro_timeout_sec = intro_timeout_sec
 	_intro_fx.intro_fx_enabled = intro_fx_enabled

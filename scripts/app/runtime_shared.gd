@@ -30,6 +30,7 @@ const CHARACTER_ID_OUTRAGE := "outrage"
 const CHARACTER_ID_EREBUS := "erebus"
 const CHARACTER_ID_TASKO := "tasko"
 const GAME_MODE_DEATHMATCH := "deathmatch"
+const GAME_MODE_BATTLE_ROYALE := "battle_royale"
 const GAME_MODE_CTF := "ctf"
 const GAME_MODE_TDTH := "tdth"
 
@@ -109,6 +110,7 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var ui_panel: PanelContainer = get_node_or_null("UiPanel") as PanelContainer
 @onready var world_root: Node2D = get_node_or_null("World") as Node2D
 @onready var map_front_sprite: Sprite2D = get_node_or_null("World/MapFront") as Sprite2D
+@onready var battle_royale_zone_controller: Node2D = get_node_or_null("World/BattleRoyaleZone") as Node2D
 @onready var main_camera: Camera2D = %MainCamera
 @onready var players_root: Node2D = %Players
 @onready var projectiles_root: Node2D = %Projectiles
@@ -402,6 +404,10 @@ func _rpc_lobby_room_state(_payload: Dictionary) -> void:
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	pass
 
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_battle_royale_zone(_center: Vector2, _radius: float) -> void:
+	pass
+
 @rpc("any_peer", "reliable")
 func _rpc_lobby_set_team(_team_id: int) -> void:
 	pass
@@ -412,6 +418,10 @@ func _rpc_lobby_set_ready(_ready: bool) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_show_starting_animation(_enabled: bool) -> void:
 	pass
 
 @rpc("any_peer", "reliable")

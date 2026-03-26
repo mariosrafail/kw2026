@@ -58,6 +58,7 @@ var _dm_room_members_label: Label
 var _dm_ready_button: Button
 var _dm_start_button: Button
 var _dm_add_bots_check: CheckBox
+var _dm_show_starting_animation_check: CheckBox
 var _room_buttons: Array[Button] = []
 var _interaction_enabled := true
 var _room_entries: Array = []
@@ -451,10 +452,12 @@ func _try_next_connect_candidate() -> void:
 	_log("try_next_connect_candidate next_index=%d total=%d" % [_connect_candidate_index, _connect_candidates.size()])
 	if _connect_candidate_index >= _connect_candidates.size():
 		var had_pending_create := not _pending_create_request.is_empty()
-		_pending_create_request = {}
+		if _rpc_bridge != null:
+			_rpc_bridge.call("disconnect_from_server")
 		_action_inflight = false
 		_lobby_list_ready = true
 		_room_entries = []
+		_pending_create_request = {}
 		_log("all connect candidates exhausted")
 		if _status_label != null:
 			_status_label.text = "Lobby server unavailable. Online create failed." if had_pending_create else "Connection failed. Try Refresh."
@@ -570,9 +573,9 @@ func _on_rpc_action_result(success: bool, message: String, active_lobby_id: int,
 		_status_label.text = message if success else "Failed: %s" % message
 	if success and active_lobby_id > 0:
 		var resolved_mode := _active_lobby_mode_id(active_lobby_id)
-		if _is_team_mode_id(resolved_mode) or resolved_mode == "deathmatch":
+		if _is_team_mode_id(resolved_mode) or _is_free_for_all_mode_id(resolved_mode):
 			if _status_label != null:
-				_status_label.text = "Entered Team room. Pick team and start." if _is_team_mode_id(resolved_mode) else "Entered FFA waiting room."
+				_status_label.text = "Entered Team room. Pick team and start." if _is_team_mode_id(resolved_mode) else "Entered waiting room."
 			_pending_create_request = {}
 			_request_lobby_list_from_server()
 			_refresh_lobby_buttons_state()
@@ -607,7 +610,7 @@ func _on_rpc_room_state(payload: Dictionary) -> void:
 		_hide_dm_room()
 		_show_ctf_room(_ctf_room_state)
 		return
-	if mode_id == "deathmatch":
+	if _is_free_for_all_mode_id(mode_id):
 		_hide_ctf_room()
 		if bool(_ctf_room_state.get("started", false)):
 			_hide_dm_room()
@@ -737,8 +740,8 @@ func _refresh_lobby_selection_summary() -> void:
 	if not _ctf_room_state.is_empty() and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id)):
 		_selection_label.text = "Team room: %s" % _joined_room_name
 		return
-	if not _ctf_room_state.is_empty() and _active_lobby_mode_id(_joined_lobby_id) == "deathmatch" and not bool(_ctf_room_state.get("started", false)):
-		_selection_label.text = "FFA waiting room: %s" % _joined_room_name
+	if not _ctf_room_state.is_empty() and _is_free_for_all_mode_id(_active_lobby_mode_id(_joined_lobby_id)) and not bool(_ctf_room_state.get("started", false)):
+		_selection_label.text = "Waiting room: %s" % _joined_room_name
 		return
 	if _joined_room_name.is_empty():
 		if _room_entries.is_empty():
@@ -962,7 +965,8 @@ func _refresh_lobby_buttons_state() -> void:
 	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
 	var in_waiting_room := not _ctf_room_state.is_empty() and _joined_lobby_id > 0 and not bool(_ctf_room_state.get("started", false))
 	var in_ctf_room := in_waiting_room and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id))
-	var in_dm_room := in_waiting_room and _active_lobby_mode_id(_joined_lobby_id) == "deathmatch"
+	var in_dm_room := in_waiting_room and _is_free_for_all_mode_id(_active_lobby_mode_id(_joined_lobby_id))
+	var supports_starting_animation_toggle := _supports_starting_animation_testing_toggle()
 	var local_peer_id := _local_peer_id()
 	var is_owner := local_peer_id > 0 and local_peer_id == int(_ctf_room_state.get("owner_peer_id", 0))
 	if _create_button != null:
@@ -1000,6 +1004,9 @@ func _refresh_lobby_buttons_state() -> void:
 	if _dm_add_bots_check != null:
 		_dm_add_bots_check.visible = in_dm_room and is_owner
 		_dm_add_bots_check.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner
+	if _dm_show_starting_animation_check != null:
+		_dm_show_starting_animation_check.visible = in_dm_room and is_owner and supports_starting_animation_toggle
+		_dm_show_starting_animation_check.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner or not supports_starting_animation_toggle
 	var ready_by_peer := _ctf_room_state.get("ready_by_peer", {}) as Dictionary
 	var local_ready := bool(ready_by_peer.get(local_peer_id, false))
 	if _ctf_ready_button != null:
@@ -1591,7 +1598,8 @@ func _ensure_overlay() -> void:
 	dm_start_btn.add_theme_font_size_override("font_size", 9)
 	dm_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dm_start_btn.pressed.connect(func() -> void:
-		_start_lobby_match("Starting FFA...")
+		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
+		_start_lobby_match("Starting Battle Royale..." if mode_id == "battle_royale" else "Starting FFA...")
 	)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(dm_start_btn)
@@ -1612,6 +1620,20 @@ func _ensure_overlay() -> void:
 		_add_hover_pop.call(dm_add_bots_check)
 	dm_room_box.add_child(dm_add_bots_check)
 	_dm_add_bots_check = dm_add_bots_check
+
+	var dm_show_starting_animation_check := CheckBox.new()
+	dm_show_starting_animation_check.text = "Show Starting Animation (Testing)"
+	dm_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
+	_apply_pixel_checkbox_style(dm_show_starting_animation_check)
+	dm_show_starting_animation_check.button_pressed = false
+	dm_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(dm_show_starting_animation_check)
+	dm_room_box.add_child(dm_show_starting_animation_check)
+	_dm_show_starting_animation_check = dm_show_starting_animation_check
 
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
@@ -1692,11 +1714,19 @@ func _show_dm_room(payload: Dictionary) -> void:
 		_mode_row.visible = false
 	if _waiting_room_title_label != null:
 		_waiting_room_title_label.visible = true
-		_waiting_room_title_label.text = "%s  |  FFA WAITING ROOM" % str(payload.get("name", "FFA Room"))
+		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
+		_waiting_room_title_label.text = "%s  |  %s" % [
+			str(payload.get("name", "FFA Room")),
+			"BR WAITING ROOM" if mode_id == "battle_royale" else "FFA WAITING ROOM"
+		]
 	_dm_room_box.visible = true
 	if _dm_room_title != null:
 		_dm_room_title.visible = false
-		_dm_room_title.text = "%s  |  FFA WAITING ROOM" % str(payload.get("name", "FFA Room"))
+		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
+		_dm_room_title.text = "%s  |  %s" % [
+			str(payload.get("name", "FFA Room")),
+			"BR WAITING ROOM" if mode_id == "battle_royale" else "FFA WAITING ROOM"
+		]
 	var members := payload.get("members", []) as Array
 	var lines := PackedStringArray()
 	for i in range(members.size()):
@@ -1725,6 +1755,13 @@ func _show_dm_room(payload: Dictionary) -> void:
 				_dm_add_bots_check.call("set_pressed_no_signal", add_bots)
 			else:
 				_dm_add_bots_check.button_pressed = add_bots
+	if _dm_show_starting_animation_check != null:
+		var show_starting_animation := bool(payload.get("show_starting_animation", false))
+		if _dm_show_starting_animation_check.button_pressed != show_starting_animation:
+			if _dm_show_starting_animation_check.has_method("set_pressed_no_signal"):
+				_dm_show_starting_animation_check.call("set_pressed_no_signal", show_starting_animation)
+			else:
+				_dm_show_starting_animation_check.button_pressed = show_starting_animation
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
@@ -1756,6 +1793,19 @@ func _active_lobby_mode_id(lobby_id: int) -> String:
 	if not _ctf_room_state.is_empty() and int(_ctf_room_state.get("lobby_id", 0)) == lobby_id:
 		return _map_flow_service.normalize_mode_id(str(_ctf_room_state.get("mode_id", "deathmatch")))
 	return _map_flow_service.normalize_mode_id(_selected_mode_id)
+
+func _supports_starting_animation_testing_toggle() -> bool:
+	if _ctf_room_state.is_empty():
+		return false
+	var mode_id := _map_flow_service.normalize_mode_id(str(_ctf_room_state.get("mode_id", "deathmatch")))
+	if not _is_free_for_all_mode_id(mode_id):
+		return false
+	var map_id := str(_ctf_room_state.get("map_id", "")).strip_edges().to_lower()
+	return map_id == "skull_ffa" or map_id == "skull_br"
+
+func _is_free_for_all_mode_id(mode_id: String) -> bool:
+	var normalized := _map_flow_service.normalize_mode_id(mode_id)
+	return normalized == "deathmatch" or normalized == "battle_royale"
 
 func _is_team_mode_id(mode_id: String) -> bool:
 	var normalized := _map_flow_service.normalize_mode_id(mode_id)

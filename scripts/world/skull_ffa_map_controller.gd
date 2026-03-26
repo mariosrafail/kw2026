@@ -11,11 +11,11 @@ func _init() -> void:
 		"deathmatch": 5
 	}
 	spawn_points = [
-		Vector2(180.0, 480.0),
-		Vector2(264.0, 285.0),
-		Vector2(536.0, 368.0),
-		Vector2(833.0, 422.0),
-		Vector2(1100.0, 400.0)
+		Vector2(58.0, 820.0),
+		Vector2(450.0, 850.0),
+		Vector2(550.0, 850.0),
+		Vector2(1150.0, 850.0),
+		Vector2(1500.0, 850.0)
 	]
-	play_bounds = Rect2i(0, 0, 1280, 720)
-	camera_limits_rect = Rect2i(128, 104, 1024, 512)
+	play_bounds = Rect2i(0, 0, 2048.0, 2048.0)
+	camera_limits_rect = Rect2i(0, 0, 2048.0, 2048.0)
