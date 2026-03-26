@@ -1,6 +1,8 @@
 extends RefCounted
 class_name CombatEffects
 
+const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
+
 const BLOOD_PARTICLES_AMOUNT := 22
 const BLOOD_PARTICLES_LIFETIME := 0.36
 const BLOOD_PARTICLES_CLEANUP_DELAY := 1.2
@@ -133,6 +135,7 @@ func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2,
 		var speed := randf_range(BLOOD_CHUNK_SPEED_MIN, BLOOD_CHUNK_SPEED_MAX)
 		chunk.linear_velocity = dir * speed + Vector2(randf_range(-12.0, 12.0), randf_range(-10.0, 22.0))
 		chunk.angular_velocity = randf_range(-13.0, 13.0)
+		_hide_from_minimap(chunk)
 		projectiles_root.add_child(chunk)
 		_queue_free_with_delay(chunk, BLOOD_PARTICLES_CLEANUP_DELAY + randf_range(0.0, 0.35))
 
@@ -217,6 +220,7 @@ func _spawn_surface_particle_burst(impact_position: Vector2, incoming_velocity: 
 		var speed := randf_range(SURFACE_CHUNK_SPEED_MIN, SURFACE_CHUNK_SPEED_MAX)
 		chunk.linear_velocity = dir * speed
 		chunk.angular_velocity = randf_range(-16.0, 16.0)
+		_hide_from_minimap(chunk)
 		projectiles_root.add_child(chunk)
 
 		_queue_free_with_delay(chunk, SURFACE_PARTICLES_CLEANUP_DELAY + randf_range(0.0, 0.55))
@@ -239,6 +243,7 @@ func _spawn_surface_particle_burst(impact_position: Vector2, incoming_velocity: 
 	dust.color = Color(dust_color.r, dust_color.g, dust_color.b, 0.55)
 	dust.direction = spray_direction
 	dust.spread = 40.0
+	_hide_from_minimap(dust)
 	projectiles_root.add_child(dust)
 	dust.emitting = true
 
@@ -374,6 +379,7 @@ func spawn_explosion_effect(world_position: Vector2) -> void:
 	sprite.sprite_frames = _explosion_sprite_frames()
 	sprite.animation = "default"
 	sprite.speed_scale = 1.0
+	_hide_from_minimap(sprite)
 	projectiles_root.add_child(sprite)
 	sprite.animation_finished.connect(Callable(self, "_queue_free_from_weak_ref").bind(weakref(sprite)))
 	sprite.play("default")
@@ -390,6 +396,7 @@ func spawn_hit_flash(world_position: Vector2) -> void:
 	sprite.z_as_relative = false
 	sprite.z_index = 1000
 	sprite.scale = Vector2.ONE * 0.85
+	_hide_from_minimap(sprite)
 	projectiles_root.add_child(sprite)
 
 	var tw := sprite.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -485,3 +492,11 @@ func _explosion_sprite_frames() -> SpriteFrames:
 		frames.add_frame("default", atlas)
 	explosion_frames = frames
 	return explosion_frames
+
+func _hide_from_minimap(node: Node) -> void:
+	if node is CanvasItem:
+		(node as CanvasItem).visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
+	for child in node.get_children():
+		var child_node := child as Node
+		if child_node != null:
+			_hide_from_minimap(child_node)

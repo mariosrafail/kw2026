@@ -13,7 +13,6 @@ func _ready() -> void:
 	position_smoothing_enabled = false
 	rotation_smoothing_enabled = false
 	ignore_rotation = true
-	set("canvas_cull_mask", 1)
 
 func configure(focus_position_cb: Callable, play_bounds_cb: Callable = Callable(), minimap_zoom: Vector2 = DEFAULT_ZOOM) -> void:
 	_focus_position_cb = focus_position_cb

@@ -9,6 +9,10 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if players.has(peer_id):
 		var existing := players[peer_id] as NetPlayer
 		if existing != null:
+			if existing.has_method("set_minimap_hidden"):
+				existing.call("set_minimap_hidden", true)
+			else:
+				existing.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
 			if _is_target_dummy_peer(peer_id):
 				var bot_controller := _bot_controller_for_peer(peer_id)
 				if bot_controller != null:
@@ -27,8 +31,11 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 	if player == null:
 		return
 	player.global_position = resolved_spawn
-	player.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
 	players_root.add_child(player)
+	if player.has_method("set_minimap_hidden"):
+		player.call("set_minimap_hidden", true)
+	else:
+		player.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
 	player.configure(peer_id, _player_color(peer_id))
 	if _is_target_dummy_peer(peer_id):
 		var bot_controller := _bot_controller_for_peer(peer_id)

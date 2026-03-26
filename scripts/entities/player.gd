@@ -1,6 +1,8 @@
 extends CharacterBody2D
 class_name NetPlayer
 
+const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
+
 const BLOOD_SCREEN_TEXTURES := [
 	preload("res://assets/textures/effects/blood1.png"),
 	preload("res://assets/textures/effects/blood2.png"),
@@ -133,6 +135,11 @@ func _ready() -> void:
 	_apply_player_facing_from_angle(target_aim_angle)
 	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
 	set_skill_cooldown_bars(1.0, 1.0, false)
+	set_minimap_hidden(true)
+
+func set_minimap_hidden(hidden: bool) -> void:
+	var layer := MINIMAP_HIDDEN_VISIBILITY_LAYER if hidden else 1
+	_set_canvas_item_visibility_layer_recursive(self, layer)
 
 func _init_movement_component() -> void:
 	movement_component = PlayerMovement.new()
@@ -183,6 +190,7 @@ func _init_damage_numbers_root() -> void:
 	damage_numbers_root.z_index = 4
 	damage_numbers_root.position = Vector2(0.0, -16.0)
 	visual_root.add_child(damage_numbers_root)
+	_set_canvas_item_visibility_layer_recursive(damage_numbers_root, visibility_layer)
 
 func _init_modular_visual() -> void:
 	modular_visual = PlayerModularVisual.new()
@@ -303,6 +311,7 @@ func _init_damage_flash_overlays() -> void:
 		overlay.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
 		overlay.visible = false
 		source_sprite.get_parent().add_child(overlay)
+		_set_canvas_item_visibility_layer_recursive(overlay, visibility_layer)
 		damage_flash_overlay_pairs.append({
 			"source": source_sprite,
 			"overlay": overlay,
@@ -334,6 +343,7 @@ func _init_outrage_boost_overlays() -> void:
 		overlay.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
 		overlay.visible = false
 		source_sprite.get_parent().add_child(overlay)
+		_set_canvas_item_visibility_layer_recursive(overlay, visibility_layer)
 		outrage_boost_overlay_pairs.append({
 			"source": source_sprite,
 			"overlay": overlay,
@@ -1039,6 +1049,14 @@ func _clear_screen_damage_blood() -> void:
 		damage_screen_blood_rect.visible = false
 		damage_screen_blood_rect.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	damage_screen_blood_tween = null
+
+func _set_canvas_item_visibility_layer_recursive(node: Node, layer: int) -> void:
+	if node is CanvasItem:
+		(node as CanvasItem).visibility_layer = layer
+	for child in node.get_children():
+		var child_node := child as Node
+		if child_node != null:
+			_set_canvas_item_visibility_layer_recursive(child_node, layer)
 
 func set_damage_immune(duration_sec: float) -> void:
 	damage_immune_remaining_sec = maxf(damage_immune_remaining_sec, maxf(0.0, duration_sec))

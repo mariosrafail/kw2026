@@ -116,7 +116,7 @@ func spawn_projectile(
 		return null
 
 	projectile.global_position = spawn_position
-	projectile.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
+	_set_canvas_item_visibility_layer_recursive(projectile, MINIMAP_HIDDEN_VISIBILITY_LAYER)
 	projectiles_root.add_child(projectile)
 	var visual_config := {}
 	var hit_radius := 8.0
@@ -294,3 +294,11 @@ func _owner_color(owner_peer_id: int, weapon: WeaponProfile = null) -> Color:
 			return resolve_owner_color.call(owner_peer_id, weapon.weapon_id()) as Color
 		return resolve_owner_color.call(owner_peer_id, "") as Color
 	return Color.WHITE
+
+func _set_canvas_item_visibility_layer_recursive(node: Node, layer: int) -> void:
+	if node is CanvasItem:
+		(node as CanvasItem).visibility_layer = layer
+	for child in node.get_children():
+		var child_node := child as Node
+		if child_node != null:
+			_set_canvas_item_visibility_layer_recursive(child_node, layer)

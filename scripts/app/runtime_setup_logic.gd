@@ -72,6 +72,8 @@ func _init_weapons() -> void:
 		lobby_service.set_local_selected_character(selected_character_id)
 
 func _init_scene_map_context() -> void:
+	if map_front_sprite != null:
+		map_front_sprite.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
 	var scene_map_id := map_catalog.map_id_for_scene_path(scene_file_path)
 	if map_controller != null:
 		scene_map_id = map_controller.normalized_map_id()
