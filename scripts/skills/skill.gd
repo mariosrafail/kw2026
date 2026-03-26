@@ -54,18 +54,19 @@ func can_cast(caster_peer_id: int) -> bool:
 
 ## Server-side skill cast
 ## Called when player presses Q (skill1) or E (skill2)
-func server_cast(caster_peer_id: int, target_world: Vector2) -> void:
+func server_cast(caster_peer_id: int, target_world: Vector2) -> bool:
 	if not multiplayer.is_server():
-		return
+		return false
 	
 	if not can_cast(caster_peer_id):
-		return
+		return false
 	
 	# Start cooldown
 	skill_cooldown_remaining[caster_peer_id] = cooldown_sec
 	
 	# Subclasses override this for actual logic
 	_execute_cast(caster_peer_id, target_world)
+	return true
 
 ## Client-side visual effect
 ## Called when RPC broadcasts skill to all clients

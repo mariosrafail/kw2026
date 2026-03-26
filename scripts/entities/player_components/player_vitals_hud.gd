@@ -15,6 +15,7 @@ var _before_death_cb: Callable = Callable()
 var _sfx_suppressed_cb: Callable = Callable()
 
 var health := MAX_HEALTH
+var max_health := MAX_HEALTH
 var ammo_count := 0
 var is_reloading := false
 
@@ -39,7 +40,7 @@ func configure(
 
 func set_health(value: int) -> bool:
 	var previous_health := health
-	health = clampi(value, 0, MAX_HEALTH)
+	health = clampi(value, 0, max_health)
 	_update_health_label()
 	if health < previous_health and health > 0 and _damage_feedback_cb.is_valid():
 		_damage_feedback_cb.call()
@@ -62,6 +63,15 @@ func set_ammo(value: int, reloading: bool = false) -> void:
 func get_health() -> int:
 	return health
 
+func set_max_health(value: int, clamp_current: bool = true) -> void:
+	max_health = maxi(1, value)
+	if clamp_current:
+		health = clampi(health, 0, max_health)
+	_update_health_label()
+
+func get_max_health() -> int:
+	return max_health
+
 func _update_health_label() -> void:
 	if _health_label != null:
 		_health_label.visible = false
@@ -69,10 +79,13 @@ func _update_health_label() -> void:
 		return
 	var width := 0.0
 	if health > 0:
-		if health >= MAX_HEALTH:
+		if health >= max_health:
 			width = HEALTH_BAR_MAX_WIDTH
 		else:
-			width = floor(((float(health - 1) / float(MAX_HEALTH - 1)) * (HEALTH_BAR_MAX_WIDTH - 1.0)) + 1.0)
+			if max_health <= 1:
+				width = HEALTH_BAR_MAX_WIDTH
+			else:
+				width = floor(((float(health - 1) / float(max_health - 1)) * (HEALTH_BAR_MAX_WIDTH - 1.0)) + 1.0)
 	_health_bar_green.visible = width > 0.0
 	_health_bar_green.region_enabled = true
 	_health_bar_green.region_rect = Rect2(0.0, 0.0, width, HEALTH_BAR_HEIGHT)

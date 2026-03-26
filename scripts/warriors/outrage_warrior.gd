@@ -11,7 +11,8 @@ const OUTRAGE_SKILL_E := preload("res://scripts/warriors/skills/outrage_skill_E.
 
 func _init() -> void:
 	super._init("outrage", "Outrage")
+	skill2_charge_required = 5
 
 func _init_skills() -> void:
-	skill1 = OUTRAGE_SKILL_Q.new()
+	skill1 = null
 	skill2 = OUTRAGE_SKILL_E.new()

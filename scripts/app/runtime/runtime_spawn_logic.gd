@@ -74,6 +74,8 @@ func _remove_player_local(peer_id: int) -> void:
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
 	pending_reload_delay_by_peer.erase(peer_id)
+	skill_charge_points_by_peer.erase(peer_id)
+	skill_charge_required_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
 	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
@@ -96,6 +98,8 @@ func _server_remove_player(peer_id: int, target_peers: Array = []) -> void:
 	ammo_by_peer.erase(peer_id)
 	reload_remaining_by_peer.erase(peer_id)
 	pending_reload_delay_by_peer.erase(peer_id)
+	skill_charge_points_by_peer.erase(peer_id)
+	skill_charge_required_by_peer.erase(peer_id)
 	peer_weapon_ids.erase(peer_id)
 	peer_weapon_skin_indices_by_peer.erase(peer_id)
 	peer_character_ids.erase(peer_id)
@@ -114,7 +118,16 @@ func _server_sync_player_stats(peer_id: int) -> void:
 
 func _server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> void:
 	player_replication.server_register_kill_death(attacker_peer_id, target_peer_id)
+	if combat_flow_service != null and _should_award_skill_charge_for_kill(attacker_peer_id, target_peer_id):
+		combat_flow_service.server_register_skill_charge_kill(attacker_peer_id)
 	_update_score_labels()
+
+func _should_award_skill_charge_for_kill(attacker_peer_id: int, target_peer_id: int) -> bool:
+	if attacker_peer_id <= 0:
+		return false
+	if attacker_peer_id == target_peer_id:
+		return false
+	return true
 
 func _server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 	player_replication.server_broadcast_player_state(peer_id, player)

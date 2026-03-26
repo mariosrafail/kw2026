@@ -1,0 +1,12 @@
+#!/bin/sh
+
+python tools/check_rpc_surface.py
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo
+  echo "RPC surface validation failed. Commit aborted."
+  exit "$status"
+fi
+
+exit 0

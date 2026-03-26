@@ -24,6 +24,8 @@ func _reset_runtime_state() -> void:
 	ammo_by_peer.clear()
 	reload_remaining_by_peer.clear()
 	pending_reload_delay_by_peer.clear()
+	skill_charge_points_by_peer.clear()
+	skill_charge_required_by_peer.clear()
 	peer_weapon_ids.clear()
 	peer_weapon_skin_indices_by_peer.clear()
 	peer_character_ids.clear()

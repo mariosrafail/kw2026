@@ -15,7 +15,7 @@ const VFX_COLOR := Color(0.0, 0.7, 1.0, 0.85)
 var character_id_for_peer_cb: Callable = Callable()
 
 func _init() -> void:
-	super._init("erebus_shield", "Shield", 8.0, "Creates protective barrier that absorbs 30 damage")
+	super._init("erebus_shield", "Shield", 0.0, "Creates protective barrier that absorbs 30 damage")
 
 func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	super.configure(state_refs, callbacks)

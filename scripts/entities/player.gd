@@ -22,6 +22,7 @@ const REMOTE_SNAP_DISTANCE := 150.0
 const REMOTE_VELOCITY_BLEND := 0.45
 const VISUAL_CORRECTION_DECAY := 9.0
 const MAX_HEALTH := 100
+const DEFAULT_MAX_HEALTH := MAX_HEALTH
 const HIT_RADIUS := 12.0
 const HIT_HEIGHT := 34.0
 const DAMAGE_FLASH_DURATION_SEC := 0.38
@@ -644,6 +645,9 @@ func set_display_name(display_name: String) -> void:
 
 func set_target_dummy_mode(enabled: bool) -> void:
 	target_dummy_mode = enabled
+	if not enabled:
+		set_max_health(DEFAULT_MAX_HEALTH)
+		target_health = clampi(target_health, 0, DEFAULT_MAX_HEALTH)
 	velocity = Vector2.ZERO
 	target_velocity = Vector2.ZERO
 	target_animation_on_floor = true
@@ -730,6 +734,17 @@ func get_health() -> int:
 	if vitals_hud_component == null:
 		return MAX_HEALTH
 	return vitals_hud_component.get_health()
+
+func set_max_health(value: int, clamp_current: bool = true) -> void:
+	if vitals_hud_component == null:
+		return
+	vitals_hud_component.set_max_health(value, clamp_current)
+	target_health = clampi(target_health, 0, get_max_health())
+
+func get_max_health() -> int:
+	if vitals_hud_component == null:
+		return DEFAULT_MAX_HEALTH
+	return vitals_hud_component.get_max_health()
 
 func _show_damage_number(amount: int) -> void:
 	if amount <= 0:
@@ -1091,8 +1106,8 @@ func force_respawn(spawn_position: Vector2) -> void:
 	target_position = spawn_position
 	velocity = Vector2.ZERO
 	target_velocity = Vector2.ZERO
-	set_health(MAX_HEALTH)
-	target_health = MAX_HEALTH
+	set_health(get_max_health())
+	target_health = get_max_health()
 	damage_immune_remaining_sec = RESPAWN_DAMAGE_IMMUNITY_SEC
 	shield_health = 0
 	shield_remaining_sec = 0.0
@@ -1178,7 +1193,7 @@ func apply_snapshot(new_position: Vector2, new_velocity: Vector2, new_aim_angle:
 	target_position = new_position
 	target_velocity = new_velocity
 	target_aim_angle = new_aim_angle
-	target_health = clampi(new_health, 0, MAX_HEALTH)
+	target_health = clampi(new_health, 0, get_max_health())
 	set_part_animation_state(part_animation_state)
 
 	if not use_network_smoothing:

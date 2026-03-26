@@ -93,7 +93,7 @@ func _layout_panel() -> void:
 	var resolved_size: Vector2 = PANEL_SIZE * size_scale
 	_panel.size = resolved_size
 	_panel.position = Vector2(
-		(size.x - resolved_size.x) * 0.5,
+		18.0,
 		size.y - resolved_size.y - PANEL_BOTTOM_MARGIN
 	)
 	if _viewport != null:

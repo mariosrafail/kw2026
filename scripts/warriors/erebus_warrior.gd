@@ -11,7 +11,8 @@ const EREBUS_SKILL_E = preload("res://scripts/warriors/skills/erebus_skill_E.gd"
 
 func _init() -> void:
 	super._init("erebus", "Erebus")
+	skill2_charge_required = 6
 
 func _init_skills() -> void:
-	skill1 = EREBUS_SKILL_Q.new()
+	skill1 = null
 	skill2 = EREBUS_SKILL_E.new()

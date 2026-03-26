@@ -20,7 +20,7 @@ var _ember_tex_cache: Texture2D
 var _smoke_tex_cache: Texture2D
 
 func _init() -> void:
-	super._init("outrage_boost", "Damage Boost", 8.0, "Temporarily increases damage by 50%")
+	super._init("outrage_boost", "Damage Boost", 0.0, "Temporarily increases damage by 50%")
 
 func _execute_cast(caster_peer_id: int, target_world: Vector2) -> void:
 	var lobby_id := _get_peer_lobby(caster_peer_id)

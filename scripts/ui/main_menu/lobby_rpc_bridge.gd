@@ -153,6 +153,7 @@ func host_local_match(map_id: String = "", mode_id: String = "deathmatch") -> bo
 
 	var tree := get_tree()
 	if tree != null:
+		_release_game_root_before_scene_change()
 		tree.call_deferred("change_scene_to_file", scene_path)
 		_begin_rpc_root_handoff()
 	return true
@@ -316,6 +317,10 @@ func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 	pass
 
 @rpc("authority", "reliable")
+func _rpc_sync_skill_charge(_peer_id: int, _current_points: int, _required_points: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
 func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
 	pass
 
@@ -466,6 +471,11 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 	lobby_action_result_received.emit(_success, _message, _active_lobby_id, _map_id)
 
 @rpc("authority", "reliable")
+func _rpc_lobby_room_state(_payload: Dictionary) -> void:
+	_log("rpc lobby_room_state payload=%s" % str(_payload))
+	lobby_room_state_received.emit(_payload)
+
+@rpc("authority", "reliable")
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	var tree := get_tree()
 	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
@@ -480,17 +490,13 @@ func _rpc_scene_switch_to_map(_map_id: String) -> void:
 	ProjectSettings.set_setting("kw/pending_game_mode", mode_id)
 	_log("scene_switch source=SERVER_LOBBY map_id=%s mode=%s scene=%s" % [normalized, mode_id, scene_path])
 	if tree != null:
+		_release_game_root_before_scene_change()
 		tree.call_deferred("change_scene_to_file", scene_path)
 		_begin_rpc_root_handoff()
 
 @rpc("authority", "unreliable_ordered")
 func _rpc_sync_battle_royale_zone(_center: Vector2, _radius: float) -> void:
 	pass
-
-@rpc("authority", "reliable")
-func _rpc_lobby_room_state(_payload: Dictionary) -> void:
-	_log("rpc lobby_room_state payload=%s" % str(_payload))
-	lobby_room_state_received.emit(_payload)
 
 @rpc("any_peer", "reliable")
 func _rpc_lobby_set_team(_team_id: int) -> void:
@@ -556,6 +562,10 @@ func _begin_rpc_root_handoff() -> void:
 	_rpc_handoff_attempts = 0
 	tree.process_frame.connect(Callable(self, "_complete_rpc_root_handoff"), CONNECT_ONE_SHOT)
 
+func _release_game_root_before_scene_change() -> void:
+	if name == "GameRoot":
+		name = "LobbyRpcBridge"
+
 func _complete_rpc_root_handoff() -> void:
 	var tree := get_tree()
 	if tree == null:
@@ -570,6 +580,9 @@ func _complete_rpc_root_handoff() -> void:
 			return
 		tree.process_frame.connect(Callable(self, "_complete_rpc_root_handoff"), CONNECT_ONE_SHOT)
 		return
-	name = "LobbyRpcBridge"
-	current.name = "GameRoot"
+	_release_game_root_before_scene_change()
+	if current.name != "GameRoot":
+		var existing := root.get_node_or_null("GameRoot")
+		if existing == null or existing == current:
+			current.name = "GameRoot"
 	queue_free()

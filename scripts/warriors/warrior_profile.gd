@@ -14,6 +14,7 @@ var warrior_name: String = ""
 
 var skill1: Skill  # Q key ability
 var skill2: Skill  # E key ability
+var skill2_charge_required: int = 5
 
 # Shared game systems
 var players: Dictionary = {}
@@ -55,9 +56,9 @@ func _init_skills() -> void:
 	push_error("Warrior %s must implement _init_skills()" % warrior_id)
 
 ## Server-side skill cast
-func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
+func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vector2) -> bool:
 	if not multiplayer.is_server():
-		return
+		return false
 	
 	var skill: Skill = null
 	if skill_number == 1:
@@ -65,13 +66,12 @@ func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vec
 	elif skill_number == 2:
 		skill = skill2
 	else:
-		return
+		return false
 	
 	if skill == null:
-		push_error("Warrior %s has no skill%d" % [warrior_id, skill_number])
-		return
+		return false
 	
-	skill.server_cast(caster_peer_id, target_world)
+	return bool(skill.server_cast(caster_peer_id, target_world))
 
 ## Client receives skill effect
 func client_receive_skill_cast(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
@@ -109,6 +109,11 @@ func can_cast_skill(skill_number: int, caster_peer_id: int) -> bool:
 		return false
 	
 	return skill.can_cast(caster_peer_id)
+
+func get_skill_charge_required(skill_number: int) -> int:
+	if skill_number != 2:
+		return 0
+	return maxi(0, skill2_charge_required)
 
 ## Get remaining cooldown time (for UI)
 func get_skill_cooldown_remaining(skill_number: int, caster_peer_id: int) -> float:

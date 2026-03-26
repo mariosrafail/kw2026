@@ -181,6 +181,8 @@ var player_display_names: Dictionary = {}
 var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
 var pending_reload_delay_by_peer: Dictionary = {}
+var skill_charge_points_by_peer: Dictionary = {}
+var skill_charge_required_by_peer: Dictionary = {}
 var peer_weapon_ids: Dictionary = {}
 var peer_weapon_skin_indices_by_peer: Dictionary = {}
 var peer_character_ids: Dictionary = {}
@@ -266,6 +268,10 @@ func _rpc_sync_player_state(_peer_id: int, _new_position: Vector2, _new_velocity
 
 @rpc("authority", "reliable")
 func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_sync_skill_charge(_peer_id: int, _current_points: int, _required_points: int) -> void:
 	pass
 
 @rpc("authority", "reliable")

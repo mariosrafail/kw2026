@@ -17,6 +17,7 @@ const WALL_CHECK_DISTANCE := 22.0
 const FLOOR_LOOKAHEAD := 18.0
 const FLOOR_DROP_CHECK := 42.0
 const BOT_WEAPON_ID := "ak47"
+const BOT_HEALTH := 20
 const JUMP_HOLD_MIN_SEC := 0.08
 const JUMP_HOLD_MAX_SEC := 0.24
 const TARGET_MEMORY_SEC := 2.2
@@ -176,6 +177,7 @@ func setup_spawned_player(player: NetPlayer, desired_position: Vector2, allow_sm
 	player.set_display_name(bot_name)
 	player.use_network_smoothing = allow_smoothing
 	player.set_target_dummy_mode(true)
+	player.set_max_health(BOT_HEALTH)
 	player.set_character_visual("outrage")
 	peer_weapon_ids[bot_peer_id] = BOT_WEAPON_ID
 	peer_weapon_skin_indices_by_peer[bot_peer_id] = 0
@@ -187,6 +189,15 @@ func setup_spawned_player(player: NetPlayer, desired_position: Vector2, allow_sm
 		player.set_reload_audio_stream(_weapon_reload_sfx_cb.call(BOT_WEAPON_ID) as AudioStream)
 	player.set_sfx_suppressed(false)
 	player.set_aim_world(desired_position + Vector2.LEFT * PATROL_AIM_DISTANCE)
+	player.set_health(BOT_HEALTH)
+
+func apply_spawn_state(player: NetPlayer, desired_position: Vector2, allow_smoothing: bool = false) -> void:
+	if player == null:
+		return
+	setup_spawned_player(player, desired_position, allow_smoothing)
+	player.force_respawn(desired_position)
+	player.set_max_health(BOT_HEALTH)
+	player.set_health(BOT_HEALTH)
 
 func ensure_spawned(player_scene: PackedScene, anchor_position: Vector2) -> NetPlayer:
 	if players_root == null or player_scene == null:
@@ -200,8 +211,7 @@ func ensure_spawned(player_scene: PackedScene, anchor_position: Vector2) -> NetP
 	current_vantage_position = Vector2.ZERO
 	var existing := players.get(bot_peer_id, null) as NetPlayer
 	if existing != null:
-		setup_spawned_player(existing, desired_position, false)
-		existing.force_respawn(desired_position)
+		apply_spawn_state(existing, desired_position, false)
 		_write_bot_input_state(desired_position + Vector2.LEFT * PATROL_AIM_DISTANCE, 0.0, false, false, false)
 		_record_history(desired_position)
 		_broadcast_spawn(desired_position)
@@ -213,7 +223,7 @@ func ensure_spawned(player_scene: PackedScene, anchor_position: Vector2) -> NetP
 	bot.global_position = desired_position
 	players_root.add_child(bot)
 	bot.configure(bot_peer_id, bot_color)
-	setup_spawned_player(bot, desired_position, false)
+	apply_spawn_state(bot, desired_position, false)
 	players[bot_peer_id] = bot
 	_write_bot_input_state(desired_position + Vector2.LEFT * PATROL_AIM_DISTANCE, 0.0, false, false, false)
 	_record_history(desired_position)
@@ -232,8 +242,7 @@ func respawn_player(player: NetPlayer) -> void:
 	last_seen_target_position = Vector2.ZERO
 	last_seen_memory_remaining = 0.0
 	current_vantage_position = Vector2.ZERO
-	setup_spawned_player(player, respawn_position, false)
-	player.force_respawn(respawn_position)
+	apply_spawn_state(player, respawn_position, false)
 	_write_bot_input_state(respawn_position + Vector2.RIGHT * PATROL_AIM_DISTANCE, 0.0, false, false, false)
 	_record_history(respawn_position)
 

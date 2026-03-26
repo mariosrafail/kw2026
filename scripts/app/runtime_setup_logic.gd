@@ -284,6 +284,7 @@ func _configure_services() -> void:
 			"ammo_by_peer": ammo_by_peer,
 			"reload_remaining_by_peer": reload_remaining_by_peer,
 			"pending_reload_delay_by_peer": pending_reload_delay_by_peer,
+			"skill_charge_points_by_peer": skill_charge_points_by_peer,
 			"peer_weapon_ids": peer_weapon_ids,
 			"multiplayer": multiplayer,
 			"projectile_system": projectile_system,
@@ -311,6 +312,7 @@ func _configure_services() -> void:
 			"send_projectile_impact": Callable(self, "_send_projectile_impact_rpc"),
 			"send_despawn_projectile": Callable(self, "_send_despawn_projectile_rpc"),
 			"broadcast_player_state": Callable(self, "_server_broadcast_player_state"),
+			"send_skill_charge": Callable(self, "_send_sync_skill_charge_rpc"),
 			"send_skill_cast": Callable(self, "_send_skill_cast_rpc"),
 			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer"),
 			"is_gameplay_locked": Callable(self, "_is_gameplay_locked")

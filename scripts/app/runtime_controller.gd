@@ -13,10 +13,6 @@ const SKULL_BR_MAP_ID := "skull_br"
 const BATTLE_ROYALE_ZONE_SYNC_INTERVAL_SEC := 0.1
 const BATTLE_ROYALE_ZONE_DAMAGE_INTERVAL_SEC := 1.0
 const BATTLE_ROYALE_ZONE_DAMAGE := 20
-var _rt_client_skill_cd_q_remaining := 0.0
-var _rt_client_skill_cd_e_remaining := 0.0
-var _rt_client_skill_cd_q_max := 0.0
-var _rt_client_skill_cd_e_max := 0.0
 var _rt_minimap_hud = null
 var _rt_skill_hud = null
 var _rt_fight_music_player: AudioStreamPlayer = null
@@ -225,7 +221,7 @@ func _ensure_skill_hud() -> void:
 	if hud_layer == null:
 		return
 	var existing := hud_layer.get_node_or_null("SkillHud")
-	if existing != null and existing.has_method("set_character_id") and existing.has_method("update_cooldowns"):
+	if existing != null and existing.has_method("set_character_id") and existing.has_method("update_charge"):
 		_rt_skill_hud = existing
 		return
 	if existing != null:
@@ -298,17 +294,13 @@ func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 		return
 	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
 	if local_peer_id <= 0 or not players.has(local_peer_id):
-		_update_skill_cooldowns_hud(0.0, 0.0)
 		if _rt_skill_hud != null:
 			_rt_skill_hud.visible = false
 		return
 
-	_rt_client_skill_cd_q_remaining = maxf(0.0, _rt_client_skill_cd_q_remaining - delta)
-	_rt_client_skill_cd_e_remaining = maxf(0.0, _rt_client_skill_cd_e_remaining - delta)
-	_update_skill_cooldowns_hud(_rt_client_skill_cd_q_remaining, _rt_client_skill_cd_e_remaining)
 	var local_player := players.get(local_peer_id, null) as NetPlayer
 	if local_player != null and local_player.has_method("set_skill_cooldown_bars"):
-		local_player.call("set_skill_cooldown_bars", 1.0, 1.0, false)
+		local_player.call("set_skill_cooldown_bars", 0.0, 0.0, false)
 	if _rt_skill_hud != null:
 		_rt_skill_hud.visible = role == Role.CLIENT and _is_local_player_spawned()
 		_rt_skill_hud.set_character_id(_warrior_id_for_peer(local_peer_id))
@@ -316,34 +308,13 @@ func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 			var torso_color_value: Variant = local_player.call("get_torso_dominant_color")
 			if torso_color_value is Color:
 				_rt_skill_hud.set_tint(torso_color_value as Color)
-		_rt_skill_hud.update_cooldowns(
-			_rt_client_skill_cd_q_remaining,
-			_rt_client_skill_cd_q_max,
-			_rt_client_skill_cd_e_remaining,
-			_rt_client_skill_cd_e_max
-		)
-
-func _begin_client_skill_cooldown(skill_number: int) -> void:
-	if multiplayer == null or multiplayer.multiplayer_peer == null:
-		return
-	var local_peer_id := multiplayer.get_unique_id()
-	if local_peer_id <= 0:
-		return
-	if combat_flow_service == null:
-		return
-	if skill_number == 1 and _rt_client_skill_cd_q_remaining > 0.0:
-		return
-	if skill_number == 2 and _rt_client_skill_cd_e_remaining > 0.0:
-		return
-	var max_cd := combat_flow_service.skill_cooldown_max_for_peer(local_peer_id, skill_number)
-	if max_cd <= 0.0:
-		return
-	if skill_number == 1:
-		_rt_client_skill_cd_q_max = max_cd
-		_rt_client_skill_cd_q_remaining = max_cd
-	elif skill_number == 2:
-		_rt_client_skill_cd_e_max = max_cd
-		_rt_client_skill_cd_e_remaining = max_cd
+		var current_points := 0
+		if combat_flow_service != null:
+			current_points = combat_flow_service.skill_charge_points_for_peer(local_peer_id, 2)
+		var required_points := maxi(0, int(skill_charge_required_by_peer.get(local_peer_id, 0)))
+		if required_points <= 0 and combat_flow_service != null:
+			required_points = combat_flow_service.skill_charge_required_for_peer(local_peer_id, 2)
+		_rt_skill_hud.update_charge(current_points, required_points)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -352,8 +323,6 @@ func _input(event: InputEvent) -> void:
 			_handle_escape_pressed()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_F4:
 			_toggle_fullscreen()
-		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_Q:
-			_try_cast_skill1()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_E:
 			_try_cast_skill2()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_R:
@@ -363,20 +332,7 @@ func _input(event: InputEvent) -> void:
 			_update_ui_visibility()
 
 func _try_cast_skill1() -> void:
-	if _is_gameplay_locked():
-		return
-	if role != Role.CLIENT and role != Role.SERVER:
-		return
-	if multiplayer == null or multiplayer.multiplayer_peer == null:
-		return
-	if main_camera == null:
-		return
-	var target_world := main_camera.get_global_mouse_position()
-	_begin_client_skill_cooldown(1)
-	if role == Role.SERVER:
-		combat_flow_service.server_cast_skill(1, multiplayer.get_unique_id(), target_world)
-		return
-	_rpc_cast_skill1.rpc_id(1, target_world)
+	return
 
 func _try_cast_skill2() -> void:
 	if _is_gameplay_locked():
@@ -387,10 +343,14 @@ func _try_cast_skill2() -> void:
 		return
 	if main_camera == null:
 		return
+	var local_peer_id := multiplayer.get_unique_id()
+	if local_peer_id <= 0 or combat_flow_service == null:
+		return
+	if not combat_flow_service.can_cast_skill_for_peer(local_peer_id, 2):
+		return
 	var target_world := main_camera.get_global_mouse_position()
-	_begin_client_skill_cooldown(2)
 	if role == Role.SERVER:
-		combat_flow_service.server_cast_skill(2, multiplayer.get_unique_id(), target_world)
+		combat_flow_service.server_cast_skill(2, local_peer_id, target_world)
 		return
 	_rpc_cast_skill2.rpc_id(1, target_world)
 

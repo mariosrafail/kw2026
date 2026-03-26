@@ -71,6 +71,36 @@ def compare_rpc_annotations(label: str, canonical: dict[str, dict[str, str]], ot
     return errors
 
 
+def parse_rpc_method_order(paths: list[Path]) -> list[str]:
+    ordered: list[str] = []
+    for path in paths:
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            func_match = FUNC_RE.match(raw_line)
+            if func_match:
+                ordered.append(func_match.group(1))
+    return ordered
+
+
+def compare_rpc_order(label: str, canonical_paths: list[Path], other_paths: list[Path]) -> list[str]:
+    canonical_order = parse_rpc_method_order(canonical_paths)
+    other_order = parse_rpc_method_order(other_paths)
+    if canonical_order == other_order:
+        return []
+    min_len = min(len(canonical_order), len(other_order))
+    for index in range(min_len):
+        if canonical_order[index] != other_order[index]:
+            return [
+                f"{label}: rpc method order mismatch at index {index}: "
+                f"canonical {canonical_order[index]} != {other_order[index]}"
+            ]
+    if len(canonical_order) != len(other_order):
+        return [
+            f"{label}: rpc method count mismatch in ordered comparison: "
+            f"canonical {len(canonical_order)} != {len(other_order)}"
+        ]
+    return [f"{label}: rpc method order mismatch"]
+
+
 def check_main_is_thin(path: Path) -> list[str]:
     errors: list[str] = []
     rpc_methods = parse_rpc_methods(path)
@@ -91,6 +121,11 @@ def main() -> int:
     errors.extend(compare_signature_sets("runtime_rpc_logic.gd", canonical, runtime))
     errors.extend(compare_signature_sets("lobby_rpc_bridge.gd", gameplay_root, bridge))
     errors.extend(compare_rpc_annotations("lobby_rpc_bridge.gd", gameplay_root, bridge))
+    errors.extend(compare_rpc_order(
+        "lobby_rpc_bridge.gd",
+        [CANONICAL_PATH, RUNTIME_CONTROLLER_PATH],
+        [BRIDGE_PATH],
+    ))
     errors.extend(check_main_is_thin(MAIN_PATH))
 
     if errors:

@@ -18,7 +18,7 @@ var _mines: Array = []
 var _client_mines_by_key: Dictionary = {}
 
 func _init() -> void:
-	super._init("tasko_mine", "Mine", 7.0, "Drop a persistent mine that explodes on contact")
+	super._init("tasko_mine", "Mine", 0.0, "Drop a persistent mine that explodes on contact")
 
 func _execute_cast(caster_peer_id: int, target_world: Vector2) -> void:
 	var lobby_id := _get_peer_lobby(caster_peer_id)

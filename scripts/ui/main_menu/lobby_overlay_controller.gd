@@ -1214,8 +1214,8 @@ func _ensure_overlay() -> void:
 	map_option_hover.border_color = MENU_PALETTE.highlight(1.0)
 	map_option.add_theme_stylebox_override("normal", map_option_normal)
 	map_option.add_theme_stylebox_override("hover", map_option_hover)
-	map_option.add_theme_stylebox_override("pressed", map_option_hover)
-	map_option.add_theme_stylebox_override("focus", map_option_hover)
+	map_option.add_theme_stylebox_override("pressed", map_option_normal)
+	map_option.add_theme_stylebox_override("focus", map_option_normal)
 	map_option.add_theme_icon_override("arrow", _make_pixel_dropdown_arrow())
 	var map_popup := map_option.get_popup()
 	var map_popup_panel := StyleBoxFlat.new()
@@ -1244,11 +1244,22 @@ func _ensure_overlay() -> void:
 	map_popup_separator.bg_color = MENU_PALETTE.hot(1.0)
 	map_popup_separator.content_margin_top = 1
 	map_popup_separator.content_margin_bottom = 1
+	var map_popup_selected := StyleBoxFlat.new()
+	map_popup_selected.bg_color = MENU_PALETTE.accent(1.0)
+	map_popup_selected.border_width_left = 1
+	map_popup_selected.border_width_top = 1
+	map_popup_selected.border_width_right = 1
+	map_popup_selected.border_width_bottom = 1
+	map_popup_selected.border_color = MENU_PALETTE.accent(1.0)
+	map_popup_selected.corner_radius_top_left = 0
+	map_popup_selected.corner_radius_top_right = 0
+	map_popup_selected.corner_radius_bottom_right = 0
+	map_popup_selected.corner_radius_bottom_left = 0
 	map_popup.add_theme_stylebox_override("panel", map_popup_panel)
 	map_popup.add_theme_stylebox_override("hover", map_popup_hover)
 	map_popup.add_theme_stylebox_override("hover_pressed", map_popup_hover)
-	map_popup.add_theme_stylebox_override("selected", map_popup_hover)
-	map_popup.add_theme_stylebox_override("focus", map_popup_hover)
+	map_popup.add_theme_stylebox_override("selected", map_popup_selected)
+	map_popup.add_theme_stylebox_override("focus", map_popup_selected)
 	map_popup.add_theme_stylebox_override("item_hover", map_popup_hover)
 	map_popup.add_theme_stylebox_override("separator", map_popup_separator)
 	map_popup.add_theme_constant_override("v_separation", 2)
@@ -1260,6 +1271,13 @@ func _ensure_overlay() -> void:
 	map_popup.about_to_popup.connect(func() -> void:
 		_remove_popup_left_markers(map_popup)
 		_position_option_popup_below(map_option, map_popup)
+	)
+	map_popup.popup_hide.connect(func() -> void:
+		_release_menu_cursor_click_state()
+		map_option.release_focus()
+	)
+	map_popup.id_pressed.connect(func(_id: int) -> void:
+		_release_menu_cursor_click_state()
 	)
 	map_option.item_selected.connect(_on_map_option_selected)
 	if _add_hover_pop.is_valid():
@@ -1846,6 +1864,19 @@ func _remove_popup_left_markers(popup: PopupMenu) -> void:
 		popup.set_item_as_checkable(i, false)
 		popup.set_item_as_radio_checkable(i, false)
 		popup.set_item_icon(i, null)
+
+func _release_menu_cursor_click_state() -> void:
+	if _host == null:
+		return
+	var tree := _host.get_tree()
+	if tree == null:
+		return
+	var root := tree.get_root()
+	if root == null:
+		return
+	var cursor_manager := root.get_node_or_null("CursorManager")
+	if cursor_manager != null and cursor_manager.has_method("clear_menu_click_state"):
+		cursor_manager.call("clear_menu_click_state")
 
 func _make_pixel_dropdown_arrow() -> Texture2D:
 	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)

@@ -148,7 +148,7 @@ func set_cursor_context(context: String) -> void:
 		_apply_menu_cursor_shapes()
 		if _root != null:
 			_root.visible = false
-		set_process(false)
+		set_process(true)
 		return
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_POINTING_HAND)
@@ -163,21 +163,26 @@ func set_menu_hover_blocked(blocked: bool) -> void:
 	if _cursor_context == "menu":
 		_apply_menu_cursor_shapes()
 
+func clear_menu_click_state() -> void:
+	_menu_click_active = false
+	if _cursor_context == "menu":
+		_apply_menu_cursor_shapes()
+
 func _apply_menu_cursor_shapes() -> void:
 	if _menu_click_active:
 		var pressed_tex := _menu_cursor_texture_pressed_x4()
-		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_ARROW, Vector2.ZERO)
-		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_POINTING_HAND, Vector2.ZERO)
-		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_IBEAM, Vector2.ZERO)
+		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_ARROW, Vector2(8, 8))
+		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_POINTING_HAND, Vector2(8, 8))
+		Input.set_custom_mouse_cursor(pressed_tex, Input.CURSOR_IBEAM, Vector2(8, 8))
 		return
 	var default_tex := _menu_cursor_texture_default_x4()
-	Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_ARROW, Vector2.ZERO)
+	Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_ARROW, Vector2(8, 8))
 	if _menu_hover_blocked:
-		Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_POINTING_HAND, Vector2.ZERO)
-		Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_IBEAM, Vector2.ZERO)
+		Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_POINTING_HAND, Vector2(8, 8))
+		Input.set_custom_mouse_cursor(default_tex, Input.CURSOR_IBEAM, Vector2(8, 8))
 	else:
-		Input.set_custom_mouse_cursor(_menu_cursor_texture_hover_x4(), Input.CURSOR_POINTING_HAND, Vector2.ZERO)
-		Input.set_custom_mouse_cursor(_menu_cursor_texture_text_x4(), Input.CURSOR_IBEAM, Vector2.ZERO)
+		Input.set_custom_mouse_cursor(_menu_cursor_texture_hover_x4(), Input.CURSOR_POINTING_HAND, Vector2(8, 8))
+		Input.set_custom_mouse_cursor(_menu_cursor_texture_text_x4(), Input.CURSOR_IBEAM, Vector2(8, 8))
 
 func _menu_cursor_texture_default_x4() -> Texture2D:
 	if _menu_cursor_default_scaled != null:
@@ -258,6 +263,12 @@ func trigger_shot_feedback(intensity: float = 1.0) -> void:
 	_shoot_feedback_until_msec = max(_shoot_feedback_until_msec, Time.get_ticks_msec() + hold_ms)
 
 func _process(_delta: float) -> void:
+	if _cursor_context == "menu":
+		var pressed_now := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+		if pressed_now != _menu_click_active:
+			_menu_click_active = pressed_now
+			_apply_menu_cursor_shapes()
+		return
 	if _root == null:
 		return
 

@@ -9,6 +9,7 @@ var fire_cooldowns: Dictionary = {}
 var ammo_by_peer: Dictionary = {}
 var reload_remaining_by_peer: Dictionary = {}
 var pending_reload_delay_by_peer: Dictionary = {}
+var skill_charge_points_by_peer: Dictionary = {}
 var peer_weapon_ids: Dictionary = {}
 var peer_warrior_ids: Dictionary = {}  # Track warrior per player
 var warriors_by_id: Dictionary = {}  # WarriorProfile instances by warrior_id
@@ -41,6 +42,7 @@ var send_spawn_surface_particles_cb: Callable = Callable()
 var send_projectile_impact_cb: Callable = Callable()
 var send_despawn_projectile_cb: Callable = Callable()
 var broadcast_player_state_cb: Callable = Callable()
+var send_skill_charge_cb: Callable = Callable()
 
 var max_reported_rtt_ms := 300
 var snapshot_rate := 30.0
@@ -54,6 +56,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	ammo_by_peer = state_refs.get("ammo_by_peer", {}) as Dictionary
 	reload_remaining_by_peer = state_refs.get("reload_remaining_by_peer", {}) as Dictionary
 	pending_reload_delay_by_peer = state_refs.get("pending_reload_delay_by_peer", {}) as Dictionary
+	skill_charge_points_by_peer = state_refs.get("skill_charge_points_by_peer", {}) as Dictionary
 	peer_weapon_ids = state_refs.get("peer_weapon_ids", {}) as Dictionary
 	multiplayer = state_refs.get("multiplayer", null) as MultiplayerAPI
 	projectile_system = state_refs.get("projectile_system", null) as ProjectileSystem
@@ -80,6 +83,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_projectile_impact_cb = callbacks.get("send_projectile_impact", Callable()) as Callable
 	send_despawn_projectile_cb = callbacks.get("send_despawn_projectile", Callable()) as Callable
 	broadcast_player_state_cb = callbacks.get("broadcast_player_state", Callable()) as Callable
+	send_skill_charge_cb = callbacks.get("send_skill_charge", Callable()) as Callable
 	send_skill_cast_cb = callbacks.get("send_skill_cast", Callable()) as Callable
 	warrior_id_for_peer_cb = callbacks.get("warrior_id_for_peer", Callable()) as Callable
 	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
@@ -94,21 +98,34 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
 	if _is_gameplay_locked():
 		return
+	if skill_number == 1:
+		return
 	var warrior_id = _warrior_id_for_peer(caster_peer_id)
 	var warrior = warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior != null:
-		warrior.server_cast_skill(skill_number, caster_peer_id, target_world)
+		if skill_number == 2 and not _has_full_skill_charge(caster_peer_id):
+			return
+		var casted := warrior.server_cast_skill(skill_number, caster_peer_id, target_world)
+		if casted and skill_number == 2:
+			skill_charge_points_by_peer[caster_peer_id] = 0
+			server_sync_skill_charge(caster_peer_id)
 	else:
 		print("[SKILL ERROR] Warrior not found for id=%s (peer_id=%d)" % [warrior_id, caster_peer_id])
 
 func can_cast_skill_for_peer(peer_id: int, skill_number: int) -> bool:
+	if skill_number == 1:
+		return false
 	var warrior_id := _warrior_id_for_peer(peer_id)
 	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior == null:
 		return false
+	if skill_number == 2 and not _has_full_skill_charge(peer_id):
+		return false
 	return warrior.can_cast_skill(skill_number, peer_id)
 
 func skill_cooldown_remaining_for_peer(peer_id: int, skill_number: int) -> float:
+	if skill_number == 1 or skill_number == 2:
+		return 0.0
 	var warrior_id := _warrior_id_for_peer(peer_id)
 	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior == null:
@@ -122,6 +139,8 @@ func client_receive_skill_cast(skill_number: int, caster_peer_id: int, target_wo
 		warrior.client_receive_skill_cast(skill_number, caster_peer_id, target_world)
 
 func skill_cooldown_max_for_peer(peer_id: int, skill_number: int) -> float:
+	if skill_number == 1 or skill_number == 2:
+		return 0.0
 	var warrior_id = _warrior_id_for_peer(peer_id)
 	var warrior = warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior == null:
@@ -421,6 +440,7 @@ func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 		clear_reload_mag_spawn_cb.call(peer_id)
 	player.set_ammo(ammo, false)
 	server_sync_player_ammo(peer_id)
+	server_sync_skill_charge(peer_id)
 
 func server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 	if not peer_weapon_ids.has(peer_id):
@@ -437,9 +457,13 @@ func server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 	if clear_reload_mag_spawn_cb.is_valid():
 		clear_reload_mag_spawn_cb.call(peer_id)
 	server_sync_player_ammo(peer_id)
+	if not skill_charge_points_by_peer.has(peer_id):
+		skill_charge_points_by_peer[peer_id] = 0
+	server_refresh_skill_charge(peer_id)
 	if lobby_id > 0:
 		for member_value in _lobby_members(lobby_id):
 			server_sync_player_ammo(int(member_value), peer_id)
+			server_sync_skill_charge(int(member_value), peer_id)
 
 func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 	var gameplay_locked := _is_gameplay_locked()
@@ -613,6 +637,58 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		peer_warrior_ids[peer_id] = warrior_id
 		return warrior_id
 	return peer_warrior_ids.get(peer_id, "outrage") as String
+
+func skill_charge_points_for_peer(peer_id: int, skill_number: int = 2) -> int:
+	if skill_number != 2:
+		return 0
+	return maxi(0, int(skill_charge_points_by_peer.get(peer_id, 0)))
+
+func skill_charge_required_for_peer(peer_id: int, skill_number: int = 2) -> int:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null:
+		return 0
+	return warrior.get_skill_charge_required(skill_number)
+
+func server_register_skill_charge_kill(attacker_peer_id: int) -> void:
+	if attacker_peer_id <= 0:
+		return
+	var required := skill_charge_required_for_peer(attacker_peer_id, 2)
+	if required <= 0:
+		return
+	var current := skill_charge_points_for_peer(attacker_peer_id, 2)
+	if current >= required:
+		return
+	skill_charge_points_by_peer[attacker_peer_id] = mini(required, current + 1)
+	server_sync_skill_charge(attacker_peer_id)
+
+func server_refresh_skill_charge(peer_id: int) -> void:
+	var required := skill_charge_required_for_peer(peer_id, 2)
+	var current := skill_charge_points_for_peer(peer_id, 2)
+	if required <= 0:
+		skill_charge_points_by_peer[peer_id] = 0
+	else:
+		skill_charge_points_by_peer[peer_id] = mini(current, required)
+	server_sync_skill_charge(peer_id)
+
+func server_sync_skill_charge(peer_id: int, target_peer_id: int = 0) -> void:
+	if not send_skill_charge_cb.is_valid():
+		return
+	var current := skill_charge_points_for_peer(peer_id, 2)
+	var required := skill_charge_required_for_peer(peer_id, 2)
+	if target_peer_id > 0:
+		send_skill_charge_cb.call(target_peer_id, peer_id, current, required)
+		return
+	var lobby_id := _peer_lobby(peer_id)
+	var recipients := _lobby_members(lobby_id)
+	if recipients.is_empty() and peer_id > 0:
+		recipients.append(peer_id)
+	for member_value in recipients:
+		send_skill_charge_cb.call(int(member_value), peer_id, current, required)
+
+func _has_full_skill_charge(peer_id: int) -> bool:
+	var required := skill_charge_required_for_peer(peer_id, 2)
+	return required > 0 and skill_charge_points_for_peer(peer_id, 2) >= required
 
 func _server_tick_warrior_cooldowns(delta: float) -> void:
 	"""Tick cooldowns and per-skill server logic for all warriors"""

@@ -81,6 +81,12 @@ func _send_sync_player_stats_rpc(target_peer_id: int, peer_id: int, kills: int, 
 		return
 	_rpc_sync_player_stats.rpc_id(target_peer_id, peer_id, kills, deaths)
 
+func _send_sync_skill_charge_rpc(target_peer_id: int, peer_id: int, current_points: int, required_points: int) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		_rpc_sync_skill_charge(peer_id, current_points, required_points)
+		return
+	_rpc_sync_skill_charge.rpc_id(target_peer_id, peer_id, current_points, required_points)
+
 func _send_kill_feed_rpc(target_peer_id: int, attacker_name: String, victim_name: String) -> void:
 	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
 		_rpc_kill_feed(attacker_name, victim_name)

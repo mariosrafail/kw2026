@@ -9,6 +9,7 @@ func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 		var bot_controller := _bot_controller_for_peer(peer_id)
 		if bot_controller != null:
 			bot_controller.respawn_player(player)
+		_server_broadcast_player_state(peer_id, player)
 		return
 	combat_flow_service.server_respawn_player(peer_id, player)
 
@@ -92,8 +93,8 @@ func _server_ensure_bots_if_needed() -> void:
 					controller.set_spawn_position(spawn_position)
 					var bot_player := players.get(controller.peer_id(), null) as NetPlayer
 					if bot_player != null and (previous_spawn == Vector2.ZERO or previous_spawn.distance_squared_to(spawn_position) > 1.0):
-						controller.setup_spawned_player(bot_player, spawn_position, false)
-						bot_player.force_respawn(spawn_position)
+						controller.apply_spawn_state(bot_player, spawn_position, false)
+						_server_broadcast_player_state(controller.peer_id(), bot_player)
 		_configure_ctf_bot_targets(lobby_id)
 		_assign_ctf_teams(lobby_id)
 		if ctf_match_controller != null:
@@ -132,8 +133,8 @@ func _server_ensure_bots_if_needed() -> void:
 				controller.set_spawn_position(spawn_position)
 				var bot_player := players.get(controller.peer_id(), null) as NetPlayer
 				if bot_player != null and (previous_spawn == Vector2.ZERO or previous_spawn.distance_squared_to(spawn_position) > 1.0):
-					controller.setup_spawned_player(bot_player, spawn_position, false)
-					bot_player.force_respawn(spawn_position)
+					controller.apply_spawn_state(bot_player, spawn_position, false)
+					_server_broadcast_player_state(controller.peer_id(), bot_player)
 			continue
 		if players.has(controller.peer_id()):
 			_server_remove_player(controller.peer_id(), [])
@@ -198,4 +199,7 @@ func _server_remove_player(_peer_id: int, _target_peers: Array = []) -> void:
 	pass
 
 func _send_spawn_player_rpc(_target_peer_id: int, _peer_id: int, _spawn_position: Vector2, _display_name: String) -> void:
+	pass
+
+func _server_broadcast_player_state(_peer_id: int, _player: NetPlayer) -> void:
 	pass

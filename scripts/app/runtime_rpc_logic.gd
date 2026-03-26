@@ -31,7 +31,6 @@ func _rpc_request_reload() -> void:
 		return
 	combat_flow_service.server_begin_reload(peer_id, weapon_profile)
 
-@rpc("authority", "reliable")
 func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: String = "", _weapon_id: String = "", _character_id: String = "", _skin_index: int = 0, _weapon_skin_index: int = 0) -> void:
 	var peer_id := _peer_id
 	var spawn_position := _spawn_position
@@ -62,7 +61,6 @@ func _rpc_spawn_player(_peer_id: int, _spawn_position: Vector2, _display_name: S
 	_spawn_player_local(peer_id, spawn_position)
 	_append_log("Spawn sync: player %d" % peer_id)
 
-@rpc("authority", "unreliable_ordered")
 func _rpc_sync_battle_royale_zone(_center: Vector2, _radius: float) -> void:
 	if multiplayer.is_server():
 		return
@@ -94,6 +92,10 @@ func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 		"deaths": _deaths
 	}
 	_update_score_labels()
+
+func _rpc_sync_skill_charge(_peer_id: int, _current_points: int, _required_points: int) -> void:
+	skill_charge_points_by_peer[_peer_id] = maxi(0, _current_points)
+	skill_charge_required_by_peer[_peer_id] = maxi(0, _required_points)
 
 func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
 	if ui_controller == null:
@@ -469,6 +471,8 @@ func _rpc_lobby_set_character(_character_id: String) -> void:
 	peer_character_ids[peer_id] = normalized_character_id
 	if lobby_service != null:
 		lobby_service.set_peer_character(peer_id, normalized_character_id)
+	if combat_flow_service != null:
+		combat_flow_service.server_refresh_skill_charge(peer_id)
 	if players.has(peer_id):
 		var player := players[peer_id] as NetPlayer
 		if player != null and player.has_method("set_character_visual"):
@@ -627,7 +631,6 @@ func _rpc_lobby_start_match() -> void:
 		return
 	_server_start_deathmatch_lobby_match(peer_id)
 
-@rpc("any_peer", "reliable")
 func _rpc_lobby_set_ready(_ready: bool) -> void:
 	if not multiplayer.is_server():
 		return
@@ -641,7 +644,6 @@ func _rpc_lobby_set_ready(_ready: bool) -> void:
 		return
 	_server_broadcast_lobby_room_state(lobby_id)
 
-@rpc("any_peer", "reliable")
 func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
 	if not multiplayer.is_server():
 		return
@@ -656,7 +658,6 @@ func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
 		return
 	_server_broadcast_lobby_room_state(lobby_id)
 
-@rpc("any_peer", "reliable")
 func _rpc_lobby_set_show_starting_animation(_enabled: bool) -> void:
 	if not multiplayer.is_server():
 		return
