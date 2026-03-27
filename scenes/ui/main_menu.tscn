@@ -23,7 +23,7 @@ border_width_right = 2
 border_width_bottom = 3
 border_color = Color(0.9294, 0.9686, 0.7412, 0.95)
 shadow_color = Color(0.06, 0.05, 0.08, 0.5)
-shadow_size = 6
+shadow_size = 0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
 content_margin_left = 14.0
@@ -136,19 +136,22 @@ stretch_mode = 1
 z_index = 3000
 z_as_relative = false
 layout_mode = 1
-offset_left = 10.0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -88.0
 offset_top = 10.0
-offset_right = 144.0
-offset_bottom = 54.0
+offset_right = -10.0
+offset_bottom = 46.0
+grow_horizontal = 0
 mouse_filter = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_wallet_panel")
 
 [node name="Margin" type="MarginContainer" parent="WalletPanel" unique_id=387552268]
 layout_mode = 2
-theme_override_constants/margin_left = 4
-theme_override_constants/margin_top = 3
-theme_override_constants/margin_right = 4
-theme_override_constants/margin_bottom = 3
+theme_override_constants/margin_left = 3
+theme_override_constants/margin_top = 2
+theme_override_constants/margin_right = 3
+theme_override_constants/margin_bottom = 2
 
 [node name="WalletBox" type="VBoxContainer" parent="WalletPanel/Margin" unique_id=773927424]
 layout_mode = 2
@@ -160,7 +163,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 10
 text = "Coins: 0"
 
 [node name="ClkLabel" type="Label" parent="WalletPanel/Margin/WalletBox" unique_id=2039175208]
@@ -169,7 +172,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 10
 text = "CLK: 0"
 
 [node name="WalletClick" type="Button" parent="WalletPanel" unique_id=577705213]
@@ -458,14 +461,37 @@ theme_override_constants/margin_bottom = 12
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="Title" type="Label" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1990738011]
+[node name="TopRow" type="HBoxContainer" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1604881203]
 layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="OptionsBackButton" type="Button" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox/TopRow" unique_id=1927757150]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
+text = "BACK"
+
+[node name="Title" type="Label" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox/TopRow" unique_id=1990738011]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 18
 text = "OPTIONS"
 horizontal_alignment = 1
+
+[node name="OptionsRowsSpacer" type="Control" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1973674401]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+mouse_filter = 2
 
 [node name="MusicRow" type="HBoxContainer" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1512535417]
 layout_mode = 2
@@ -505,19 +531,6 @@ max_value = 1.0
 step = 0.01
 value = 0.85
 
-[node name="OptionsBackButton" type="Button" parent="Screens/ScreenOptions/OptionsPanel/Margin/VBox" unique_id=1927757150]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
-theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
-theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 14
-theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
-theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
-theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
-text = "BACK"
-
 [node name="ScreenWarriors" type="Control" parent="Screens" unique_id=1631116497]
 unique_name_in_owner = true
 visible = false
@@ -550,13 +563,17 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 10
 
-[node name="TopRow" type="HBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox" unique_id=337851289]
+[node name="TopRow" type="Control" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox" unique_id=337851289]
+custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
-theme_override_constants/separation = 10
+size_flags_horizontal = 3
 
 [node name="WarriorsBackButton" type="Button" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/TopRow" unique_id=1380183365]
 unique_name_in_owner = true
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 0
+offset_right = 120.0
+offset_bottom = 34.0
 theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
@@ -568,14 +585,19 @@ theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
 text = "BACK"
 
 [node name="WarriorsTitle" type="Label" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/TopRow" unique_id=754192360]
-layout_mode = 2
-size_flags_horizontal = 3
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 0
 theme_override_font_sizes/font_size = 18
 text = "WARRIORS"
 horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="BodyRow" type="HBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox" unique_id=1735431691]
 layout_mode = 2
@@ -588,20 +610,37 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
-[node name="WarriorNameLabel" type="Label" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=1743055141]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
-theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
-theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 14
-text = "Skin"
-horizontal_alignment = 1
+[node name="WarriorShopGlow" type="Panel" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=200712441]
+modulate = Color(1, 1, 1, 0.45)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -60.0
+offset_top = -10.0
+offset_right = 60.0
+offset_bottom = 110.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_soft_white_glow")
 
 [node name="WarriorShopPreview" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=126348019 instance=ExtResource("4_player")]
 unique_name_in_owner = true
 position = Vector2(95, 120)
 scale = Vector2(2.2, 2.2)
+
+[node name="WarriorNameLabel" type="Label" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=1743055141]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 18
+text = "Skin"
+horizontal_alignment = 1
 
 [node name="WarriorActionButton" type="Button" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=679315921]
 unique_name_in_owner = true
@@ -705,16 +744,6 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
-[node name="WeaponNameLabel" type="Label" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=1189782607]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.92, 0.95, 0.98, 1)
-theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
-theme_override_constants/outline_size = 0
-theme_override_font_sizes/font_size = 14
-text = "Gun"
-horizontal_alignment = 1
-
 [node name="WeaponShopPreviewSlot" type="Control" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=2084490461]
 custom_minimum_size = Vector2(180, 110)
 layout_mode = 2
@@ -726,6 +755,16 @@ unique_name_in_owner = true
 texture_filter = 1
 position = Vector2(90, 68)
 texture = SubResource("AtlasTexture_ak_icon")
+
+[node name="WeaponNameLabel" type="Label" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=1189782607]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 18
+text = "Gun"
+horizontal_alignment = 1
 
 [node name="WeaponActionButton" type="Button" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=150180992]
 unique_name_in_owner = true
@@ -757,7 +796,7 @@ horizontal_scroll_mode = 0
 [node name="WeaponGrid" type="GridContainer" parent="Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/ListCol/WeaponScroll" unique_id=307548040]
 unique_name_in_owner = true
 layout_mode = 2
-columns = 2
+columns = 4
 
 [node name="Intro" type="Control" parent="." unique_id=1964588908]
 unique_name_in_owner = true

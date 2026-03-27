@@ -242,9 +242,8 @@ func _ready() -> void:
 		Callable(self, "_on_lobby_overlay_closed")
 	)
 	_intro_fx.configure(self, intro, intro_fade, intro_plate, intro_label, Callable(self, "_pixel_burst_at"))
-	# Temporarily skip the "KEYBOARD WARRIORS" intro while testing.
-	enable_intro_animation = false
 	_intro_fx.enable_intro_animation = enable_intro_animation
+	enable_intro_animation = false
 	_intro_fx.intro_timeout_sec = intro_timeout_sec
 	_intro_fx.intro_fx_enabled = intro_fx_enabled
 	_on_music_slider_changed(music_slider.value if music_slider != null else 1.0)
@@ -1460,6 +1459,8 @@ func _build_warrior_shop_grid() -> void:
 
 func _build_weapon_shop_grid() -> void:
 	_clear_children(weapon_grid)
+	if weapon_grid != null:
+		weapon_grid.columns = 4
 	var weapon_list := [WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE]
 	if not _weapon_filter_weapon_id.is_empty():
 		weapon_list = [_weapon_filter_weapon_id]

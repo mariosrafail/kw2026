@@ -470,7 +470,7 @@ func make_weapon_item_button(host: Object, make_shop_button: Callable, weapon_id
 		if created is Button:
 			btn = created as Button
 	btn.text = ""
-	btn.custom_minimum_size = Vector2(104, 64)
+	btn.custom_minimum_size = Vector2(84, 62)
 	btn.set_meta("weapon_id", weapon_id.strip_edges().to_lower())
 	btn.set_meta("skin_index", maxi(0, skin_index))
 	btn.set_meta("_anim_key", "%s:%d" % [weapon_id.strip_edges().to_lower(), maxi(0, skin_index)])
@@ -482,10 +482,10 @@ func make_weapon_item_button(host: Object, make_shop_button: Callable, weapon_id
 	var margin := MarginContainer.new()
 	margin.name = "Margin"
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_bottom", 14)
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_bottom", 12)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(margin)
 
@@ -501,13 +501,13 @@ func make_weapon_item_button(host: Object, make_shop_button: Callable, weapon_id
 	var name := Label.new()
 	name.name = "Name"
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_font_size_override("font_size", 12)
+	name.add_theme_font_size_override("font_size", 11)
 	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(name)
 
 	var icon_slot := Control.new()
 	icon_slot.name = "IconSlot"
-	icon_slot.custom_minimum_size = Vector2(0, 28)
+	icon_slot.custom_minimum_size = Vector2(0, 24)
 	icon_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	icon_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -524,7 +524,7 @@ func make_weapon_item_button(host: Object, make_shop_button: Callable, weapon_id
 	var info := Label.new()
 	info.name = "Info"
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info.add_theme_font_size_override("font_size", 11)
+	info.add_theme_font_size_override("font_size", 10)
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
