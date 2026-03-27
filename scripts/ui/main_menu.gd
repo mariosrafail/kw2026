@@ -90,6 +90,10 @@ var logo_node: Node = null
 @onready var options_back_button: Button = %OptionsBackButton
 @onready var warriors_back_button: Button = %WarriorsBackButton
 @onready var weapons_back_button: Button = %WeaponsBackButton
+@onready var warriors_right_spacer: Control = %WarriorsRightSpacer
+@onready var warriors_top_row: HBoxContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/TopRow
+@onready var weapons_right_spacer: Control = %WeaponsRightSpacer
+@onready var weapons_top_row: HBoxContainer = $Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/TopRow
 
 @onready var music_slider: HSlider = %MusicSlider
 @onready var sfx_slider: HSlider = %SfxSlider
@@ -313,6 +317,14 @@ func _ready() -> void:
 	_idle_anim.set_shop_base_state(warrior_shop_preview_base_pos, weapon_shop_preview_base_pos)
 
 	call_deferred("_apply_center_pivots")
+	call_deferred("_sync_wallet_size_to_back_button")
+	call_deferred("_sync_warriors_header_centering")
+	call_deferred("_sync_weapons_header_centering")
+	var viewport := get_viewport()
+	if viewport != null:
+		var size_cb := Callable(self, "_on_viewport_size_changed")
+		if not viewport.size_changed.is_connected(size_cb):
+			viewport.size_changed.connect(size_cb)
 	_apply_pixel_slider_style(music_slider)
 	_apply_pixel_slider_style(sfx_slider)
 	_apply_pixel_scroll_style(warrior_scroll)
@@ -771,6 +783,51 @@ func _apply_center_pivots() -> void:
 	_center_pivot(warrior_action_button)
 	_center_pivot(weapon_action_button)
 
+func _sync_wallet_size_to_back_button() -> void:
+	if wallet_panel == null or warriors_back_button == null:
+		return
+	var target_size := warriors_back_button.get_combined_minimum_size().ceil()
+	if target_size.x <= 0.0 or target_size.y <= 0.0:
+		call_deferred("_sync_wallet_size_to_back_button")
+		return
+	wallet_panel.offset_left = wallet_panel.offset_right - target_size.x
+	wallet_panel.offset_bottom = wallet_panel.offset_top + target_size.y
+
+func _sync_warriors_header_centering() -> void:
+	_sync_wallet_size_to_back_button()
+	if warriors_top_row == null or warriors_back_button == null or warriors_right_spacer == null:
+		return
+	if warriors_top_row.size.x <= 0.0:
+		call_deferred("_sync_warriors_header_centering")
+		return
+	var back_w := warriors_back_button.size.x
+	if back_w <= 0.0:
+		back_w = warriors_back_button.get_combined_minimum_size().x
+	var viewport_center_x := get_viewport_rect().size.x * 0.5
+	var row_left_x := warriors_top_row.global_position.x
+	var required_spacer_w := warriors_top_row.size.x + back_w - 2.0 * (viewport_center_x - row_left_x)
+	required_spacer_w = clampf(required_spacer_w, 0.0, warriors_top_row.size.x)
+	warriors_right_spacer.custom_minimum_size = Vector2(required_spacer_w, 0.0)
+
+func _sync_weapons_header_centering() -> void:
+	if weapons_top_row == null or weapons_back_button == null or weapons_right_spacer == null:
+		return
+	if weapons_top_row.size.x <= 0.0:
+		call_deferred("_sync_weapons_header_centering")
+		return
+	var back_w := weapons_back_button.size.x
+	if back_w <= 0.0:
+		back_w = weapons_back_button.get_combined_minimum_size().x
+	var viewport_center_x := get_viewport_rect().size.x * 0.5
+	var row_left_x := weapons_top_row.global_position.x
+	var required_spacer_w := weapons_top_row.size.x + back_w - 2.0 * (viewport_center_x - row_left_x)
+	required_spacer_w = clampf(required_spacer_w, 0.0, weapons_top_row.size.x)
+	weapons_right_spacer.custom_minimum_size = Vector2(required_spacer_w, 0.0)
+
+func _on_viewport_size_changed() -> void:
+	call_deferred("_sync_warriors_header_centering")
+	call_deferred("_sync_weapons_header_centering")
+
 func _center_pivot(c: Control) -> void:
 	if c == null:
 		return
@@ -1212,9 +1269,11 @@ func _open_warriors_menu() -> void:
 		_transition_tween = null
 	_apply_meta_ui_visibility(false)
 	_menu_transition_ctrl.open_warriors_menu()
+	call_deferred("_sync_warriors_header_centering")
 
 func _open_warriors_menu_stage2() -> void:
 	_menu_transition_ctrl.open_warriors_menu_stage2(warriors_menu_preview_scale_mult, _warrior_shop_preview_base_scale)
+	call_deferred("_sync_warriors_header_centering")
 
 func _close_warriors_menu() -> void:
 	if _current_screen != screen_warriors:
@@ -1233,9 +1292,11 @@ func _open_weapons_menu() -> void:
 		_transition_tween = null
 	_apply_meta_ui_visibility(false)
 	_menu_transition_ctrl.open_weapons_menu(_pending_weapon_id, _pending_weapon_skin)
+	call_deferred("_sync_weapons_header_centering")
 
 func _open_weapons_menu_stage2() -> void:
 	_menu_transition_ctrl.open_weapons_menu_stage2(_pending_weapon_id, _pending_weapon_skin, WEAPON_UZI)
+	call_deferred("_sync_weapons_header_centering")
 
 func _close_weapons_menu() -> void:
 	if _current_screen != screen_weapons:
@@ -1317,9 +1378,11 @@ func _sync_visible_weapon_from_preview() -> void:
 
 func _make_filter_button(text: String) -> Button:
 	var btn := _make_shop_button()
-	btn.custom_minimum_size = Vector2(0, 28)
+	btn.custom_minimum_size = Vector2(180, 36)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.text = text
+	btn.clip_text = false
+	btn.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	return btn
 
 func _set_filter_btn_selected(btn: Button, selected: bool) -> void:
@@ -1357,10 +1420,11 @@ func _ensure_weapon_filter_ui() -> void:
 	filters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	filters.add_theme_constant_override("separation", 6)
 	list_col.add_child(filters)
-	list_col.move_child(filters, 0)
+	list_col.move_child(filters, list_col.get_child_count() - 1)
 
-	var weapon_row := HBoxContainer.new()
+	var weapon_row := GridContainer.new()
 	weapon_row.name = "WeaponRow"
+	weapon_row.columns = 1
 	weapon_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	weapon_row.add_theme_constant_override("separation", 6)
 	filters.add_child(weapon_row)
@@ -1387,28 +1451,8 @@ func _ensure_weapon_filter_ui() -> void:
 		weapon_row.add_child(btn)
 		_weapon_filter_weapon_buttons[wid] = btn
 
-	var cat_row := HBoxContainer.new()
-	cat_row.name = "CategoryRow"
-	cat_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cat_row.add_theme_constant_override("separation", 6)
-	filters.add_child(cat_row)
-
 	_weapon_filter_category_buttons = {}
-	var cat_items := [
-		{"label": "ALL", "id": ""},
-		{"label": "COLORS", "id": "colors"},
-		{"label": "SKINS", "id": "skins"},
-	]
-	for it in cat_items:
-		var cid := str(it.get("id", ""))
-		var btn := _make_filter_button(str(it.get("label", "")))
-		btn.pressed.connect(func() -> void:
-			_weapon_filter_category = cid
-			_refresh_weapon_filter_button_state()
-			_build_weapon_shop_grid()
-		)
-		cat_row.add_child(btn)
-		_weapon_filter_category_buttons[cid] = btn
+	_weapon_filter_category = ""
 
 	_refresh_weapon_filter_button_state()
 
@@ -1466,9 +1510,6 @@ func _build_weapon_shop_grid() -> void:
 		weapon_list = [_weapon_filter_weapon_id]
 	for weapon_id in weapon_list:
 		for skin in _weapon_skins_for(weapon_id):
-			var cat := str(skin.get("category", "")).strip_edges().to_lower()
-			if not _weapon_filter_category.is_empty() and cat != _weapon_filter_category:
-				continue
 			var skin_index := int(skin.get("skin", 0))
 			var btn := _weapon_ui.make_weapon_item_button(self, Callable(self, "_make_shop_button"), weapon_id, skin_index)
 			btn.pressed.connect(Callable(self, "_on_weapon_item_button_pressed").bind(weapon_id, skin_index))
