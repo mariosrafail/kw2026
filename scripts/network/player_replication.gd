@@ -152,7 +152,7 @@ func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	if respawn_position == Vector2.ZERO:
 		respawn_position = _random_spawn_position()
 	player.force_respawn(respawn_position)
-	player.set_health(100)
+	player.set_health(player.get_max_health())
 	var state: Dictionary = _default_input_state()
 	state["aim_world"] = respawn_position + Vector2.RIGHT * 160.0
 	input_states[peer_id] = state

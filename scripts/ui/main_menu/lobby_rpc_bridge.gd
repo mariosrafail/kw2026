@@ -580,9 +580,4 @@ func _complete_rpc_root_handoff() -> void:
 			return
 		tree.process_frame.connect(Callable(self, "_complete_rpc_root_handoff"), CONNECT_ONE_SHOT)
 		return
-	_release_game_root_before_scene_change()
-	if current.name != "GameRoot":
-		var existing := root.get_node_or_null("GameRoot")
-		if existing == null or existing == current:
-			current.name = "GameRoot"
 	queue_free()

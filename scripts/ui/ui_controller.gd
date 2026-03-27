@@ -491,8 +491,10 @@ func push_kill_feed(attacker_name: String, victim_name: String) -> void:
 
 	while _kill_feed_root.get_child_count() > _kill_feed_max_entries:
 		var old_entry := _kill_feed_root.get_child(_kill_feed_root.get_child_count() - 1)
-		if old_entry != null:
-			old_entry.queue_free()
+		if old_entry == null:
+			break
+		_kill_feed_root.remove_child(old_entry)
+		old_entry.queue_free()
 
 	var tween := panel.create_tween()
 	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

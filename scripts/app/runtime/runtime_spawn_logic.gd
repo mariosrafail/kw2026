@@ -16,7 +16,7 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 			if _is_target_dummy_peer(peer_id):
 				var bot_controller := _bot_controller_for_peer(peer_id)
 				if bot_controller != null:
-					bot_controller.setup_spawned_player(existing, resolved_spawn, role == Role.CLIENT)
+					bot_controller.apply_spawn_state(existing, resolved_spawn, role == Role.CLIENT)
 			elif existing.has_method("set_display_name"):
 				existing.call("set_display_name", _ensure_player_display_name(peer_id))
 				existing.set_weapon_visual(_weapon_visual_for_peer(peer_id))
@@ -24,7 +24,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 					existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
 				if existing.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
 					existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
-			existing.force_respawn(resolved_spawn)
+			if not _is_target_dummy_peer(peer_id):
+				existing.force_respawn(resolved_spawn)
 		return
 
 	var player := PLAYER_SCENE.instantiate() as NetPlayer

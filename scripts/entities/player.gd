@@ -1076,6 +1076,9 @@ func _set_canvas_item_visibility_layer_recursive(node: Node, layer: int) -> void
 func set_damage_immune(duration_sec: float) -> void:
 	damage_immune_remaining_sec = maxf(damage_immune_remaining_sec, maxf(0.0, duration_sec))
 
+func clear_damage_immune() -> void:
+	damage_immune_remaining_sec = 0.0
+
 func is_damage_immune() -> bool:
 	return damage_immune_remaining_sec > 0.0
 

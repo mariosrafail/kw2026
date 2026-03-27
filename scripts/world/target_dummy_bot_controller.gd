@@ -196,6 +196,8 @@ func apply_spawn_state(player: NetPlayer, desired_position: Vector2, allow_smoot
 		return
 	setup_spawned_player(player, desired_position, allow_smoothing)
 	player.force_respawn(desired_position)
+	if player.has_method("clear_damage_immune"):
+		player.call("clear_damage_immune")
 	player.set_max_health(BOT_HEALTH)
 	player.set_health(BOT_HEALTH)
 
