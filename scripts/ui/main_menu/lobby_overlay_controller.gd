@@ -1182,6 +1182,7 @@ func _ensure_overlay() -> void:
 	var map_label := Label.new()
 	map_label.text = "Map"
 	map_label.add_theme_font_size_override("font_size", 9)
+	map_label.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
 	mode_row.add_child(map_label)
 
 	var map_option := OptionButton.new()
@@ -1191,9 +1192,9 @@ func _ensure_overlay() -> void:
 	map_option.add_theme_font_size_override("font_size", 8)
 	map_option.add_theme_constant_override("arrow_margin", 4)
 	map_option.add_theme_constant_override("h_separation", 4)
-	map_option.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
-	map_option.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
-	map_option.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
+	map_option.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	map_option.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
+	map_option.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_primary(1.0))
 	var map_option_normal := StyleBoxFlat.new()
 	map_option_normal.bg_color = MENU_PALETTE.accent(1.0)
 	map_option_normal.border_width_left = 2
@@ -1264,9 +1265,9 @@ func _ensure_overlay() -> void:
 	map_popup.add_theme_stylebox_override("separator", map_popup_separator)
 	map_popup.add_theme_constant_override("v_separation", 2)
 	map_popup.add_theme_constant_override("h_separation", 6)
-	map_popup.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
-	map_popup.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
-	map_popup.add_theme_color_override("font_selected_color", MENU_PALETTE.text_dark(1.0))
+	map_popup.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	map_popup.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
+	map_popup.add_theme_color_override("font_selected_color", MENU_PALETTE.text_primary(1.0))
 	map_popup.add_theme_font_size_override("font_size", 8)
 	map_popup.about_to_popup.connect(func() -> void:
 		_remove_popup_left_markers(map_popup)

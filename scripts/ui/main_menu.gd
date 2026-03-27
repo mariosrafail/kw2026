@@ -1378,11 +1378,12 @@ func _sync_visible_weapon_from_preview() -> void:
 
 func _make_filter_button(text: String) -> Button:
 	var btn := _make_shop_button()
-	btn.custom_minimum_size = Vector2(180, 36)
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 26)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	btn.text = text
 	btn.clip_text = false
 	btn.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	btn.add_theme_font_size_override("font_size", 9)
 	return btn
 
 func _set_filter_btn_selected(btn: Button, selected: bool) -> void:
@@ -1420,11 +1421,10 @@ func _ensure_weapon_filter_ui() -> void:
 	filters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	filters.add_theme_constant_override("separation", 6)
 	list_col.add_child(filters)
-	list_col.move_child(filters, list_col.get_child_count() - 1)
+	list_col.move_child(filters, 0)
 
-	var weapon_row := GridContainer.new()
+	var weapon_row := HFlowContainer.new()
 	weapon_row.name = "WeaponRow"
-	weapon_row.columns = 1
 	weapon_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	weapon_row.add_theme_constant_override("separation", 6)
 	filters.add_child(weapon_row)
