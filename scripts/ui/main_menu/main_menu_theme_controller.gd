@@ -391,4 +391,3 @@ func _remap_legacy_color(c: Color) -> Color:
 
 func _is_near(a: Color, b: Color, eps: float = 0.02) -> bool:
 	return absf(a.r - b.r) <= eps and absf(a.g - b.g) <= eps and absf(a.b - b.b) <= eps
-

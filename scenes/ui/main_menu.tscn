@@ -226,7 +226,7 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
-text = "PLAY"
+text = "FIGHT!"
 
 [node name="OptionsButton" type="Button" parent="Screens/ScreenMain" unique_id=1939518164]
 unique_name_in_owner = true
@@ -271,7 +271,7 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
-text = "EXIT"
+text = "I HATE THIS GAME"
 
 [node name="WarriorArea" type="Control" parent="Screens/ScreenMain" unique_id=651435392]
 unique_name_in_owner = true

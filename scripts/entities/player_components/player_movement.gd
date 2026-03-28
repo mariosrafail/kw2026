@@ -10,10 +10,16 @@ const MAX_FALL_SPEED := 1300.0
 const JUMP_RELEASE_DAMP := 0.55
 const COYOTE_TIME := 0.16
 const JUMP_BUFFER_TIME := 0.1
+const GROUND_ACCEL := 3200.0
+const GROUND_DECEL := 1850.0
+const AIR_ACCEL := 1700.0
 
 const MAX_WALKABLE_SLOPE_DEGREES := 45.0
-const FLOOR_SLOPE_TOLERANCE_DEGREES := 0.5
-const FLOOR_SNAP_LENGTH := 14.0
+const FLOOR_SLOPE_TOLERANCE_DEGREES := 2.0
+const FLOOR_SNAP_LENGTH := 18.0
+const STAIR_STEP_HEIGHT := 8.0
+const STAIR_FORWARD_MIN := 2.0
+const STAIR_FORWARD_PADDING := 2.0
 const PLAYER_SAFE_MARGIN := 0.08
 const PLAYER_MAX_SLIDES := 8
 
@@ -54,10 +60,16 @@ func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_
 	if _player != null and _player.has_method("get_movement_speed_multiplier"):
 		speed_multiplier = float(_player.call("get_movement_speed_multiplier"))
 	var target_speed := axis * SPEED * clampf(speed_multiplier, 0.0, 1.0)
+	var horizontal_accel := AIR_ACCEL
+	var horizontal_decel := AIR_ACCEL
+	if on_floor:
+		horizontal_accel = GROUND_ACCEL
+		horizontal_decel = GROUND_DECEL
 	if absf(axis) > 0.001:
-		_player.velocity.x = target_speed
+		_player.velocity.x = move_toward(_player.velocity.x, target_speed, horizontal_accel * delta)
 	else:
-		_player.velocity.x = 0.0
+		# Keep a little glide on ground instead of hard-stopping (felt like sticky friction on slopes).
+		_player.velocity.x = move_toward(_player.velocity.x, 0.0, horizontal_decel * delta)
 
 	if not on_floor:
 		var gravity_scale := FALL_GRAVITY_MULTIPLIER if _player.velocity.y > 0.0 else 1.0
@@ -74,6 +86,7 @@ func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_
 	if not jumped_this_frame and not jump_held and _player.velocity.y < 0.0:
 		_player.velocity.y *= JUMP_RELEASE_DAMP
 
+	_try_step_up(delta, axis, on_floor, jumped_this_frame)
 	_player.move_and_slide()
 	if _player.is_on_floor():
 		coyote_time_left = COYOTE_TIME
@@ -83,7 +96,46 @@ func _configure_floor_movement() -> void:
 	_player.floor_max_angle = deg_to_rad(MAX_WALKABLE_SLOPE_DEGREES + FLOOR_SLOPE_TOLERANCE_DEGREES)
 	_player.floor_snap_length = FLOOR_SNAP_LENGTH
 	_player.floor_constant_speed = true
-	_player.floor_block_on_wall = true
+	# Allows smoother transitions on 45deg slope seams instead of wall-like catches.
+	_player.floor_block_on_wall = false
 	_player.safe_margin = PLAYER_SAFE_MARGIN
 	_player.max_slides = PLAYER_MAX_SLIDES
 	_player.motion_mode = CharacterBody2D.MOTION_MODE_GROUNDED
+
+func _try_step_up(delta: float, axis: float, was_on_floor: bool, jumped_this_frame: bool) -> bool:
+	if _player == null:
+		return false
+	if not was_on_floor or jumped_this_frame:
+		return false
+	if absf(axis) <= 0.001:
+		return false
+	# Only attempt step-up when a forward move is actually blocked.
+	var dir := signf(axis)
+	var forward_dist := maxf(STAIR_FORWARD_MIN, absf(_player.velocity.x) * delta + STAIR_FORWARD_PADDING)
+	var forward := Vector2(dir * forward_dist, 0.0)
+	var base_xform: Transform2D = _player.global_transform
+	if not _player.test_move(base_xform, forward):
+		return false
+
+	var step_heights := PackedFloat32Array([
+		STAIR_STEP_HEIGHT,
+		STAIR_STEP_HEIGHT * 0.75,
+		STAIR_STEP_HEIGHT * 0.5
+	])
+	for step_h_value in step_heights:
+		var step_h := float(step_h_value)
+		var up := Vector2(0.0, -step_h)
+		if _player.test_move(base_xform, up):
+			continue
+		var raised_xform := base_xform.translated(up)
+		if _player.test_move(raised_xform, forward):
+			continue
+		var raised_forward_xform := raised_xform.translated(forward)
+		# Require floor under the stepped position, so we don't "climb" vertical walls.
+		if not _player.test_move(raised_forward_xform, Vector2(0.0, step_h + FLOOR_SNAP_LENGTH)):
+			continue
+		_player.global_position += up
+		if _player.velocity.y > 0.0:
+			_player.velocity.y = 0.0
+		return true
+	return false

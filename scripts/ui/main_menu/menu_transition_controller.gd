@@ -228,7 +228,7 @@ func _weapon_ui_offset(weapon_id: String) -> Vector2:
 		return value
 	return Vector2.ZERO
 
-func open_weapons_menu_stage2(pending_weapon_id: String, pending_weapon_skin: int, weapon_uzi_id: String) -> void:
+func open_weapons_menu_stage2(pending_weapon_id: String, pending_weapon_skin: int, _weapon_uzi_id: String) -> void:
 	if _screen_weapons == null or _screen_main == null:
 		return
 	if _fx_layer == null:
@@ -249,9 +249,8 @@ func open_weapons_menu_stage2(pending_weapon_id: String, pending_weapon_skin: in
 		)
 		return
 
-	var delta := _weapon_ui_offset(weapon_uzi_id)
-	var start_center := src_icon.global_position + delta * src_icon.global_scale
-	var target_center := dst_icon.global_position + delta * dst_icon.global_scale
+	var start_center := src_icon.global_position
+	var target_center := dst_icon.global_position
 
 	var tex := src_icon.texture
 	if tex == null:
@@ -268,7 +267,7 @@ func open_weapons_menu_stage2(pending_weapon_id: String, pending_weapon_skin: in
 	spr.texture = tex
 	spr.modulate = src_icon.modulate
 	spr.material = src_icon.material
-	spr.offset = -delta
+	spr.offset = Vector2.ZERO
 	spr.scale = start_scale
 	_weapon_open_transition.add_child(spr)
 	_fx_layer.add_child(_weapon_open_transition)
@@ -314,7 +313,7 @@ func close_weapons_menu() -> void:
 	if _host != null:
 		_host.call_deferred("_close_weapons_menu_stage2")
 
-func close_weapons_menu_stage2(visible_weapon_id: String, visible_weapon_skin: int, weapon_uzi_id: String) -> void:
+func close_weapons_menu_stage2(visible_weapon_id: String, visible_weapon_skin: int, _weapon_uzi_id: String) -> void:
 	if _screen_weapons == null or _screen_main == null:
 		return
 	if _fx_layer == null:
@@ -329,9 +328,8 @@ func close_weapons_menu_stage2(visible_weapon_id: String, visible_weapon_skin: i
 	if _apply_weapon_skin_visual.is_valid():
 		_apply_weapon_skin_visual.call(dst_icon, visible_weapon_id, visible_weapon_skin)
 
-	var delta := _weapon_ui_offset(weapon_uzi_id)
-	var start_center := src_icon.global_position + delta * src_icon.global_scale
-	var target_center := dst_icon.global_position + delta * dst_icon.global_scale
+	var start_center := src_icon.global_position
+	var target_center := dst_icon.global_position
 
 	var tex := src_icon.texture
 	if tex == null:
@@ -348,7 +346,7 @@ func close_weapons_menu_stage2(visible_weapon_id: String, visible_weapon_skin: i
 	spr.texture = tex
 	spr.modulate = src_icon.modulate
 	spr.material = src_icon.material
-	spr.offset = -delta
+	spr.offset = Vector2.ZERO
 	spr.scale = start_scale
 	_weapon_open_transition.add_child(spr)
 	_fx_layer.add_child(_weapon_open_transition)

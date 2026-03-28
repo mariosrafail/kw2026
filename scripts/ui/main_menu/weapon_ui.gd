@@ -452,9 +452,9 @@ func _apply_selected_button_visual(btn: Button, selected: bool) -> void:
 			flat.border_width_right = maxi(flat.border_width_right, 3)
 			flat.border_width_bottom = maxi(flat.border_width_bottom, 5)
 			flat.border_color = MENU_PALETTE.highlight(1.0)
-			flat.shadow_color = MENU_PALETTE.highlight(0.46)
+			flat.shadow_color = MENU_PALETTE.highlight(0.45)
 			flat.shadow_size = maxi(flat.shadow_size, 18)
-			var target := MENU_PALETTE.accent(1.0)
+			var target := MENU_PALETTE.hot(1.0)
 			flat.bg_color = Color(
 				lerpf(flat.bg_color.r, target.r, 0.24),
 				lerpf(flat.bg_color.g, target.g, 0.24),
