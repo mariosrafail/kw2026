@@ -60,6 +60,8 @@ func client_spawn_boost(peer_id: int, duration_sec: float) -> void:
 	var player: NetPlayer = players.get(peer_id, null) as NetPlayer
 	if player == null:
 		return
+	if player.has_method("start_ulti_duration_bar"):
+		player.call("start_ulti_duration_bar", duration_sec, "x2 Damage")
 	var visual_root := player.get_node_or_null("VisualRoot") as Node2D
 	if visual_root == null:
 		return

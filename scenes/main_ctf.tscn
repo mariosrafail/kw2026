@@ -110,7 +110,7 @@ source_sprite_path = NodePath("")
 [node name="MainCamera" type="Camera2D" parent="World" unique_id=1297512947]
 unique_name_in_owner = true
 position = Vector2(640, 360)
-zoom = Vector2(1.6, 1.6)
+zoom = Vector2(1.35, 1.35)
 limit_left = 128
 limit_top = 104
 limit_right = 1152

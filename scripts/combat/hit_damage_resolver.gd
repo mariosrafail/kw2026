@@ -190,10 +190,10 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 			for member_value in _lobby_members(target_lobby_id):
 				send_spawn_blood_particles_cb.call(int(member_value), death_position, death_blood_velocity, death_blood_color, 10.0)
 		if play_death_sfx_local_cb.is_valid():
-			play_death_sfx_local_cb.call(death_position)
+			play_death_sfx_local_cb.call(target_peer_id, death_position, death_blood_velocity)
 		if send_play_death_sfx_cb.is_valid():
 			for member_value in _lobby_members(target_lobby_id):
-				send_play_death_sfx_cb.call(int(member_value), death_position)
+				send_play_death_sfx_cb.call(int(member_value), target_peer_id, death_position, death_blood_velocity)
 		if server_respawn_player_cb.is_valid():
 			server_respawn_player_cb.call(target_peer_id, target_player)
 
@@ -238,10 +238,10 @@ func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, targ
 			for member_value in _lobby_members(target_lobby_id):
 				send_spawn_blood_particles_cb.call(int(member_value), death_position, death_blood_velocity, death_blood_color, 10.0)
 		if play_death_sfx_local_cb.is_valid():
-			play_death_sfx_local_cb.call(death_position)
+			play_death_sfx_local_cb.call(target_peer_id, death_position, death_blood_velocity)
 		if send_play_death_sfx_cb.is_valid():
 			for member_value in _lobby_members(target_lobby_id):
-				send_play_death_sfx_cb.call(int(member_value), death_position)
+				send_play_death_sfx_cb.call(int(member_value), target_peer_id, death_position, death_blood_velocity)
 		if server_respawn_player_cb.is_valid():
 			server_respawn_player_cb.call(target_peer_id, target_player)
 	if server_broadcast_player_state_cb.is_valid():

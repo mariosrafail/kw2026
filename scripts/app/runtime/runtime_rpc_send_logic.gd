@@ -146,13 +146,13 @@ func _send_despawn_projectile_rpc(target_peer_id: int, projectile_id: int) -> vo
 		return
 	_rpc_despawn_projectile.rpc_id(target_peer_id, projectile_id)
 
-func _play_death_sfx_local(impact_position: Vector2) -> void:
-	combat_effects.play_death_sfx(impact_position)
+func _play_death_sfx_local(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2 = Vector2.ZERO) -> void:
+	client_rpc_flow_service.rpc_play_death_sfx(target_peer_id, impact_position, incoming_velocity)
 
-func _send_play_death_sfx_rpc(target_peer_id: int, impact_position: Vector2) -> void:
-	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+func _send_play_death_sfx_rpc(target_client_peer_id: int, target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2 = Vector2.ZERO) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_client_peer_id == multiplayer.get_unique_id():
 		return
-	_rpc_play_death_sfx.rpc_id(target_peer_id, impact_position)
+	_rpc_play_death_sfx.rpc_id(target_client_peer_id, target_peer_id, impact_position, incoming_velocity)
 
 func _send_spawn_outrage_bomb_rpc(target_peer_id: int, caster_peer_id: int, world_position: Vector2, fuse_sec: float) -> void:
 	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():

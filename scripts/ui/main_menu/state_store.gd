@@ -83,6 +83,8 @@ func load_state_or_defaults(path: String, defaults: Dictionary, required_weapon_
 	state["username"] = str(d.get("username", str(state.get("username", "Player")))).strip_edges()
 	state["music_volume"] = clampf(float(d.get("music_volume", float(state.get("music_volume", 0.8)))), 0.0, 1.0)
 	state["sfx_volume"] = clampf(float(d.get("sfx_volume", float(state.get("sfx_volume", 0.4)))), 0.0, 1.0)
+	state["particles_enabled"] = bool(d.get("particles_enabled", bool(state.get("particles_enabled", true))))
+	state["screen_shake_enabled"] = bool(d.get("screen_shake_enabled", bool(state.get("screen_shake_enabled", true))))
 
 	var skins_dict: Variant = d.get("owned_weapon_skins_by_weapon", null)
 	if skins_dict is Dictionary:

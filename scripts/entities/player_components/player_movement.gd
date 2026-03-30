@@ -78,7 +78,11 @@ func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_
 		_player.velocity.y = 0.0
 
 	if jump_buffer_time_left > 0.0 and (on_floor or coyote_time_left > 0.0):
-		_player.velocity.y = JUMP_VELOCITY
+		var jump_velocity := JUMP_VELOCITY
+		if _player.has_method("get_jump_velocity_multiplier"):
+			var jump_mul := clampf(float(_player.call("get_jump_velocity_multiplier")), 0.25, 2.0)
+			jump_velocity *= jump_mul
+		_player.velocity.y = jump_velocity
 		coyote_time_left = 0.0
 		jump_buffer_time_left = 0.0
 		jumped_this_frame = true

@@ -33,10 +33,14 @@ func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	weapon_visual_for_peer_cb = callbacks.get("weapon_visual_for_peer", Callable()) as Callable
 	weapon_impact_sfx_cb = callbacks.get("weapon_impact_sfx", Callable()) as Callable
 
-func rpc_play_death_sfx(impact_position: Vector2) -> void:
+func rpc_play_death_sfx(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2 = Vector2.ZERO) -> void:
 	if combat_effects == null:
-		return
-	combat_effects.play_death_sfx(impact_position)
+		pass
+	else:
+		combat_effects.play_death_sfx(impact_position)
+	var player := players.get(target_peer_id, null) as NetPlayer
+	if player != null and player.has_method("spawn_death_chunks_at"):
+		player.call("spawn_death_chunks_at", impact_position, incoming_velocity)
 
 func rpc_play_reload_sfx(peer_id: int, weapon_id: String) -> void:
 	var player := players.get(peer_id, null) as NetPlayer

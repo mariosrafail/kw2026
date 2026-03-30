@@ -671,6 +671,17 @@ func server_refresh_skill_charge(peer_id: int) -> void:
 		skill_charge_points_by_peer[peer_id] = mini(current, required)
 	server_sync_skill_charge(peer_id)
 
+func server_fill_skill_charge_for_peer(peer_id: int, skill_number: int = 2) -> void:
+	if multiplayer == null or not multiplayer.is_server():
+		return
+	if peer_id <= 0 or skill_number != 2:
+		return
+	var required := skill_charge_required_for_peer(peer_id, skill_number)
+	if required <= 0:
+		return
+	skill_charge_points_by_peer[peer_id] = required
+	server_sync_skill_charge(peer_id)
+
 func server_sync_skill_charge(peer_id: int, target_peer_id: int = 0) -> void:
 	if not send_skill_charge_cb.is_valid():
 		return

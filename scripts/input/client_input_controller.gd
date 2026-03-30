@@ -9,6 +9,7 @@ var camera_shake: CameraShake
 var submit_input_cb: Callable = Callable()
 var is_gameplay_locked_cb: Callable = Callable()
 var input_send_rate := 60.0
+var idle_input_send_rate := 12.0
 
 var _input_send_accumulator := 0.0
 var _cached_local_input_state: Dictionary = {}
@@ -35,6 +36,7 @@ func configure(refs: Dictionary, callbacks: Dictionary, config: Dictionary = {})
 	submit_input_cb = callbacks.get("submit_input", Callable()) as Callable
 	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
 	input_send_rate = float(config.get("input_send_rate", input_send_rate))
+	idle_input_send_rate = float(config.get("idle_input_send_rate", idle_input_send_rate))
 
 func reset() -> void:
 	_input_send_accumulator = 0.0
@@ -69,7 +71,9 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 		local_player.set_aim_world(state.get("aim_world", local_player.global_position + Vector2.RIGHT * 120.0) as Vector2)
 
 	_input_send_accumulator += delta
-	if not changed and _input_send_accumulator < 1.0 / input_send_rate:
+	var send_rate := input_send_rate if changed else idle_input_send_rate
+	send_rate = maxf(1.0, send_rate)
+	if _input_send_accumulator < 1.0 / send_rate:
 		return
 	_input_send_accumulator = 0.0
 	if not submit_input_cb.is_valid():

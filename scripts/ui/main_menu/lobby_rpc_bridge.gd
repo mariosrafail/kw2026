@@ -8,6 +8,7 @@ signal lobby_server_disconnected
 signal lobby_list_received(entries: Array, active_lobby_id: int)
 signal lobby_action_result_received(success: bool, message: String, active_lobby_id: int, map_id: String)
 signal lobby_room_state_received(payload: Dictionary)
+signal lobby_chat_received(lobby_id: int, peer_id: int, display_name: String, message: String)
 
 var _is_connected := false
 var _last_host := "127.0.0.1"
@@ -232,6 +233,19 @@ func set_display_name(display_name: String) -> bool:
 	_rpc_lobby_set_display_name.rpc_id(1, trimmed)
 	return true
 
+func send_lobby_chat_message(message: String) -> bool:
+	if not _can_send_server_rpc():
+		_log("send_lobby_chat_message blocked can_send=false")
+		return false
+	var trimmed := message.strip_edges()
+	if trimmed.is_empty():
+		return false
+	if trimmed.length() > 140:
+		trimmed = trimmed.substr(0, 140)
+	_log("send_lobby_chat_message rpc_id(1) active_lobby_id=%d chars=%d" % [_active_lobby_id, trimmed.length()])
+	_rpc_lobby_chat_send.rpc_id(1, trimmed)
+	return true
+
 func set_warrior_skin(skin_index: int) -> bool:
 	if not _can_send_server_rpc():
 		_log("set_warrior_skin blocked can_send=false")
@@ -401,7 +415,7 @@ func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void
 	pass
 
 @rpc("authority", "reliable")
-func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
+func _rpc_play_death_sfx(_target_or_impact: Variant, _impact_position: Vector2 = Vector2.ZERO, _incoming_velocity: Vector2 = Vector2.ZERO) -> void:
 	pass
 
 @rpc("any_peer", "reliable")
@@ -440,6 +454,10 @@ func _rpc_lobby_set_skin(_skin_index: int) -> void:
 func _rpc_lobby_set_display_name(_display_name: String) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
+func _rpc_lobby_chat_send(_message: String) -> void:
+	pass
+
 @rpc("authority", "reliable")
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [_entries.size(), _active_lobby_id])
@@ -474,6 +492,10 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 func _rpc_lobby_room_state(_payload: Dictionary) -> void:
 	_log("rpc lobby_room_state payload=%s" % str(_payload))
 	lobby_room_state_received.emit(_payload)
+
+@rpc("authority", "reliable")
+func _rpc_lobby_chat_message(_lobby_id: int, _peer_id: int, _display_name: String, _message: String) -> void:
+	lobby_chat_received.emit(_lobby_id, _peer_id, _display_name, _message)
 
 @rpc("authority", "reliable")
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
@@ -524,6 +546,10 @@ func _rpc_cast_skill1(_target_world: Vector2) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_cast_skill2(_target_world: Vector2) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_debug_fill_skill2_charge() -> void:
 	pass
 
 @rpc("authority", "reliable")

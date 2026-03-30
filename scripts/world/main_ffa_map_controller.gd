@@ -17,4 +17,4 @@ func _init() -> void:
 		Vector2(1100.0, 480.0)
 	]
 	play_bounds = Rect2i(0, 0, 1280, 720)
-	camera_limits_rect = Rect2i(128, -150, 1024, 766)
+	camera_limits_rect = Rect2i(128, 128, 1024, 766)

@@ -16,6 +16,7 @@ var cooldown_label: Label
 var cooldown_q_label: Label
 var cooldown_e_label: Label
 var scoreboard_label: Label
+var client_hud_layer: CanvasLayer
 var ui_panel: PanelContainer
 var world_root: Node2D
 var lobby_panel: PanelContainer
@@ -37,7 +38,12 @@ var _ctf_start_button: Button
 var _ctf_room_callbacks: Dictionary = {}
 var _kill_feed_root: VBoxContainer
 var _kill_feed_max_entries: int = 4
-var _kill_feed_lifetime_sec: float = 2.4
+var _kill_feed_lifetime_sec: float = 2.8
+var _scoreboard_panel: PanelContainer
+var _scoreboard_title: Label
+var _scoreboard_grid: GridContainer
+var _scoreboard_empty: Label
+var _ping_visible_override := true
 
 func configure(refs: Dictionary) -> void:
 	start_server_button = refs.get("start_server_button", null) as Button
@@ -53,6 +59,7 @@ func configure(refs: Dictionary) -> void:
 	cooldown_q_label = refs.get("cooldown_q_label", null) as Label
 	cooldown_e_label = refs.get("cooldown_e_label", null) as Label
 	scoreboard_label = refs.get("scoreboard_label", null) as Label
+	client_hud_layer = refs.get("client_hud_layer", null) as CanvasLayer
 	ui_panel = refs.get("ui_panel", null) as PanelContainer
 	world_root = refs.get("world_root", null) as Node2D
 	lobby_panel = refs.get("lobby_panel", null) as PanelContainer
@@ -66,6 +73,7 @@ func configure(refs: Dictionary) -> void:
 	lobby_room_title = refs.get("lobby_room_title", null) as Label
 	_ensure_ctf_room_ui()
 	_ensure_kill_feed_ui()
+	_ensure_scoreboard_ui()
 
 func update_buttons(
 	has_active_session: bool,
@@ -136,9 +144,17 @@ func update_cooldown_label(cooldown_text: String) -> void:
 func set_status_text(text: String) -> void:
 	if cooldown_label == null:
 		return
-	var normalized := text.strip_edges()
-	cooldown_label.visible = not normalized.is_empty()
-	cooldown_label.text = normalized
+	# Status text (Immune/Invisible) now lives above the local healthbar.
+	# Keep the legacy top-left slot hidden.
+	cooldown_label.visible = false
+	cooldown_label.text = ""
+
+func set_ping_visible(enabled: bool) -> void:
+	_ping_visible_override = enabled
+
+func refresh_ping_visibility(local_spawned: bool, is_server_role: bool, is_client_role: bool) -> void:
+	if ping_label != null:
+		ping_label.visible = local_spawned and (is_client_role or is_server_role) and _ping_visible_override
 
 func update_skill_cooldowns(q_text: String, e_text: String) -> void:
 	if cooldown_q_label != null:
@@ -149,24 +165,34 @@ func update_skill_cooldowns(q_text: String, e_text: String) -> void:
 		cooldown_e_label.text = e_text
 
 func update_scoreboard_label(player_stats: Dictionary, player_display_names: Dictionary) -> void:
-	if scoreboard_label == null:
+	if _scoreboard_grid == null or not is_instance_valid(_scoreboard_grid):
+		_ensure_scoreboard_ui()
+	if _scoreboard_grid == null or not is_instance_valid(_scoreboard_grid):
 		return
-	var lines := PackedStringArray()
-	lines.append("K/D")
 	var peer_ids := player_stats.keys()
 	peer_ids.sort_custom(func(a, b) -> bool:
 		return _display_order_for_peer(int(a), player_display_names) < _display_order_for_peer(int(b), player_display_names)
 	)
+	for child in _scoreboard_grid.get_children():
+		child.queue_free()
+	_scoreboard_header_cell("PLAYER", true)
+	_scoreboard_header_cell("K", false)
+	_scoreboard_header_cell("D", false)
+	_scoreboard_header_cell("K/D", false)
+	if _scoreboard_empty != null:
+		_scoreboard_empty.visible = peer_ids.is_empty()
 	if peer_ids.is_empty():
-		lines.append("-")
-	else:
-		for peer_id_value in peer_ids:
-			var peer_id := int(peer_id_value)
-			var stats := player_stats[peer_id] as Dictionary
-			var kills := int(stats.get("kills", 0))
-			var deaths := int(stats.get("deaths", 0))
-			lines.append("%s  %d/%d" % [_display_name_for_peer(peer_id, player_display_names), kills, deaths])
-	scoreboard_label.text = "\n".join(lines)
+		return
+	for peer_id_value in peer_ids:
+		var peer_id := int(peer_id_value)
+		var stats := player_stats[peer_id] as Dictionary
+		var kills := int(stats.get("kills", 0))
+		var deaths := int(stats.get("deaths", 0))
+		var ratio_text := "%.2f" % (float(kills) / maxf(1.0, float(deaths)))
+		_scoreboard_row_cell(_display_name_for_peer(peer_id, player_display_names), true)
+		_scoreboard_row_cell(str(kills), false)
+		_scoreboard_row_cell(str(deaths), false)
+		_scoreboard_row_cell(ratio_text, false)
 
 func selected_lobby_id() -> int:
 	if lobby_list == null:
@@ -291,6 +317,9 @@ func update_ui_visibility(
 	lobby_room_title_enabled: bool,
 	auth_blocking: bool = false
 ) -> void:
+	if _scoreboard_panel == null or not is_instance_valid(_scoreboard_panel):
+		_ensure_scoreboard_ui()
+
 	var show_lobby_room := lobby_scene_mode and not is_server_role and not local_spawned
 	if lobby_scene_mode and lobby_panel == null:
 		if ui_panel != null:
@@ -303,6 +332,8 @@ func update_ui_visibility(
 			kd_label.visible = false
 		if scoreboard_label != null:
 			scoreboard_label.visible = false
+		if _scoreboard_panel != null:
+			_scoreboard_panel.visible = false
 		return
 
 	if ui_panel != null:
@@ -311,12 +342,13 @@ func update_ui_visibility(
 			ui_panel.visible = true
 		else:
 			ui_panel.visible = not local_spawned
-	if ping_label != null:
-		ping_label.visible = local_spawned and (is_client_role or is_server_role)
+	refresh_ping_visibility(local_spawned, is_server_role, is_client_role)
 	if kd_label != null:
-		kd_label.visible = local_spawned and (is_client_role or is_server_role)
+		kd_label.visible = false
 	if scoreboard_label != null:
-		scoreboard_label.visible = local_spawned and scoreboard_visible
+		scoreboard_label.visible = false
+	if _scoreboard_panel != null:
+		_scoreboard_panel.visible = scoreboard_visible and (is_client_role or is_server_role) and not lobby_scene_mode
 	if lobby_panel != null:
 		lobby_panel.visible = show_lobby_room and not auth_blocking
 	if lobby_room_bg != null:
@@ -448,43 +480,54 @@ func _display_order_for_peer(peer_id: int, player_display_names: Dictionary) -> 
 	return 9999 + peer_id
 
 func push_kill_feed(attacker_name: String, victim_name: String) -> void:
+	var text := "%s killed %s" % [attacker_name, victim_name]
+	_push_feed_entry(text)
+
+func push_combat_notification(text: String) -> void:
+	_push_feed_entry(text)
+
+func _push_feed_entry(raw_text: String) -> void:
 	_ensure_kill_feed_ui()
 	if _kill_feed_root == null or not is_instance_valid(_kill_feed_root):
 		return
 	_update_kill_feed_position()
+	var text := raw_text.strip_edges()
+	if text.is_empty():
+		return
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(320.0, 30.0)
+	panel.custom_minimum_size = Vector2(236.0, 24.0)
 	panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
-	panel.scale = Vector2(0.72, 0.72)
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.scale = Vector2(0.96, 0.96)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel.position.x = -34.0
 
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.07, 0.15, 0.93)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.16, 0.88, 1.0, 1.0)
-	style.corner_radius_top_left = 2
-	style.corner_radius_top_right = 2
-	style.corner_radius_bottom_right = 2
-	style.corner_radius_bottom_left = 2
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.34)
+	style.border_width_left = 0
+	style.border_width_top = 0
+	style.border_width_right = 0
+	style.border_width_bottom = 0
+	style.corner_radius_top_left = 0
+	style.corner_radius_top_right = 0
+	style.corner_radius_bottom_right = 0
+	style.corner_radius_bottom_left = 0
 	panel.add_theme_stylebox_override("panel", style)
 
 	var label := Label.new()
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	label.add_theme_font_override("font", KILL_FEED_FONT)
-	label.add_theme_font_size_override("font_size", 16)
-	label.add_theme_color_override("font_color", Color(0.94, 0.98, 1.0, 1.0))
-	label.text = "%s has killed %s" % [attacker_name, victim_name]
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+	label.text = text
+	label.offset_left = 11.0
+	label.offset_right = -7.0
 	panel.add_child(label)
 
 	_kill_feed_root.add_child(panel)
-	_kill_feed_root.move_child(panel, 0)
 	panel.resized.connect(func() -> void:
 		panel.pivot_offset = panel.size * 0.5
 	, CONNECT_ONE_SHOT)
@@ -497,37 +540,45 @@ func push_kill_feed(attacker_name: String, victim_name: String) -> void:
 		old_entry.queue_free()
 
 	var tween := panel.create_tween()
-	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(panel, "modulate:a", 1.0, 0.08)
-	tween.parallel().tween_property(panel, "scale", Vector2(1.08, 1.08), 0.10)
-	tween.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.08)
+	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(panel, "position:x", 0.0, 0.2)
+	tween.parallel().tween_property(panel, "modulate:a", 1.0, 0.18)
+	tween.parallel().tween_property(panel, "scale", Vector2(1.0, 1.0), 0.16)
 	tween.tween_interval(_kill_feed_lifetime_sec)
 	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.tween_property(panel, "modulate:a", 0.0, 0.20)
+	tween.tween_property(panel, "modulate:a", 0.0, 0.2)
 	tween.tween_callback(panel.queue_free)
 
-func _kill_feed_host_canvas() -> CanvasItem:
+func _kill_feed_host_canvas() -> Node:
+	if client_hud_layer != null and is_instance_valid(client_hud_layer):
+		return client_hud_layer
 	if ping_label != null and is_instance_valid(ping_label):
 		var ping_parent := ping_label.get_parent()
-		if ping_parent is CanvasItem:
-			return ping_parent as CanvasItem
+		if ping_parent != null:
+			return ping_parent
 	if kd_label != null and is_instance_valid(kd_label):
 		var kd_parent := kd_label.get_parent()
-		if kd_parent is CanvasItem:
-			return kd_parent as CanvasItem
+		if kd_parent != null:
+			return kd_parent
 	if scoreboard_label != null and is_instance_valid(scoreboard_label):
 		var score_parent := scoreboard_label.get_parent()
-		if score_parent is CanvasItem:
-			return score_parent as CanvasItem
+		if score_parent != null:
+			return score_parent
 	return null
 
 func _ensure_kill_feed_ui() -> void:
-	if _kill_feed_root != null and is_instance_valid(_kill_feed_root):
-		return
 	var host := _kill_feed_host_canvas()
 	if (host == null or not is_instance_valid(host)) and ping_label != null and is_instance_valid(ping_label):
 		host = ping_label
 	if host == null or not is_instance_valid(host):
+		return
+	if _kill_feed_root != null and is_instance_valid(_kill_feed_root):
+		if _kill_feed_root.get_parent() != host:
+			var parent := _kill_feed_root.get_parent()
+			if parent != null:
+				parent.remove_child(_kill_feed_root)
+			host.add_child(_kill_feed_root)
+			_update_kill_feed_position()
 		return
 
 	var root := VBoxContainer.new()
@@ -543,11 +594,105 @@ func _ensure_kill_feed_ui() -> void:
 	_kill_feed_root = root
 	_update_kill_feed_position()
 
+func _scoreboard_host_canvas() -> Node:
+	# Keep scoreboard on the same always-visible HUD host as notifications/ping.
+	# The legacy scoreboard label can live under panels hidden during gameplay.
+	return _kill_feed_host_canvas()
+
+func _ensure_scoreboard_ui() -> void:
+	var host := _scoreboard_host_canvas()
+	if host == null or not is_instance_valid(host):
+		return
+	if _scoreboard_panel != null and is_instance_valid(_scoreboard_panel):
+		if _scoreboard_panel.get_parent() != host:
+			var parent := _scoreboard_panel.get_parent()
+			if parent != null:
+				parent.remove_child(_scoreboard_panel)
+			host.add_child(_scoreboard_panel)
+		return
+	var panel := PanelContainer.new()
+	panel.name = "ScoreboardPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.set_as_top_level(true)
+	panel.z_index = 320
+	panel.position = Vector2(20.0, 70.0)
+	panel.custom_minimum_size = Vector2(360.0, 220.0)
+	panel.size = panel.custom_minimum_size
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.65)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.border_color = Color(1.0, 1.0, 1.0, 0.25)
+	panel.add_theme_stylebox_override("panel", style)
+	host.add_child(panel)
+	_scoreboard_panel = panel
+	_scoreboard_panel.visible = false
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	panel.add_child(margin)
+
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 6)
+	margin.add_child(root)
+
+	var title := Label.new()
+	title.text = "SCOREBOARD"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.add_theme_font_override("font", KILL_FEED_FONT)
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+	root.add_child(title)
+	_scoreboard_title = title
+
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 5)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(grid)
+	_scoreboard_grid = grid
+
+	var empty_label := Label.new()
+	empty_label.text = "No players yet"
+	empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty_label.add_theme_font_override("font", KILL_FEED_FONT)
+	empty_label.add_theme_font_size_override("font_size", 15)
+	empty_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.85))
+	root.add_child(empty_label)
+	_scoreboard_empty = empty_label
+
+func _scoreboard_header_cell(text: String, align_left: bool) -> void:
+	if _scoreboard_grid == null:
+		return
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if align_left else HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", KILL_FEED_FONT)
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color(0.96, 0.96, 0.96, 0.95))
+	_scoreboard_grid.add_child(label)
+
+func _scoreboard_row_cell(text: String, align_left: bool) -> void:
+	if _scoreboard_grid == null:
+		return
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if align_left else HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", KILL_FEED_FONT)
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+	_scoreboard_grid.add_child(label)
+
 func _update_kill_feed_position() -> void:
 	if _kill_feed_root == null or not is_instance_valid(_kill_feed_root):
 		return
-	if scoreboard_label != null and is_instance_valid(scoreboard_label):
-		var score_pos := scoreboard_label.get_global_position()
-		_kill_feed_root.global_position = Vector2(maxf(8.0, score_pos.x - 90.0), maxf(8.0, score_pos.y - 50.0))
-		return
-	_kill_feed_root.global_position = Vector2(24.0, 12.0)
+	_kill_feed_root.global_position = Vector2(22.0, 14.0)

@@ -4,9 +4,10 @@ class_name MinimapHud
 const MINIMAP_CAMERA_CONTROLLER_SCRIPT := preload("res://scripts/ui/minimap/minimap_camera_controller.gd")
 const MINIMAP_MARKER_OVERLAY_SCRIPT := preload("res://scripts/ui/minimap/minimap_marker_overlay.gd")
 const MINIMAP_VISIBLE_CANVAS_CULL_MASK := 1
-const PANEL_SIZE := Vector2(228.0, 132.0)
+const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
+const PANEL_SIZE := Vector2(184.0, 106.0)
 const PANEL_BOTTOM_MARGIN := 16.0
-const PANEL_BORDER := 3
+const PANEL_BORDER := 0
 const PANEL_BG := Color(0.02, 0.04, 0.08, 1.0)
 const PANEL_BORDER_COLOR := Color(0.92, 0.97, 1.0, 0.9)
 var _panel: PanelContainer
@@ -25,12 +26,19 @@ func _ready() -> void:
 	_build_ui()
 	_layout_panel()
 
-func configure(world_2d: World2D, focus_position_cb: Callable, play_bounds_cb: Callable = Callable(), marker_data_cb: Callable = Callable()) -> void:
+func configure(
+	world_2d: World2D,
+	focus_position_cb: Callable,
+	play_bounds_cb: Callable = Callable(),
+	camera_limits_cb: Callable = Callable(),
+	marker_data_cb: Callable = Callable()
+) -> void:
 	if _viewport == null or _camera == null:
 		return
 	_viewport.world_2d = world_2d
+	_configure_world_minimap_layers()
 	if _camera.has_method("configure"):
-		_camera.call("configure", focus_position_cb, play_bounds_cb)
+		_camera.call("configure", focus_position_cb, play_bounds_cb, camera_limits_cb)
 	if _marker_overlay != null and _marker_overlay.has_method("configure"):
 		_marker_overlay.call("configure", marker_data_cb, Callable(_camera, "state_snapshot"))
 
@@ -47,6 +55,8 @@ func _build_ui() -> void:
 	_panel = PanelContainer.new()
 	_panel.name = "MiniMapPanel"
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panel.clip_contents = true
+	_panel.modulate = Color(1.0, 1.0, 1.0, 0.5)
 	add_child(_panel)
 
 	var panel_style: StyleBoxFlat = StyleBoxFlat.new()
@@ -64,7 +74,9 @@ func _build_ui() -> void:
 	_panel.add_child(root)
 
 	_viewport_container = SubViewportContainer.new()
-	_viewport_container.stretch = true
+	# We control SubViewport size manually in _layout_panel().
+	# Keeping stretch=false avoids runtime warnings and resize churn.
+	_viewport_container.stretch = false
 	_viewport_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_viewport_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(_viewport_container)
@@ -98,3 +110,25 @@ func _layout_panel() -> void:
 	)
 	if _viewport != null:
 		_viewport.size = Vector2i(maxi(1, int(round(resolved_size.x))), maxi(1, int(round(resolved_size.y))))
+
+func _configure_world_minimap_layers() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var current_scene := tree.current_scene
+	if current_scene == null:
+		return
+	var world := current_scene.get_node_or_null("World")
+	if world == null:
+		return
+	_apply_minimap_visibility_layers(world)
+
+func _apply_minimap_visibility_layers(node: Node) -> void:
+	var canvas_item := node as CanvasItem
+	if canvas_item != null:
+		if node is TileMapLayer:
+			canvas_item.visibility_layer = MINIMAP_HIDDEN_VISIBILITY_LAYER
+		elif node.name == "MapFront":
+			canvas_item.visibility_layer = MINIMAP_VISIBLE_CANVAS_CULL_MASK
+	for child in node.get_children():
+		_apply_minimap_visibility_layers(child)

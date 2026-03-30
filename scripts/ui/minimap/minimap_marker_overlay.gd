@@ -4,8 +4,9 @@ class_name MinimapMarkerOverlay
 const SELF_COLOR := Color(0.18, 1.0, 0.34, 0.98)
 const ALLY_COLOR := Color(0.22, 0.62, 1.0, 0.95)
 const ENEMY_COLOR := Color(1.0, 0.22, 0.22, 0.95)
-const SELF_RADIUS := 5.0
+const SELF_SIZE := 4.0
 const OTHER_RADIUS := 4.0
+const ENEMY_SIZE := 3.0
 
 var _marker_data_cb: Callable = Callable()
 var _camera_state_cb: Callable = Callable()
@@ -13,6 +14,7 @@ var _camera_state_cb: Callable = Callable()
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	clip_contents = true
 	offset_left = 0.0
 	offset_top = 0.0
 	offset_right = 0.0
@@ -57,14 +59,26 @@ func _draw() -> void:
 			(world_position.y - camera_center.y) * camera_zoom.y
 		)
 		var screen_position: Vector2 = viewport_center + offset
-		if screen_position.x < -12.0 or screen_position.y < -12.0 or screen_position.x > size.x + 12.0 or screen_position.y > size.y + 12.0:
+		if screen_position.x < 0.0 or screen_position.y < 0.0 or screen_position.x > size.x or screen_position.y > size.y:
 			continue
 		var relation: String = str(marker.get("relation", "enemy")).strip_edges().to_lower()
 		var color: Color = ENEMY_COLOR
-		var radius: float = OTHER_RADIUS
+		var draw_self_square := false
+		var draw_enemy_square := false
 		if relation == "self":
 			color = SELF_COLOR
-			radius = SELF_RADIUS
+			draw_self_square = true
 		elif relation == "ally":
 			color = ALLY_COLOR
-		draw_circle(screen_position, radius, color)
+		elif relation == "enemy":
+			draw_enemy_square = true
+		if draw_self_square:
+			var side := SELF_SIZE
+			var top_left := screen_position - Vector2(side * 0.5, side * 0.5)
+			draw_rect(Rect2(top_left, Vector2(side, side)), color, true)
+		elif draw_enemy_square:
+			var enemy_side := ENEMY_SIZE
+			var enemy_top_left := screen_position - Vector2(enemy_side * 0.5, enemy_side * 0.5)
+			draw_rect(Rect2(enemy_top_left, Vector2(enemy_side, enemy_side)), ENEMY_COLOR, true)
+		else:
+			draw_circle(screen_position, OTHER_RADIUS, color)

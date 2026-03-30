@@ -82,14 +82,24 @@ func _set_hidden(hidden: bool, caster: NetPlayer) -> void:
 		return
 	if hidden:
 		if not _applied_hidden:
-			caster.visual_root.visible = false
-			if caster.has_method("set_sfx_suppressed"):
+			if caster.has_method("set_forced_hidden"):
+				caster.call("set_forced_hidden", "tasko_invis_field", true)
+			else:
+				caster.visual_root.visible = false
+			if caster.has_method("set_forced_sfx_suppressed"):
+				caster.call("set_forced_sfx_suppressed", "tasko_invis_field", true)
+			elif caster.has_method("set_sfx_suppressed"):
 				caster.call("set_sfx_suppressed", true)
 			_applied_hidden = true
 	else:
 		if _applied_hidden:
-			caster.visual_root.visible = true
-			if caster.has_method("set_sfx_suppressed"):
+			if caster.has_method("set_forced_hidden"):
+				caster.call("set_forced_hidden", "tasko_invis_field", false)
+			else:
+				caster.visual_root.visible = true
+			if caster.has_method("set_forced_sfx_suppressed"):
+				caster.call("set_forced_sfx_suppressed", "tasko_invis_field", false)
+			elif caster.has_method("set_sfx_suppressed"):
 				caster.call("set_sfx_suppressed", false)
 			_applied_hidden = false
 
@@ -111,4 +121,3 @@ func _clear_effect() -> void:
 	if caster != null:
 		_set_hidden(false, caster)
 	_set_status(false)
-

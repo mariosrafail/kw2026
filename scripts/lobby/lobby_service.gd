@@ -147,7 +147,8 @@ func create_lobby(
 		"ready_by_peer": {peer_id: false},
 		"add_bots": false,
 		"show_starting_animation": false,
-		"team_by_peer": {peer_id: TEAM_RED} if _is_team_mode(mode_id) else {}
+		"team_by_peer": {peer_id: TEAM_RED} if _is_team_mode(mode_id) else {},
+		"chat_history": []
 	}
 	_global_peer_lobby_by_peer[peer_id] = lobby_id
 	return {
@@ -572,6 +573,38 @@ func get_peer_display_name(peer_id: int, fallback: String = "") -> String:
 	if trimmed.is_empty():
 		return fallback
 	return trimmed
+
+func append_lobby_chat_message(lobby_id: int, peer_id: int, display_name: String, message: String, max_messages: int = 60) -> void:
+	if lobby_id <= 0:
+		return
+	if not _global_server_lobbies.has(lobby_id):
+		return
+	var safe_name := str(display_name).strip_edges()
+	if safe_name.is_empty():
+		safe_name = "Player"
+	var safe_message := str(message).strip_edges()
+	if safe_message.is_empty():
+		return
+	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
+	var history := (lobby.get("chat_history", []) as Array).duplicate(true)
+	history.append({
+		"peer_id": peer_id,
+		"display_name": safe_name,
+		"message": safe_message
+	})
+	var safe_limit := maxi(1, max_messages)
+	if history.size() > safe_limit:
+		history = history.slice(history.size() - safe_limit, history.size())
+	lobby["chat_history"] = history
+	_global_server_lobbies[lobby_id] = lobby
+
+func get_lobby_chat_history(lobby_id: int) -> Array:
+	if lobby_id <= 0:
+		return []
+	if not _global_server_lobbies.has(lobby_id):
+		return []
+	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
+	return (lobby.get("chat_history", []) as Array).duplicate(true)
 
 func get_peer_character(peer_id: int, fallback: String = "outrage") -> String:
 	var character_id := str(_global_peer_character_by_peer.get(peer_id, "")).strip_edges().to_lower()

@@ -3,8 +3,8 @@
 const DEFAULT_PORT := 8080
 const MAX_CLIENTS := 8
 const DEFAULT_HOST := "127.0.0.1"
-const SNAPSHOT_RATE := 45.0
-const INPUT_SEND_RATE := 90.0
+const SNAPSHOT_RATE := 30.0
+const INPUT_SEND_RATE := 45.0
 const PING_INTERVAL := 0.75
 const PLAYER_HISTORY_MS := 800
 const MAX_INPUT_PACKETS_PER_SEC := 120
@@ -107,6 +107,7 @@ enum Role { NONE, SERVER, CLIENT }
 @onready var cooldown_q_label: Label = get_node_or_null("%CooldownQLabel") as Label
 @onready var cooldown_e_label: Label = get_node_or_null("%CooldownELabel") as Label
 @onready var scoreboard_label: Label = %ScoreboardLabel
+@onready var client_hud_layer: CanvasLayer = get_node_or_null("ClientHud") as CanvasLayer
 @onready var ui_panel: PanelContainer = get_node_or_null("UiPanel") as PanelContainer
 @onready var world_root: Node2D = get_node_or_null("World") as Node2D
 @onready var map_front_sprite: Sprite2D = get_node_or_null("World/MapFront") as Sprite2D
@@ -355,7 +356,7 @@ func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void
 	pass
 
 @rpc("authority", "reliable")
-func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
+func _rpc_play_death_sfx(_target_or_impact: Variant, _impact_position: Vector2 = Vector2.ZERO, _incoming_velocity: Vector2 = Vector2.ZERO) -> void:
 	pass
 
 @rpc("any_peer", "reliable")
@@ -394,6 +395,10 @@ func _rpc_lobby_set_skin(_skin_index: int) -> void:
 func _rpc_lobby_set_display_name(_display_name: String) -> void:
 	pass
 
+@rpc("any_peer", "reliable")
+func _rpc_lobby_chat_send(_message: String) -> void:
+	pass
+
 @rpc("authority", "reliable")
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	pass
@@ -404,6 +409,10 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 
 @rpc("authority", "reliable")
 func _rpc_lobby_room_state(_payload: Dictionary) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_lobby_chat_message(_lobby_id: int, _peer_id: int, _display_name: String, _message: String) -> void:
 	pass
 
 @rpc("authority", "reliable")
@@ -440,6 +449,10 @@ func _rpc_cast_skill1(_target_world: Vector2) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_cast_skill2(_target_world: Vector2) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_debug_fill_skill2_charge() -> void:
 	pass
 
 @rpc("authority", "reliable")

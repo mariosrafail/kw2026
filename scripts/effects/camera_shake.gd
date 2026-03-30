@@ -11,8 +11,11 @@ var noise_time := 0.0
 var _explosion_override_until_msec := 0
 var _explosion_decay := DECAY
 var _explosion_max_offset := MAX_OFFSET
+var enabled := true
 
 func step_offset(delta: float) -> Vector2:
+	if not enabled:
+		return Vector2.ZERO
 	if trauma <= 0.0001:
 		trauma = 0.0
 		return Vector2.ZERO
@@ -32,9 +35,13 @@ func step_offset(delta: float) -> Vector2:
 	return Vector2(x, y)
 
 func add_shake(amount: float) -> void:
+	if not enabled:
+		return
 	trauma = minf(MAX_TRAUMA, trauma + maxf(0.0, amount))
 
 func add_explosion_shake(amount: float, max_trauma: float, max_offset: float, hold_sec: float = 0.0, decay: float = DECAY) -> void:
+	if not enabled:
+		return
 	var clamped_amount := maxf(0.0, amount)
 	var target_max_trauma := clampf(max_trauma, 0.0, 1.0)
 	trauma = minf(target_max_trauma, trauma + clamped_amount)
@@ -42,6 +49,11 @@ func add_explosion_shake(amount: float, max_trauma: float, max_offset: float, ho
 		_explosion_override_until_msec = Time.get_ticks_msec() + int(ceil(hold_sec * 1000.0))
 		_explosion_max_offset = maxf(MAX_OFFSET, max_offset)
 		_explosion_decay = maxf(0.01, decay)
+
+func set_enabled(value: bool) -> void:
+	enabled = value
+	if not enabled:
+		reset()
 
 func reset() -> void:
 	trauma = 0.0

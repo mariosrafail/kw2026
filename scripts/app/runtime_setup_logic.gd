@@ -272,7 +272,8 @@ func _configure_services() -> void:
 				"bot_peer_id": -1001 - index,
 				"bot_name": "BOT %d" % (index + 1),
 				"bot_color": Color(1.0, minf(0.96, 0.48 + 0.08 * float(index)), 0.48, 1.0),
-				"spawn_point_index": mini(index + 1, maxi(0, spawn_points.size() - 1))
+				"spawn_point_index": mini(index + 1, maxi(0, spawn_points.size() - 1)),
+				"think_rate_hz": 18.0
 			}
 		)
 
@@ -357,7 +358,8 @@ func _configure_services() -> void:
 			"is_gameplay_locked": Callable(self, "_is_gameplay_locked")
 		},
 		{
-			"input_send_rate": INPUT_SEND_RATE
+			"input_send_rate": INPUT_SEND_RATE,
+			"idle_input_send_rate": 12.0
 		}
 	)
 
@@ -376,6 +378,7 @@ func _configure_services() -> void:
 			"cooldown_q_label": cooldown_q_label,
 			"cooldown_e_label": cooldown_e_label,
 			"scoreboard_label": scoreboard_label,
+			"client_hud_layer": client_hud_layer,
 			"ui_panel": ui_panel,
 			"world_root": world_root,
 			"lobby_panel": lobby_panel,
@@ -480,17 +483,31 @@ func _ensure_input_actions() -> void:
 	_ensure_action_with_keys("move_left", [KEY_A, KEY_LEFT])
 	_ensure_action_with_keys("move_right", [KEY_D, KEY_RIGHT])
 	_ensure_action_with_keys("jump", [KEY_SPACE, KEY_W, KEY_UP])
+	_ensure_action_with_keys("show_scoreboard", [KEY_TAB])
+	_ensure_action_with_keys("toggle_ping", [KEY_F])
 	_ensure_action_with_mouse_button("shoot", MOUSE_BUTTON_LEFT)
 
 func _ensure_action_with_keys(action: StringName, keys: Array[int]) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
-	if not InputMap.action_get_events(action).is_empty():
-		return
 	for keycode in keys:
-		var event := InputEventKey.new()
-		event.physical_keycode = keycode
-		InputMap.action_add_event(action, event)
+		if _action_has_keycode(action, keycode):
+			continue
+		var physical_event := InputEventKey.new()
+		physical_event.physical_keycode = keycode
+		InputMap.action_add_event(action, physical_event)
+		var logical_event := InputEventKey.new()
+		logical_event.keycode = keycode
+		InputMap.action_add_event(action, logical_event)
+
+func _action_has_keycode(action: StringName, keycode: int) -> bool:
+	for existing_event in InputMap.action_get_events(action):
+		var key_event := existing_event as InputEventKey
+		if key_event == null:
+			continue
+		if int(key_event.keycode) == keycode or int(key_event.physical_keycode) == keycode:
+			return true
+	return false
 
 func _ensure_action_with_mouse_button(action: StringName, button: MouseButton) -> void:
 	if not InputMap.has_action(action):

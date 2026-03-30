@@ -18,6 +18,9 @@ const BLOOD_CHUNK_ANGULAR_DAMP := 1.4
 const BLOOD_CHUNK_BOUNCE := 0.02
 const BLOOD_CHUNK_FRICTION := 0.92
 const BLOOD_CHUNK_SPREAD_RADIANS := 0.95
+const BLOOD_DEATH_BURST_SPEED_MULTIPLIER := 1.9
+const BLOOD_DEATH_BURST_LINEAR_DAMP := 1.2
+const BLOOD_DEATH_BURST_GRAVITY_SCALE := 0.95
 const SURFACE_PARTICLES_AMOUNT := 18
 const SURFACE_PARTICLES_LIFETIME := 0.58
 const SURFACE_PARTICLES_CLEANUP_DELAY := 1.45
@@ -46,7 +49,7 @@ const EXPLOSION_FRAME_COUNT := 8
 const EXPLOSION_FRAME_SEC := 0.035
 const EXPLOSION_Y_OFFSET := 10.0
 const HIT_FLASH_LIFETIME := 0.08
-const BLOOD_EFFECTS_Z_INDEX := 1000
+const BLOOD_EFFECTS_Z_INDEX := 44
 const SURFACE_ID_WOOD := "wood"
 const SURFACE_ID_GRASS := "grass"
 
@@ -76,6 +79,7 @@ var explosion_texture: Texture2D
 var hit_texture: Texture2D
 var map_front_image: Image = null
 var explosion_frames: SpriteFrames = null
+var particles_enabled := true
 
 func configure(root: Node2D, front_sprite: Sprite2D, splash_sfx: AudioStream, death_sfx: AudioStream, bullet_touch: AudioStream = null, explosion_fx: Texture2D = null, hit_fx: Texture2D = null) -> void:
 	projectiles_root = root
@@ -87,12 +91,18 @@ func configure(root: Node2D, front_sprite: Sprite2D, splash_sfx: AudioStream, de
 	hit_texture = hit_fx
 	explosion_frames = null
 
+func set_particles_enabled(enabled: bool) -> void:
+	particles_enabled = enabled
+
 func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2, blood_color: Color = BLOOD_PARTICLES_COLOR, count_multiplier: float = 1.0) -> void:
+	if not particles_enabled:
+		return
 	if projectiles_root == null:
 		return
 	play_splash_hit_sfx(impact_position)
 	spawn_hit_flash(impact_position)
 	var chunk_count := maxi(1, int(round(float(BLOOD_PARTICLES_AMOUNT) * maxf(0.1, count_multiplier))))
+	var is_death_burst := count_multiplier >= 5.0
 	var spray_direction := Vector2.UP
 	if incoming_velocity.length_squared() > 0.0001:
 		spray_direction = (-incoming_velocity).normalized()
@@ -101,8 +111,8 @@ func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2,
 		chunk.z_as_relative = false
 		chunk.z_index = BLOOD_EFFECTS_Z_INDEX
 		chunk.global_position = impact_position + Vector2(randf_range(-2.0, 2.0), randf_range(-2.0, 2.0))
-		chunk.gravity_scale = BLOOD_CHUNK_GRAVITY_SCALE
-		chunk.linear_damp = BLOOD_CHUNK_LINEAR_DAMP
+		chunk.gravity_scale = BLOOD_DEATH_BURST_GRAVITY_SCALE if is_death_burst else BLOOD_CHUNK_GRAVITY_SCALE
+		chunk.linear_damp = BLOOD_DEATH_BURST_LINEAR_DAMP if is_death_burst else BLOOD_CHUNK_LINEAR_DAMP
 		chunk.angular_damp = BLOOD_CHUNK_ANGULAR_DAMP
 		chunk.continuous_cd = RigidBody2D.CCD_MODE_CAST_SHAPE
 		chunk.collision_layer = SURFACE_CHUNK_COLLISION_LAYER
@@ -132,7 +142,11 @@ func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2,
 		chunk.physics_material_override = material
 
 		var dir := spray_direction.rotated(randf_range(-BLOOD_CHUNK_SPREAD_RADIANS, BLOOD_CHUNK_SPREAD_RADIANS))
+		if is_death_burst:
+			dir = Vector2.RIGHT.rotated(randf_range(0.0, TAU))
 		var speed := randf_range(BLOOD_CHUNK_SPEED_MIN, BLOOD_CHUNK_SPEED_MAX)
+		if is_death_burst:
+			speed *= BLOOD_DEATH_BURST_SPEED_MULTIPLIER
 		chunk.linear_velocity = dir * speed + Vector2(randf_range(-12.0, 12.0), randf_range(-10.0, 22.0))
 		chunk.angular_velocity = randf_range(-13.0, 13.0)
 		_hide_from_minimap(chunk)
@@ -140,9 +154,13 @@ func spawn_blood_particles(impact_position: Vector2, incoming_velocity: Vector2,
 		_queue_free_with_delay(chunk, BLOOD_PARTICLES_CLEANUP_DELAY + randf_range(0.0, 0.35))
 
 func spawn_surface_particles(impact_position: Vector2, incoming_velocity: Vector2, particle_color: Color) -> void:
+	if not particles_enabled:
+		return
 	_spawn_surface_particle_burst(impact_position, incoming_velocity, particle_color, true)
 
 func spawn_explosion_surface_particles(world_position: Vector2) -> void:
+	if not particles_enabled:
+		return
 	if projectiles_root == null:
 		return
 	var center_color := sample_map_front_color(world_position)
@@ -374,7 +392,7 @@ func spawn_explosion_effect(world_position: Vector2) -> void:
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	sprite.global_position = world_position + Vector2(0.0, EXPLOSION_Y_OFFSET)
 	sprite.z_as_relative = false
-	sprite.z_index = 1000
+	sprite.z_index = BLOOD_EFFECTS_Z_INDEX
 	sprite.scale = Vector2.ONE * 1.85
 	sprite.sprite_frames = _explosion_sprite_frames()
 	sprite.animation = "default"
@@ -394,7 +412,7 @@ func spawn_hit_flash(world_position: Vector2) -> void:
 	sprite.global_position = world_position
 	sprite.rotation = randf_range(0.0, TAU)
 	sprite.z_as_relative = false
-	sprite.z_index = 1000
+	sprite.z_index = BLOOD_EFFECTS_Z_INDEX
 	sprite.scale = Vector2.ONE * 0.85
 	_hide_from_minimap(sprite)
 	projectiles_root.add_child(sprite)

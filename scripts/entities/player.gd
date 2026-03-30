@@ -13,7 +13,9 @@ const BLOOD_SCREEN_TEXTURES := [
 const DAMAGE_FLASH_WHITE_SHADER := preload("res://assets/shaders/damage_flash_white.gdshader")
 const DAMAGE_FLASH_MIX_SHADER := preload("res://assets/shaders/damage_flash_mix.gdshader")
 const OUTRAGE_BOOST_FIRE_SHADER := preload("res://assets/shaders/outrage_boost_fire.gdshader")
+const EREBUS_IMMUNE_SHIMMER_SHADER := preload("res://assets/shaders/erebus_immune_shimmer.gdshader")
 const DAMAGE_NUMBER_FONT := preload("res://assets/fonts/kwfont.ttf")
+const PLAYER_DEATH_CHUNKS_SCRIPT := preload("res://scripts/entities/player_components/player_death_chunks.gd")
 
 const SNAP_LERP_SPEED_X := 14.0
 const SNAP_LERP_SPEED_Y := 10.0
@@ -49,6 +51,22 @@ const DAMAGE_NUMBER_END_SCALE := 0.72
 const DAMAGE_NUMBER_RISE_DISTANCE := 38.0
 const ANIMATION_AIR_VELOCITY_THRESHOLD := 24.0
 const RESPAWN_DAMAGE_IMMUNITY_SEC := 0.3
+const EREBUS_IMMUNE_SIZE_SCALE := 1.2
+const EREBUS_IMMUNE_HITBOX_SCALE := 1.28
+const EREBUS_IMMUNE_HEAD_SCALE := 1.18
+const EREBUS_IMMUNE_TORSO_SCALE := 1.16
+const EREBUS_IMMUNE_HEAD_Y_OFFSET := -3.5
+const EREBUS_IMMUNE_TORSO_Y_OFFSET := -2.0
+const EREBUS_IMMUNE_SPEED_MULTIPLIER := 0.72
+const EREBUS_IMMUNE_JUMP_MULTIPLIER := 0.74
+const ULTI_DURATION_BAR_SIZE := Vector2(56.0, 4.0)
+const ULTI_DURATION_BAR_OFFSET := Vector2(-28.0, -72.0)
+const ULTI_DURATION_BAR_BG_COLOR := Color(0.04, 0.08, 0.12, 0.86)
+const ULTI_DURATION_BAR_FILL_COLOR := Color(0.24, 0.8, 0.94, 0.97)
+const ULTI_STATUS_LABEL_OFFSET := Vector2(-32.0, -88.0)
+const ULTI_STATUS_LABEL_SIZE := Vector2(64.0, 12.0)
+const ULTI_STATUS_LABEL_COLOR := Color(1.0, 0.97, 0.88, 1.0)
+const ULTI_STATUS_LABEL_OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 
 @onready var body: Polygon2D = get_node_or_null("Body") as Polygon2D
 @onready var feet: Polygon2D = get_node_or_null("Feet") as Polygon2D
@@ -67,16 +85,22 @@ const RESPAWN_DAMAGE_IMMUNITY_SEC := 0.3
 @onready var death_audio: AudioStreamPlayer2D = $DeathAudio
 @onready var health_label: Label = $VisualRoot/HealthLabel
 @onready var health_bar_green: Sprite2D = $VisualRoot/HpBackground/HpGreen
+@onready var health_bar_damage_lag: Sprite2D = get_node_or_null("VisualRoot/HpBackground/HpDamageLag") as Sprite2D
 @onready var ammo_label: Label = $VisualRoot/AmmoLabel
 @onready var name_label: Label = $VisualRoot/NameLabel
-@onready var skill_bars_root: Node2D = $VisualRoot/SkillBars
-@onready var skill_q_fill: ColorRect = $VisualRoot/SkillBars/QDial
-@onready var skill_e_fill: ColorRect = $VisualRoot/SkillBars/EDial
+@onready var skill_label: Label = get_node_or_null("VisualRoot/SkillLabel") as Label
+@onready var skill_duration_bar_bg: Sprite2D = get_node_or_null("VisualRoot/SkillBarBackground") as Sprite2D
+@onready var skill_duration_bar: Sprite2D = get_node_or_null("VisualRoot/SkillBar") as Sprite2D
+@onready var skill_bars_root: Node2D = get_node_or_null("VisualRoot/SkillBars") as Node2D
+@onready var skill_q_fill: ColorRect = get_node_or_null("VisualRoot/SkillBars/QDial") as ColorRect
+@onready var skill_e_fill: ColorRect = get_node_or_null("VisualRoot/SkillBars/EDial") as ColorRect
+@onready var body_collision_shape: CollisionShape2D = get_node_or_null("CollisionShape2D") as CollisionShape2D
 
 var movement_component: PlayerMovement
 var vitals_hud_component: PlayerVitalsHud
 var weapon_visual_component: PlayerWeaponVisual
 var surface_audio_component: PlayerSurfaceAudio
+var death_chunks_component: PlayerDeathChunks
 var peer_id: int = 0
 var use_network_smoothing := false
 var target_position := Vector2.ZERO
@@ -89,6 +113,8 @@ var shield_remaining_sec := 0.0
 var visual_correction_offset := Vector2.ZERO
 var modular_visual: PlayerModularVisual
 var sfx_suppressed := false
+var forced_hidden_reasons: Dictionary = {}
+var forced_sfx_suppressed_reasons: Dictionary = {}
 var damage_flash_tween: Tween
 var gun_base_modulate := Color.WHITE
 var damage_flash_overlay_pairs: Array = []
@@ -109,6 +135,15 @@ var damage_screen_blood_tween: Tween
 var outrage_boost_remaining_sec := 0.0
 var outrage_boost_materials: Dictionary = {}
 var outrage_boost_base_modulates: Dictionary = {}
+var erebus_immune_visual_remaining_sec := 0.0
+var erebus_immune_materials: Dictionary = {}
+var _erebus_immune_base_collision_scale := Vector2.ONE
+var _erebus_immune_base_collision_position := Vector2.ZERO
+var _erebus_immune_base_head_scale := Vector2.ONE
+var _erebus_immune_base_torso_scale := Vector2.ONE
+var _erebus_immune_base_head_position := Vector2.ZERO
+var _erebus_immune_base_torso_position := Vector2.ZERO
+var _erebus_immune_size_captured := false
 var outrage_boost_screen_fire_layer: CanvasLayer
 var outrage_boost_screen_fire_root: Control
 var outrage_boost_screen_fire_nodes: Array = []
@@ -117,9 +152,21 @@ var target_dummy_mode := false
 var _screen_fire_edge_h_tex_cache: Texture2D
 var _screen_fire_edge_v_tex_cache: Texture2D
 var damage_numbers_root: Node2D
+var ulti_duration_bar_root: Node2D
+var ulti_duration_bar_bg: ColorRect
+var ulti_duration_bar_fill: Sprite2D
+var ulti_duration_total_sec := 0.0
+var ulti_duration_remaining_sec := 0.0
+var ulti_status_label: Label
+var ulti_status_text := ""
+var _skill_duration_bar_base_region: Rect2 = Rect2(0, 0, 61, 2)
+var _skill_duration_bar_base_scale: Vector2 = Vector2.ONE
+var _skill_duration_bar_base_modulate: Color = Color.WHITE
+var _skill_duration_bar_base_captured := false
 
 func _ready() -> void:
 	_init_movement_component()
+	_init_death_chunks_component()
 	_init_vitals_hud_component()
 	_init_weapon_visual_component()
 	_init_surface_audio_component()
@@ -136,6 +183,8 @@ func _ready() -> void:
 	_apply_player_facing_from_angle(target_aim_angle)
 	_apply_gun_horizontal_flip_from_angle(target_aim_angle)
 	set_skill_cooldown_bars(1.0, 1.0, false)
+	_ensure_ulti_duration_bar()
+	clear_ulti_duration_bar()
 	set_minimap_hidden(true)
 
 func set_minimap_hidden(hidden: bool) -> void:
@@ -152,12 +201,31 @@ func _init_vitals_hud_component() -> void:
 	vitals_hud_component.configure(
 		health_label,
 		health_bar_green,
+		health_bar_damage_lag,
 		ammo_label,
 		death_audio,
 		Callable(self, "_play_damage_visual_feedback"),
-		Callable(self, "_reset_gun_scale"),
+		Callable(self, "_handle_before_death"),
 		Callable(self, "_is_sfx_suppressed")
 	)
+
+func _init_death_chunks_component() -> void:
+	death_chunks_component = PLAYER_DEATH_CHUNKS_SCRIPT.new()
+	death_chunks_component.configure(self, _part_sprites())
+
+func _handle_before_death() -> void:
+	pass
+
+func spawn_death_chunks_at(world_position: Vector2, incoming_velocity: Vector2 = Vector2.ZERO) -> void:
+	if DisplayServer.get_name().to_lower() == "headless":
+		return
+	if death_chunks_component == null:
+		return
+	var impulse := incoming_velocity
+	if impulse.length_squared() <= 0.0001:
+		impulse = _resolved_damage_push_direction() * 130.0
+	death_chunks_component.clear_active_chunks()
+	death_chunks_component.spawn_chunks_at(world_position, impulse, visibility_layer)
 
 func _init_weapon_visual_component() -> void:
 	weapon_visual_component = PlayerWeaponVisual.new()
@@ -203,6 +271,53 @@ func _init_modular_visual() -> void:
 func _part_sprites() -> Array:
 	return [head_sprite, torso_sprite, leg1_sprite, leg2_sprite]
 
+func _capture_erebus_immune_base_size() -> void:
+	if _erebus_immune_size_captured:
+		return
+	if body_collision_shape != null:
+		_erebus_immune_base_collision_scale = body_collision_shape.scale
+		_erebus_immune_base_collision_position = body_collision_shape.position
+	if head_sprite != null:
+		_erebus_immune_base_head_scale = head_sprite.scale
+		_erebus_immune_base_head_position = head_sprite.position
+	if torso_sprite != null:
+		_erebus_immune_base_torso_scale = torso_sprite.scale
+		_erebus_immune_base_torso_position = torso_sprite.position
+	_erebus_immune_size_captured = true
+
+func _apply_erebus_immune_size() -> void:
+	_capture_erebus_immune_base_size()
+	if body_collision_shape != null:
+		body_collision_shape.scale = Vector2(
+			_erebus_immune_base_collision_scale.x * EREBUS_IMMUNE_HITBOX_SCALE,
+			_erebus_immune_base_collision_scale.y * EREBUS_IMMUNE_HITBOX_SCALE
+		)
+		var hitbox_growth := HIT_HEIGHT * (EREBUS_IMMUNE_HITBOX_SCALE - 1.0)
+		body_collision_shape.position = _erebus_immune_base_collision_position + Vector2(0.0, -hitbox_growth * 0.5)
+	if head_sprite != null:
+		head_sprite.scale = Vector2(
+			_erebus_immune_base_head_scale.x * EREBUS_IMMUNE_HEAD_SCALE,
+			_erebus_immune_base_head_scale.y * EREBUS_IMMUNE_HEAD_SCALE
+		)
+		head_sprite.position = _erebus_immune_base_head_position + Vector2(0.0, EREBUS_IMMUNE_HEAD_Y_OFFSET)
+	if torso_sprite != null:
+		torso_sprite.scale = Vector2(
+			_erebus_immune_base_torso_scale.x * EREBUS_IMMUNE_TORSO_SCALE,
+			_erebus_immune_base_torso_scale.y * EREBUS_IMMUNE_TORSO_SCALE
+		)
+		torso_sprite.position = _erebus_immune_base_torso_position + Vector2(0.0, EREBUS_IMMUNE_TORSO_Y_OFFSET)
+
+func _restore_erebus_immune_size() -> void:
+	if body_collision_shape != null:
+		body_collision_shape.scale = _erebus_immune_base_collision_scale
+		body_collision_shape.position = _erebus_immune_base_collision_position
+	if head_sprite != null:
+		head_sprite.scale = _erebus_immune_base_head_scale
+		head_sprite.position = _erebus_immune_base_head_position
+	if torso_sprite != null:
+		torso_sprite.scale = _erebus_immune_base_torso_scale
+		torso_sprite.position = _erebus_immune_base_torso_position
+
 func _ensure_outrage_boost_materials() -> void:
 	if not outrage_boost_materials.is_empty():
 		return
@@ -215,9 +330,27 @@ func _ensure_outrage_boost_materials() -> void:
 		material.set_shader_parameter("fire_strength", 0.48)
 		outrage_boost_materials[sprite] = material
 
+func _ensure_erebus_immune_materials() -> void:
+	if not erebus_immune_materials.is_empty():
+		return
+	for sprite_value in _part_sprites():
+		var sprite := sprite_value as Sprite2D
+		if sprite == null:
+			continue
+		var material := ShaderMaterial.new()
+		material.shader = EREBUS_IMMUNE_SHIMMER_SHADER
+		material.set_shader_parameter("shimmer_speed", 0.34)
+		material.set_shader_parameter("shimmer_width", 0.28)
+		material.set_shader_parameter("shimmer_softness", 0.16)
+		material.set_shader_parameter("shimmer_strength", 0.24)
+		material.set_shader_parameter("shimmer_color", Color(1.0, 1.0, 1.0, 1.0))
+		erebus_immune_materials[sprite] = material
+
 func _part_base_material(sprite: Sprite2D) -> Material:
 	if sprite == null:
 		return null
+	if erebus_immune_visual_remaining_sec > 0.0:
+		return erebus_immune_materials.get(sprite, null) as Material
 	if outrage_boost_remaining_sec > 0.0:
 		return outrage_boost_materials.get(sprite, null) as Material
 	return null
@@ -278,7 +411,7 @@ func set_outrage_boost_visual(duration_sec: float) -> void:
 	_sync_outrage_boost_overlays()
 	_set_outrage_boost_overlay_alpha(0.52)
 	_ensure_outrage_boost_screen_fire_overlay()
-	_set_outrage_boost_screen_fire_alpha(0.72)
+	_set_outrage_boost_screen_fire_alpha(0.05)
 	_tick_outrage_boost_part_colors()
 
 func clear_outrage_boost_visual() -> void:
@@ -287,6 +420,31 @@ func clear_outrage_boost_visual() -> void:
 	_set_outrage_boost_overlay_alpha(0.0)
 	_set_outrage_boost_screen_fire_alpha(0.0)
 	_restore_outrage_boost_base_modulates()
+
+func set_erebus_immune_visual(duration_sec: float) -> void:
+	erebus_immune_visual_remaining_sec = maxf(erebus_immune_visual_remaining_sec, maxf(0.0, duration_sec))
+	if erebus_immune_visual_remaining_sec <= 0.0:
+		clear_erebus_immune_visual()
+		return
+	_ensure_erebus_immune_materials()
+	_apply_erebus_immune_size()
+	_apply_part_base_materials()
+	_tick_erebus_immune_visual()
+
+func clear_erebus_immune_visual() -> void:
+	erebus_immune_visual_remaining_sec = 0.0
+	_restore_erebus_immune_size()
+	_apply_part_base_materials()
+
+func _tick_erebus_immune_visual() -> void:
+	if erebus_immune_visual_remaining_sec <= 0.0:
+		return
+	var tint := get_torso_dominant_color()
+	for material_value in erebus_immune_materials.values():
+		var material := material_value as ShaderMaterial
+		if material == null:
+			continue
+		material.set_shader_parameter("tint_color", Color(tint.r, tint.g, tint.b, 1.0))
 
 func _init_damage_flash_overlays() -> void:
 	damage_flash_overlay_pairs.clear()
@@ -435,7 +593,8 @@ func _set_outrage_boost_overlay_alpha(alpha: float) -> void:
 		overlay.self_modulate = Color(1.0, 1.0, 1.0, clampf(alpha, 0.0, 1.0))
 
 func _ensure_outrage_boost_screen_fire_overlay() -> void:
-	if peer_id <= 0 or peer_id != multiplayer.get_unique_id():
+	var local_peer_id := _local_peer_id_safe()
+	if peer_id <= 0 or peer_id != local_peer_id:
 		return
 	if outrage_boost_screen_fire_root != null and is_instance_valid(outrage_boost_screen_fire_root):
 		return
@@ -466,82 +625,18 @@ func _ensure_outrage_boost_screen_fire_overlay() -> void:
 	_layout_outrage_boost_screen_fire_overlay()
 
 	outrage_boost_screen_fire_nodes.clear()
-	var top_fire := TextureRect.new()
-	top_fire.name = "FireTop"
-	top_fire.texture = _screen_fire_edge_h_tex(false)
-	top_fire.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	top_fire.stretch_mode = TextureRect.STRETCH_SCALE
-	top_fire.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	top_fire.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_fire.offset_left = 0.0
-	top_fire.offset_top = 0.0
-	top_fire.offset_right = 0.0
-	top_fire.offset_bottom = 72.0
-	top_fire.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_fire.z_index = 1101
-	outrage_boost_screen_fire_root.add_child(top_fire)
-	outrage_boost_screen_fire_nodes.append(top_fire)
-
-	var bottom_fire := TextureRect.new()
-	bottom_fire.name = "FireBottom"
-	bottom_fire.texture = _screen_fire_edge_h_tex(true)
-	bottom_fire.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bottom_fire.stretch_mode = TextureRect.STRETCH_SCALE
-	bottom_fire.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	bottom_fire.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bottom_fire.offset_left = 0.0
-	bottom_fire.offset_top = -72.0
-	bottom_fire.offset_right = 0.0
-	bottom_fire.offset_bottom = 0.0
-	bottom_fire.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bottom_fire.z_index = 1101
-	outrage_boost_screen_fire_root.add_child(bottom_fire)
-	outrage_boost_screen_fire_nodes.append(bottom_fire)
-
-	var left_fire := TextureRect.new()
-	left_fire.name = "FireLeft"
-	left_fire.texture = _screen_fire_edge_v_tex(false)
-	left_fire.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	left_fire.stretch_mode = TextureRect.STRETCH_SCALE
-	left_fire.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	left_fire.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	left_fire.offset_left = 0.0
-	left_fire.offset_top = 56.0
-	left_fire.offset_right = 54.0
-	left_fire.offset_bottom = -56.0
-	left_fire.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	left_fire.z_index = 1101
-	outrage_boost_screen_fire_root.add_child(left_fire)
-	outrage_boost_screen_fire_nodes.append(left_fire)
-
-	var right_fire := TextureRect.new()
-	right_fire.name = "FireRight"
-	right_fire.texture = _screen_fire_edge_v_tex(true)
-	right_fire.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	right_fire.stretch_mode = TextureRect.STRETCH_SCALE
-	right_fire.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	right_fire.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	right_fire.offset_left = -54.0
-	right_fire.offset_top = 56.0
-	right_fire.offset_right = 0.0
-	right_fire.offset_bottom = -56.0
-	right_fire.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	right_fire.z_index = 1101
-	outrage_boost_screen_fire_root.add_child(right_fire)
-	outrage_boost_screen_fire_nodes.append(right_fire)
-
-	var ember_glow := ColorRect.new()
-	ember_glow.name = "EdgeGlow"
-	ember_glow.color = Color(1.0, 0.28, 0.02, 0.0)
-	ember_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ember_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ember_glow.offset_left = 0.0
-	ember_glow.offset_top = 0.0
-	ember_glow.offset_right = 0.0
-	ember_glow.offset_bottom = 0.0
-	ember_glow.z_index = 1100
-	outrage_boost_screen_fire_root.add_child(ember_glow)
-	outrage_boost_screen_fire_nodes.append(ember_glow)
+	var screen_tint := ColorRect.new()
+	screen_tint.name = "BoostScreenTint"
+	screen_tint.color = Color(1.0, 0.0, 0.0, 0.0)
+	screen_tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_tint.set_anchors_preset(Control.PRESET_FULL_RECT)
+	screen_tint.offset_left = 0.0
+	screen_tint.offset_top = 0.0
+	screen_tint.offset_right = 0.0
+	screen_tint.offset_bottom = 0.0
+	screen_tint.z_index = 1101
+	outrage_boost_screen_fire_root.add_child(screen_tint)
+	outrage_boost_screen_fire_nodes.append(screen_tint)
 	_set_outrage_boost_screen_fire_alpha(0.0)
 
 func _layout_outrage_boost_screen_fire_overlay() -> void:
@@ -560,14 +655,10 @@ func _set_outrage_boost_screen_fire_alpha(alpha: float) -> void:
 		_layout_outrage_boost_screen_fire_overlay()
 		outrage_boost_screen_fire_root.visible = visible
 	for node_value in outrage_boost_screen_fire_nodes:
-		if node_value is TextureRect:
-			var fire_rect := node_value as TextureRect
-			fire_rect.visible = visible
-			fire_rect.modulate = Color(1.0, 1.0, 1.0, outrage_boost_screen_fire_base_alpha)
-		elif node_value is ColorRect:
+		if node_value is ColorRect:
 			var glow := node_value as ColorRect
 			glow.visible = visible
-			glow.color = Color(1.0, 0.28, 0.02, outrage_boost_screen_fire_base_alpha * 0.16)
+			glow.color = Color(1.0, 0.0, 0.0, outrage_boost_screen_fire_base_alpha)
 
 func _tick_outrage_boost_screen_fire(_delta: float) -> void:
 	if outrage_boost_screen_fire_root == null or not is_instance_valid(outrage_boost_screen_fire_root):
@@ -575,15 +666,10 @@ func _tick_outrage_boost_screen_fire(_delta: float) -> void:
 	if outrage_boost_screen_fire_base_alpha <= 0.001:
 		return
 	_layout_outrage_boost_screen_fire_overlay()
-	var pulse := 0.84 + 0.16 * (0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.012))
-	var alpha := outrage_boost_screen_fire_base_alpha * pulse
 	for node_value in outrage_boost_screen_fire_nodes:
-		if node_value is TextureRect:
-			var fire_rect := node_value as TextureRect
-			fire_rect.modulate = Color(1.0, 1.0, 1.0, alpha)
-		elif node_value is ColorRect:
+		if node_value is ColorRect:
 			var glow := node_value as ColorRect
-			glow.color = Color(1.0, 0.28, 0.02, alpha * 0.16)
+			glow.color = Color(1.0, 0.0, 0.0, outrage_boost_screen_fire_base_alpha)
 
 func _screen_fire_edge_h_tex(flip_vertical: bool) -> Texture2D:
 	if not flip_vertical and _screen_fire_edge_h_tex_cache != null:
@@ -666,6 +752,22 @@ func set_skill_cooldown_bars(q_ratio: float, e_ratio: float, bars_visible: bool)
 		var e_material := skill_e_fill.material as ShaderMaterial
 		if e_material != null:
 			e_material.set_shader_parameter("progress", clampf(e_ratio, 0.0, 1.0))
+
+func start_ulti_duration_bar(duration_sec: float, status_text: String = "") -> void:
+	var resolved := maxf(0.0, duration_sec)
+	if resolved <= 0.0:
+		clear_ulti_duration_bar()
+		return
+	ulti_duration_total_sec = resolved
+	ulti_duration_remaining_sec = resolved
+	ulti_status_text = status_text.strip_edges()
+	_update_ulti_duration_bar_visual()
+
+func clear_ulti_duration_bar() -> void:
+	ulti_duration_total_sec = 0.0
+	ulti_duration_remaining_sec = 0.0
+	ulti_status_text = ""
+	_update_ulti_duration_bar_visual()
 
 func set_shot_audio_stream(stream: AudioStream) -> void:
 	if weapon_visual_component != null:
@@ -850,7 +952,7 @@ func play_reload_audio() -> void:
 	if weapon_visual_component != null:
 		weapon_visual_component.play_reload_audio()
 		return
-	if sfx_suppressed:
+	if _is_sfx_suppressed():
 		return
 	if reload_audio == null or reload_audio.stream == null:
 		return
@@ -889,7 +991,14 @@ func get_movement_speed_multiplier() -> float:
 	var multiplier := clampf(external_movement_speed_multiplier, 0.0, 1.0)
 	if damage_slow_remaining_sec > 0.0:
 		multiplier *= DAMAGE_SLOW_MULTIPLIER
+	if erebus_immune_visual_remaining_sec > 0.0:
+		multiplier *= EREBUS_IMMUNE_SPEED_MULTIPLIER
 	return multiplier
+
+func get_jump_velocity_multiplier() -> float:
+	if erebus_immune_visual_remaining_sec > 0.0:
+		return EREBUS_IMMUNE_JUMP_MULTIPLIER
+	return 1.0
 
 func set_external_movement_speed_multiplier(value: float) -> void:
 	external_movement_speed_multiplier = clampf(value, 0.0, 1.0)
@@ -1010,7 +1119,8 @@ func _apply_damage_part_scramble(delta: float) -> void:
 		damage_part_scramble_rotations.clear()
 
 func _play_screen_damage_blood() -> void:
-	if peer_id <= 0 or peer_id != multiplayer.get_unique_id():
+	var local_peer_id := _local_peer_id_safe()
+	if peer_id <= 0 or peer_id != local_peer_id:
 		return
 	_ensure_screen_damage_blood_overlay()
 	if damage_screen_blood_rect == null:
@@ -1093,15 +1203,44 @@ func set_shield(amount: int, duration_sec: float) -> void:
 	shield_remaining_sec = maxf(shield_remaining_sec, normalized_duration)
 
 func _is_sfx_suppressed() -> bool:
-	return sfx_suppressed
+	return sfx_suppressed or not forced_sfx_suppressed_reasons.is_empty()
 
 func set_sfx_suppressed(value: bool) -> void:
 	sfx_suppressed = value
+	_refresh_forced_visibility_state()
+
+func set_forced_hidden(reason: String, enabled: bool) -> void:
+	var key := reason.strip_edges()
+	if key.is_empty():
+		key = "default"
+	if enabled:
+		forced_hidden_reasons[key] = true
+	else:
+		forced_hidden_reasons.erase(key)
+	_refresh_forced_visibility_state()
+
+func set_forced_sfx_suppressed(reason: String, enabled: bool) -> void:
+	var key := reason.strip_edges()
+	if key.is_empty():
+		key = "default"
+	if enabled:
+		forced_sfx_suppressed_reasons[key] = true
+	else:
+		forced_sfx_suppressed_reasons.erase(key)
+	_refresh_forced_visibility_state()
+
+func _refresh_forced_visibility_state() -> void:
+	if visual_root != null:
+		visual_root.visible = forced_hidden_reasons.is_empty()
 
 func get_hit_radius() -> float:
+	if erebus_immune_visual_remaining_sec > 0.0:
+		return HIT_RADIUS * EREBUS_IMMUNE_HITBOX_SCALE
 	return HIT_RADIUS
 
 func get_hit_height() -> float:
+	if erebus_immune_visual_remaining_sec > 0.0:
+		return HIT_HEIGHT * EREBUS_IMMUNE_HITBOX_SCALE
 	return HIT_HEIGHT
 
 func force_respawn(spawn_position: Vector2) -> void:
@@ -1121,6 +1260,11 @@ func force_respawn(spawn_position: Vector2) -> void:
 	damage_part_scramble_remaining_sec = 0.0
 	damage_part_scramble_offsets.clear()
 	damage_part_scramble_rotations.clear()
+	clear_ulti_duration_bar()
+	clear_erebus_immune_visual()
+	forced_hidden_reasons.clear()
+	forced_sfx_suppressed_reasons.clear()
+	_refresh_forced_visibility_state()
 	if movement_component != null:
 		movement_component.reset_jump_state()
 	if surface_audio_component != null:
@@ -1171,7 +1315,8 @@ func _apply_gun_horizontal_flip_from_angle(angle: float) -> void:
 func play_shot_recoil() -> void:
 	if weapon_visual_component != null:
 		weapon_visual_component.play_shot_recoil(target_aim_angle)
-		if peer_id > 0 and peer_id == multiplayer.get_unique_id():
+		var local_peer_id := _local_peer_id_safe()
+		if peer_id > 0 and peer_id == local_peer_id:
 			var cursor_manager := get_tree().root.get_node_or_null("CursorManager")
 			if cursor_manager != null and cursor_manager.has_method("trigger_shot_feedback"):
 				cursor_manager.call("trigger_shot_feedback", 1.0)
@@ -1221,6 +1366,8 @@ func get_part_animation_state() -> Dictionary:
 	}
 
 func _physics_process(delta: float) -> void:
+	if vitals_hud_component != null:
+		vitals_hud_component.tick(delta)
 	if damage_immune_remaining_sec > 0.0:
 		damage_immune_remaining_sec = maxf(0.0, damage_immune_remaining_sec - delta)
 	if damage_slow_remaining_sec > 0.0:
@@ -1233,10 +1380,18 @@ func _physics_process(delta: float) -> void:
 			_apply_part_base_materials()
 			_set_outrage_boost_screen_fire_alpha(0.0)
 			_restore_outrage_boost_base_modulates()
+	if erebus_immune_visual_remaining_sec > 0.0:
+		erebus_immune_visual_remaining_sec = maxf(0.0, erebus_immune_visual_remaining_sec - delta)
+		_tick_erebus_immune_visual()
+		if erebus_immune_visual_remaining_sec <= 0.0:
+			clear_erebus_immune_visual()
 	if shield_remaining_sec > 0.0:
 		shield_remaining_sec = maxf(0.0, shield_remaining_sec - delta)
 		if shield_remaining_sec <= 0.0:
 			shield_health = 0
+	if ulti_duration_remaining_sec > 0.0:
+		ulti_duration_remaining_sec = maxf(0.0, ulti_duration_remaining_sec - delta)
+		_update_ulti_duration_bar_visual()
 	if visual_root != null:
 		_tick_visual_correction(delta)
 	if modular_visual != null:
@@ -1291,3 +1446,58 @@ func _tick_visual_correction(delta: float) -> void:
 		return
 	visual_correction_offset = visual_correction_offset.lerp(Vector2.ZERO, min(1.0, delta * VISUAL_CORRECTION_DECAY))
 	visual_root.position = visual_correction_offset
+
+func _ensure_ulti_duration_bar() -> void:
+	if visual_root == null:
+		return
+	ulti_status_label = skill_label
+	ulti_duration_bar_root = skill_duration_bar
+	ulti_duration_bar_fill = skill_duration_bar
+	if skill_duration_bar != null:
+		skill_duration_bar.region_enabled = true
+		skill_duration_bar.centered = false
+		if not _skill_duration_bar_base_captured:
+			_skill_duration_bar_base_region = skill_duration_bar.region_rect
+			_skill_duration_bar_base_scale = skill_duration_bar.scale
+			_skill_duration_bar_base_modulate = skill_duration_bar.modulate
+			_skill_duration_bar_base_captured = true
+	if ulti_status_label != null:
+		ulti_status_label.visible = false
+	if skill_duration_bar_bg != null:
+		skill_duration_bar_bg.visible = false
+	if skill_duration_bar != null:
+		skill_duration_bar.visible = false
+
+func _update_ulti_duration_bar_visual() -> void:
+	_ensure_ulti_duration_bar()
+	if skill_duration_bar == null:
+		return
+	var local_peer_id := _local_peer_id_safe()
+	var is_local_player := local_peer_id > 0 and peer_id > 0 and peer_id == local_peer_id
+	var show := is_local_player and ulti_duration_total_sec > 0.0 and ulti_duration_remaining_sec > 0.0
+	skill_duration_bar.visible = show
+	if skill_duration_bar_bg != null:
+		skill_duration_bar_bg.visible = show
+	if ulti_status_label != null:
+		ulti_status_label.visible = show and not ulti_status_text.is_empty()
+		ulti_status_label.text = ulti_status_text if show else ""
+	if not show:
+		if _skill_duration_bar_base_captured:
+			skill_duration_bar.scale = _skill_duration_bar_base_scale
+			skill_duration_bar.modulate = _skill_duration_bar_base_modulate
+		return
+	var ratio := clampf(ulti_duration_remaining_sec / maxf(0.001, ulti_duration_total_sec), 0.0, 1.0)
+	skill_duration_bar.region_rect = _skill_duration_bar_base_region
+	skill_duration_bar.scale = Vector2(_skill_duration_bar_base_scale.x * ratio, _skill_duration_bar_base_scale.y)
+	var tint := get_main_torso_ui_color()
+	skill_duration_bar.modulate = Color(clampf(tint.r, 0.0, 1.0), clampf(tint.g, 0.0, 1.0), clampf(tint.b, 0.0, 1.0), 0.96)
+
+func get_main_torso_ui_color() -> Color:
+	if body != null:
+		return Color(body.color.r, body.color.g, body.color.b, 1.0)
+	return get_torso_dominant_color()
+
+func _local_peer_id_safe() -> int:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return 0
+	return multiplayer.get_unique_id()

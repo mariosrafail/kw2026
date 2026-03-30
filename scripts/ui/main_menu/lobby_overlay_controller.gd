@@ -4,6 +4,7 @@ const LOBBY_RPC_BRIDGE_SCRIPT := preload("res://scripts/ui/main_menu/lobby_rpc_b
 const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
+const LOBBY_CHAT_CONTROLLER_SCRIPT := preload("res://scripts/ui/main_menu/lobby_chat_controller.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const CONNECT_WATCHDOG_TIMEOUT_SEC := 8.0
 const ALLOW_LOCALHOST_LOBBY_CONNECT := false
@@ -40,6 +41,7 @@ var _create_button: Button
 var _join_button: Button
 var _refresh_button: Button
 var _leave_button: Button
+var _ctf_leave_button: Button
 var _back_button: Button
 var _map_option: OptionButton
 var _ctf_room_box: VBoxContainer
@@ -51,10 +53,12 @@ var _ctf_join_blue_button: Button
 var _ctf_start_button: Button
 var _ctf_ready_button: Button
 var _ctf_add_bots_check: CheckBox
+var _ctf_show_starting_animation_check: CheckBox
 var _ctf_room_state: Dictionary = {}
 var _dm_room_box: VBoxContainer
 var _dm_room_title: Label
 var _dm_room_members_label: Label
+var _dm_leave_button: Button
 var _dm_ready_button: Button
 var _dm_start_button: Button
 var _dm_add_bots_check: CheckBox
@@ -78,6 +82,7 @@ var _map_catalog = MAP_CATALOG_SCRIPT.new()
 var _map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
 var _selected_mode_id := "deathmatch"
 var _selected_map_id := ""
+var _lobby_chat_ctrl = LOBBY_CHAT_CONTROLLER_SCRIPT.new()
 
 func _log(message: String) -> void:
 	print("[lobby_overlay] %s" % message)
@@ -100,6 +105,25 @@ func configure(
 	_pixel_burst_at = pixel_burst_at
 	_center_of = center_of
 	_on_closed = on_closed
+	_lobby_chat_ctrl.configure(Callable(self, "_send_lobby_chat_message"))
+
+func _send_lobby_chat_message(message: String) -> bool:
+	if _rpc_bridge == null or not is_instance_valid(_rpc_bridge):
+		return false
+	if _joined_lobby_id <= 0:
+		return false
+	return bool(_rpc_bridge.call("send_lobby_chat_message", message))
+
+func _on_rpc_lobby_chat_message(lobby_id: int, _peer_id: int, display_name: String, message: String) -> void:
+	_lobby_chat_ctrl.append_message(lobby_id, display_name, message)
+
+func _clear_lobby_chat_cache(lobby_id: int) -> void:
+	if lobby_id <= 0:
+		return
+	_lobby_chat_ctrl.clear_lobby(lobby_id)
+
+func _refresh_lobby_chat_context() -> void:
+	_lobby_chat_ctrl.set_active_lobby(maxi(0, _joined_lobby_id))
 
 func is_visible() -> bool:
 	return _overlay != null and _overlay.visible
@@ -147,8 +171,11 @@ func open(play_button: Control) -> void:
 	_ensure_valid_map_selection()
 	_refresh_map_dropdown_selection()
 	_lobby_list_ready = false
+	_joined_lobby_id = 0
+	_joined_room_name = ""
 	_pending_create_request = {}
 	_ctf_room_state.clear()
+	_refresh_lobby_chat_context()
 	_layout_overlay()
 	if _host != null and _host.has_method("_apply_runtime_palette"):
 		_host.call("_apply_runtime_palette", _overlay)
@@ -157,8 +184,9 @@ func open(play_button: Control) -> void:
 	_overlay.modulate = Color(1, 1, 1, 0)
 	set_interaction_enabled(true)
 	if _loading_box != null:
-		_loading_box.visible = true
-	_set_rooms_list_visible(false)
+		_loading_box.visible = false
+	_set_rooms_list_visible(true)
+	_populate_lobby_room_list()
 
 	if _loading_label != null:
 		_loading_label.text = "LOADING"
@@ -501,6 +529,9 @@ func _ensure_rpc_bridge() -> void:
 		_rpc_bridge.lobby_action_result_received.connect(_on_rpc_action_result)
 	if not _rpc_bridge.lobby_room_state_received.is_connected(_on_rpc_room_state):
 		_rpc_bridge.lobby_room_state_received.connect(_on_rpc_room_state)
+	if _rpc_bridge.has_signal("lobby_chat_received"):
+		if not _rpc_bridge.lobby_chat_received.is_connected(_on_rpc_lobby_chat_message):
+			_rpc_bridge.lobby_chat_received.connect(_on_rpc_lobby_chat_message)
 
 func _on_rpc_connected() -> void:
 	_connect_nonce += 1
@@ -529,9 +560,12 @@ func _on_rpc_failed() -> void:
 func _on_rpc_disconnected() -> void:
 	_connect_nonce += 1
 	_lobby_list_ready = false
+	_joined_lobby_id = 0
+	_joined_room_name = ""
 	_pending_create_request = {}
 	_action_inflight = false
 	_ctf_room_state.clear()
+	_refresh_lobby_chat_context()
 	_log("rpc disconnected signal")
 	if _status_label != null:
 		_status_label.text = "Disconnected from server"
@@ -543,7 +577,10 @@ func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	_log("lobby_list received entries=%d active_lobby_id=%d" % [entries.size(), active_lobby_id])
 	_lobby_list_ready = true
 	_room_entries = entries
+	var previous_lobby_id := _joined_lobby_id
 	_joined_lobby_id = active_lobby_id
+	if previous_lobby_id > 0 and _joined_lobby_id <= 0:
+		_clear_lobby_chat_cache(previous_lobby_id)
 	_joined_room_name = ""
 	for entry in _room_entries:
 		if not (entry is Dictionary):
@@ -556,6 +593,7 @@ func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 		_ctf_room_state.clear()
 		_hide_ctf_room()
 		_hide_dm_room()
+	_refresh_lobby_chat_context()
 	_populate_lobby_room_list()
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
@@ -566,7 +604,13 @@ func _on_rpc_action_result(success: bool, message: String, active_lobby_id: int,
 		_log("action_result result=SERVER_LOBBY_CONFIRMED lobby_id=%d" % active_lobby_id)
 	elif not success:
 		_log("action_result result=SERVER_ACTION_FAILED")
+	var previous_lobby_id := _joined_lobby_id
 	_joined_lobby_id = active_lobby_id
+	if previous_lobby_id > 0 and _joined_lobby_id <= 0:
+		_clear_lobby_chat_cache(previous_lobby_id)
+	if active_lobby_id <= 0:
+		_ctf_room_state.clear()
+	_refresh_lobby_chat_context()
 	_action_inflight = false
 	_action_nonce += 1
 	if _status_label != null:
@@ -604,7 +648,9 @@ func _on_rpc_room_state(payload: Dictionary) -> void:
 	_ctf_room_state = payload.duplicate(true)
 	_log("room_state received payload=%s" % str(_ctf_room_state))
 	if int(_ctf_room_state.get("lobby_id", 0)) != _joined_lobby_id:
+		_refresh_lobby_chat_context()
 		return
+	_refresh_lobby_chat_context()
 	var mode_id := _active_lobby_mode_id(_joined_lobby_id)
 	if _is_team_mode_id(mode_id):
 		_hide_dm_room()
@@ -656,6 +702,7 @@ func _populate_lobby_room_list() -> void:
 		var btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 		btn.custom_minimum_size = Vector2(0, 30)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", 8)
 		var lobby_id := int(entry.get("id", 0))
 		var room_name := str(entry.get("name", "Room"))
 		var players := int(entry.get("players", 0))
@@ -671,6 +718,10 @@ func _populate_lobby_room_list() -> void:
 		)
 		if _add_hover_pop.is_valid():
 			_add_hover_pop.call(btn)
+		_apply_button_palette(btn, MENU_PALETTE.accent(0.94), MENU_PALETTE.highlight(0.95))
+		btn.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+		btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
+		btn.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_primary(1.0))
 		_rooms_box.add_child(btn)
 		if _center_pivot.is_valid():
 			_center_pivot.call(btn)
@@ -726,13 +777,11 @@ func _apply_room_button_selected_style(btn: Button, selected: bool) -> void:
 		btn.add_theme_stylebox_override("pressed", selected_style)
 		btn.add_theme_stylebox_override("focus", selected_style)
 		return
-	btn.modulate = MENU_PALETTE.text_dark(0.96)
-	btn.remove_theme_color_override("font_color")
-	btn.remove_theme_color_override("font_hover_color")
-	btn.remove_theme_stylebox_override("normal")
-	btn.remove_theme_stylebox_override("hover")
-	btn.remove_theme_stylebox_override("pressed")
-	btn.remove_theme_stylebox_override("focus")
+	btn.modulate = Color(1, 1, 1, 1)
+	_apply_button_palette(btn, MENU_PALETTE.accent(0.94), MENU_PALETTE.highlight(0.95))
+	btn.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
+	btn.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_primary(1.0))
 
 func _refresh_lobby_selection_summary() -> void:
 	if _selection_label == null:
@@ -829,6 +878,7 @@ func _leave_lobby_room() -> void:
 	_ctf_room_state.clear()
 	_hide_ctf_room()
 	_hide_dm_room()
+	_refresh_lobby_chat_context()
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
@@ -979,8 +1029,14 @@ func _refresh_lobby_buttons_state() -> void:
 		_refresh_button.visible = not in_waiting_room
 		_refresh_button.disabled = _action_inflight or in_waiting_room
 	if _leave_button != null:
-		_leave_button.visible = in_waiting_room
+		_leave_button.visible = false
 		_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
+	if _ctf_leave_button != null:
+		_ctf_leave_button.visible = in_ctf_room
+		_ctf_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
+	if _dm_leave_button != null:
+		_dm_leave_button.visible = in_dm_room
+		_dm_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
 	if _back_button != null:
 		_back_button.visible = not in_waiting_room
 		_back_button.disabled = _action_inflight
@@ -989,6 +1045,7 @@ func _refresh_lobby_buttons_state() -> void:
 	if _ctf_join_blue_button != null:
 		_ctf_join_blue_button.disabled = not can_send or _action_inflight or _local_team_id() == 1
 	if _ctf_start_button != null:
+		_ctf_start_button.visible = in_ctf_room and is_owner
 		_ctf_start_button.disabled = not can_send or _action_inflight or _local_peer_id() != int(_ctf_room_state.get("owner_peer_id", 0)) or not bool(_ctf_room_state.get("can_start", false))
 	if _ctf_ready_button != null:
 		_ctf_ready_button.visible = in_ctf_room and not is_owner
@@ -996,10 +1053,14 @@ func _refresh_lobby_buttons_state() -> void:
 	if _ctf_add_bots_check != null:
 		_ctf_add_bots_check.visible = in_ctf_room and is_owner
 		_ctf_add_bots_check.disabled = not can_send or _action_inflight or not in_ctf_room or not is_owner
+	if _ctf_show_starting_animation_check != null:
+		_ctf_show_starting_animation_check.visible = in_ctf_room and is_owner and supports_starting_animation_toggle
+		_ctf_show_starting_animation_check.disabled = not can_send or _action_inflight or not in_ctf_room or not is_owner or not supports_starting_animation_toggle
 	if _dm_ready_button != null:
 		_dm_ready_button.visible = in_dm_room and not is_owner
 		_dm_ready_button.disabled = not can_send or _action_inflight or not in_dm_room
 	if _dm_start_button != null:
+		_dm_start_button.visible = in_dm_room and is_owner
 		_dm_start_button.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner or not bool(_ctf_room_state.get("can_start", false))
 	if _dm_add_bots_check != null:
 		_dm_add_bots_check.visible = in_dm_room and is_owner
@@ -1076,6 +1137,7 @@ func _ensure_overlay() -> void:
 	var loading_box := PanelContainer.new()
 	loading_box.custom_minimum_size = Vector2(0, 84)
 	loading_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	loading_box.visible = false
 	root.add_child(loading_box)
 	_loading_box = loading_box
 
@@ -1153,6 +1215,7 @@ func _ensure_overlay() -> void:
 
 	var rooms_box := VBoxContainer.new()
 	rooms_box.custom_minimum_size = Vector2(0, 64)
+	rooms_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rooms_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rooms_box.add_theme_constant_override("separation", 4)
 	rooms_box.visible = false
@@ -1342,6 +1405,7 @@ func _ensure_overlay() -> void:
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(leave_btn)
 	_apply_button_palette(leave_btn, BTN_RED_BG, BTN_RED_BORDER)
+	_remove_button_outlines(leave_btn)
 	actions.add_child(leave_btn)
 	_leave_button = leave_btn
 
@@ -1508,15 +1572,33 @@ func _ensure_overlay() -> void:
 	start_btn.custom_minimum_size = Vector2(0, 22)
 	start_btn.add_theme_font_size_override("font_size", 9)
 	start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_btn.size_flags_stretch_ratio = 4.0
 	start_btn.pressed.connect(_start_ctf_match)
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(start_btn)
 	_apply_button_palette(start_btn, BTN_GREEN_BG, BTN_GREEN_BORDER)
+	_remove_button_outlines(start_btn)
+	var ctf_leave_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	ctf_leave_btn.text = "LEAVE"
+	ctf_leave_btn.custom_minimum_size = Vector2(0, 22)
+	ctf_leave_btn.add_theme_font_size_override("font_size", 9)
+	ctf_leave_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ctf_leave_btn.size_flags_stretch_ratio = 1.0
+	ctf_leave_btn.disabled = true
+	ctf_leave_btn.visible = false
+	ctf_leave_btn.pressed.connect(_leave_lobby_room)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(ctf_leave_btn)
+	_apply_button_palette(ctf_leave_btn, BTN_RED_BG, BTN_RED_BORDER)
+	_remove_button_outlines(ctf_leave_btn)
+	match_actions.add_child(ctf_leave_btn)
+	_ctf_leave_button = ctf_leave_btn
 	var ready_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	ready_btn.text = "READY"
 	ready_btn.custom_minimum_size = Vector2(0, 22)
 	ready_btn.add_theme_font_size_override("font_size", 9)
 	ready_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ready_btn.size_flags_stretch_ratio = 4.0
 	ready_btn.pressed.connect(func() -> void:
 		if _rpc_bridge == null:
 			return
@@ -1548,6 +1630,21 @@ func _ensure_overlay() -> void:
 		_add_hover_pop.call(ctf_add_bots_check)
 	ctf_room_box.add_child(ctf_add_bots_check)
 	_ctf_add_bots_check = ctf_add_bots_check
+
+	var ctf_show_starting_animation_check := CheckBox.new()
+	ctf_show_starting_animation_check.text = "Show Starting Animation"
+	ctf_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
+	_apply_pixel_checkbox_style(ctf_show_starting_animation_check)
+	ctf_show_starting_animation_check.button_pressed = false
+	ctf_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(ctf_show_starting_animation_check)
+	ctf_room_box.add_child(ctf_show_starting_animation_check)
+	_ctf_show_starting_animation_check = ctf_show_starting_animation_check
+	_add_lobby_chat_section(ctf_room_box, "ctf")
 
 	var dm_room_box := VBoxContainer.new()
 	dm_room_box.visible = false
@@ -1596,6 +1693,7 @@ func _ensure_overlay() -> void:
 	dm_ready_btn.custom_minimum_size = Vector2(0, 20)
 	dm_ready_btn.add_theme_font_size_override("font_size", 9)
 	dm_ready_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_ready_btn.size_flags_stretch_ratio = 4.0
 	dm_ready_btn.pressed.connect(func() -> void:
 		if _rpc_bridge == null:
 			return
@@ -1611,11 +1709,28 @@ func _ensure_overlay() -> void:
 	dm_actions.add_child(dm_ready_btn)
 	_dm_ready_button = dm_ready_btn
 
+	var dm_leave_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	dm_leave_btn.text = "LEAVE"
+	dm_leave_btn.custom_minimum_size = Vector2(0, 20)
+	dm_leave_btn.add_theme_font_size_override("font_size", 9)
+	dm_leave_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_leave_btn.size_flags_stretch_ratio = 1.0
+	dm_leave_btn.disabled = true
+	dm_leave_btn.visible = false
+	dm_leave_btn.pressed.connect(_leave_lobby_room)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(dm_leave_btn)
+	_apply_button_palette(dm_leave_btn, BTN_RED_BG, BTN_RED_BORDER)
+	_remove_button_outlines(dm_leave_btn)
+	dm_actions.add_child(dm_leave_btn)
+	_dm_leave_button = dm_leave_btn
+
 	var dm_start_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
 	dm_start_btn.text = "START MATCH"
 	dm_start_btn.custom_minimum_size = Vector2(0, 20)
 	dm_start_btn.add_theme_font_size_override("font_size", 9)
 	dm_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_start_btn.size_flags_stretch_ratio = 4.0
 	dm_start_btn.pressed.connect(func() -> void:
 		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
 		_start_lobby_match("Starting Battle Royale..." if mode_id == "battle_royale" else "Starting FFA...")
@@ -1623,6 +1738,7 @@ func _ensure_overlay() -> void:
 	if _add_hover_pop.is_valid():
 		_add_hover_pop.call(dm_start_btn)
 	_apply_button_palette(dm_start_btn, BTN_GREEN_BG, BTN_GREEN_BORDER)
+	_remove_button_outlines(dm_start_btn)
 	dm_actions.add_child(dm_start_btn)
 	_dm_start_button = dm_start_btn
 
@@ -1641,7 +1757,7 @@ func _ensure_overlay() -> void:
 	_dm_add_bots_check = dm_add_bots_check
 
 	var dm_show_starting_animation_check := CheckBox.new()
-	dm_show_starting_animation_check.text = "Show Starting Animation (Testing)"
+	dm_show_starting_animation_check.text = "Show Starting Animation"
 	dm_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
 	_apply_pixel_checkbox_style(dm_show_starting_animation_check)
 	dm_show_starting_animation_check.button_pressed = false
@@ -1653,9 +1769,116 @@ func _ensure_overlay() -> void:
 		_add_hover_pop.call(dm_show_starting_animation_check)
 	dm_room_box.add_child(dm_show_starting_animation_check)
 	_dm_show_starting_animation_check = dm_show_starting_animation_check
+	_add_lobby_chat_section(dm_room_box, "dm")
 
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
+
+func _add_lobby_chat_section(parent: Control, view_id: String) -> void:
+	if parent == null:
+		return
+	var chat_panel := PanelContainer.new()
+	chat_panel.custom_minimum_size = Vector2(0, 112)
+	chat_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var chat_style := StyleBoxFlat.new()
+	chat_style.bg_color = MENU_PALETTE.accent(0.84)
+	chat_style.border_width_left = 0
+	chat_style.border_width_top = 0
+	chat_style.border_width_right = 0
+	chat_style.border_width_bottom = 0
+	chat_style.border_color = Color(0, 0, 0, 0)
+	chat_style.corner_radius_top_left = 6
+	chat_style.corner_radius_top_right = 6
+	chat_style.corner_radius_bottom_right = 6
+	chat_style.corner_radius_bottom_left = 6
+	chat_panel.add_theme_stylebox_override("panel", chat_style)
+	parent.add_child(chat_panel)
+
+	var chat_margin := MarginContainer.new()
+	chat_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	chat_margin.add_theme_constant_override("margin_left", 6)
+	chat_margin.add_theme_constant_override("margin_right", 6)
+	chat_margin.add_theme_constant_override("margin_top", 5)
+	chat_margin.add_theme_constant_override("margin_bottom", 5)
+	chat_panel.add_child(chat_margin)
+
+	var chat_v := VBoxContainer.new()
+	chat_v.set_anchors_preset(Control.PRESET_FULL_RECT)
+	chat_v.add_theme_constant_override("separation", 4)
+	chat_margin.add_child(chat_v)
+
+	var chat_title := Label.new()
+	chat_title.text = "Lobby Chat"
+	chat_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	chat_title.add_theme_font_size_override("font_size", 9)
+	chat_v.add_child(chat_title)
+
+	var chat_list := RichTextLabel.new()
+	chat_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	chat_list.custom_minimum_size = Vector2(0, 54)
+	chat_list.scroll_active = true
+	chat_list.selection_enabled = false
+	chat_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var chat_list_style := StyleBoxFlat.new()
+	chat_list_style.bg_color = Color(0.04, 0.07, 0.12, 0.18)
+	chat_list_style.border_width_left = 0
+	chat_list_style.border_width_top = 0
+	chat_list_style.border_width_right = 0
+	chat_list_style.border_width_bottom = 0
+	chat_list_style.corner_radius_top_left = 0
+	chat_list_style.corner_radius_top_right = 0
+	chat_list_style.corner_radius_bottom_right = 0
+	chat_list_style.corner_radius_bottom_left = 0
+	chat_list_style.content_margin_left = 4
+	chat_list_style.content_margin_right = 4
+	chat_list_style.content_margin_top = 3
+	chat_list_style.content_margin_bottom = 3
+	chat_list.add_theme_stylebox_override("normal", chat_list_style)
+	chat_v.add_child(chat_list)
+
+	var input_row := HBoxContainer.new()
+	input_row.add_theme_constant_override("separation", 4)
+	chat_v.add_child(input_row)
+
+	var input := LineEdit.new()
+	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	input.custom_minimum_size = Vector2(0, 20)
+	input.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	input.add_theme_color_override("font_placeholder_color", MENU_PALETTE.text_primary(0.64))
+	var input_style := StyleBoxFlat.new()
+	input_style.bg_color = MENU_PALETTE.accent(0.92)
+	input_style.border_width_left = 0
+	input_style.border_width_top = 0
+	input_style.border_width_right = 0
+	input_style.border_width_bottom = 0
+	input_style.corner_radius_top_left = 5
+	input_style.corner_radius_top_right = 5
+	input_style.corner_radius_bottom_right = 5
+	input_style.corner_radius_bottom_left = 5
+	input_style.content_margin_left = 6
+	input_style.content_margin_right = 6
+	input_style.content_margin_top = 3
+	input_style.content_margin_bottom = 3
+	input.add_theme_stylebox_override("normal", input_style)
+	input.add_theme_stylebox_override("focus", input_style)
+	input.add_theme_stylebox_override("read_only", input_style)
+	input_row.add_child(input)
+
+	_lobby_chat_ctrl.bind_view(view_id, chat_list, input)
+	call_deferred("_style_lobby_chat_scrollbar", chat_list)
+
+func _style_lobby_chat_scrollbar(chat_list: RichTextLabel) -> void:
+	if chat_list == null:
+		return
+	if _host == null:
+		return
+	var v_scroll := chat_list.get_v_scroll_bar()
+	if v_scroll == null:
+		return
+	if _host.has_method("_ensure_scrollbar_styleboxes"):
+		_host.call("_ensure_scrollbar_styleboxes")
+	if _host.has_method("_apply_pixel_scrollbar"):
+		_host.call("_apply_pixel_scrollbar", v_scroll)
 
 func _show_ctf_room(payload: Dictionary) -> void:
 	if _ctf_room_box == null:
@@ -1676,6 +1899,7 @@ func _show_ctf_room(payload: Dictionary) -> void:
 		var mode_label := "CTF ROOM" if _active_lobby_mode_id(_joined_lobby_id) == "ctf" else "TDTH ROOM"
 		_waiting_room_title_label.text = "%s  |  %s" % [str(payload.get("name", "Team Room")), mode_label]
 	_ctf_room_box.visible = true
+	_refresh_lobby_chat_context()
 	if _ctf_room_title != null:
 		_ctf_room_title.visible = false
 		var mode_title := "CTF ROOM" if _active_lobby_mode_id(_joined_lobby_id) == "ctf" else "TDTH ROOM"
@@ -1697,6 +1921,13 @@ func _show_ctf_room(payload: Dictionary) -> void:
 				_ctf_add_bots_check.call("set_pressed_no_signal", add_bots)
 			else:
 				_ctf_add_bots_check.button_pressed = add_bots
+	if _ctf_show_starting_animation_check != null:
+		var show_starting_animation_ctf := bool(payload.get("show_starting_animation", false))
+		if _ctf_show_starting_animation_check.button_pressed != show_starting_animation_ctf:
+			if _ctf_show_starting_animation_check.has_method("set_pressed_no_signal"):
+				_ctf_show_starting_animation_check.call("set_pressed_no_signal", show_starting_animation_ctf)
+			else:
+				_ctf_show_starting_animation_check.button_pressed = show_starting_animation_ctf
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
@@ -1739,6 +1970,7 @@ func _show_dm_room(payload: Dictionary) -> void:
 			"BR WAITING ROOM" if mode_id == "battle_royale" else "FFA WAITING ROOM"
 		]
 	_dm_room_box.visible = true
+	_refresh_lobby_chat_context()
 	if _dm_room_title != null:
 		_dm_room_title.visible = false
 		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
@@ -1814,13 +2046,7 @@ func _active_lobby_mode_id(lobby_id: int) -> String:
 	return _map_flow_service.normalize_mode_id(_selected_mode_id)
 
 func _supports_starting_animation_testing_toggle() -> bool:
-	if _ctf_room_state.is_empty():
-		return false
-	var mode_id := _map_flow_service.normalize_mode_id(str(_ctf_room_state.get("mode_id", "deathmatch")))
-	if not _is_free_for_all_mode_id(mode_id):
-		return false
-	var map_id := str(_ctf_room_state.get("map_id", "")).strip_edges().to_lower()
-	return map_id == "skull_ffa" or map_id == "skull_br"
+	return not _ctf_room_state.is_empty()
 
 func _is_free_for_all_mode_id(mode_id: String) -> bool:
 	var normalized := _map_flow_service.normalize_mode_id(mode_id)
@@ -1942,9 +2168,17 @@ func _apply_button_palette(btn: Button, normal_bg: Color, border: Color) -> void
 		return
 	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
 		var sb := btn.get_theme_stylebox(sb_name)
-		if not (sb is StyleBoxFlat):
-			continue
-		var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		var flat := StyleBoxFlat.new()
+		if sb is StyleBoxFlat:
+			flat = (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		flat.border_width_left = maxi(1, flat.border_width_left)
+		flat.border_width_top = maxi(1, flat.border_width_top)
+		flat.border_width_right = maxi(1, flat.border_width_right)
+		flat.border_width_bottom = maxi(1, flat.border_width_bottom)
+		flat.corner_radius_top_left = 0
+		flat.corner_radius_top_right = 0
+		flat.corner_radius_bottom_right = 0
+		flat.corner_radius_bottom_left = 0
 		if sb_name == "hover":
 			flat.bg_color = _tinted_color(normal_bg, 0.06)
 		elif sb_name == "pressed":
@@ -1967,6 +2201,20 @@ func _apply_ready_button_state_style(btn: Button, is_ready: bool) -> void:
 		_apply_button_palette(btn, BTN_GREEN_BG, BTN_GREEN_BORDER)
 	else:
 		_apply_button_palette(btn, BTN_YELLOW_BG, BTN_YELLOW_BORDER)
+
+func _remove_button_outlines(btn: Button) -> void:
+	if btn == null:
+		return
+	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := btn.get_theme_stylebox(sb_name)
+		if not (sb is StyleBoxFlat):
+			continue
+		var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		flat.border_width_left = 0
+		flat.border_width_top = 0
+		flat.border_width_right = 0
+		flat.border_width_bottom = 0
+		btn.add_theme_stylebox_override(sb_name, flat)
 
 func _set_rooms_list_visible(visible: bool) -> void:
 	if _rooms_box != null:

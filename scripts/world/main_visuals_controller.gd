@@ -31,7 +31,7 @@ func _ready() -> void:
 	if sky != null:
 		sky.modulate = Color(0.72, 0.95, 1.0, 1.0)
 	if map_front != null:
-		map_front.modulate = Color(0.94, 0.96, 1.0, 0.95)
+		map_front.modulate = Color(0.94, 0.96, 1.0, 1.0)
 	if atmosphere_overlay != null:
 		var atmosphere_color := atmosphere_overlay.modulate
 		atmosphere_color.a = 0.0
@@ -115,4 +115,4 @@ func _update_layer_modulates() -> void:
 		bg3.modulate = bg3_color
 	if map_front != null:
 		var front_pulse := 0.94 + 0.04 * sin(_time_sec * 0.52)
-		map_front.modulate = Color(front_pulse, front_pulse + 0.015, 1.0, 0.93 + 0.03 * sin(_time_sec * 0.41))
+		map_front.modulate = Color(front_pulse, front_pulse + 0.015, 1.0, 1.0)

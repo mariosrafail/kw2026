@@ -22,6 +22,10 @@ const MENU_NAV_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_navi
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
 const PIXEL_FONT_CHAT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
+const TOXIC_CHAT_BOX_SIZE := Vector2(196.0, 82.0)
+const TOXIC_CHAT_MARGIN_X := 5
+const TOXIC_CHAT_MARGIN_Y := 4
+const TOXIC_CHAT_ROW_SEPARATION := 1
 const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8081/auth"
 const ENABLE_MENU_LOADING_OVERLAY := false
 var MENU_CLR_BASE := MENU_PALETTE.base()
@@ -140,6 +144,8 @@ var logo_node: Node = null
 
 @onready var music_slider: HSlider = %MusicSlider
 @onready var sfx_slider: HSlider = %SfxSlider
+@onready var particles_toggle_button: Button = %ParticlesToggleButton
+@onready var screen_shake_toggle_button: Button = %ScreenShakeToggleButton
 
 @onready var intro: Control = %Intro
 @onready var intro_fade: ColorRect = $Intro/IntroFade
@@ -267,9 +273,13 @@ var _meta_footer_tween: Tween
 var _bg_crack_layer: Control
 var _toxic_bubble_layer: Control
 var _toxic_bubble_timer: Timer
-var _toxic_chat_box: PanelContainer
+var _toxic_chat_box: Panel
 var _toxic_chat_list: VBoxContainer
 var _toxic_chat_entries: Array = []
+var _toxic_chat_locked_position := Vector2.ZERO
+var _toxic_chat_position_locked := false
+var particles_enabled := true
+var screen_shake_enabled := true
 
 func _ready() -> void:
 	_ensure_cursor_manager()
@@ -321,6 +331,7 @@ func _ready() -> void:
 	_rebuild_background_cracks()
 	_ensure_toxic_bubble_layer()
 	_start_toxic_bubble_loop()
+	set_process(true)
 
 	_menu_transition_ctrl.configure(
 		{
@@ -960,6 +971,16 @@ func _connect_signals() -> void:
 		var sfx_cb := Callable(self, "_on_sfx_slider_changed")
 		if not sfx_slider.value_changed.is_connected(sfx_cb):
 			sfx_slider.value_changed.connect(sfx_cb)
+	if particles_toggle_button != null:
+		var particles_cb := Callable(self, "_on_particles_toggle_pressed")
+		if not particles_toggle_button.pressed.is_connected(particles_cb):
+			particles_toggle_button.pressed.connect(particles_cb)
+		_bind_menu_sfx_button(particles_toggle_button)
+	if screen_shake_toggle_button != null:
+		var shake_cb := Callable(self, "_on_screen_shake_toggle_pressed")
+		if not screen_shake_toggle_button.pressed.is_connected(shake_cb):
+			screen_shake_toggle_button.pressed.connect(shake_cb)
+		_bind_menu_sfx_button(screen_shake_toggle_button)
 
 func _on_play_pressed() -> void:
 	if _play_lobby_transition_running:
@@ -2020,6 +2041,8 @@ func _load_state_or_defaults() -> void:
 		"clk": 50000,
 		"music_volume": 0.8,
 		"sfx_volume": 0.4,
+		"particles_enabled": true,
+		"screen_shake_enabled": true,
 		"username": fallback_username,
 		"owned_warriors": Array(default_owned_warriors),
 		"owned_warrior_skins": [0],
@@ -2038,6 +2061,8 @@ func _load_state_or_defaults() -> void:
 		music_slider.value = clampf(float(st.get("music_volume", 0.8)), 0.0, 1.0)
 	if sfx_slider != null:
 		sfx_slider.value = clampf(float(st.get("sfx_volume", 0.4)), 0.0, 1.0)
+	_set_particles_enabled(bool(st.get("particles_enabled", true)), false)
+	_set_screen_shake_enabled(bool(st.get("screen_shake_enabled", true)), false)
 
 	wallet_coins = int(st.get("coins", 0))
 	wallet_clk = int(st.get("clk", 0))
@@ -2155,6 +2180,8 @@ func _save_state() -> void:
 		"clk": wallet_clk,
 		"music_volume": music_slider.value if music_slider != null else 0.8,
 		"sfx_volume": sfx_slider.value if sfx_slider != null else 0.4,
+		"particles_enabled": particles_enabled,
+		"screen_shake_enabled": screen_shake_enabled,
 		"username": player_username,
 		"owned_warriors": owned_warriors_list,
 		"owned_warrior_skins": owned_warrior_skin_list,
@@ -2222,6 +2249,36 @@ func _on_sfx_slider_changed(value: float) -> void:
 	if _intro_fx != null and _intro_fx.has_method("set_menu_sfx_volume_linear"):
 		_intro_fx.call("set_menu_sfx_volume_linear", clamped)
 	_save_state()
+
+func _on_particles_toggle_pressed() -> void:
+	if particles_toggle_button == null:
+		return
+	_set_particles_enabled(particles_toggle_button.button_pressed, true)
+
+func _set_particles_enabled(enabled: bool, save: bool) -> void:
+	particles_enabled = enabled
+	ProjectSettings.set_setting("kw/particles_enabled", particles_enabled)
+	if particles_toggle_button != null:
+		particles_toggle_button.set_pressed_no_signal(particles_enabled)
+		particles_toggle_button.text = "ON" if particles_enabled else "OFF"
+		particles_toggle_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if particles_enabled else Color(0.78, 0.78, 0.82, 1.0)
+	if save:
+		_save_state()
+
+func _on_screen_shake_toggle_pressed() -> void:
+	if screen_shake_toggle_button == null:
+		return
+	_set_screen_shake_enabled(screen_shake_toggle_button.button_pressed, true)
+
+func _set_screen_shake_enabled(enabled: bool, save: bool) -> void:
+	screen_shake_enabled = enabled
+	ProjectSettings.set_setting("kw/screen_shake_enabled", screen_shake_enabled)
+	if screen_shake_toggle_button != null:
+		screen_shake_toggle_button.set_pressed_no_signal(screen_shake_enabled)
+		screen_shake_toggle_button.text = "ON" if screen_shake_enabled else "OFF"
+		screen_shake_toggle_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if screen_shake_enabled else Color(0.78, 0.78, 0.82, 1.0)
+	if save:
+		_save_state()
 
 func _set_sound_buses_volume_linear(value: float) -> void:
 	var db := -80.0 if value <= 0.001 else linear_to_db(value)
@@ -2377,6 +2434,7 @@ func _ensure_toxic_bubble_layer() -> void:
 	_toxic_bubble_layer = Control.new()
 	_toxic_bubble_layer.name = "ToxicBubbleLayer"
 	_toxic_bubble_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toxic_bubble_layer.top_level = true
 	_toxic_bubble_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_toxic_bubble_layer.z_index = 120
 	add_child(_toxic_bubble_layer)
@@ -2418,23 +2476,25 @@ func _spawn_toxic_bubble() -> void:
 		return
 	var user := str(TOXIC_CHAT_USERS[randi() % TOXIC_CHAT_USERS.size()])
 	var msg := str(TOXIC_BUBBLE_LINES[randi() % TOXIC_BUBBLE_LINES.size()])
-	var full_text := "%s: %s" % [user, msg]
+	var row_bbcode := "[b]%s[/b]: %s" % [user, msg]
 
 	var label := RichTextLabel.new()
-	label.text = full_text
-	label.bbcode_enabled = false
+	label.bbcode_enabled = true
+	label.text = row_bbcode
 	label.fit_content = true
 	label.scroll_active = false
 	label.selection_enabled = false
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	label.visible_ratio = 0.0
-	label.clip_contents = true
+	label.visible_ratio = 1.0
+	label.clip_contents = false
 	label.custom_minimum_size = Vector2(0.0, 13.0)
-	label.add_theme_font_override("font", PIXEL_FONT_CHAT)
-	label.add_theme_font_size_override("font_size", 10)
+	label.add_theme_font_override("normal_font", PIXEL_FONT_CHAT)
+	label.add_theme_font_override("bold_font", PIXEL_FONT_BOLD)
+	label.add_theme_font_size_override("normal_font_size", 10)
+	label.add_theme_font_size_override("bold_font_size", 10)
 	label.add_theme_color_override("default_color", Color(0.95, 0.98, 1.0, 0.74))
-	label.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.06, 1.0))
-	label.add_theme_constant_override("outline_size", 1)
+	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.0))
+	label.add_theme_constant_override("outline_size", 0)
 	_toxic_chat_list.add_child(label)
 	_toxic_chat_entries.append(label)
 	if _toxic_chat_entries.size() > 8:
@@ -2450,25 +2510,29 @@ func _spawn_toxic_bubble() -> void:
 
 	_layout_toxic_chat_stack()
 
-	var type_time := clampf(0.35 + full_text.length() * 0.013, 0.35, 1.15)
 	var tw := create_tween()
 	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tw.tween_property(label, "modulate:a", 1.0, 0.08)
-	tw.parallel().tween_property(label, "visible_ratio", 1.0, type_time)
 
 func _layout_toxic_chat_stack() -> void:
 	if _toxic_bubble_layer == null or not is_instance_valid(_toxic_bubble_layer):
 		return
 	if _toxic_chat_box == null or not is_instance_valid(_toxic_chat_box):
 		return
-	var anchor := _main_warrior_message_anchor_pos()
-	var viewport_size := get_viewport_rect().size
-	var box_size := _toxic_chat_box.size
-	if box_size.x <= 1.0 or box_size.y <= 1.0:
-		box_size = _toxic_chat_box.get_combined_minimum_size()
-	var x := clampf(anchor.x - box_size.x * 0.5, 8.0, maxf(10.0, viewport_size.x - box_size.x - 8.0))
-	var y := clampf(anchor.y - box_size.y - 10.0, 8.0, maxf(10.0, viewport_size.y - box_size.y - 8.0))
-	_toxic_chat_box.position = Vector2(x, y)
+	var fixed_box_size := TOXIC_CHAT_BOX_SIZE
+	_toxic_chat_box.custom_minimum_size = fixed_box_size
+	_toxic_chat_box.size = fixed_box_size
+	_toxic_chat_box.scale = Vector2.ONE
+	if not _toxic_chat_position_locked:
+		var anchor := _main_warrior_message_anchor_pos()
+		var viewport_size := get_viewport_rect().size
+		var box_size := fixed_box_size
+		var x := clampf(anchor.x - box_size.x * 0.5, 8.0, maxf(10.0, viewport_size.x - box_size.x - 8.0))
+		var y := clampf(anchor.y - box_size.y - 10.0, 8.0, maxf(10.0, viewport_size.y - box_size.y - 8.0))
+		_toxic_chat_locked_position = Vector2(x, y)
+		_toxic_chat_position_locked = true
+	_toxic_chat_box.position = _toxic_chat_locked_position
+	_trim_toxic_chat_entries_to_fit()
 
 	for i in range(_toxic_chat_entries.size()):
 		var entry = _toxic_chat_entries[i]
@@ -2481,23 +2545,74 @@ func _layout_toxic_chat_stack() -> void:
 		var alpha := clampf(0.82 - float(age) * 0.10, 0.20, 0.82)
 		row.modulate.a = alpha
 
+func _process(_delta: float) -> void:
+	if _toxic_chat_box == null or not is_instance_valid(_toxic_chat_box):
+		return
+	if _toxic_chat_box.custom_minimum_size != TOXIC_CHAT_BOX_SIZE:
+		_toxic_chat_box.custom_minimum_size = TOXIC_CHAT_BOX_SIZE
+	if _toxic_chat_box.size != TOXIC_CHAT_BOX_SIZE:
+		_toxic_chat_box.size = TOXIC_CHAT_BOX_SIZE
+	if _toxic_chat_box.scale != Vector2.ONE:
+		_toxic_chat_box.scale = Vector2.ONE
+	if _toxic_chat_position_locked and _toxic_chat_box.position != _toxic_chat_locked_position:
+		_toxic_chat_box.position = _toxic_chat_locked_position
+
+func _trim_toxic_chat_entries_to_fit() -> void:
+	if _toxic_chat_box == null or not is_instance_valid(_toxic_chat_box):
+		return
+	if _toxic_chat_list == null or not is_instance_valid(_toxic_chat_list):
+		return
+	if _toxic_chat_entries.is_empty():
+		return
+	var max_rows_height := maxf(0.0, _toxic_chat_box.custom_minimum_size.y - float(TOXIC_CHAT_MARGIN_Y * 2))
+	var used_height := 0.0
+	var first_keep_index := 0
+	var needs_trim := false
+	for i in range(_toxic_chat_entries.size() - 1, -1, -1):
+		var row := _toxic_chat_entries[i] as RichTextLabel
+		if row == null or not is_instance_valid(row):
+			first_keep_index = i + 1
+			needs_trim = true
+			break
+		var row_height := maxf(row.custom_minimum_size.y, maxf(row.get_combined_minimum_size().y, row.size.y))
+		var required_height := row_height
+		if used_height > 0.0:
+			required_height += float(TOXIC_CHAT_ROW_SEPARATION)
+		if used_height + required_height > max_rows_height:
+			first_keep_index = i + 1
+			needs_trim = true
+			break
+		used_height += required_height
+	if not needs_trim or first_keep_index <= 0:
+		return
+	for i in range(first_keep_index):
+		var old_row = _toxic_chat_entries[i]
+		if old_row != null and is_instance_valid(old_row):
+			old_row.queue_free()
+	_toxic_chat_entries = _toxic_chat_entries.slice(first_keep_index, _toxic_chat_entries.size())
+
 func _ensure_toxic_chat_box() -> void:
 	if _toxic_bubble_layer == null or not is_instance_valid(_toxic_bubble_layer):
 		return
 	if _toxic_chat_box != null and is_instance_valid(_toxic_chat_box):
 		return
-	_toxic_chat_box = PanelContainer.new()
+	_toxic_chat_box = Panel.new()
 	_toxic_chat_box.name = "ToxicChatBox"
 	_toxic_chat_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toxic_chat_box.custom_minimum_size = Vector2(232.0, 102.0)
+	_toxic_chat_box.top_level = true
+	_toxic_chat_box.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_toxic_chat_box.custom_minimum_size = TOXIC_CHAT_BOX_SIZE
 	_toxic_chat_box.size = _toxic_chat_box.custom_minimum_size
+	_toxic_chat_box.scale = Vector2.ONE
+	_toxic_chat_box.clip_contents = true
+	_toxic_chat_position_locked = false
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.05, 0.07, 0.14, 0.50)
-	sb.border_width_left = 2
-	sb.border_width_top = 2
-	sb.border_width_right = 2
-	sb.border_width_bottom = 2
-	sb.border_color = Color(0.22, 0.88, 0.94, 0.54)
+	sb.border_width_left = 0
+	sb.border_width_top = 0
+	sb.border_width_right = 0
+	sb.border_width_bottom = 0
+	sb.border_color = Color(0.0, 0.0, 0.0, 0.0)
 	sb.corner_radius_top_left = 0
 	sb.corner_radius_top_right = 0
 	sb.corner_radius_bottom_left = 0
@@ -2507,18 +2622,20 @@ func _ensure_toxic_chat_box() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 6)
-	margin.add_theme_constant_override("margin_right", 6)
-	margin.add_theme_constant_override("margin_top", 5)
-	margin.add_theme_constant_override("margin_bottom", 5)
+	margin.clip_contents = true
+	margin.add_theme_constant_override("margin_left", TOXIC_CHAT_MARGIN_X)
+	margin.add_theme_constant_override("margin_right", TOXIC_CHAT_MARGIN_X)
+	margin.add_theme_constant_override("margin_top", TOXIC_CHAT_MARGIN_Y)
+	margin.add_theme_constant_override("margin_bottom", TOXIC_CHAT_MARGIN_Y)
 	_toxic_chat_box.add_child(margin)
 
 	_toxic_chat_list = VBoxContainer.new()
 	_toxic_chat_list.name = "Messages"
 	_toxic_chat_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_toxic_chat_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_toxic_chat_list.clip_contents = true
 	_toxic_chat_list.alignment = BoxContainer.ALIGNMENT_END
-	_toxic_chat_list.add_theme_constant_override("separation", 1)
+	_toxic_chat_list.add_theme_constant_override("separation", TOXIC_CHAT_ROW_SEPARATION)
 	margin.add_child(_toxic_chat_list)
 	_layout_toxic_chat_stack()
 

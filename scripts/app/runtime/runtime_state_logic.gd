@@ -168,13 +168,7 @@ func _update_score_labels() -> void:
 		var mode_label := "CTF" if _ctf_objective_enabled() else "TDTH"
 		if kd_label != null:
 			kd_label.text = ctf_match_controller.hud_score_text_for_mode(mode_label)
-		if scoreboard_label != null:
-			scoreboard_label.text = ctf_match_controller.scoreboard_table_text(
-				player_stats,
-				player_display_names,
-				_ctf_objective_enabled(),
-				mode_label
-			)
+		ui_controller.update_scoreboard_label(player_stats, player_display_names)
 	else:
 		ui_controller.update_kd_label(local_peer_id, player_stats)
 		ui_controller.update_scoreboard_label(player_stats, player_display_names)

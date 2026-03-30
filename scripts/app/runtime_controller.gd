@@ -21,6 +21,10 @@ var _rt_gameplay_locked_until_msec := 0
 var _rt_skull_match_intro_sent := false
 var _rt_battle_royale_zone_sync_accumulator := 0.0
 var _rt_battle_royale_zone_damage_accumulator := 0.0
+var _rt_particles_enabled := true
+var _rt_screen_shake_enabled := true
+var _rt_particles_listener_bound := false
+var _rt_ping_visible := true
 
 const RPC_ROOT_NODE_NAME := "GameRoot"
 
@@ -52,8 +56,12 @@ func _ready() -> void:
 	_init_scene_map_context()
 	_refresh_spawn_points()
 	_configure_services()
+	_apply_particles_pref_from_menu_state()
+	_apply_screen_shake_pref_from_menu_state()
 	_connect_local_signals()
 	_setup_ui_defaults()
+	if ui_controller != null and ui_controller.has_method("set_ping_visible"):
+		ui_controller.call("set_ping_visible", _rt_ping_visible)
 	_ensure_skill_hud()
 	_ensure_minimap_hud()
 	_configure_skull_intro_controller()
@@ -179,6 +187,21 @@ func _ensure_rpc_root_node_name() -> void:
 	print("[RPC ROOT] Renamed scene root %s -> %s (self_path=%s root_children=%s)" % [before, name, str(get_path()), str(child_names)])
 
 func _physics_process(delta: float) -> void:
+	var tab_scoreboard_active := Input.is_action_pressed("show_scoreboard") \
+		or Input.is_key_pressed(KEY_TAB) \
+		or Input.is_physical_key_pressed(KEY_TAB)
+	if scoreboard_visible != tab_scoreboard_active:
+		scoreboard_visible = tab_scoreboard_active
+		if scoreboard_visible:
+			_update_score_labels()
+		_update_ui_visibility()
+	if Input.is_action_just_pressed("toggle_ping"):
+		_rt_ping_visible = not _rt_ping_visible
+		if ui_controller != null and ui_controller.has_method("set_ping_visible"):
+			ui_controller.call("set_ping_visible", _rt_ping_visible)
+		if ui_controller != null and ui_controller.has_method("refresh_ping_visibility"):
+			ui_controller.call("refresh_ping_visibility", _is_local_player_spawned(), role == Role.SERVER, role == Role.CLIENT)
+
 	if _allows_scene_network_bootstrap():
 		session_controller.client_connect_watchdog_tick(delta)
 
@@ -204,10 +227,10 @@ func _physics_process(delta: float) -> void:
 	if ctf_match_controller != null:
 		ctf_match_controller.visual_tick(_ctf_objective_enabled())
 
-	if multiplayer.multiplayer_peer != null:
+	if multiplayer.multiplayer_peer != null and (role == Role.CLIENT or (role == Role.SERVER and not OS.has_feature("dedicated_server"))):
 		if _rt_skull_intro != null and _rt_skull_intro.has_method("is_active") and _rt_skull_intro.call("is_active") == true:
 			_rt_skull_intro.call("visual_tick", delta)
-		else:
+		elif client_input_controller != null:
 			client_input_controller.follow_local_player_camera(delta)
 
 func _ensure_skill_hud() -> void:
@@ -255,6 +278,7 @@ func _ensure_minimap_hud() -> void:
 			get_world_2d(),
 			Callable(self, "_minimap_focus_position"),
 			Callable(self, "_play_bounds_rect"),
+			Callable(self, "_minimap_camera_limits_rect"),
 			Callable(self, "_minimap_marker_payload")
 		)
 
@@ -282,12 +306,42 @@ func _minimap_marker_payload() -> Array:
 			relation = "self"
 		elif _ctf_enabled() and local_peer_id > 0 and _team_for_peer(peer_id) == local_team:
 			relation = "ally"
+		if relation == "enemy" and not _is_world_position_visible_in_main_camera(player.global_position):
+			continue
 		out.append({
 			"peer_id": peer_id,
 			"world_position": player.global_position,
 			"relation": relation
 		})
 	return out
+
+func _minimap_camera_limits_rect() -> Rect2i:
+	if main_camera == null:
+		return _play_bounds_rect()
+	var left := int(main_camera.limit_left)
+	var top := int(main_camera.limit_top)
+	var right := int(main_camera.limit_right)
+	var bottom := int(main_camera.limit_bottom)
+	if right <= left or bottom <= top:
+		return _play_bounds_rect()
+	return Rect2i(left, top, right - left, bottom - top)
+
+func _is_world_position_visible_in_main_camera(world_position: Vector2) -> bool:
+	if main_camera == null:
+		return true
+	var viewport := main_camera.get_viewport()
+	if viewport == null:
+		return true
+	var viewport_size := viewport.get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return true
+	var safe_zoom := Vector2(maxf(main_camera.zoom.x, 0.0001), maxf(main_camera.zoom.y, 0.0001))
+	var half_extents := Vector2(
+		viewport_size.x * 0.5 * safe_zoom.x,
+		viewport_size.y * 0.5 * safe_zoom.y
+	)
+	var camera_rect := Rect2(main_camera.global_position - half_extents, half_extents * 2.0).grow(6.0)
+	return camera_rect.has_point(world_position)
 
 func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	if ui_controller == null:
@@ -304,7 +358,11 @@ func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	if _rt_skill_hud != null:
 		_rt_skill_hud.visible = role == Role.CLIENT and _is_local_player_spawned()
 		_rt_skill_hud.set_character_id(_warrior_id_for_peer(local_peer_id))
-		if local_player != null and local_player.has_method("get_torso_dominant_color"):
+		if local_player != null and local_player.has_method("get_main_torso_ui_color"):
+			var torso_color_value: Variant = local_player.call("get_main_torso_ui_color")
+			if torso_color_value is Color:
+				_rt_skill_hud.set_tint(torso_color_value as Color)
+		elif local_player != null and local_player.has_method("get_torso_dominant_color"):
 			var torso_color_value: Variant = local_player.call("get_torso_dominant_color")
 			if torso_color_value is Color:
 				_rt_skill_hud.set_tint(torso_color_value as Color)
@@ -325,11 +383,10 @@ func _input(event: InputEvent) -> void:
 			_toggle_fullscreen()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_E:
 			_try_cast_skill2()
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_T:
+			_try_debug_fill_skill2_charge()
 		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_R:
 			_try_reload()
-		elif key_event.keycode == KEY_TAB:
-			scoreboard_visible = key_event.pressed
-			_update_ui_visibility()
 
 func _try_cast_skill1() -> void:
 	return
@@ -353,6 +410,21 @@ func _try_cast_skill2() -> void:
 		combat_flow_service.server_cast_skill(2, local_peer_id, target_world)
 		return
 	_rpc_cast_skill2.rpc_id(1, target_world)
+
+func _try_debug_fill_skill2_charge() -> void:
+	if role != Role.CLIENT and role != Role.SERVER:
+		return
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if combat_flow_service == null:
+		return
+	var local_peer_id := multiplayer.get_unique_id()
+	if local_peer_id <= 0:
+		return
+	if role == Role.SERVER:
+		combat_flow_service.server_fill_skill_charge_for_peer(local_peer_id, 2)
+		return
+	_rpc_debug_fill_skill2_charge.rpc_id(1)
 
 func _try_reload() -> void:
 	if _is_gameplay_locked():
@@ -553,8 +625,6 @@ func _maybe_server_begin_skull_match_intro() -> void:
 		return
 	if _rt_skull_match_intro_sent:
 		return
-	if not _is_skull_intro_match_scene():
-		return
 	var lobby_id := _active_match_lobby_id()
 	if lobby_id <= 0:
 		return
@@ -589,8 +659,6 @@ func _maybe_server_begin_skull_match_intro() -> void:
 @rpc("authority", "reliable")
 func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:
-		return
-	if not _is_skull_intro_match_scene():
 		return
 	_activate_gameplay_lock(_duration_sec)
 	if _rt_skull_intro != null and _rt_skull_intro.has_method("start") and multiplayer != null:
@@ -691,6 +759,94 @@ func _load_music_volume_linear_from_menu_state() -> float:
 		return 0.8
 	var state: Dictionary = parsed as Dictionary
 	return clampf(float(state.get("music_volume", 0.8)), 0.0, 1.0)
+
+func _load_particles_enabled_from_menu_state() -> bool:
+	if not FileAccess.file_exists(MENU_STATE_PATH):
+		return true
+	var raw := FileAccess.get_file_as_string(MENU_STATE_PATH)
+	if raw.is_empty():
+		return true
+	var parsed: Variant = JSON.parse_string(raw)
+	if not (parsed is Dictionary):
+		return true
+	var state: Dictionary = parsed as Dictionary
+	return bool(state.get("particles_enabled", true))
+
+func _load_screen_shake_enabled_from_menu_state() -> bool:
+	if not FileAccess.file_exists(MENU_STATE_PATH):
+		return true
+	var raw := FileAccess.get_file_as_string(MENU_STATE_PATH)
+	if raw.is_empty():
+		return true
+	var parsed: Variant = JSON.parse_string(raw)
+	if not (parsed is Dictionary):
+		return true
+	var state: Dictionary = parsed as Dictionary
+	return bool(state.get("screen_shake_enabled", true))
+
+func _apply_particles_pref_from_menu_state() -> void:
+	_rt_particles_enabled = _load_particles_enabled_from_menu_state()
+	ProjectSettings.set_setting("kw/particles_enabled", _rt_particles_enabled)
+	if combat_effects != null and combat_effects.has_method("set_particles_enabled"):
+		combat_effects.call("set_particles_enabled", _rt_particles_enabled)
+	_bind_particles_policy_listener()
+	_apply_particles_policy_recursive(self)
+	var tree := get_tree()
+	if tree != null and tree.current_scene != null and tree.current_scene != self:
+		_apply_particles_policy_recursive(tree.current_scene)
+
+func _apply_screen_shake_pref_from_menu_state() -> void:
+	_rt_screen_shake_enabled = _load_screen_shake_enabled_from_menu_state()
+	ProjectSettings.set_setting("kw/screen_shake_enabled", _rt_screen_shake_enabled)
+	if camera_shake != null and camera_shake.has_method("set_enabled"):
+		camera_shake.call("set_enabled", _rt_screen_shake_enabled)
+
+func _bind_particles_policy_listener() -> void:
+	if _rt_particles_listener_bound:
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
+	var added_cb := Callable(self, "_on_runtime_node_added_for_particles")
+	if not tree.node_added.is_connected(added_cb):
+		tree.node_added.connect(added_cb)
+	_rt_particles_listener_bound = true
+
+func _on_runtime_node_added_for_particles(node: Node) -> void:
+	if node == null:
+		return
+	_apply_particles_policy_recursive(node)
+
+func _apply_particles_policy_recursive(root_node: Node) -> void:
+	if root_node == null:
+		return
+	_apply_particles_policy_to_node(root_node)
+	for child in root_node.get_children():
+		var child_node := child as Node
+		if child_node != null:
+			_apply_particles_policy_recursive(child_node)
+
+func _apply_particles_policy_to_node(node: Node) -> void:
+	if node is CPUParticles2D:
+		var cpu := node as CPUParticles2D
+		if _rt_particles_enabled:
+			if cpu.has_meta("kw_saved_emitting"):
+				cpu.emitting = bool(cpu.get_meta("kw_saved_emitting"))
+				cpu.remove_meta("kw_saved_emitting")
+		else:
+			if not cpu.has_meta("kw_saved_emitting"):
+				cpu.set_meta("kw_saved_emitting", cpu.emitting)
+			cpu.emitting = false
+	elif node is GPUParticles2D:
+		var gpu := node as GPUParticles2D
+		if _rt_particles_enabled:
+			if gpu.has_meta("kw_saved_emitting"):
+				gpu.emitting = bool(gpu.get_meta("kw_saved_emitting"))
+				gpu.remove_meta("kw_saved_emitting")
+		else:
+			if not gpu.has_meta("kw_saved_emitting"):
+				gpu.set_meta("kw_saved_emitting", gpu.emitting)
+			gpu.emitting = false
 
 func _music_db_from_linear(value: float, base_db: float = 0.0) -> float:
 	var clamped: float = clampf(value, 0.0, 1.0)

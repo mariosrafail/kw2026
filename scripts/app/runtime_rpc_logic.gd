@@ -1,5 +1,7 @@
 ﻿extends "res://scripts/app/runtime_setup_logic.gd"
 
+const LOBBY_CHAT_HISTORY_LIMIT := 60
+
 func _rpc_request_spawn() -> void:
 	if not multiplayer.is_server():
 		return
@@ -107,6 +109,21 @@ func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
 	if victim.is_empty():
 		victim = "Unknown"
 	ui_controller.push_kill_feed(attacker, victim)
+
+func _push_ultimate_notification(caster_peer_id: int, fallback_warrior_id: String) -> void:
+	if ui_controller == null:
+		return
+	var username := str(player_display_names.get(caster_peer_id, "")).strip_edges()
+	if username.is_empty() and lobby_service != null and lobby_service.has_method("get_peer_display_name"):
+		username = str(lobby_service.call("get_peer_display_name", caster_peer_id, "")).strip_edges()
+	if username.is_empty():
+		var warrior_id := _warrior_id_for_peer(caster_peer_id).strip_edges().to_lower()
+		if warrior_id.is_empty():
+			warrior_id = fallback_warrior_id.strip_edges().to_lower()
+		username = warrior_id if not warrior_id.is_empty() else "player"
+	var message := "%s used his ultimate" % username
+	if ui_controller.has_method("push_combat_notification"):
+		ui_controller.call("push_combat_notification", message)
 
 func _rpc_submit_input(_axis: float, _jump_pressed: bool, _jump_held: bool, _aim_world: Vector2, _shoot_held: bool, _boost_damage: bool, _reported_rtt_ms: int) -> void:
 	if not multiplayer.is_server():
@@ -312,10 +329,17 @@ func _rpc_sync_player_display_name(_peer_id: int, _display_name: String) -> void
 		player.call("set_display_name", trimmed)
 	_update_score_labels()
 
-func _rpc_play_death_sfx(_impact_position: Vector2) -> void:
+func _rpc_play_death_sfx(_target_or_impact: Variant, _impact_position: Vector2 = Vector2.ZERO, _incoming_velocity: Vector2 = Vector2.ZERO) -> void:
 	if multiplayer.is_server():
 		return
-	client_rpc_flow_service.rpc_play_death_sfx(_impact_position)
+	var resolved_target_peer_id := 0
+	var resolved_impact_position := _impact_position
+	if _target_or_impact is Vector2:
+		# Backward compatibility: older peers may send only impact_position.
+		resolved_impact_position = _target_or_impact as Vector2
+	else:
+		resolved_target_peer_id = int(_target_or_impact)
+	client_rpc_flow_service.rpc_play_death_sfx(resolved_target_peer_id, resolved_impact_position, _incoming_velocity)
 
 func _rpc_request_lobby_list() -> void:
 	if not multiplayer.is_server():
@@ -387,6 +411,21 @@ func _rpc_lobby_join(_lobby_id: int, _weapon_id: String, _character_id: String =
 		lobby_service.set_peer_weapon(peer_id, _normalize_weapon_id(_weapon_id))
 		lobby_service.set_peer_character(peer_id, normalized_character_id)
 	lobby_flow_controller.server_join_lobby(peer_id, _lobby_id)
+	var joined_lobby_id := _peer_lobby(peer_id)
+	if joined_lobby_id > 0 and lobby_service != null and lobby_service.has_method("get_lobby_chat_history"):
+		var history := lobby_service.call("get_lobby_chat_history", joined_lobby_id) as Array
+		for row_value in history:
+			if not (row_value is Dictionary):
+				continue
+			var row := row_value as Dictionary
+			var sender_peer_id := int(row.get("peer_id", 0))
+			var sender_name := str(row.get("display_name", "Player")).strip_edges()
+			var sender_message := str(row.get("message", "")).strip_edges()
+			if sender_name.is_empty():
+				sender_name = "Player"
+			if sender_message.is_empty():
+				continue
+			_rpc_lobby_chat_message.rpc_id(peer_id, joined_lobby_id, sender_peer_id, sender_name, sender_message)
 	if not _uses_lobby_scene_flow() and lobby_service != null:
 		var active_lobby_id := _peer_lobby(peer_id)
 		if active_lobby_id > 0:
@@ -551,6 +590,35 @@ func _rpc_lobby_set_display_name(_display_name: String) -> void:
 		if member_id <= 0:
 			continue
 		_rpc_sync_player_display_name.rpc_id(member_id, peer_id, trimmed)
+
+func _rpc_lobby_chat_send(_message: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id <= 0:
+		return
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_id <= 0:
+		return
+	var trimmed := str(_message).strip_edges()
+	if trimmed.is_empty():
+		return
+	if trimmed.length() > 140:
+		trimmed = trimmed.substr(0, 140)
+	var display_name := "P%d" % peer_id
+	if lobby_service != null:
+		display_name = lobby_service.get_peer_display_name(peer_id, display_name)
+		lobby_service.append_lobby_chat_message(lobby_id, peer_id, display_name, trimmed, LOBBY_CHAT_HISTORY_LIMIT)
+	var recipients := _lobby_members(lobby_id)
+	for member_value in recipients:
+		var member_id := int(member_value)
+		if member_id <= 0:
+			continue
+		_rpc_lobby_chat_message.rpc_id(member_id, lobby_id, peer_id, display_name, trimmed)
+
+func _rpc_lobby_chat_message(_lobby_id: int, _peer_id: int, _display_name: String, _message: String) -> void:
+	# Lobby chat is handled by the main-menu lobby bridge; ignore in runtime scenes.
+	pass
 
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:
@@ -723,6 +791,14 @@ func _rpc_cast_skill2(_target_world: Vector2) -> void:
 	var caster_peer_id := multiplayer.get_remote_sender_id()
 	combat_flow_service.server_cast_skill(2, caster_peer_id, _target_world)
 
+func _rpc_debug_fill_skill2_charge() -> void:
+	if not multiplayer.is_server():
+		return
+	var caster_peer_id := multiplayer.get_remote_sender_id()
+	if combat_flow_service == null:
+		return
+	combat_flow_service.server_fill_skill_charge_for_peer(caster_peer_id, 2)
+
 func _rpc_spawn_outrage_bomb(_caster_peer_id: int, _world_position: Vector2, _fuse_sec: float) -> void:
 	if multiplayer.is_server():
 		return
@@ -734,6 +810,7 @@ func _rpc_spawn_outrage_boost(_caster_peer_id: int, _duration_sec: float) -> voi
 		return
 	# Delegate to new warrior system (Outrage skill 2 = Damage Boost)
 	combat_flow_service.client_receive_skill_cast(2, _caster_peer_id, Vector2(_duration_sec, 0.0))
+	_push_ultimate_notification(_caster_peer_id, CHARACTER_ID_OUTRAGE)
 
 func _rpc_spawn_erebus_immunity(_caster_peer_id: int, _duration_sec: float) -> void:
 	if multiplayer.is_server():
@@ -746,6 +823,7 @@ func _rpc_spawn_erebus_shield(_caster_peer_id: int, _duration_sec: float) -> voi
 		return
 	# Delegate to new warrior system (Erebus skill 2 = Shield)
 	combat_flow_service.client_receive_skill_cast(2, _caster_peer_id, Vector2.ZERO)
+	_push_ultimate_notification(_caster_peer_id, CHARACTER_ID_EREBUS)
 
 func _rpc_spawn_tasko_invis_field(_caster_peer_id: int, _world_position: Vector2) -> void:
 	if multiplayer.is_server():
@@ -756,3 +834,4 @@ func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> vo
 	if multiplayer.is_server():
 		return
 	combat_flow_service.client_receive_skill_cast(2, _caster_peer_id, _world_position)
+	_push_ultimate_notification(_caster_peer_id, CHARACTER_ID_TASKO)

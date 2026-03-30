@@ -86,9 +86,11 @@ var preferred_target_peer_id := 0
 var current_vantage_position := Vector2.ZERO
 var bot_role: BotRole = BotRole.ENEMY
 var ally_peer_id: int = 0
+var think_rate_hz := 18.0
 var _stuck_check_timer := 0.0
 var _stuck_last_position := Vector2.ZERO
 var _stuck_climb_cooldown := 0.0
+var _think_accumulator := 0.0
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -105,6 +107,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	spawn_point_index = maxi(0, int(config.get("spawn_point_index", 1)))
 	bot_role = int(config.get("bot_role", BotRole.ENEMY)) as BotRole
 	ally_peer_id = int(config.get("ally_peer_id", 0))
+	think_rate_hz = maxf(1.0, float(config.get("think_rate_hz", think_rate_hz)))
 
 	_get_world_2d_cb = callbacks.get("get_world_2d", Callable()) as Callable
 	_random_spawn_position_cb = callbacks.get("random_spawn_position", Callable()) as Callable
@@ -139,6 +142,7 @@ func reset() -> void:
 	_stuck_check_timer = 0.0
 	_stuck_last_position = Vector2.ZERO
 	_stuck_climb_cooldown = 0.0
+	_think_accumulator = 0.0
 	if pathfinder != null:
 		pathfinder.invalidate()
 
@@ -254,8 +258,14 @@ func tick(delta: float) -> void:
 		return
 	if bot.get_health() <= 0:
 		return
-	jump_hold_remaining = maxf(0.0, jump_hold_remaining - delta)
-	last_seen_memory_remaining = maxf(0.0, last_seen_memory_remaining - delta)
+	_think_accumulator += delta
+	var think_interval := 1.0 / maxf(1.0, think_rate_hz)
+	if _think_accumulator < think_interval:
+		return
+	var think_delta := _think_accumulator
+	_think_accumulator = 0.0
+	jump_hold_remaining = maxf(0.0, jump_hold_remaining - think_delta)
+	last_seen_memory_remaining = maxf(0.0, last_seen_memory_remaining - think_delta)
 	var movement_goal := _movement_goal()
 	var pursuing_goal := movement_goal != Vector2.ZERO
 	var target := _nearest_target(bot)
@@ -396,8 +406,8 @@ func tick(delta: float) -> void:
 		jump_hold_remaining = _jump_hold_duration(bot, target, wall_ahead, climb_pursuit, wall_ledge_target != Vector2.ZERO or step_up_target != Vector2.ZERO)
 	# Stuck detection: if the bot hasn't progressed toward a target above it for
 	# STUCK_CHECK_INTERVAL seconds, force a max-height jump to break free.
-	_stuck_climb_cooldown = maxf(0.0, _stuck_climb_cooldown - delta)
-	_stuck_check_timer += delta
+	_stuck_climb_cooldown = maxf(0.0, _stuck_climb_cooldown - think_delta)
+	_stuck_check_timer += think_delta
 	if _stuck_check_timer >= STUCK_CHECK_INTERVAL:
 		var moved := bot.global_position.distance_to(_stuck_last_position)
 		if moved < STUCK_DISTANCE_THRESHOLD and search_target != Vector2.ZERO and _stuck_climb_cooldown <= 0.0:
