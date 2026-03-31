@@ -8,6 +8,7 @@ const GRAVITY := 1450.0
 const FALL_GRAVITY_MULTIPLIER := 1.35
 const MAX_FALL_SPEED := 1300.0
 const JUMP_RELEASE_DAMP := 0.55
+const EXTERNAL_HOLD_INPUT_SUPPRESS_EXTENSION := 0.12
 const COYOTE_TIME := 0.16
 const JUMP_BUFFER_TIME := 0.1
 const GROUND_ACCEL := 3200.0
@@ -26,6 +27,8 @@ const PLAYER_MAX_SLIDES := 8
 var _player: CharacterBody2D
 var coyote_time_left := 0.0
 var jump_buffer_time_left := 0.0
+var external_jump_hold_time_left := 0.0
+var external_jump_hold_input_suppress_time_left := 0.0
 
 func configure(player: CharacterBody2D) -> void:
 	_player = player
@@ -34,6 +37,16 @@ func configure(player: CharacterBody2D) -> void:
 func reset_jump_state() -> void:
 	coyote_time_left = 0.0
 	jump_buffer_time_left = 0.0
+	external_jump_hold_time_left = 0.0
+	external_jump_hold_input_suppress_time_left = 0.0
+
+func set_external_jump_hold(duration_sec: float) -> void:
+	var normalized_duration := maxf(0.0, duration_sec)
+	external_jump_hold_time_left = maxf(external_jump_hold_time_left, normalized_duration)
+	external_jump_hold_input_suppress_time_left = maxf(
+		external_jump_hold_input_suppress_time_left,
+		normalized_duration + EXTERNAL_HOLD_INPUT_SUPPRESS_EXTENSION
+	)
 
 func configure_floor_movement() -> void:
 	if _player == null:
@@ -43,6 +56,14 @@ func configure_floor_movement() -> void:
 func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_held: bool) -> void:
 	if _player == null:
 		return
+	if external_jump_hold_time_left > 0.0:
+		external_jump_hold_time_left = maxf(external_jump_hold_time_left - delta, 0.0)
+	if external_jump_hold_input_suppress_time_left > 0.0:
+		external_jump_hold_input_suppress_time_left = maxf(external_jump_hold_input_suppress_time_left - delta, 0.0)
+	var input_jump_held := jump_held
+	if external_jump_hold_input_suppress_time_left > 0.0 and _player.velocity.y < 0.0:
+		input_jump_held = false
+	var effective_jump_held := input_jump_held or external_jump_hold_time_left > 0.0
 	axis = clamp(axis, -1.0, 1.0)
 	var on_floor := _player.is_on_floor()
 	var jumped_this_frame := false
@@ -87,7 +108,7 @@ func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_
 		jump_buffer_time_left = 0.0
 		jumped_this_frame = true
 
-	if not jumped_this_frame and not jump_held and _player.velocity.y < 0.0:
+	if not jumped_this_frame and not effective_jump_held and _player.velocity.y < 0.0:
 		_player.velocity.y *= JUMP_RELEASE_DAMP
 
 	_try_step_up(delta, axis, on_floor, jumped_this_frame)

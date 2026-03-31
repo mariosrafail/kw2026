@@ -121,6 +121,7 @@ func _server_register_kill_death(attacker_peer_id: int, target_peer_id: int) -> 
 	player_replication.server_register_kill_death(attacker_peer_id, target_peer_id)
 	if combat_flow_service != null and _should_award_skill_charge_for_kill(attacker_peer_id, target_peer_id):
 		combat_flow_service.server_register_skill_charge_kill(attacker_peer_id)
+	_server_handle_skull_kill_event(attacker_peer_id, target_peer_id)
 	_update_score_labels()
 
 func _should_award_skill_charge_for_kill(attacker_peer_id: int, target_peer_id: int) -> bool:
@@ -162,3 +163,6 @@ func _warrior_id_for_peer(_peer_id: int) -> String:
 
 func _get_world_2d_ref() -> World2D:
 	return null
+
+func _server_handle_skull_kill_event(_attacker_peer_id: int, _target_peer_id: int) -> void:
+	pass

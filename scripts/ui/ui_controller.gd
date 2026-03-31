@@ -194,6 +194,33 @@ func update_scoreboard_label(player_stats: Dictionary, player_display_names: Dic
 		_scoreboard_row_cell(str(deaths), false)
 		_scoreboard_row_cell(ratio_text, false)
 
+func update_scoreboard_round_wins(round_wins_by_peer: Dictionary, player_display_names: Dictionary) -> void:
+	if _scoreboard_grid == null or not is_instance_valid(_scoreboard_grid):
+		_ensure_scoreboard_ui()
+	if _scoreboard_grid == null or not is_instance_valid(_scoreboard_grid):
+		return
+	var peer_ids := round_wins_by_peer.keys()
+	peer_ids.sort_custom(func(a, b) -> bool:
+		return _display_order_for_peer(int(a), player_display_names) < _display_order_for_peer(int(b), player_display_names)
+	)
+	for child in _scoreboard_grid.get_children():
+		child.queue_free()
+	_scoreboard_header_cell("PLAYER", true)
+	_scoreboard_header_cell("RW", false)
+	_scoreboard_header_cell("-", false)
+	_scoreboard_header_cell("-", false)
+	if _scoreboard_empty != null:
+		_scoreboard_empty.visible = peer_ids.is_empty()
+	if peer_ids.is_empty():
+		return
+	for peer_id_value in peer_ids:
+		var peer_id := int(peer_id_value)
+		var wins := int(round_wins_by_peer.get(peer_id, 0))
+		_scoreboard_row_cell(_display_name_for_peer(peer_id, player_display_names), true)
+		_scoreboard_row_cell(str(wins), false)
+		_scoreboard_row_cell("", false)
+		_scoreboard_row_cell("", false)
+
 func selected_lobby_id() -> int:
 	if lobby_list == null:
 		return 0
@@ -481,12 +508,12 @@ func _display_order_for_peer(peer_id: int, player_display_names: Dictionary) -> 
 
 func push_kill_feed(attacker_name: String, victim_name: String) -> void:
 	var text := "%s killed %s" % [attacker_name, victim_name]
-	_push_feed_entry(text)
+	_push_feed_entry(text, false)
 
 func push_combat_notification(text: String) -> void:
-	_push_feed_entry(text)
+	_push_feed_entry(text, true)
 
-func _push_feed_entry(raw_text: String) -> void:
+func _push_feed_entry(raw_text: String, highlight: bool = false) -> void:
 	_ensure_kill_feed_ui()
 	if _kill_feed_root == null or not is_instance_valid(_kill_feed_root):
 		return
@@ -503,7 +530,7 @@ func _push_feed_entry(raw_text: String) -> void:
 	panel.position.x = -34.0
 
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.0, 0.0, 0.0, 0.34)
+	style.bg_color = Color(0.24, 0.15, 0.02, 0.36) if highlight else Color(0.0, 0.0, 0.0, 0.34)
 	style.border_width_left = 0
 	style.border_width_top = 0
 	style.border_width_right = 0
@@ -521,7 +548,9 @@ func _push_feed_entry(raw_text: String) -> void:
 	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	label.add_theme_font_override("font", KILL_FEED_FONT)
 	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+	label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.15, 1.0) if highlight else Color(1.0, 1.0, 1.0, 1.0))
+	label.add_theme_color_override("font_outline_color", Color(0.18, 0.08, 0.02, 0.94) if highlight else Color(0.0, 0.0, 0.0, 0.88))
+	label.add_theme_constant_override("outline_size", 3 if highlight else 2)
 	label.text = text
 	label.offset_left = 11.0
 	label.offset_right = -7.0
@@ -543,7 +572,9 @@ func _push_feed_entry(raw_text: String) -> void:
 	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.tween_property(panel, "position:x", 0.0, 0.2)
 	tween.parallel().tween_property(panel, "modulate:a", 1.0, 0.18)
-	tween.parallel().tween_property(panel, "scale", Vector2(1.0, 1.0), 0.16)
+	tween.parallel().tween_property(panel, "scale", Vector2(1.05, 1.05) if highlight else Vector2(1.0, 1.0), 0.16)
+	if highlight:
+		tween.tween_property(panel, "scale", Vector2(1.0, 1.0), 0.22)
 	tween.tween_interval(_kill_feed_lifetime_sec)
 	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_property(panel, "modulate:a", 0.0, 0.2)

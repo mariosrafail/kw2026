@@ -2,9 +2,11 @@ extends RefCounted
 class_name SkullFfaMatchIntroController
 
 const PLAYER_FOCUS_OFFSET := Vector2(0.0, -28.0)
+const MAP_OVERVIEW_SECONDS := 2.0
+const OVERVIEW_TO_FOCUS_MOVE_SECONDS := 1.0
+const FOCUS_HOLD_SECONDS := 1.0
 const COUNTDOWN_SECONDS := 3.0
 const GO_SECONDS := 0.75
-const LOCAL_FOCUS_MOVE_SECONDS := 1.0
 const COUNTDOWN_FONT := preload("res://assets/fonts/kwfont.ttf")
 const COUNTDOWN_BASE_SIZE := Vector2(320.0, 180.0)
 const COUNTDOWN_POP_SCALE := 1.32
@@ -27,6 +29,9 @@ var _duration_sec := 13.0
 var _local_peer_id := 0
 var _tour_peer_ids: Array[int] = []
 var _last_countdown_cue := ""
+var _base_camera_zoom := Vector2.ONE
+var _map_overview_zoom := Vector2.ONE
+var _map_overview_center := Vector2.ZERO
 
 func configure(host: Node, main_camera: Camera2D, players: Dictionary) -> void:
 	_host = host
@@ -39,8 +44,9 @@ func is_active() -> bool:
 	return _active
 
 func recommended_duration_sec(participant_count: int) -> float:
-	var normalized_count := maxi(1, participant_count)
-	return float(normalized_count * 2 + 3) + GO_SECONDS
+	var _normalized_count := maxi(1, participant_count)
+	var tour_duration := MAP_OVERVIEW_SECONDS + OVERVIEW_TO_FOCUS_MOVE_SECONDS + FOCUS_HOLD_SECONDS
+	return tour_duration + COUNTDOWN_SECONDS + GO_SECONDS
 
 func start(participant_peer_ids: Array, local_peer_id: int, duration_sec: float = 13.0) -> void:
 	_ensure_countdown_label()
@@ -50,6 +56,12 @@ func start(participant_peer_ids: Array, local_peer_id: int, duration_sec: float 
 	_active = true
 	_tour_peer_ids.clear()
 	_last_countdown_cue = ""
+	if _main_camera != null:
+		_base_camera_zoom = _main_camera.zoom
+	else:
+		_base_camera_zoom = Vector2.ONE
+	_map_overview_center = _map_center_fallback()
+	_map_overview_zoom = _compute_map_overview_zoom()
 
 	var filtered_ids: Array[int] = []
 	for peer_value in participant_peer_ids:
@@ -61,17 +73,26 @@ func start(participant_peer_ids: Array, local_peer_id: int, duration_sec: float 
 		filtered_ids.append(_local_peer_id)
 	if filtered_ids.is_empty():
 		_active = false
+		_restore_camera_defaults()
 		_hide_countdown()
 		return
 
+	if _local_peer_id != 0 and filtered_ids.has(_local_peer_id):
+		_tour_peer_ids.append(_local_peer_id)
 	for peer_id in filtered_ids:
-		_tour_peer_ids.append(int(peer_id))
+		var normalized_peer_id := int(peer_id)
+		if normalized_peer_id == _local_peer_id:
+			continue
+		_tour_peer_ids.append(normalized_peer_id)
+	if _tour_peer_ids.is_empty() and _local_peer_id != 0:
+		_tour_peer_ids.append(_local_peer_id)
 	_duration_sec = maxf(recommended_duration_sec(_tour_peer_ids.size()), duration_sec)
 
 	_hide_countdown()
 
 func stop() -> void:
 	_active = false
+	_restore_camera_defaults()
 	_hide_countdown()
 
 func visual_tick(_delta: float) -> void:
@@ -80,46 +101,127 @@ func visual_tick(_delta: float) -> void:
 	_elapsed_sec += _delta
 	if _elapsed_sec >= _duration_sec:
 		_active = false
+		_restore_camera_defaults()
 		_hide_countdown()
 		return
 
 	_main_camera.global_position = _camera_position_for_elapsed(_elapsed_sec)
+	_main_camera.zoom = _camera_zoom_for_elapsed(_elapsed_sec)
 	_update_countdown(_elapsed_sec)
 
 func _camera_position_for_elapsed(elapsed_sec: float) -> Vector2:
-	var slot_positions: Array[Vector2] = []
 	var fallback := _main_camera.global_position if _main_camera != null else Vector2.ZERO
-	for peer_id in _tour_peer_ids:
-		var focus := _focus_position_for_peer(peer_id, fallback)
-		slot_positions.append(focus)
-		fallback = focus
 	var local_focus := _focus_position_for_peer(_local_peer_id, fallback)
 
-	if slot_positions.is_empty():
+	if elapsed_sec < MAP_OVERVIEW_SECONDS:
+		return _map_overview_center
+	var segment_elapsed := elapsed_sec - MAP_OVERVIEW_SECONDS
+	if segment_elapsed < OVERVIEW_TO_FOCUS_MOVE_SECONDS:
+		return _map_overview_center.lerp(local_focus, segment_elapsed / OVERVIEW_TO_FOCUS_MOVE_SECONDS)
+	segment_elapsed -= OVERVIEW_TO_FOCUS_MOVE_SECONDS
+	if segment_elapsed < FOCUS_HOLD_SECONDS:
 		return local_focus
-	var segment_start := 0.0
-	var current_focus := slot_positions[0]
-	if elapsed_sec < 1.0:
-		return current_focus
-	segment_start = 1.0
-	for index in range(1, slot_positions.size()):
-		var next_focus := slot_positions[index]
-		if elapsed_sec < segment_start + 1.0:
-			return current_focus.lerp(next_focus, elapsed_sec - segment_start)
-		segment_start += 1.0
-		if elapsed_sec < segment_start + 1.0:
-			return next_focus
-		segment_start += 1.0
-		current_focus = next_focus
-	if elapsed_sec < segment_start + LOCAL_FOCUS_MOVE_SECONDS:
-		return current_focus.lerp(local_focus, (elapsed_sec - segment_start) / LOCAL_FOCUS_MOVE_SECONDS)
+
+	# Player-to-player tour temporarily disabled by request.
+	#segment_elapsed -= FOCUS_HOLD_SECONDS
+	#for index in range(1, slot_positions.size()):
+	#	var next_focus := slot_positions[index]
+	#	if segment_elapsed < FOCUS_MOVE_SECONDS:
+	#		return current_focus.lerp(next_focus, segment_elapsed / FOCUS_MOVE_SECONDS)
+	#	segment_elapsed -= FOCUS_MOVE_SECONDS
+	#	if segment_elapsed < FOCUS_HOLD_SECONDS:
+	#		return next_focus
+	#	segment_elapsed -= FOCUS_HOLD_SECONDS
+	#	current_focus = next_focus
 	return local_focus
+
+func _camera_zoom_for_elapsed(elapsed_sec: float) -> Vector2:
+	if elapsed_sec < MAP_OVERVIEW_SECONDS:
+		return _map_overview_zoom
+	var transition_elapsed := elapsed_sec - MAP_OVERVIEW_SECONDS
+	if transition_elapsed < OVERVIEW_TO_FOCUS_MOVE_SECONDS:
+		var t := transition_elapsed / OVERVIEW_TO_FOCUS_MOVE_SECONDS
+		return _map_overview_zoom.lerp(_base_camera_zoom, t)
+	return _base_camera_zoom
 
 func _focus_position_for_peer(peer_id: int, fallback: Vector2) -> Vector2:
 	var player := _players.get(peer_id, null) as NetPlayer
 	if player == null:
 		return fallback
 	return player.global_position + PLAYER_FOCUS_OFFSET
+
+func _map_center_fallback() -> Vector2:
+	var play_bounds := _overview_bounds_rect()
+	if play_bounds.size.x <= 0 or play_bounds.size.y <= 0:
+		return _main_camera.global_position if _main_camera != null else Vector2.ZERO
+	return Vector2(
+		float(play_bounds.position.x) + float(play_bounds.size.x) * 0.5,
+		float(play_bounds.position.y) + float(play_bounds.size.y) * 0.5
+	)
+
+func _compute_map_overview_zoom() -> Vector2:
+	var fallback_zoom := _base_camera_zoom if _base_camera_zoom != Vector2.ZERO else Vector2.ONE
+	if _main_camera == null:
+		return fallback_zoom
+	var play_bounds := _overview_bounds_rect()
+	if play_bounds.size.x <= 0 or play_bounds.size.y <= 0:
+		return fallback_zoom
+	var viewport := _main_camera.get_viewport()
+	if viewport == null:
+		return fallback_zoom
+	var viewport_size := viewport.get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return fallback_zoom
+	# Camera2D semantics: smaller zoom values show more world (zoomed out),
+	# matching how MinimapCameraController uses DEFAULT_ZOOM=0.16.
+	var required_x := viewport_size.x / float(play_bounds.size.x)
+	var required_y := viewport_size.y / float(play_bounds.size.y)
+	var required_zoom := minf(required_x, required_y) * 0.92
+	required_zoom = clampf(required_zoom, 0.05, 8.0)
+	var base_zoom_min := minf(fallback_zoom.x, fallback_zoom.y)
+	var overview_zoom := minf(base_zoom_min, required_zoom)
+	return Vector2(overview_zoom, overview_zoom)
+
+func _overview_bounds_rect() -> Rect2i:
+	var play_bounds := _play_bounds_rect()
+	var limits_bounds := _camera_limits_rect()
+	if play_bounds.size.x <= 0 or play_bounds.size.y <= 0:
+		return limits_bounds
+	if limits_bounds.size.x <= 0 or limits_bounds.size.y <= 0:
+		return play_bounds
+	return Rect2i(
+		Vector2i(
+			mini(play_bounds.position.x, limits_bounds.position.x),
+			mini(play_bounds.position.y, limits_bounds.position.y)
+		),
+		Vector2i(
+			maxi(play_bounds.position.x + play_bounds.size.x, limits_bounds.position.x + limits_bounds.size.x) - mini(play_bounds.position.x, limits_bounds.position.x),
+			maxi(play_bounds.position.y + play_bounds.size.y, limits_bounds.position.y + limits_bounds.size.y) - mini(play_bounds.position.y, limits_bounds.position.y)
+		)
+	)
+
+func _play_bounds_rect() -> Rect2i:
+	if _host != null and _host.has_method("_play_bounds_rect"):
+		var play_bounds_value: Variant = _host.call("_play_bounds_rect")
+		if play_bounds_value is Rect2i:
+			return play_bounds_value as Rect2i
+	return Rect2i()
+
+func _camera_limits_rect() -> Rect2i:
+	if _main_camera == null:
+		return Rect2i()
+	var left := int(_main_camera.limit_left)
+	var top := int(_main_camera.limit_top)
+	var right := int(_main_camera.limit_right)
+	var bottom := int(_main_camera.limit_bottom)
+	if right <= left or bottom <= top:
+		return Rect2i()
+	return Rect2i(left, top, right - left, bottom - top)
+
+func _restore_camera_defaults() -> void:
+	if _main_camera == null:
+		return
+	_main_camera.zoom = _base_camera_zoom if _base_camera_zoom != Vector2.ZERO else Vector2.ONE
 
 func _update_countdown(elapsed_sec: float) -> void:
 	if _countdown_label == null:

@@ -20,6 +20,8 @@ const HEAD_GROUNDED_AIM_OFFSET_SCALE := 0.45
 const HEAD_GROUNDED_MAX_DRIFT := 7.5
 const HEAD_GROUNDED_IDLE_ROTATION_MAX := 0.26
 const HEAD_GROUNDED_WALK_ROTATION_MAX := 0.22
+const STAIR_DESCEND_BLEND_IN_SPEED := 24.0
+const STAIR_DESCEND_BLEND_OUT_SPEED := 12.0
 
 const PART_TEXTURE_PATHS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -60,6 +62,7 @@ var _leg_facing_sign := 1.0
 var _anim_time := 0.0
 var _air_blend := 0.0
 var _move_blend := 0.0
+var _stair_descend_blend := 0.0
 var _was_on_floor := true
 var _previous_horizontal_speed := 0.0
 var _pose_blend_speed := 16.0
@@ -130,7 +133,7 @@ func _apply_facing_to_sprite(sprite: Sprite2D, key: String, looking_left: bool) 
 	current_scale.x = -absf(current_scale.x) if looking_left else absf(current_scale.x)
 	sprite.scale = current_scale
 
-func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool) -> void:
+func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool, stair_descend_blend: float = 0.0) -> void:
 	_anim_time += delta
 	var previous_smoothed_velocity: Vector2 = _smoothed_velocity
 	var velocity_tracking: float = minf(1.0, delta * (16.0 if on_floor else 9.0))
@@ -156,6 +159,9 @@ func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool) -> v
 	_previous_horizontal_speed = horizontal_speed
 	_air_blend = 1.0 if not on_floor else move_toward(_air_blend, 0.0, delta * 14.0)
 	_move_blend = move_toward(_move_blend, 1.0 if grounded else 0.0, delta * (9.0 if grounded else 7.0))
+	var stair_target := clampf(stair_descend_blend, 0.0, 1.0)
+	var stair_speed := STAIR_DESCEND_BLEND_IN_SPEED if stair_target > _stair_descend_blend else STAIR_DESCEND_BLEND_OUT_SPEED
+	_stair_descend_blend = move_toward(_stair_descend_blend, stair_target, delta * stair_speed)
 	if grounded:
 		_walk_phase = wrapf(_walk_phase + delta * phase_speed, 0.0, TAU)
 	else:
@@ -169,6 +175,10 @@ func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool) -> v
 		_apply_air_pose(velocity, _air_blend)
 	elif idle_grounded:
 		_apply_idle_pose()
+		return
+
+	if _stair_descend_blend > 0.001:
+		_apply_stair_descend_pose(velocity, _stair_descend_blend)
 		return
 
 	if not grounded and not idle_grounded and _air_blend <= 0.001:
@@ -218,6 +228,42 @@ func _apply_air_pose(velocity: Vector2, blend: float) -> void:
 	_apply_air_leg(_legs_sprite_2, "leg2", -1.0, torso_lift, leg_tuck, forward_splay, back_splay, flutter)
 	_apply_air_torso(torso_lift, travel_tilt, vertical_ratio, flutter, blend)
 	_apply_air_head(head_lift, travel_tilt, vertical_ratio, flutter, blend)
+
+func _apply_stair_descend_pose(velocity: Vector2, blend: float) -> void:
+	var drift := clampf(velocity.x / 245.0, -1.0, 1.0)
+	var drop_ratio := clampf(maxf(0.0, velocity.y) / 260.0, 0.0, 1.0)
+	var lean := (0.22 + drop_ratio * 0.34) * blend
+	var leg_spread := (5.5 + drop_ratio * 4.0) * blend
+	var leg_drop := (2.0 + drop_ratio * 3.2) * blend
+	var torso_raise := (2.0 + drop_ratio * 4.0) * blend
+	var head_raise := (3.0 + drop_ratio * 5.0) * blend
+	var sway := sin(_anim_time * 8.0 + _goofy_seed * TAU) * 0.18 * blend
+
+	if _legs_sprite != null:
+		var leg1_base := _base_positions.get("leg1", _legs_sprite.position) as Vector2
+		_apply_pose(_legs_sprite, Vector2(
+			(leg1_base.x * _leg_facing_sign) - leg_spread * _leg_facing_sign,
+			leg1_base.y + leg_drop
+		) + _secondary_drag(0.0035, 0.003) + _shot_jolt(0.24), (-lean * 1.8 - drift * 0.08 + sway) * _leg_facing_sign + _secondary_tilt(0.05) + _shot_jolt_rot(0.45))
+	if _legs_sprite_2 != null:
+		var leg2_base := _base_positions.get("leg2", _legs_sprite_2.position) as Vector2
+		_apply_pose(_legs_sprite_2, Vector2(
+			(leg2_base.x * _leg_facing_sign) + leg_spread * _leg_facing_sign,
+			leg2_base.y + leg_drop * 0.86
+		) + _secondary_drag(0.0035, 0.003) + _shot_jolt(0.24), (-lean * 1.35 - drift * 0.06 - sway * 0.7) * _leg_facing_sign + _secondary_tilt(0.05) + _shot_jolt_rot(0.45))
+	if _torso_sprite != null:
+		var torso_base := _base_positions.get("torso", _torso_sprite.position) as Vector2
+		_apply_pose(_torso_sprite, Vector2(
+			(torso_base.x * _facing_sign) - drift * 2.0 * blend,
+			torso_base.y - torso_raise
+		) + _secondary_drag(0.008, 0.007) + _shot_jolt(0.78), (lean + drift * 0.09) * _facing_sign + _secondary_tilt(0.1) + _shot_jolt_rot(0.95))
+	if _head_sprite != null:
+		var head_base := _base_positions.get("head", _head_sprite.position) as Vector2
+		var head_anchor_x := _resolved_head_anchor_x(head_base.x)
+		_apply_pose(_head_sprite, Vector2(
+			_head_target_x(head_anchor_x, _head_aim_offset_x() * 0.3 - drift * 1.7 * blend, HEAD_GROUNDED_MAX_DRIFT + 1.0),
+			head_base.y - head_raise
+		) + _secondary_drag(0.01, 0.009) + _shot_jolt(1.0), (lean * 0.9 + drift * 0.08) * _facing_sign + _head_aim_rotation(0.24) + _secondary_tilt(0.08) + _shot_jolt_rot(1.0))
 
 func _apply_idle_pose() -> void:
 	var breath := sin(_anim_time * 2.3 + _goofy_seed * 3.4)

@@ -50,6 +50,11 @@ const DAMAGE_NUMBER_PEAK_SCALE := 1.28
 const DAMAGE_NUMBER_END_SCALE := 0.72
 const DAMAGE_NUMBER_RISE_DISTANCE := 38.0
 const ANIMATION_AIR_VELOCITY_THRESHOLD := 24.0
+const ANIMATION_FLOOR_GRACE_SEC := 0.09
+const JUMP_TAKEOFF_FORCE_AIR_SEC := 0.11
+const STAIR_DESCEND_MIN_FALL_SPEED := 28.0
+const STAIR_DESCEND_MAX_FALL_SPEED := 210.0
+const STAIR_DESCEND_MIN_HORIZONTAL_SPEED := 10.0
 const RESPAWN_DAMAGE_IMMUNITY_SEC := 0.3
 const EREBUS_IMMUNE_SIZE_SCALE := 1.2
 const EREBUS_IMMUNE_HITBOX_SCALE := 1.28
@@ -122,6 +127,7 @@ var damage_flash_part_materials: Array = []
 var damage_flash_source_materials: Dictionary = {}
 var outrage_boost_overlay_pairs: Array = []
 var target_animation_on_floor := true
+var target_respawn_hidden := false
 var damage_push_direction := Vector2.ZERO
 var target_damage_push_direction := Vector2.ZERO
 var damage_slow_remaining_sec := 0.0
@@ -163,6 +169,12 @@ var _skill_duration_bar_base_region: Rect2 = Rect2(0, 0, 61, 2)
 var _skill_duration_bar_base_scale: Vector2 = Vector2.ONE
 var _skill_duration_bar_base_modulate: Color = Color.WHITE
 var _skill_duration_bar_base_captured := false
+var _last_input_jump_held := false
+var _animation_floor_grace_remaining_sec := 0.0
+var _jump_takeoff_force_air_remaining_sec := 0.0
+var _respawn_collision_override_active := false
+var _respawn_saved_collision_layer := 0
+var _respawn_saved_collision_mask := 0
 
 func _ready() -> void:
 	_init_movement_component()
@@ -1230,8 +1242,27 @@ func set_forced_sfx_suppressed(reason: String, enabled: bool) -> void:
 	_refresh_forced_visibility_state()
 
 func _refresh_forced_visibility_state() -> void:
+	var forced_visible := forced_hidden_reasons.is_empty()
+	visible = forced_visible
 	if visual_root != null:
-		visual_root.visible = forced_hidden_reasons.is_empty()
+		visual_root.visible = forced_visible
+	var respawn_hidden := bool(forced_hidden_reasons.get("respawn_wait", false))
+	if body_collision_shape != null:
+		body_collision_shape.set_deferred("disabled", respawn_hidden)
+	if respawn_hidden:
+		if not _respawn_collision_override_active:
+			_respawn_saved_collision_layer = collision_layer
+			_respawn_saved_collision_mask = collision_mask
+			_respawn_collision_override_active = true
+		set_deferred("collision_layer", 0)
+		set_deferred("collision_mask", 0)
+	elif _respawn_collision_override_active:
+		set_deferred("collision_layer", _respawn_saved_collision_layer)
+		set_deferred("collision_mask", _respawn_saved_collision_mask)
+		_respawn_collision_override_active = false
+
+func is_respawn_hidden() -> bool:
+	return bool(forced_hidden_reasons.get("respawn_wait", false))
 
 func get_hit_radius() -> float:
 	if erebus_immune_visual_remaining_sec > 0.0:
@@ -1264,6 +1295,7 @@ func force_respawn(spawn_position: Vector2) -> void:
 	clear_erebus_immune_visual()
 	forced_hidden_reasons.clear()
 	forced_sfx_suppressed_reasons.clear()
+	target_respawn_hidden = false
 	_refresh_forced_visibility_state()
 	if movement_component != null:
 		movement_component.reset_jump_state()
@@ -1331,11 +1363,24 @@ func get_muzzle_world_position() -> Vector2:
 	return global_position
 
 func simulate_authoritative(delta: float, axis: float, jump_pressed: bool, jump_held: bool) -> void:
+	_last_input_jump_held = jump_held
+	var pre_jump_on_floor := is_on_floor()
+	var pre_jump_coyote_ready := movement_component != null and movement_component.coyote_time_left > 0.0
 	if movement_component != null:
 		movement_component.simulate_authoritative(delta, axis, jump_pressed, jump_held)
+	if jump_pressed and (pre_jump_on_floor or pre_jump_coyote_ready) and velocity.y < -ANIMATION_AIR_VELOCITY_THRESHOLD:
+		_jump_takeoff_force_air_remaining_sec = JUMP_TAKEOFF_FORCE_AIR_SEC
 	target_position = global_position
 	target_velocity = velocity
 	target_aim_angle = get_aim_angle()
+
+func apply_external_jump_hold(duration_sec: float) -> void:
+	if movement_component == null:
+		return
+	movement_component.set_external_jump_hold(duration_sec)
+
+func is_jump_input_held() -> bool:
+	return _last_input_jump_held
 
 func apply_snapshot(new_position: Vector2, new_velocity: Vector2, new_aim_angle: float, new_health: int, part_animation_state: Dictionary = {}) -> void:
 	target_position = new_position
@@ -1355,6 +1400,7 @@ func apply_snapshot(new_position: Vector2, new_velocity: Vector2, new_aim_angle:
 
 func set_part_animation_state(state: Dictionary) -> void:
 	target_animation_on_floor = bool(state.get("on_floor", target_animation_on_floor))
+	target_respawn_hidden = bool(state.get("respawn_hidden", target_respawn_hidden))
 	var push_direction_value: Variant = state.get("damage_push_direction", Vector2.ZERO)
 	if push_direction_value is Vector2:
 		target_damage_push_direction = push_direction_value as Vector2
@@ -1362,6 +1408,7 @@ func set_part_animation_state(state: Dictionary) -> void:
 func get_part_animation_state() -> Dictionary:
 	return {
 		"on_floor": is_on_floor(),
+		"respawn_hidden": bool(forced_hidden_reasons.get("respawn_wait", false)),
 		"damage_push_direction": damage_push_direction
 	}
 
@@ -1394,19 +1441,54 @@ func _physics_process(delta: float) -> void:
 		_update_ulti_duration_bar_visual()
 	if visual_root != null:
 		_tick_visual_correction(delta)
+	if _jump_takeoff_force_air_remaining_sec > 0.0:
+		_jump_takeoff_force_air_remaining_sec = maxf(0.0, _jump_takeoff_force_air_remaining_sec - delta)
+	var floor_contact := is_on_floor()
+	if floor_contact:
+		_animation_floor_grace_remaining_sec = ANIMATION_FLOOR_GRACE_SEC
+	elif _animation_floor_grace_remaining_sec > 0.0:
+		_animation_floor_grace_remaining_sec = maxf(0.0, _animation_floor_grace_remaining_sec - delta)
+	var local_animation_floor := floor_contact or _animation_floor_grace_remaining_sec > 0.0
+	if _jump_takeoff_force_air_remaining_sec > 0.0:
+		local_animation_floor = false
+	var local_stair_descend_blend := 0.0
+	if (
+		not floor_contact
+		and _jump_takeoff_force_air_remaining_sec <= 0.0
+		and _animation_floor_grace_remaining_sec > 0.0
+		and absf(velocity.x) >= STAIR_DESCEND_MIN_HORIZONTAL_SPEED
+		and velocity.y >= STAIR_DESCEND_MIN_FALL_SPEED
+	):
+		var speed_t := clampf(
+			(velocity.y - STAIR_DESCEND_MIN_FALL_SPEED) / (STAIR_DESCEND_MAX_FALL_SPEED - STAIR_DESCEND_MIN_FALL_SPEED),
+			0.0,
+			1.0
+		)
+		var grace_t := clampf(_animation_floor_grace_remaining_sec / ANIMATION_FLOOR_GRACE_SEC, 0.0, 1.0)
+		local_stair_descend_blend = speed_t * grace_t
 	if modular_visual != null:
-		var animation_on_floor := is_on_floor()
+		var animation_on_floor := local_animation_floor
+		var animation_stair_descend_blend := local_stair_descend_blend
 		if use_network_smoothing:
 			animation_on_floor = target_animation_on_floor and absf(target_velocity.y) < ANIMATION_AIR_VELOCITY_THRESHOLD
-		modular_visual.update_walk_animation(delta, velocity if not use_network_smoothing else target_velocity, animation_on_floor)
+			animation_stair_descend_blend = 0.0
+		modular_visual.update_walk_animation(
+			delta,
+			velocity if not use_network_smoothing else target_velocity,
+			animation_on_floor,
+			animation_stair_descend_blend
+		)
 	if surface_audio_component != null:
-		var audio_on_floor := is_on_floor()
+		var audio_on_floor := local_animation_floor
 		var audio_velocity := velocity
 		if use_network_smoothing:
 			audio_on_floor = target_animation_on_floor and absf(target_velocity.y) < ANIMATION_AIR_VELOCITY_THRESHOLD
 			audio_velocity = target_velocity
 		surface_audio_component.tick(delta, audio_velocity, audio_on_floor)
 	_apply_damage_part_scramble(delta)
+	if use_network_smoothing:
+		set_forced_hidden("respawn_wait", target_respawn_hidden)
+		set_forced_sfx_suppressed("respawn_wait", target_respawn_hidden)
 	if not damage_flash_overlay_pairs.is_empty():
 		_sync_damage_flash_overlays()
 	if not outrage_boost_overlay_pairs.is_empty():

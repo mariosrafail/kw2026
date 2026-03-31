@@ -1,6 +1,8 @@
 extends "res://scripts/app/runtime/runtime_ctf_logic.gd"
 
 func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
+	if _server_handle_special_respawn(peer_id, player):
+		return
 	var death_position := player.global_position if player != null else Vector2.ZERO
 	if ctf_match_controller != null and _ctf_objective_enabled():
 		ctf_match_controller.drop_flag_for_peer(peer_id, death_position)
@@ -203,3 +205,6 @@ func _send_spawn_player_rpc(_target_peer_id: int, _peer_id: int, _spawn_position
 
 func _server_broadcast_player_state(_peer_id: int, _player: NetPlayer) -> void:
 	pass
+
+func _server_handle_special_respawn(_peer_id: int, _player: NetPlayer) -> bool:
+	return false

@@ -85,6 +85,10 @@ func server_projectile_player_hit(projectile: NetProjectile, from_position: Vect
 		var target_player := players[target_peer_id] as NetPlayer
 		if target_player == null:
 			continue
+		if target_player.get_health() <= 0:
+			continue
+		if target_player.has_method("is_respawn_hidden") and bool(target_player.call("is_respawn_hidden")):
+			continue
 
 		var rewound_position := get_player_rewound_position(target_peer_id, projectile.lag_comp_ms)
 		var combined_radius := projectile.get_hit_radius() + target_player.get_hit_radius()
@@ -160,6 +164,8 @@ func record_player_history(peer_id: int, position: Vector2) -> void:
 func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, target_player: NetPlayer, base_damage: int, incoming_velocity: Vector2 = Vector2.ZERO, is_headshot: bool = false) -> int:
 	if target_player == null:
 		return 0
+	if target_player.get_health() <= 0:
+		return 0
 
 	var attacker_peer_id := -1
 	var projectile: NetProjectile = null
@@ -213,6 +219,8 @@ func _is_headshot_hit(target_player: NetPlayer, hit_position: Vector2, target_ce
 
 func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, target_player: NetPlayer, damage: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int:
 	if target_player == null:
+		return 0
+	if target_player.get_health() <= 0:
 		return 0
 	if can_damage_peer_cb.is_valid() and not bool(can_damage_peer_cb.call(attacker_peer_id, target_peer_id)):
 		return target_player.get_health()

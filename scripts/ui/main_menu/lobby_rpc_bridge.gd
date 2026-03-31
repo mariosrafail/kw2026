@@ -214,6 +214,35 @@ func set_lobby_show_starting_animation(enabled: bool) -> bool:
 	_rpc_lobby_set_show_starting_animation.rpc_id(1, enabled)
 	return true
 
+func set_lobby_skull_ruleset(ruleset_id: String) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_lobby_skull_ruleset blocked can_send=false")
+		return false
+	var normalized := ruleset_id.strip_edges().to_lower()
+	if normalized.is_empty():
+		normalized = "kill_race"
+	_log("set_lobby_skull_ruleset rpc_id(1) ruleset=%s" % normalized)
+	_rpc_lobby_set_skull_ruleset.rpc_id(1, normalized)
+	return true
+
+func set_lobby_skull_target_score(target_score: int) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_lobby_skull_target_score blocked can_send=false")
+		return false
+	var resolved := clampi(target_score, 1, 100)
+	_log("set_lobby_skull_target_score rpc_id(1) target=%d" % resolved)
+	_rpc_lobby_set_skull_target_score.rpc_id(1, resolved)
+	return true
+
+func set_lobby_skull_time_limit_sec(time_limit_sec: int) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_lobby_skull_time_limit_sec blocked can_send=false")
+		return false
+	var resolved := clampi(time_limit_sec, 30, 3600)
+	_log("set_lobby_skull_time_limit_sec rpc_id(1) seconds=%d" % resolved)
+	_rpc_lobby_set_skull_time_limit_sec.rpc_id(1, resolved)
+	return true
+
 func start_lobby_match() -> bool:
 	if not _can_send_server_rpc():
 		_log("start_lobby_match blocked can_send=false")
@@ -331,11 +360,19 @@ func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 	pass
 
 @rpc("authority", "reliable")
+func _rpc_sync_round_wins(_peer_id: int, _wins: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
 func _rpc_sync_skill_charge(_peer_id: int, _current_points: int, _required_points: int) -> void:
 	pass
 
 @rpc("authority", "reliable")
 func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_match_message(_text: String) -> void:
 	pass
 
 @rpc("any_peer", "unreliable_ordered")
@@ -520,6 +557,10 @@ func _rpc_scene_switch_to_map(_map_id: String) -> void:
 func _rpc_sync_battle_royale_zone(_center: Vector2, _radius: float) -> void:
 	pass
 
+@rpc("authority", "unreliable_ordered")
+func _rpc_sync_skull_time_remaining(_remaining_sec: float) -> void:
+	pass
+
 @rpc("any_peer", "reliable")
 func _rpc_lobby_set_team(_team_id: int) -> void:
 	pass
@@ -534,6 +575,18 @@ func _rpc_lobby_set_add_bots(_enabled: bool) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_lobby_set_show_starting_animation(_enabled: bool) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_skull_ruleset(_ruleset_id: String) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_skull_target_score(_target_score: int) -> void:
+	pass
+
+@rpc("any_peer", "reliable")
+func _rpc_lobby_set_skull_time_limit_sec(_time_limit_sec: int) -> void:
 	pass
 
 @rpc("any_peer", "reliable")

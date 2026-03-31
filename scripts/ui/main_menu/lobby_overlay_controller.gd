@@ -6,7 +6,10 @@ const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
 const LOBBY_CHAT_CONTROLLER_SCRIPT := preload("res://scripts/ui/main_menu/lobby_chat_controller.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
-const CONNECT_WATCHDOG_TIMEOUT_SEC := 8.0
+const CONNECT_WATCHDOG_CHECK_INTERVAL_SEC := 1.0
+const CONNECT_WATCHDOG_MAX_WAIT_SEC := 35.0
+const CONNECT_ATTEMPTS_PER_CANDIDATE := 3
+const CONNECT_FALLBACK_PORTS := [8081]
 const ALLOW_LOCALHOST_LOBBY_CONNECT := false
 var BTN_RED_BG := MENU_PALETTE.base(0.96)
 var BTN_RED_BORDER := MENU_PALETTE.highlight(1.0)
@@ -63,6 +66,13 @@ var _dm_ready_button: Button
 var _dm_start_button: Button
 var _dm_add_bots_check: CheckBox
 var _dm_show_starting_animation_check: CheckBox
+var _dm_ruleset_row: HBoxContainer
+var _dm_ruleset_option: OptionButton
+var _dm_target_row: HBoxContainer
+var _dm_target_label: Label
+var _dm_target_option: OptionButton
+var _dm_time_row: HBoxContainer
+var _dm_time_option: OptionButton
 var _room_buttons: Array[Button] = []
 var _interaction_enabled := true
 var _room_entries: Array = []
@@ -76,6 +86,7 @@ var _action_nonce := 0
 var _pending_create_request := {}
 var _connect_candidates: Array[Dictionary] = []
 var _connect_candidate_index := -1
+var _connect_attempt_in_candidate := 0
 var _connect_nonce := 0
 var _lobby_service = LOBBY_SERVICE_SCRIPT.new()
 var _map_catalog = MAP_CATALOG_SCRIPT.new()
@@ -414,7 +425,55 @@ func _build_connect_candidates() -> Array[Dictionary]:
 			continue
 		seen[key] = true
 		out.append({"host": host, "port": port})
+		for fallback_port_value in CONNECT_FALLBACK_PORTS:
+			var fallback_port := int(fallback_port_value)
+			if fallback_port < 1 or fallback_port > 65535 or fallback_port == port:
+				continue
+			var fallback_key := "%s:%d" % [host, fallback_port]
+			if seen.has(fallback_key):
+				continue
+			seen[fallback_key] = true
+			out.append({"host": host, "port": fallback_port})
+		# NAT loopback on UDP is often disabled on home routers.
+		# Add LAN/local fallbacks so same-network tests can still connect.
+		var local_hosts := _local_connect_fallback_hosts()
+		for local_host_value in local_hosts:
+			var local_host := str(local_host_value).strip_edges()
+			if local_host.is_empty():
+				continue
+			var local_key := "%s:%d" % [local_host, port]
+			if not seen.has(local_key):
+				seen[local_key] = true
+				out.append({"host": local_host, "port": port})
+			for fallback_port_value in CONNECT_FALLBACK_PORTS:
+				var fallback_port := int(fallback_port_value)
+				if fallback_port < 1 or fallback_port > 65535 or fallback_port == port:
+					continue
+				var local_fallback_key := "%s:%d" % [local_host, fallback_port]
+				if seen.has(local_fallback_key):
+					continue
+				seen[local_fallback_key] = true
+				out.append({"host": local_host, "port": fallback_port})
 	_log("connect candidates=%s" % str(out))
+	return out
+
+func _local_connect_fallback_hosts() -> PackedStringArray:
+	var out := PackedStringArray()
+	out.append("127.0.0.1")
+	out.append("localhost")
+	for address_value in IP.get_local_addresses():
+		var address := str(address_value).strip_edges()
+		if address.is_empty():
+			continue
+		if not address.contains("."):
+			continue
+		if address.begins_with("127."):
+			continue
+		if address.begins_with("169.254."):
+			continue
+		if out.has(address):
+			continue
+		out.append(address)
 	return out
 
 func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...", allow_while_connecting: bool = false) -> void:
@@ -430,9 +489,11 @@ func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...
 	if force_restart or _connect_candidates.is_empty():
 		_connect_candidates = _build_connect_candidates()
 		_connect_candidate_index = 0
+		_connect_attempt_in_candidate = 0
 	if _connect_candidate_index < 0 or _connect_candidate_index >= _connect_candidates.size():
 		_connect_candidates = _build_connect_candidates()
 		_connect_candidate_index = 0
+		_connect_attempt_in_candidate = 0
 	if _connect_candidates.is_empty():
 		_log("begin_connect_attempt failed no candidates")
 		if _status_label != null:
@@ -443,6 +504,7 @@ func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...
 	var endpoint := _connect_candidates[_connect_candidate_index] as Dictionary
 	var host := str(endpoint.get("host", "127.0.0.1"))
 	var port := int(endpoint.get("port", 8080))
+	_connect_attempt_in_candidate += 1
 	_log("begin_connect_attempt force_restart=%s reason=%s candidate_index=%d target=%s:%d pending_create=%s" % [
 		str(force_restart),
 		reason,
@@ -450,6 +512,12 @@ func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...
 		host,
 		port,
 		str(not _pending_create_request.is_empty())
+	])
+	_log("begin_connect_attempt candidate_try=%d/%d for %s:%d" % [
+		_connect_attempt_in_candidate,
+		CONNECT_ATTEMPTS_PER_CANDIDATE,
+		host,
+		port
 	])
 	if _status_label != null:
 		_status_label.text = "%s %s:%d..." % [reason, host, port]
@@ -464,19 +532,60 @@ func _start_connect_watchdog() -> void:
 	_connect_nonce += 1
 	var nonce := _connect_nonce
 	_log("start_connect_watchdog nonce=%d" % nonce)
-	var timer := _host.get_tree().create_timer(CONNECT_WATCHDOG_TIMEOUT_SEC)
+	_tick_connect_watchdog(nonce, 0.0)
+
+func _tick_connect_watchdog(nonce: int, elapsed_sec: float) -> void:
+	if _host == null or _host.get_tree() == null:
+		return
+	var timer := _host.get_tree().create_timer(CONNECT_WATCHDOG_CHECK_INTERVAL_SEC)
 	timer.timeout.connect(func() -> void:
 		if nonce != _connect_nonce:
 			return
-		if _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc")):
+		if _rpc_bridge == null:
+			return
+		if bool(_rpc_bridge.call("can_send_lobby_rpc")):
 			_log("watchdog nonce=%d sees connected rpc bridge" % nonce)
 			return
-		_log("watchdog timeout nonce=%d advancing candidate" % nonce)
-		_try_next_connect_candidate()
+		var still_connecting := bool(_rpc_bridge.call("is_connecting_to_server"))
+		var next_elapsed := elapsed_sec + CONNECT_WATCHDOG_CHECK_INTERVAL_SEC
+		if still_connecting and next_elapsed < CONNECT_WATCHDOG_MAX_WAIT_SEC:
+			_tick_connect_watchdog(nonce, next_elapsed)
+			return
+		if still_connecting:
+			_log("watchdog nonce=%d max_wait reached (%.1fs) while connecting; advancing candidate" % [nonce, next_elapsed])
+			_handle_failed_connect_attempt("watchdog_max_wait")
+			return
+		_log("watchdog nonce=%d peer no longer connecting; advancing candidate" % nonce)
+		_handle_failed_connect_attempt("watchdog_not_connecting")
 	)
+
+func _handle_failed_connect_attempt(source: String) -> void:
+	if _connect_candidate_index < 0 or _connect_candidate_index >= _connect_candidates.size():
+		_try_next_connect_candidate()
+		return
+	var endpoint := _connect_candidates[_connect_candidate_index] as Dictionary
+	var host := str(endpoint.get("host", "127.0.0.1"))
+	var port := int(endpoint.get("port", 8080))
+	_log("connect attempt failed source=%s candidate_index=%d try=%d/%d target=%s:%d" % [
+		source,
+		_connect_candidate_index,
+		_connect_attempt_in_candidate,
+		CONNECT_ATTEMPTS_PER_CANDIDATE,
+		host,
+		port
+	])
+	# Fast-fail when ENet already reported a hard failure for this endpoint.
+	if source == "connection_failed":
+		_try_next_connect_candidate()
+		return
+	if _connect_attempt_in_candidate < CONNECT_ATTEMPTS_PER_CANDIDATE:
+		_begin_connect_attempt(false, "Retrying", true)
+		return
+	_try_next_connect_candidate()
 
 func _try_next_connect_candidate() -> void:
 	_connect_candidate_index += 1
+	_connect_attempt_in_candidate = 0
 	_log("try_next_connect_candidate next_index=%d total=%d" % [_connect_candidate_index, _connect_candidates.size()])
 	if _connect_candidate_index >= _connect_candidates.size():
 		var had_pending_create := not _pending_create_request.is_empty()
@@ -555,14 +664,17 @@ func _on_rpc_connected() -> void:
 
 func _on_rpc_failed() -> void:
 	_log("rpc connection_failed signal")
-	_try_next_connect_candidate()
+	_handle_failed_connect_attempt("connection_failed")
 
 func _on_rpc_disconnected() -> void:
 	_connect_nonce += 1
 	_lobby_list_ready = false
 	_joined_lobby_id = 0
 	_joined_room_name = ""
-	_pending_create_request = {}
+	if _action_inflight:
+		_log("rpc disconnected while action inflight; keeping pending request")
+	else:
+		_pending_create_request = {}
 	_action_inflight = false
 	_ctf_room_state.clear()
 	_refresh_lobby_chat_context()
@@ -1017,6 +1129,7 @@ func _refresh_lobby_buttons_state() -> void:
 	var in_ctf_room := in_waiting_room and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id))
 	var in_dm_room := in_waiting_room and _is_free_for_all_mode_id(_active_lobby_mode_id(_joined_lobby_id))
 	var supports_starting_animation_toggle := _supports_starting_animation_testing_toggle()
+	var supports_skull_options := in_dm_room and _active_lobby_map_id(_joined_lobby_id) == "skull_ffa"
 	var local_peer_id := _local_peer_id()
 	var is_owner := local_peer_id > 0 and local_peer_id == int(_ctf_room_state.get("owner_peer_id", 0))
 	if _create_button != null:
@@ -1068,6 +1181,20 @@ func _refresh_lobby_buttons_state() -> void:
 	if _dm_show_starting_animation_check != null:
 		_dm_show_starting_animation_check.visible = in_dm_room and is_owner and supports_starting_animation_toggle
 		_dm_show_starting_animation_check.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner or not supports_starting_animation_toggle
+	if _dm_ruleset_row != null:
+		_dm_ruleset_row.visible = supports_skull_options
+	if _dm_target_row != null:
+		var selected_ruleset_target := str(_ctf_room_state.get("skull_ruleset", "kill_race"))
+		_dm_target_row.visible = supports_skull_options and selected_ruleset_target != "timed_kills"
+	if _dm_time_row != null:
+		var selected_ruleset := str(_ctf_room_state.get("skull_ruleset", "kill_race"))
+		_dm_time_row.visible = supports_skull_options and selected_ruleset == "timed_kills"
+	if _dm_ruleset_option != null:
+		_dm_ruleset_option.disabled = not supports_skull_options or not is_owner or not can_send or _action_inflight
+	if _dm_target_option != null:
+		_dm_target_option.disabled = not supports_skull_options or not is_owner or not can_send or _action_inflight
+	if _dm_time_option != null:
+		_dm_time_option.disabled = not supports_skull_options or not is_owner or not can_send or _action_inflight
 	var ready_by_peer := _ctf_room_state.get("ready_by_peer", {}) as Dictionary
 	var local_ready := bool(ready_by_peer.get(local_peer_id, false))
 	if _ctf_ready_button != null:
@@ -1742,6 +1869,113 @@ func _ensure_overlay() -> void:
 	dm_actions.add_child(dm_start_btn)
 	_dm_start_button = dm_start_btn
 
+	var dm_ruleset_row := HBoxContainer.new()
+	dm_ruleset_row.add_theme_constant_override("separation", 6)
+	dm_room_box.add_child(dm_ruleset_row)
+	_dm_ruleset_row = dm_ruleset_row
+
+	var dm_ruleset_label := Label.new()
+	dm_ruleset_label.text = "Skull Mode:"
+	dm_ruleset_label.add_theme_font_size_override("font_size", 9)
+	dm_ruleset_row.add_child(dm_ruleset_label)
+
+	var dm_ruleset_option := OptionButton.new()
+	dm_ruleset_option.custom_minimum_size = Vector2(0, 20)
+	dm_ruleset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_ruleset_option.add_theme_font_size_override("font_size", 9)
+	_apply_compact_option_style(dm_ruleset_option)
+	dm_ruleset_option.add_item("Round Survival")
+	dm_ruleset_option.set_item_metadata(0, "round_survival")
+	dm_ruleset_option.add_item("Kill Race")
+	dm_ruleset_option.set_item_metadata(1, "kill_race")
+	dm_ruleset_option.add_item("Timed Kills")
+	dm_ruleset_option.set_item_metadata(2, "timed_kills")
+	dm_ruleset_option.item_selected.connect(func(index: int) -> void:
+		if _rpc_bridge == null:
+			return
+		if index < 0 or index >= dm_ruleset_option.get_item_count():
+			return
+		var ruleset_id := str(dm_ruleset_option.get_item_metadata(index))
+		_rpc_bridge.call("set_lobby_skull_ruleset", ruleset_id)
+	)
+	var dm_ruleset_popup := dm_ruleset_option.get_popup()
+	dm_ruleset_popup.position = Vector2i.ZERO
+	dm_ruleset_popup.about_to_popup.connect(func() -> void:
+		_position_option_popup_below(dm_ruleset_option, dm_ruleset_popup)
+	)
+	_remove_popup_left_markers(dm_ruleset_popup)
+	dm_ruleset_row.add_child(dm_ruleset_option)
+	_dm_ruleset_option = dm_ruleset_option
+
+	var dm_target_row := HBoxContainer.new()
+	dm_target_row.add_theme_constant_override("separation", 6)
+	dm_room_box.add_child(dm_target_row)
+	_dm_target_row = dm_target_row
+
+	var dm_target_label := Label.new()
+	dm_target_label.text = "Target:"
+	dm_target_label.add_theme_font_size_override("font_size", 9)
+	dm_target_row.add_child(dm_target_label)
+	_dm_target_label = dm_target_label
+
+	var dm_target_option := OptionButton.new()
+	dm_target_option.custom_minimum_size = Vector2(0, 20)
+	dm_target_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_target_option.add_theme_font_size_override("font_size", 9)
+	_apply_compact_option_style(dm_target_option)
+	for target_value in [3, 5, 10, 15, 20]:
+		dm_target_option.add_item(str(target_value))
+		dm_target_option.set_item_metadata(dm_target_option.get_item_count() - 1, int(target_value))
+	dm_target_option.item_selected.connect(func(index: int) -> void:
+		if _rpc_bridge == null:
+			return
+		if index < 0 or index >= dm_target_option.get_item_count():
+			return
+		_rpc_bridge.call("set_lobby_skull_target_score", int(dm_target_option.get_item_metadata(index)))
+	)
+	var dm_target_popup := dm_target_option.get_popup()
+	dm_target_popup.position = Vector2i.ZERO
+	dm_target_popup.about_to_popup.connect(func() -> void:
+		_position_option_popup_below(dm_target_option, dm_target_popup)
+	)
+	_remove_popup_left_markers(dm_target_popup)
+	dm_target_row.add_child(dm_target_option)
+	_dm_target_option = dm_target_option
+
+	var dm_time_row := HBoxContainer.new()
+	dm_time_row.add_theme_constant_override("separation", 6)
+	dm_room_box.add_child(dm_time_row)
+	_dm_time_row = dm_time_row
+
+	var dm_time_label := Label.new()
+	dm_time_label.text = "Time (min):"
+	dm_time_label.add_theme_font_size_override("font_size", 9)
+	dm_time_row.add_child(dm_time_label)
+
+	var dm_time_option := OptionButton.new()
+	dm_time_option.custom_minimum_size = Vector2(0, 20)
+	dm_time_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dm_time_option.add_theme_font_size_override("font_size", 9)
+	_apply_compact_option_style(dm_time_option)
+	for minute_value in [1, 2, 3, 5, 10]:
+		dm_time_option.add_item(str(minute_value))
+		dm_time_option.set_item_metadata(dm_time_option.get_item_count() - 1, int(minute_value) * 60)
+	dm_time_option.item_selected.connect(func(index: int) -> void:
+		if _rpc_bridge == null:
+			return
+		if index < 0 or index >= dm_time_option.get_item_count():
+			return
+		_rpc_bridge.call("set_lobby_skull_time_limit_sec", int(dm_time_option.get_item_metadata(index)))
+	)
+	var dm_time_popup := dm_time_option.get_popup()
+	dm_time_popup.position = Vector2i.ZERO
+	dm_time_popup.about_to_popup.connect(func() -> void:
+		_position_option_popup_below(dm_time_option, dm_time_popup)
+	)
+	_remove_popup_left_markers(dm_time_popup)
+	dm_time_row.add_child(dm_time_option)
+	_dm_time_option = dm_time_option
+
 	var dm_add_bots_check := CheckBox.new()
 	dm_add_bots_check.text = "Add Bots"
 	dm_add_bots_check.add_theme_font_size_override("font_size", 9)
@@ -2013,6 +2247,22 @@ func _show_dm_room(payload: Dictionary) -> void:
 				_dm_show_starting_animation_check.call("set_pressed_no_signal", show_starting_animation)
 			else:
 				_dm_show_starting_animation_check.button_pressed = show_starting_animation
+	if _active_lobby_map_id(_joined_lobby_id) == "skull_ffa":
+		var skull_ruleset := str(payload.get("skull_ruleset", "kill_race")).strip_edges().to_lower()
+		var skull_target := int(payload.get("skull_target_score", 10))
+		var skull_time_limit := int(payload.get("skull_time_limit_sec", 180))
+		if _dm_ruleset_option != null:
+			_select_option_by_metadata(_dm_ruleset_option, skull_ruleset)
+		if _dm_target_option != null:
+			_select_option_by_metadata(_dm_target_option, skull_target)
+		if _dm_time_option != null:
+			_select_option_by_metadata(_dm_time_option, skull_time_limit)
+		if _dm_target_label != null:
+			_dm_target_label.text = "Rounds to Win:" if skull_ruleset == "round_survival" else "Kills to Win:"
+		if _dm_target_row != null:
+			_dm_target_row.visible = skull_ruleset != "timed_kills"
+		if _dm_time_row != null:
+			_dm_time_row.visible = skull_ruleset == "timed_kills"
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
@@ -2044,6 +2294,18 @@ func _active_lobby_mode_id(lobby_id: int) -> String:
 	if not _ctf_room_state.is_empty() and int(_ctf_room_state.get("lobby_id", 0)) == lobby_id:
 		return _map_flow_service.normalize_mode_id(str(_ctf_room_state.get("mode_id", "deathmatch")))
 	return _map_flow_service.normalize_mode_id(_selected_mode_id)
+
+func _active_lobby_map_id(lobby_id: int) -> String:
+	for entry in _room_entries:
+		if not (entry is Dictionary):
+			continue
+		var data := entry as Dictionary
+		if int(data.get("id", 0)) != lobby_id:
+			continue
+		return _map_flow_service.normalize_map_id(_map_catalog, str(data.get("map_id", "")))
+	if not _ctf_room_state.is_empty() and int(_ctf_room_state.get("lobby_id", 0)) == lobby_id:
+		return _map_flow_service.normalize_map_id(_map_catalog, str(_ctf_room_state.get("map_id", "")))
+	return _selected_map_id
 
 func _supports_starting_animation_testing_toggle() -> bool:
 	return not _ctf_room_state.is_empty()
@@ -2087,7 +2349,7 @@ func _position_option_popup_below(option: OptionButton, popup: PopupMenu) -> voi
 func _remove_popup_left_markers(popup: PopupMenu) -> void:
 	if popup == null:
 		return
-	for i in range(popup.item_count):
+	for i in range(popup.get_item_count()):
 		popup.set_item_as_checkable(i, false)
 		popup.set_item_as_radio_checkable(i, false)
 		popup.set_item_icon(i, null)
@@ -2104,6 +2366,76 @@ func _release_menu_cursor_click_state() -> void:
 	var cursor_manager := root.get_node_or_null("CursorManager")
 	if cursor_manager != null and cursor_manager.has_method("clear_menu_click_state"):
 		cursor_manager.call("clear_menu_click_state")
+
+func _select_option_by_metadata(option: OptionButton, metadata: Variant) -> void:
+	if option == null:
+		return
+	for i in range(option.get_item_count()):
+		if option.get_item_metadata(i) == metadata:
+			option.select(i)
+			return
+
+func _apply_compact_option_style(option: OptionButton) -> void:
+	if option == null:
+		return
+	option.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	option.add_theme_constant_override("arrow_margin", 4)
+	option.add_theme_constant_override("h_separation", 4)
+	option.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	option.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
+	option.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_primary(1.0))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = MENU_PALETTE.accent(1.0)
+	normal.border_width_left = 2
+	normal.border_width_top = 2
+	normal.border_width_right = 2
+	normal.border_width_bottom = 2
+	normal.border_color = MENU_PALETTE.accent(1.0)
+	normal.content_margin_left = 6
+	normal.content_margin_right = 6
+	normal.content_margin_top = 3
+	normal.content_margin_bottom = 3
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.border_color = MENU_PALETTE.highlight(1.0)
+	option.add_theme_stylebox_override("normal", normal)
+	option.add_theme_stylebox_override("hover", hover)
+	option.add_theme_stylebox_override("pressed", normal)
+	option.add_theme_stylebox_override("focus", normal)
+	option.add_theme_icon_override("arrow", _make_pixel_dropdown_arrow())
+	var popup := option.get_popup()
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = MENU_PALETTE.accent(1.0)
+	panel.border_width_left = 2
+	panel.border_width_top = 2
+	panel.border_width_right = 2
+	panel.border_width_bottom = 2
+	panel.border_color = MENU_PALETTE.accent(1.0)
+	var hover_popup := StyleBoxFlat.new()
+	hover_popup.bg_color = MENU_PALETTE.hot(1.0)
+	hover_popup.border_width_left = 1
+	hover_popup.border_width_top = 1
+	hover_popup.border_width_right = 1
+	hover_popup.border_width_bottom = 1
+	hover_popup.border_color = MENU_PALETTE.highlight(1.0)
+	var selected_popup := StyleBoxFlat.new()
+	selected_popup.bg_color = MENU_PALETTE.accent(1.0)
+	selected_popup.border_width_left = 1
+	selected_popup.border_width_top = 1
+	selected_popup.border_width_right = 1
+	selected_popup.border_width_bottom = 1
+	selected_popup.border_color = MENU_PALETTE.accent(1.0)
+	popup.add_theme_stylebox_override("panel", panel)
+	popup.add_theme_stylebox_override("hover", hover_popup)
+	popup.add_theme_stylebox_override("hover_pressed", hover_popup)
+	popup.add_theme_stylebox_override("selected", selected_popup)
+	popup.add_theme_stylebox_override("focus", selected_popup)
+	popup.add_theme_stylebox_override("item_hover", hover_popup)
+	popup.add_theme_constant_override("v_separation", 2)
+	popup.add_theme_constant_override("h_separation", 6)
+	popup.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	popup.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
+	popup.add_theme_color_override("font_selected_color", MENU_PALETTE.text_primary(1.0))
+	popup.add_theme_font_size_override("font_size", 8)
 
 func _make_pixel_dropdown_arrow() -> Texture2D:
 	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)

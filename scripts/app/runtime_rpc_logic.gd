@@ -71,6 +71,11 @@ func _rpc_sync_battle_royale_zone(_center: Vector2, _radius: float) -> void:
 	if battle_royale_zone_controller.has_method("apply_synced_state"):
 		battle_royale_zone_controller.call("apply_synced_state", _center, _radius)
 
+func _rpc_sync_skull_time_remaining(_remaining_sec: float) -> void:
+	if multiplayer.is_server():
+		return
+	_set_skull_time_remaining(_remaining_sec)
+
 func _rpc_despawn_player(_peer_id: int) -> void:
 	_remove_player_local(_peer_id)
 	_update_score_labels()
@@ -95,6 +100,10 @@ func _rpc_sync_player_stats(_peer_id: int, _kills: int, _deaths: int) -> void:
 	}
 	_update_score_labels()
 
+func _rpc_sync_round_wins(_peer_id: int, _wins: int) -> void:
+	_set_round_wins_for_peer(_peer_id, _wins)
+	_update_score_labels()
+
 func _rpc_sync_skill_charge(_peer_id: int, _current_points: int, _required_points: int) -> void:
 	skill_charge_points_by_peer[_peer_id] = maxi(0, _current_points)
 	skill_charge_required_by_peer[_peer_id] = maxi(0, _required_points)
@@ -109,6 +118,16 @@ func _rpc_kill_feed(_attacker_name: String, _victim_name: String) -> void:
 	if victim.is_empty():
 		victim = "Unknown"
 	ui_controller.push_kill_feed(attacker, victim)
+
+func _rpc_match_message(_text: String) -> void:
+	if ui_controller == null:
+		return
+	var text := str(_text).strip_edges()
+	if text.is_empty():
+		return
+	if ui_controller.has_method("push_combat_notification"):
+		ui_controller.call("push_combat_notification", text)
+	_handle_match_message_text(text)
 
 func _push_ultimate_notification(caster_peer_id: int, fallback_warrior_id: String) -> void:
 	if ui_controller == null:
@@ -129,6 +148,8 @@ func _rpc_submit_input(_axis: float, _jump_pressed: bool, _jump_held: bool, _aim
 	if not multiplayer.is_server():
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
+	if _server_blocks_input_for_peer(peer_id):
+		return
 	var weapon := _weapon_profile_for_peer(peer_id)
 	player_replication.server_submit_input(
 		peer_id,
@@ -740,6 +761,48 @@ func _rpc_lobby_set_show_starting_animation(_enabled: bool) -> void:
 		return
 	_server_broadcast_lobby_room_state(lobby_id)
 
+func _rpc_lobby_set_skull_ruleset(_ruleset_id: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_service == null or lobby_id <= 0:
+		return
+	if lobby_service.lobby_started(lobby_id):
+		return
+	if not lobby_service.set_skull_ruleset(lobby_id, peer_id, _ruleset_id):
+		_server_send_lobby_action_result(peer_id, false, "Only host can change Skull rules.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	_server_broadcast_lobby_room_state(lobby_id)
+
+func _rpc_lobby_set_skull_target_score(_target_score: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_service == null or lobby_id <= 0:
+		return
+	if lobby_service.lobby_started(lobby_id):
+		return
+	if not lobby_service.set_skull_target_score(lobby_id, peer_id, _target_score):
+		_server_send_lobby_action_result(peer_id, false, "Only host can change Skull target.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	_server_broadcast_lobby_room_state(lobby_id)
+
+func _rpc_lobby_set_skull_time_limit_sec(_time_limit_sec: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_service == null or lobby_id <= 0:
+		return
+	if lobby_service.lobby_started(lobby_id):
+		return
+	if not lobby_service.set_skull_time_limit_sec(lobby_id, peer_id, _time_limit_sec):
+		_server_send_lobby_action_result(peer_id, false, "Only host can change Skull timer.", lobby_id, _lobby_map_id(lobby_id))
+		return
+	_server_broadcast_lobby_room_state(lobby_id)
+
 func _server_start_deathmatch_lobby_match(peer_id: int) -> void:
 	if lobby_service == null:
 		return
@@ -835,3 +898,30 @@ func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> vo
 		return
 	combat_flow_service.client_receive_skill_cast(2, _caster_peer_id, _world_position)
 	_push_ultimate_notification(_caster_peer_id, CHARACTER_ID_TASKO)
+
+func _server_broadcast_match_message(lobby_id: int, text: String) -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	var trimmed := text.strip_edges()
+	if trimmed.is_empty():
+		return
+	var recipients := _lobby_members(lobby_id)
+	if recipients.is_empty():
+		recipients = multiplayer.get_peers()
+	for member_value in recipients:
+		var member_id := int(member_value)
+		if member_id <= 0:
+			continue
+		_rpc_match_message.rpc_id(member_id, trimmed)
+
+func _server_blocks_input_for_peer(_peer_id: int) -> bool:
+	return false
+
+func _handle_match_message_text(_text: String) -> void:
+	pass
+
+func _set_round_wins_for_peer(_peer_id: int, _wins: int) -> void:
+	pass
+
+func _set_skull_time_remaining(_remaining_sec: float) -> void:
+	pass
