@@ -115,7 +115,10 @@ func pack_lobby_list() -> Array:
 			"players": members.size(),
 			"max_players": max_players_for_lobby(lobby_id),
 			"map_id": map_id,
-			"mode_id": str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower()
+			"mode_id": str(lobby.get("mode_id", GAME_MODE_DEATHMATCH)).strip_edges().to_lower(),
+			"skull_ruleset": _sanitize_skull_ruleset_for_map(map_id, str(lobby.get("skull_ruleset", SKULL_DEFAULT_RULESET))),
+			"skull_target_score": _sanitize_skull_target_score(int(lobby.get("skull_target_score", SKULL_DEFAULT_TARGET_SCORE))),
+			"skull_time_limit_sec": _sanitize_skull_time_limit_sec(int(lobby.get("skull_time_limit_sec", SKULL_DEFAULT_TIME_LIMIT_SEC)))
 		})
 	return payload
 
@@ -142,6 +145,7 @@ func create_lobby(
 		max_players = lobby_config.max_players_for_new_lobby(lobby_name)
 	max_players = maxi(1, max_players)
 
+	var default_skull_ruleset := _sanitize_skull_ruleset_for_map(map_id, SKULL_DEFAULT_RULESET)
 	_global_server_lobbies[lobby_id] = {
 		"name": lobby_name,
 		"members": [peer_id],
@@ -152,8 +156,8 @@ func create_lobby(
 		"started": false,
 		"ready_by_peer": {peer_id: false},
 		"add_bots": false,
-		"show_starting_animation": false,
-		"skull_ruleset": SKULL_DEFAULT_RULESET,
+		"show_starting_animation": true,
+		"skull_ruleset": default_skull_ruleset,
 		"skull_target_score": SKULL_DEFAULT_TARGET_SCORE,
 		"skull_time_limit_sec": SKULL_DEFAULT_TIME_LIMIT_SEC,
 		"team_by_peer": {peer_id: TEAM_RED} if _is_team_mode(mode_id) else {},
@@ -292,15 +296,16 @@ func set_show_starting_animation_enabled(lobby_id: int, owner_peer_id: int, enab
 	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
 	if int(lobby.get("owner_peer_id", 0)) != owner_peer_id:
 		return false
-	lobby["show_starting_animation"] = bool(enabled)
+	# Temporary policy: intro stays enabled for every lobby.
+	lobby["show_starting_animation"] = true
 	_global_server_lobbies[lobby_id] = lobby
 	return true
 
 func show_starting_animation_enabled(lobby_id: int) -> bool:
 	var lobby := get_lobby_data(lobby_id)
 	if lobby.is_empty():
-		return false
-	return bool(lobby.get("show_starting_animation", false))
+		return true
+	return true
 
 func set_skull_ruleset(lobby_id: int, owner_peer_id: int, ruleset_id: String) -> bool:
 	if not _global_server_lobbies.has(lobby_id):
@@ -308,7 +313,8 @@ func set_skull_ruleset(lobby_id: int, owner_peer_id: int, ruleset_id: String) ->
 	var lobby := _global_server_lobbies.get(lobby_id, {}) as Dictionary
 	if int(lobby.get("owner_peer_id", 0)) != owner_peer_id:
 		return false
-	lobby["skull_ruleset"] = _normalize_skull_ruleset_id(ruleset_id)
+	var map_id := str(lobby.get("map_id", "classic")).strip_edges().to_lower()
+	lobby["skull_ruleset"] = _sanitize_skull_ruleset_for_map(map_id, ruleset_id)
 	_global_server_lobbies[lobby_id] = lobby
 	return true
 
@@ -316,7 +322,8 @@ func skull_ruleset(lobby_id: int) -> String:
 	var lobby := get_lobby_data(lobby_id)
 	if lobby.is_empty():
 		return SKULL_DEFAULT_RULESET
-	return _normalize_skull_ruleset_id(str(lobby.get("skull_ruleset", SKULL_DEFAULT_RULESET)))
+	var map_id := str(lobby.get("map_id", "classic")).strip_edges().to_lower()
+	return _sanitize_skull_ruleset_for_map(map_id, str(lobby.get("skull_ruleset", SKULL_DEFAULT_RULESET)))
 
 func set_skull_target_score(lobby_id: int, owner_peer_id: int, target_score: int) -> bool:
 	if not _global_server_lobbies.has(lobby_id):
@@ -491,7 +498,7 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 			"all_ready": false,
 			"can_start": false,
 			"add_bots": false,
-			"show_starting_animation": false,
+			"show_starting_animation": true,
 			"skull_ruleset": SKULL_DEFAULT_RULESET,
 			"skull_target_score": SKULL_DEFAULT_TARGET_SCORE,
 			"skull_time_limit_sec": SKULL_DEFAULT_TIME_LIMIT_SEC,
@@ -540,8 +547,8 @@ func pack_lobby_room_state(lobby_id: int) -> Dictionary:
 		"all_ready": all_non_owner_humans_ready(lobby_id),
 		"can_start": can_start,
 		"add_bots": bool(lobby.get("add_bots", false)),
-		"show_starting_animation": bool(lobby.get("show_starting_animation", false)),
-		"skull_ruleset": _normalize_skull_ruleset_id(str(lobby.get("skull_ruleset", SKULL_DEFAULT_RULESET))),
+		"show_starting_animation": true,
+		"skull_ruleset": _sanitize_skull_ruleset_for_map(str(lobby.get("map_id", "classic")), str(lobby.get("skull_ruleset", SKULL_DEFAULT_RULESET))),
 		"skull_target_score": _sanitize_skull_target_score(int(lobby.get("skull_target_score", SKULL_DEFAULT_TARGET_SCORE))),
 		"skull_time_limit_sec": _sanitize_skull_time_limit_sec(int(lobby.get("skull_time_limit_sec", SKULL_DEFAULT_TIME_LIMIT_SEC))),
 		"human_count": members.size(),
@@ -783,6 +790,17 @@ func _normalize_skull_ruleset_id(ruleset_id: String) -> String:
 	if normalized == SKULL_RULESET_TIMED_KILLS:
 		return SKULL_RULESET_TIMED_KILLS
 	return SKULL_RULESET_KILL_RACE
+
+func _sanitize_skull_ruleset_for_map(map_id: String, ruleset_id: String) -> String:
+	var normalized_map := str(map_id).strip_edges().to_lower()
+	if normalized_map == "skull_rounds" or normalized_map == "skull_br":
+		return SKULL_RULESET_ROUND_SURVIVAL
+	if normalized_map == "skull_deathmatch":
+		var normalized_ruleset := _normalize_skull_ruleset_id(ruleset_id)
+		if normalized_ruleset == SKULL_RULESET_ROUND_SURVIVAL:
+			return SKULL_RULESET_KILL_RACE
+		return normalized_ruleset
+	return _normalize_skull_ruleset_id(ruleset_id)
 
 func _sanitize_skull_target_score(value: int) -> int:
 	return clampi(value, 1, 100)

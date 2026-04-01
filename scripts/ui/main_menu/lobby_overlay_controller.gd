@@ -37,6 +37,7 @@ var _rooms_title_label: Label
 var _rooms_list_panel: PanelContainer
 var _rooms_box: VBoxContainer
 var _selection_label: Label
+var _preset_row: HBoxContainer
 var _mode_row: HBoxContainer
 var _waiting_room_title_label: Label
 var _actions_row: HBoxContainer
@@ -47,6 +48,9 @@ var _leave_button: Button
 var _ctf_leave_button: Button
 var _back_button: Button
 var _map_option: OptionButton
+var _preset_rounds_button: Button
+var _preset_deathmatch_button: Button
+var _preset_br_button: Button
 var _ctf_room_box: VBoxContainer
 var _ctf_room_title: Label
 var _ctf_room_red_label: Label
@@ -79,6 +83,8 @@ var _room_entries: Array = []
 var _selected_room_index := -1
 var _joined_room_name := ""
 var _joined_lobby_id := 0
+var _last_create_requested_map_id := ""
+var _forced_rounds_ruleset_lobby_id := 0
 var _rpc_bridge: Node
 var _lobby_list_ready := false
 var _action_inflight := false
@@ -320,6 +326,15 @@ func _persist_local_loadout_selection() -> void:
 	_lobby_service.set_local_selected_character(warrior_id)
 	_lobby_service.set_local_selected_skin(warrior_id, _selected_warrior_skin())
 
+func sync_current_loadout_to_lobby() -> void:
+	_persist_local_loadout_selection()
+	if _rpc_bridge == null or not bool(_rpc_bridge.call("can_send_lobby_rpc")):
+		return
+	_rpc_bridge.call("set_weapon", _selected_weapon_id())
+	_rpc_bridge.call("set_character", _selected_warrior_id())
+	_sync_selected_warrior_skin()
+	_sync_selected_weapon_skin()
+
 func _resolve_server_host_port_from_args(host: String = "127.0.0.1", port: int = 8080) -> Dictionary:
 	var resolved_host := host.strip_edges()
 	var resolved_port := clampi(port, 1, 65535)
@@ -384,7 +399,7 @@ func _resolve_server_host_port() -> Dictionary:
 	return resolved
 
 func _resolve_auth_api_host_port() -> Dictionary:
-	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://127.0.0.1:8081/auth")).strip_edges()
+	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://updates.outrage.ink:8081/auth")).strip_edges()
 	if configured.is_empty():
 		return {"host": "", "port": 8080}
 	var scheme_idx := configured.find("://")
@@ -759,6 +774,31 @@ func _on_rpc_action_result(success: bool, message: String, active_lobby_id: int,
 func _on_rpc_room_state(payload: Dictionary) -> void:
 	_ctf_room_state = payload.duplicate(true)
 	_log("room_state received payload=%s" % str(_ctf_room_state))
+	var room_lobby_id := int(_ctf_room_state.get("lobby_id", 0))
+	var room_map_id := _map_flow_service.normalize_map_id(_map_catalog, str(_ctf_room_state.get("map_id", "")))
+	var room_started := bool(_ctf_room_state.get("started", false))
+	var room_owner_id := int(_ctf_room_state.get("owner_peer_id", 0))
+	var local_peer_id := _local_peer_id()
+	var room_ruleset := str(_ctf_room_state.get("skull_ruleset", "kill_race")).strip_edges().to_lower()
+	var skull_policy := _skull_ruleset_policy_for_map(room_map_id)
+	var should_force_rounds_ruleset := (
+		skull_policy == "round_only"
+		and room_lobby_id > 0
+		and room_lobby_id == _joined_lobby_id
+		and not room_started
+		and room_owner_id == local_peer_id
+		and room_ruleset != "round_survival"
+		and _forced_rounds_ruleset_lobby_id != room_lobby_id
+	)
+	if should_force_rounds_ruleset and _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc")):
+		_forced_rounds_ruleset_lobby_id = room_lobby_id
+		ProjectSettings.set_setting("kw/pending_skull_ruleset", "round_survival")
+		_log("forcing round_survival ruleset lobby_id=%d map_id=%s current_ruleset=%s" % [
+			room_lobby_id,
+			room_map_id,
+			room_ruleset
+		])
+		_rpc_bridge.call("set_lobby_skull_ruleset", "round_survival")
 	if int(_ctf_room_state.get("lobby_id", 0)) != _joined_lobby_id:
 		_refresh_lobby_chat_context()
 		return
@@ -1013,6 +1053,15 @@ func _start_lobby_match(status_text: String = "Starting match...") -> void:
 
 func _build_create_lobby_request() -> Dictionary:
 	_ensure_valid_map_selection()
+	var dropdown_map_id := _selected_map_id
+	if _map_option != null:
+		var selected_index := _map_option.get_selected()
+		if selected_index >= 0 and selected_index < _map_option.get_item_count():
+			var selected_meta := str(_map_option.get_item_metadata(selected_index)).strip_edges().to_lower()
+			if not selected_meta.is_empty():
+				dropdown_map_id = _map_flow_service.normalize_map_id(_map_catalog, selected_meta)
+	_selected_map_id = dropdown_map_id
+	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
 	var requested_name := "My Lobby %d" % (_room_entries.size() + 1)
 	var selected_weapon_id := _selected_weapon_id()
 	var selected_character_id := _selected_warrior_id()
@@ -1044,6 +1093,8 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 	if map_id.is_empty():
 		map_id = default_map_id
 	map_id = _map_flow_service.normalize_map_id(_map_catalog, map_id)
+	_last_create_requested_map_id = map_id
+	_forced_rounds_ruleset_lobby_id = 0
 	mode_id = _map_flow_service.select_mode_for_map(_map_catalog, map_id, mode_id)
 	_log("send_create_lobby_request name=%s weapon=%s character=%s map=%s mode=%s can_send=%s" % [
 		requested_name,
@@ -1071,7 +1122,7 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 	_refresh_lobby_buttons_state()
 
 func _ensure_valid_map_selection() -> void:
-	var map_ids := _map_catalog.all_map_ids()
+	var map_ids := _lobby_selectable_map_ids()
 	if map_ids.is_empty():
 		_selected_map_id = "classic"
 		_selected_mode_id = "deathmatch"
@@ -1087,11 +1138,28 @@ func _ensure_valid_map_selection() -> void:
 	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
 	_refresh_map_dropdown_selection()
 
+func _lobby_selectable_map_ids() -> Array[String]:
+	var preferred_order := ["skull_deathmatch", "skull_rounds", "skull_br"]
+	var available := _map_catalog.all_map_ids()
+	var selected: Array[String] = []
+	for map_id_value in preferred_order:
+		var map_id := str(map_id_value).strip_edges().to_lower()
+		if available.find(map_id) >= 0:
+			selected.append(map_id)
+	if not selected.is_empty():
+		return selected
+	# Fallback safety if custom skull maps are missing for any reason.
+	for map_id_value in available:
+		var map_id := str(map_id_value).strip_edges().to_lower()
+		if map_id.begins_with("skull_"):
+			selected.append(map_id)
+	return selected
+
 func _populate_map_dropdown() -> void:
 	if _map_option == null:
 		return
 	_map_option.clear()
-	for map_id_value in _map_catalog.all_map_ids():
+	for map_id_value in _lobby_selectable_map_ids():
 		var map_id := str(map_id_value)
 		var label := _map_flow_service.map_label_for_id(_map_catalog, map_id)
 		_map_option.add_item(label)
@@ -1123,13 +1191,34 @@ func _on_map_option_selected(index: int) -> void:
 	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
 	_log("map_dropdown selected_map_id=%s selected_mode_id=%s" % [_selected_map_id, _selected_mode_id])
 
+# Quick preset buttons disabled for now by request.
+#func _apply_quick_mode_preset(map_id: String, mode_id: String, status_text: String) -> void:
+#	_selected_map_id = _map_flow_service.normalize_map_id(_map_catalog, map_id)
+#	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, mode_id)
+#	_refresh_map_dropdown_selection()
+#	_refresh_lobby_selection_summary()
+#	if _status_label != null and not status_text.strip_edges().is_empty():
+#		_status_label.text = status_text
+
+func _skull_ruleset_policy_for_map(map_id: String) -> String:
+	var normalized := _map_flow_service.normalize_map_id(_map_catalog, map_id)
+	if normalized == "skull_rounds" or normalized == "skull_br":
+		return "round_only"
+	if normalized == "skull_deathmatch":
+		return "deathmatch_only"
+	if normalized == "skull_ffa":
+		return "flex"
+	return "none"
+
 func _refresh_lobby_buttons_state() -> void:
 	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
 	var in_waiting_room := not _ctf_room_state.is_empty() and _joined_lobby_id > 0 and not bool(_ctf_room_state.get("started", false))
 	var in_ctf_room := in_waiting_room and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id))
 	var in_dm_room := in_waiting_room and _is_free_for_all_mode_id(_active_lobby_mode_id(_joined_lobby_id))
 	var supports_starting_animation_toggle := _supports_starting_animation_testing_toggle()
-	var supports_skull_options := in_dm_room and _active_lobby_map_id(_joined_lobby_id) == "skull_ffa"
+	var skull_policy := _skull_ruleset_policy_for_map(_active_lobby_map_id(_joined_lobby_id))
+	var supports_skull_options := in_dm_room and skull_policy != "none"
+	var supports_ruleset_choice := supports_skull_options and skull_policy == "deathmatch_only"
 	var local_peer_id := _local_peer_id()
 	var is_owner := local_peer_id > 0 and local_peer_id == int(_ctf_room_state.get("owner_peer_id", 0))
 	if _create_button != null:
@@ -1153,6 +1242,12 @@ func _refresh_lobby_buttons_state() -> void:
 	if _back_button != null:
 		_back_button.visible = not in_waiting_room
 		_back_button.disabled = _action_inflight
+	if _preset_rounds_button != null:
+		_preset_rounds_button.disabled = in_waiting_room or _action_inflight
+	if _preset_deathmatch_button != null:
+		_preset_deathmatch_button.disabled = in_waiting_room or _action_inflight
+	if _preset_br_button != null:
+		_preset_br_button.disabled = in_waiting_room or _action_inflight
 	if _ctf_join_red_button != null:
 		_ctf_join_red_button.disabled = not can_send or _action_inflight or _local_team_id() == 0
 	if _ctf_join_blue_button != null:
@@ -1182,15 +1277,18 @@ func _refresh_lobby_buttons_state() -> void:
 		_dm_show_starting_animation_check.visible = in_dm_room and is_owner and supports_starting_animation_toggle
 		_dm_show_starting_animation_check.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner or not supports_starting_animation_toggle
 	if _dm_ruleset_row != null:
-		_dm_ruleset_row.visible = supports_skull_options
+		_dm_ruleset_row.visible = supports_ruleset_choice
 	if _dm_target_row != null:
 		var selected_ruleset_target := str(_ctf_room_state.get("skull_ruleset", "kill_race"))
-		_dm_target_row.visible = supports_skull_options and selected_ruleset_target != "timed_kills"
+		if skull_policy == "round_only":
+			_dm_target_row.visible = supports_skull_options
+		else:
+			_dm_target_row.visible = supports_skull_options and selected_ruleset_target != "timed_kills"
 	if _dm_time_row != null:
 		var selected_ruleset := str(_ctf_room_state.get("skull_ruleset", "kill_race"))
-		_dm_time_row.visible = supports_skull_options and selected_ruleset == "timed_kills"
+		_dm_time_row.visible = supports_skull_options and skull_policy != "round_only" and selected_ruleset == "timed_kills"
 	if _dm_ruleset_option != null:
-		_dm_ruleset_option.disabled = not supports_skull_options or not is_owner or not can_send or _action_inflight
+		_dm_ruleset_option.disabled = not supports_ruleset_choice or not is_owner or not can_send or _action_inflight
 	if _dm_target_option != null:
 		_dm_target_option.disabled = not supports_skull_options or not is_owner or not can_send or _action_inflight
 	if _dm_time_option != null:
@@ -1355,6 +1453,51 @@ func _ensure_overlay() -> void:
 	selection_label.add_theme_font_size_override("font_size", 9)
 	root.add_child(selection_label)
 	_selection_label = selection_label
+
+	# Quick preset row intentionally disabled for now.
+	#var preset_row := HBoxContainer.new()
+	#preset_row.add_theme_constant_override("separation", 6)
+	#root.add_child(preset_row)
+	#_preset_row = preset_row
+	#
+	#var preset_rounds_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	#preset_rounds_btn.text = "ROUNDS"
+	#preset_rounds_btn.custom_minimum_size = Vector2(0, 20)
+	#preset_rounds_btn.add_theme_font_size_override("font_size", 8)
+	#preset_rounds_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	#preset_rounds_btn.pressed.connect(func() -> void:
+	#	_apply_quick_mode_preset("skull_rounds", "deathmatch", "Preset: Skull Rounds")
+	#)
+	#if _add_hover_pop.is_valid():
+	#	_add_hover_pop.call(preset_rounds_btn)
+	#preset_row.add_child(preset_rounds_btn)
+	#_preset_rounds_button = preset_rounds_btn
+	#
+	#var preset_dm_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	#preset_dm_btn.text = "FFA"
+	#preset_dm_btn.custom_minimum_size = Vector2(0, 20)
+	#preset_dm_btn.add_theme_font_size_override("font_size", 8)
+	#preset_dm_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	#preset_dm_btn.pressed.connect(func() -> void:
+	#	_apply_quick_mode_preset("skull_deathmatch", "deathmatch", "Preset: Skull Deathmatch")
+	#)
+	#if _add_hover_pop.is_valid():
+	#	_add_hover_pop.call(preset_dm_btn)
+	#preset_row.add_child(preset_dm_btn)
+	#_preset_deathmatch_button = preset_dm_btn
+	#
+	#var preset_br_btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
+	#preset_br_btn.text = "BR ROUNDS"
+	#preset_br_btn.custom_minimum_size = Vector2(0, 20)
+	#preset_br_btn.add_theme_font_size_override("font_size", 8)
+	#preset_br_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	#preset_br_btn.pressed.connect(func() -> void:
+	#	_apply_quick_mode_preset("skull_br", "battle_royale", "Preset: Skull BR Rounds")
+	#)
+	#if _add_hover_pop.is_valid():
+	#	_add_hover_pop.call(preset_br_btn)
+	#preset_row.add_child(preset_br_btn)
+	#_preset_br_button = preset_br_btn
 
 	var mode_row := HBoxContainer.new()
 	mode_row.add_theme_constant_override("separation", 6)
@@ -1744,33 +1887,34 @@ func _ensure_overlay() -> void:
 	match_actions.add_child(start_btn)
 	_ctf_start_button = start_btn
 
-	var ctf_add_bots_check := CheckBox.new()
-	ctf_add_bots_check.text = "Add Bots"
-	ctf_add_bots_check.add_theme_font_size_override("font_size", 9)
-	_apply_pixel_checkbox_style(ctf_add_bots_check)
-	ctf_add_bots_check.button_pressed = false
-	ctf_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
-		if _rpc_bridge != null:
-			_rpc_bridge.call("set_lobby_add_bots", toggled_on)
-	)
-	if _add_hover_pop.is_valid():
-		_add_hover_pop.call(ctf_add_bots_check)
-	ctf_room_box.add_child(ctf_add_bots_check)
-	_ctf_add_bots_check = ctf_add_bots_check
+	# Temporary: hide the Add Bots / Starting Animation toggles from the lobby UI.
+	# var ctf_add_bots_check := CheckBox.new()
+	# ctf_add_bots_check.text = "Add Bots"
+	# ctf_add_bots_check.add_theme_font_size_override("font_size", 9)
+	# _apply_pixel_checkbox_style(ctf_add_bots_check)
+	# ctf_add_bots_check.button_pressed = false
+	# ctf_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
+	# 	if _rpc_bridge != null:
+	# 		_rpc_bridge.call("set_lobby_add_bots", toggled_on)
+	# )
+	# if _add_hover_pop.is_valid():
+	# 	_add_hover_pop.call(ctf_add_bots_check)
+	# ctf_room_box.add_child(ctf_add_bots_check)
+	# _ctf_add_bots_check = ctf_add_bots_check
 
-	var ctf_show_starting_animation_check := CheckBox.new()
-	ctf_show_starting_animation_check.text = "Show Starting Animation"
-	ctf_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
-	_apply_pixel_checkbox_style(ctf_show_starting_animation_check)
-	ctf_show_starting_animation_check.button_pressed = false
-	ctf_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
-		if _rpc_bridge != null:
-			_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
-	)
-	if _add_hover_pop.is_valid():
-		_add_hover_pop.call(ctf_show_starting_animation_check)
-	ctf_room_box.add_child(ctf_show_starting_animation_check)
-	_ctf_show_starting_animation_check = ctf_show_starting_animation_check
+	# var ctf_show_starting_animation_check := CheckBox.new()
+	# ctf_show_starting_animation_check.text = "Show Starting Animation"
+	# ctf_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
+	# _apply_pixel_checkbox_style(ctf_show_starting_animation_check)
+	# ctf_show_starting_animation_check.button_pressed = false
+	# ctf_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
+	# 	if _rpc_bridge != null:
+	# 		_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
+	# )
+	# if _add_hover_pop.is_valid():
+	# 	_add_hover_pop.call(ctf_show_starting_animation_check)
+	# ctf_room_box.add_child(ctf_show_starting_animation_check)
+	# _ctf_show_starting_animation_check = ctf_show_starting_animation_check
 	_add_lobby_chat_section(ctf_room_box, "ctf")
 
 	var dm_room_box := VBoxContainer.new()
@@ -1884,12 +2028,10 @@ func _ensure_overlay() -> void:
 	dm_ruleset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dm_ruleset_option.add_theme_font_size_override("font_size", 9)
 	_apply_compact_option_style(dm_ruleset_option)
-	dm_ruleset_option.add_item("Round Survival")
-	dm_ruleset_option.set_item_metadata(0, "round_survival")
-	dm_ruleset_option.add_item("Kill Race")
-	dm_ruleset_option.set_item_metadata(1, "kill_race")
-	dm_ruleset_option.add_item("Timed Kills")
-	dm_ruleset_option.set_item_metadata(2, "timed_kills")
+	dm_ruleset_option.add_item("Max Kills")
+	dm_ruleset_option.set_item_metadata(0, "kill_race")
+	dm_ruleset_option.add_item("Timed")
+	dm_ruleset_option.set_item_metadata(1, "timed_kills")
 	dm_ruleset_option.item_selected.connect(func(index: int) -> void:
 		if _rpc_bridge == null:
 			return
@@ -1976,33 +2118,34 @@ func _ensure_overlay() -> void:
 	dm_time_row.add_child(dm_time_option)
 	_dm_time_option = dm_time_option
 
-	var dm_add_bots_check := CheckBox.new()
-	dm_add_bots_check.text = "Add Bots"
-	dm_add_bots_check.add_theme_font_size_override("font_size", 9)
-	_apply_pixel_checkbox_style(dm_add_bots_check)
-	dm_add_bots_check.button_pressed = false
-	dm_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
-		if _rpc_bridge != null:
-			_rpc_bridge.call("set_lobby_add_bots", toggled_on)
-	)
-	if _add_hover_pop.is_valid():
-		_add_hover_pop.call(dm_add_bots_check)
-	dm_room_box.add_child(dm_add_bots_check)
-	_dm_add_bots_check = dm_add_bots_check
+	# Temporary: hide the Add Bots / Starting Animation toggles from the lobby UI.
+	# var dm_add_bots_check := CheckBox.new()
+	# dm_add_bots_check.text = "Add Bots"
+	# dm_add_bots_check.add_theme_font_size_override("font_size", 9)
+	# _apply_pixel_checkbox_style(dm_add_bots_check)
+	# dm_add_bots_check.button_pressed = false
+	# dm_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
+	# 	if _rpc_bridge != null:
+	# 		_rpc_bridge.call("set_lobby_add_bots", toggled_on)
+	# )
+	# if _add_hover_pop.is_valid():
+	# 	_add_hover_pop.call(dm_add_bots_check)
+	# dm_room_box.add_child(dm_add_bots_check)
+	# _dm_add_bots_check = dm_add_bots_check
 
-	var dm_show_starting_animation_check := CheckBox.new()
-	dm_show_starting_animation_check.text = "Show Starting Animation"
-	dm_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
-	_apply_pixel_checkbox_style(dm_show_starting_animation_check)
-	dm_show_starting_animation_check.button_pressed = false
-	dm_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
-		if _rpc_bridge != null:
-			_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
-	)
-	if _add_hover_pop.is_valid():
-		_add_hover_pop.call(dm_show_starting_animation_check)
-	dm_room_box.add_child(dm_show_starting_animation_check)
-	_dm_show_starting_animation_check = dm_show_starting_animation_check
+	# var dm_show_starting_animation_check := CheckBox.new()
+	# dm_show_starting_animation_check.text = "Show Starting Animation"
+	# dm_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
+	# _apply_pixel_checkbox_style(dm_show_starting_animation_check)
+	# dm_show_starting_animation_check.button_pressed = false
+	# dm_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
+	# 	if _rpc_bridge != null:
+	# 		_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
+	# )
+	# if _add_hover_pop.is_valid():
+	# 	_add_hover_pop.call(dm_show_starting_animation_check)
+	# dm_room_box.add_child(dm_show_starting_animation_check)
+	# _dm_show_starting_animation_check = dm_show_starting_animation_check
 	_add_lobby_chat_section(dm_room_box, "dm")
 
 	_refresh_lobby_selection_summary()
@@ -2126,6 +2269,8 @@ func _show_ctf_room(payload: Dictionary) -> void:
 	if _selection_label != null:
 		_selection_label.visible = false
 	_set_rooms_list_visible(false)
+	if _preset_row != null:
+		_preset_row.visible = false
 	if _mode_row != null:
 		_mode_row.visible = false
 	if _waiting_room_title_label != null:
@@ -2177,6 +2322,8 @@ func _hide_ctf_room() -> void:
 	if _selection_label != null:
 		_selection_label.visible = true
 	_set_rooms_list_visible(true)
+	if _preset_row != null:
+		_preset_row.visible = true
 	if _mode_row != null:
 		_mode_row.visible = true
 	if _waiting_room_title_label != null:
@@ -2194,23 +2341,29 @@ func _show_dm_room(payload: Dictionary) -> void:
 	if _selection_label != null:
 		_selection_label.visible = false
 	_set_rooms_list_visible(false)
+	if _preset_row != null:
+		_preset_row.visible = false
 	if _mode_row != null:
 		_mode_row.visible = false
 	if _waiting_room_title_label != null:
 		_waiting_room_title_label.visible = true
 		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
+		var map_id := _active_lobby_map_id(_joined_lobby_id)
+		var waiting_room_type := "BR WAITING ROOM" if mode_id == "battle_royale" else "ROUNDS WAITING ROOM" if map_id == "skull_rounds" else "DEATHMATCH WAITING ROOM"
 		_waiting_room_title_label.text = "%s  |  %s" % [
 			str(payload.get("name", "FFA Room")),
-			"BR WAITING ROOM" if mode_id == "battle_royale" else "FFA WAITING ROOM"
+			waiting_room_type
 		]
 	_dm_room_box.visible = true
 	_refresh_lobby_chat_context()
 	if _dm_room_title != null:
 		_dm_room_title.visible = false
 		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
+		var map_id := _active_lobby_map_id(_joined_lobby_id)
+		var waiting_room_type := "BR WAITING ROOM" if mode_id == "battle_royale" else "ROUNDS WAITING ROOM" if map_id == "skull_rounds" else "DEATHMATCH WAITING ROOM"
 		_dm_room_title.text = "%s  |  %s" % [
 			str(payload.get("name", "FFA Room")),
-			"BR WAITING ROOM" if mode_id == "battle_royale" else "FFA WAITING ROOM"
+			waiting_room_type
 		]
 	var members := payload.get("members", []) as Array
 	var lines := PackedStringArray()
@@ -2247,8 +2400,14 @@ func _show_dm_room(payload: Dictionary) -> void:
 				_dm_show_starting_animation_check.call("set_pressed_no_signal", show_starting_animation)
 			else:
 				_dm_show_starting_animation_check.button_pressed = show_starting_animation
-	if _active_lobby_map_id(_joined_lobby_id) == "skull_ffa":
+	var map_id := _active_lobby_map_id(_joined_lobby_id)
+	var skull_policy := _skull_ruleset_policy_for_map(map_id)
+	if skull_policy != "none":
 		var skull_ruleset := str(payload.get("skull_ruleset", "kill_race")).strip_edges().to_lower()
+		if skull_policy == "round_only":
+			skull_ruleset = "round_survival"
+		elif skull_policy == "deathmatch_only" and skull_ruleset == "round_survival":
+			skull_ruleset = "kill_race"
 		var skull_target := int(payload.get("skull_target_score", 10))
 		var skull_time_limit := int(payload.get("skull_time_limit_sec", 180))
 		if _dm_ruleset_option != null:
@@ -2258,11 +2417,11 @@ func _show_dm_room(payload: Dictionary) -> void:
 		if _dm_time_option != null:
 			_select_option_by_metadata(_dm_time_option, skull_time_limit)
 		if _dm_target_label != null:
-			_dm_target_label.text = "Rounds to Win:" if skull_ruleset == "round_survival" else "Kills to Win:"
+			_dm_target_label.text = "Choose Rounds:" if skull_ruleset == "round_survival" else "Choose Kills:"
 		if _dm_target_row != null:
-			_dm_target_row.visible = skull_ruleset != "timed_kills"
+			_dm_target_row.visible = skull_policy == "round_only" or skull_ruleset != "timed_kills"
 		if _dm_time_row != null:
-			_dm_time_row.visible = skull_ruleset == "timed_kills"
+			_dm_time_row.visible = skull_policy != "round_only" and skull_ruleset == "timed_kills"
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
@@ -2278,6 +2437,8 @@ func _hide_dm_room() -> void:
 	if _selection_label != null:
 		_selection_label.visible = true
 	_set_rooms_list_visible(true)
+	if _preset_row != null:
+		_preset_row.visible = true
 	if _mode_row != null:
 		_mode_row.visible = true
 	if _waiting_room_title_label != null:

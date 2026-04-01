@@ -42,6 +42,11 @@ func rpc_play_death_sfx(target_peer_id: int, impact_position: Vector2, incoming_
 	if player != null and player.has_method("spawn_death_chunks_at"):
 		player.call("spawn_death_chunks_at", impact_position, incoming_velocity)
 
+func rpc_play_respawn_sfx(respawn_position: Vector2, respawn_sfx: AudioStream) -> void:
+	if combat_effects == null or respawn_sfx == null:
+		return
+	combat_effects.play_weapon_impact_sfx(respawn_sfx, respawn_position, -4.0, randf_range(0.97, 1.03), 2)
+
 func rpc_play_reload_sfx(peer_id: int, weapon_id: String) -> void:
 	var player := players.get(peer_id, null) as NetPlayer
 	if player == null:

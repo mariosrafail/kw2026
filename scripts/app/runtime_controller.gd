@@ -9,15 +9,51 @@ const FIGHT_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/fight_soundtrack.
 const FIGHT_SOUNDTRACK_FALLBACK := preload("res://assets/sounds/soundtrack/fight_soundtrack.MP3")
 const MENU_STATE_PATH := "user://main_menu_shop_state.json"
 const SKULL_FFA_MAP_ID := "skull_ffa"
+const SKULL_ROUNDS_MAP_ID := "skull_rounds"
+const SKULL_DEATHMATCH_MAP_ID := "skull_deathmatch"
 const SKULL_BR_MAP_ID := "skull_br"
+const SKULL_ROUNDS_SCENE_PATH := "res://scenes/skull_rounds.tscn"
+const SKULL_BR_SCENE_PATH := "res://scenes/skull_br.tscn"
 const BATTLE_ROYALE_ZONE_SYNC_INTERVAL_SEC := 0.1
 const BATTLE_ROYALE_ZONE_DAMAGE_INTERVAL_SEC := 1.0
 const BATTLE_ROYALE_ZONE_DAMAGE := 20
+const BATTLE_ROYALE_ZONE_START_DELAY_SEC := 10
 const SKULL_RULESET_ROUND_SURVIVAL := "round_survival"
 const SKULL_RULESET_KILL_RACE := "kill_race"
 const SKULL_RULESET_TIMED_KILLS := "timed_kills"
+const PENDING_SKULL_RULESET_SETTING := "kw/pending_skull_ruleset"
+const PENDING_SKULL_TARGET_SCORE_SETTING := "kw/pending_skull_target_score"
+const PENDING_SKULL_TIME_LIMIT_SEC_SETTING := "kw/pending_skull_time_limit_sec"
 const SKULL_RESPAWN_DELAY_SEC := 3.0
 const SKULL_ROUND_END_FREEZE_SEC := 2.2
+const SKULL_ROUND_RESULT_MESSAGE_PREFIX := "__kw_skull_round_result__|"
+const SKULL_MODE_RUNTIME_ROUNDS_SCRIPT := preload("res://scripts/app/runtime/modes/skull_mode_runtime_rounds.gd")
+const SKULL_MODE_RUNTIME_BR_SCRIPT := preload("res://scripts/app/runtime/modes/skull_mode_runtime_br.gd")
+const SKULL_MODE_RUNTIME_DEATHMATCH_SCRIPT := preload("res://scripts/app/runtime/modes/skull_mode_runtime_deathmatch.gd")
+const DEATH_TAUNTS_GREEKLISH := [
+	"pe8anes malaka",
+	"kurwa",
+	"re file ksipna",
+	"mpouketo sto kefali",
+	"rage quit incoming",
+	"ela re noobaki",
+	"pali xwma esy",
+	"boom ston koura",
+	"adios amigo",
+	"gg ez re filos"
+]
+const ROUND_WIN_TAUNTS_GREEKLISH := [
+	"nikises malaka",
+	"bravo re magka",
+	"teleutaio frag diko sou",
+	"katharises ton gyro",
+	"easy round re file",
+	"clutcharas san trelos",
+	"pame gia epomeno",
+	"auta einai kills",
+	"den tous afises anasa",
+	"round sto tsepaki sou"
+]
 var _rt_minimap_hud = null
 var _rt_skill_hud = null
 var _rt_fight_music_player: AudioStreamPlayer = null
@@ -26,6 +62,7 @@ var _rt_gameplay_locked_until_msec := 0
 var _rt_skull_match_intro_sent := false
 var _rt_battle_royale_zone_sync_accumulator := 0.0
 var _rt_battle_royale_zone_damage_accumulator := 0.0
+var _rt_battle_royale_zone_unfreeze_due_msec := 0
 var _rt_particles_enabled := true
 var _rt_screen_shake_enabled := true
 var _rt_particles_listener_bound := false
@@ -43,12 +80,25 @@ var _rt_spectator_camera_position := Vector2.ZERO
 var _rt_local_respawn_countdown_remaining_sec := 0.0
 var _rt_local_respawn_countdown_active := false
 var _rt_local_respawn_was_dead := false
+var _rt_local_death_taunt := ""
 var _rt_timer_label: Label = null
 var _rt_center_message_label: Label = null
 var _rt_winner_return_due_msec := 0
 var _rt_winner_screen_active := false
 var _rt_center_message_tween: Tween = null
 var _rt_timer_label_tween: Tween = null
+var _rt_skull_intro_was_active := false
+var _rt_priority_center_message_text := ""
+var _rt_priority_center_message_until_msec := 0
+var _rt_pending_skull_ruleset := ""
+var _rt_pending_skull_target_score := -1
+var _rt_pending_skull_time_limit_sec := -1
+var _rt_skull_round_number := 1
+var _rt_round_transition_due_msec := 0
+var _rt_round_transition_message := ""
+var _rt_skull_mode_rounds = SKULL_MODE_RUNTIME_ROUNDS_SCRIPT.new()
+var _rt_skull_mode_br = SKULL_MODE_RUNTIME_BR_SCRIPT.new()
+var _rt_skull_mode_deathmatch = SKULL_MODE_RUNTIME_DEATHMATCH_SCRIPT.new()
 
 const RPC_ROOT_NODE_NAME := "GameRoot"
 
@@ -78,6 +128,7 @@ func _ready() -> void:
 	_init_services()
 	_init_weapons()
 	_init_scene_map_context()
+	_capture_pending_skull_match_config()
 	_refresh_spawn_points()
 	_configure_services()
 	_apply_particles_pref_from_menu_state()
@@ -92,6 +143,8 @@ func _ready() -> void:
 	_configure_battle_royale_zone_controller()
 	_reset_skull_mode_runtime_state()
 	_ensure_skull_runtime_hud()
+	if multiplayer != null and multiplayer.is_server() and _is_battle_royale_match_scene():
+		_schedule_battle_royale_zone_start(BATTLE_ROYALE_ZONE_START_DELAY_SEC)
 
 	var startup_defaults := _load_startup_network_defaults()
 	port_spin.value = int(startup_defaults.get("port", DEFAULT_PORT))
@@ -255,12 +308,22 @@ func _physics_process(delta: float) -> void:
 		ctf_match_controller.visual_tick(_ctf_objective_enabled())
 
 	if multiplayer.multiplayer_peer != null and (role == Role.CLIENT or (role == Role.SERVER and not OS.has_feature("dedicated_server"))):
+		var intro_active := false
 		if _rt_skull_intro != null and _rt_skull_intro.has_method("is_active") and _rt_skull_intro.call("is_active") == true:
+			intro_active = true
 			_rt_skull_intro.call("visual_tick", delta)
+			if _rt_skull_intro != null and _rt_skull_intro.has_method("is_active") and _rt_skull_intro.call("is_active") != true:
+				intro_active = false
 		elif _should_use_skull_spectator_camera():
 			_tick_skull_spectator_camera(delta)
 		elif client_input_controller != null:
 			client_input_controller.follow_local_player_camera(delta)
+		if _rt_skull_intro_was_active and not intro_active and client_input_controller != null and client_input_controller.has_method("snap_camera_to_local_player"):
+			client_input_controller.call("snap_camera_to_local_player", true)
+		_rt_skull_intro_was_active = intro_active
+	_tick_dead_player_visibility()
+	_tick_local_dead_visibility()
+	_tick_minimap_visibility()
 	_tick_skull_runtime_hud(delta)
 
 func _ensure_skill_hud() -> void:
@@ -372,6 +435,51 @@ func _is_world_position_visible_in_main_camera(world_position: Vector2) -> bool:
 	)
 	var camera_rect := Rect2(main_camera.global_position - half_extents, half_extents * 2.0).grow(6.0)
 	return camera_rect.has_point(world_position)
+
+func _local_player_is_dead_or_waiting_respawn() -> bool:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return false
+	var local_peer_id := multiplayer.get_unique_id()
+	if local_peer_id <= 0:
+		return false
+	var local_player := players.get(local_peer_id, null) as NetPlayer
+	if local_player == null:
+		return false
+	if local_player.get_health() <= 0:
+		return true
+	if local_player.has_method("is_respawn_hidden"):
+		return bool(local_player.call("is_respawn_hidden"))
+	return false
+
+func _tick_local_dead_visibility() -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	var local_peer_id := multiplayer.get_unique_id()
+	if local_peer_id <= 0:
+		return
+	var local_player := players.get(local_peer_id, null) as NetPlayer
+	if local_player == null:
+		return
+	var should_hide := _local_player_is_dead_or_waiting_respawn()
+	if local_player.has_method("set_forced_hidden"):
+		local_player.call("set_forced_hidden", "local_dead_view", should_hide)
+
+func _tick_dead_player_visibility() -> void:
+	for player_value in players.values():
+		var player := player_value as NetPlayer
+		if player == null:
+			continue
+		var dead_hidden := player.get_health() <= 0
+		if player.has_method("set_forced_hidden"):
+			player.call("set_forced_hidden", "dead_state", dead_hidden)
+		if player.has_method("set_forced_sfx_suppressed"):
+			player.call("set_forced_sfx_suppressed", "dead_state", dead_hidden)
+
+func _tick_minimap_visibility() -> void:
+	if _rt_minimap_hud == null or not is_instance_valid(_rt_minimap_hud):
+		return
+	var should_show := _is_local_player_spawned() and not _local_player_is_dead_or_waiting_respawn()
+	_rt_minimap_hud.visible = should_show
 
 func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	if ui_controller == null:
@@ -537,16 +645,20 @@ func _configure_battle_royale_zone_controller() -> void:
 func _is_skull_intro_match_scene() -> bool:
 	if map_controller != null:
 		var map_id := map_controller.normalized_map_id()
-		if map_id == SKULL_FFA_MAP_ID or map_id == SKULL_BR_MAP_ID:
+		if map_id == SKULL_FFA_MAP_ID or map_id == SKULL_ROUNDS_MAP_ID or map_id == SKULL_DEATHMATCH_MAP_ID or map_id == SKULL_BR_MAP_ID:
 			return true
-	if selected_map_id == SKULL_FFA_MAP_ID or selected_map_id == SKULL_BR_MAP_ID:
+	if selected_map_id == SKULL_FFA_MAP_ID or selected_map_id == SKULL_ROUNDS_MAP_ID or selected_map_id == SKULL_DEATHMATCH_MAP_ID or selected_map_id == SKULL_BR_MAP_ID:
 		return true
 	return false
 
 func _is_skull_ffa_match_scene() -> bool:
-	if map_controller != null and map_controller.normalized_map_id() == SKULL_FFA_MAP_ID:
-		return true
-	return selected_map_id == SKULL_FFA_MAP_ID
+	var map_id := selected_map_id
+	if map_controller != null:
+		map_id = map_controller.normalized_map_id()
+	return map_id == SKULL_FFA_MAP_ID \
+		or map_id == SKULL_ROUNDS_MAP_ID \
+		or map_id == SKULL_DEATHMATCH_MAP_ID \
+		or map_id == SKULL_BR_MAP_ID
 
 func _is_battle_royale_match_scene() -> bool:
 	if map_controller != null and map_controller.normalized_map_id() == SKULL_BR_MAP_ID:
@@ -609,6 +721,8 @@ func _server_tick_battle_royale_zone(delta: float) -> void:
 		return
 	if battle_royale_zone_controller == null:
 		return
+	if _is_battle_royale_zone_frozen():
+		return
 	if battle_royale_zone_controller.has_method("server_tick"):
 		battle_royale_zone_controller.call("server_tick", delta)
 	_rt_battle_royale_zone_sync_accumulator += delta
@@ -642,6 +756,8 @@ func _server_broadcast_battle_royale_zone_state() -> void:
 		_rpc_sync_battle_royale_zone.rpc_id(member_id, center, radius)
 
 func _server_apply_battle_royale_zone_damage() -> void:
+	if _rt_skull_match_locked or _rt_skull_round_restart_due_msec > 0:
+		return
 	if battle_royale_zone_controller == null or hit_damage_resolver == null:
 		return
 	var center: Vector2 = Vector2(1552.0, 1552.0)
@@ -699,13 +815,16 @@ func _maybe_server_begin_skull_match_intro() -> void:
 	_rt_skull_match_intro_sent = true
 	_activate_gameplay_lock(intro_duration_sec)
 	for member_value in _lobby_members(lobby_id):
-		_rpc_skull_match_intro.rpc_id(int(member_value), ordered_peer_ids, intro_duration_sec)
+		_server_send_skull_match_intro_to_peer(int(member_value), ordered_peer_ids, intro_duration_sec)
 
 func _reset_skull_mode_runtime_state() -> void:
 	_rt_skull_round_wins_by_peer.clear()
 	_rt_skull_round_eliminated_by_peer.clear()
 	_rt_skull_respawn_due_msec_by_peer.clear()
 	_rt_skull_round_restart_due_msec = 0
+	_rt_battle_royale_zone_sync_accumulator = 0.0
+	_rt_battle_royale_zone_damage_accumulator = 0.0
+	_rt_battle_royale_zone_unfreeze_due_msec = 0
 	_rt_prev_round_spawn_slots.clear()
 	_rt_skull_match_locked = false
 	_rt_skull_timed_remaining_sec = -1.0
@@ -715,8 +834,15 @@ func _reset_skull_mode_runtime_state() -> void:
 	_rt_local_respawn_countdown_remaining_sec = 0.0
 	_rt_local_respawn_countdown_active = false
 	_rt_local_respawn_was_dead = false
+	_rt_local_death_taunt = ""
 	_rt_winner_return_due_msec = 0
 	_rt_winner_screen_active = false
+	_rt_skull_intro_was_active = false
+	_rt_priority_center_message_text = ""
+	_rt_priority_center_message_until_msec = 0
+	_rt_skull_round_number = 1
+	_rt_round_transition_due_msec = 0
+	_rt_round_transition_message = ""
 	_show_center_message("", false)
 	_update_skull_timer_label()
 
@@ -816,37 +942,117 @@ func _set_label_pulse(label: Label, tween_ref: Tween, active: bool, scale_to: fl
 func _active_skull_lobby_id() -> int:
 	return _active_match_lobby_id()
 
+func _active_skull_map_id() -> String:
+	if map_controller != null:
+		return map_controller.normalized_map_id()
+	return selected_map_id
+
+func _is_forced_round_survival_scene() -> bool:
+	if scene_file_path == SKULL_ROUNDS_SCENE_PATH or scene_file_path == SKULL_BR_SCENE_PATH:
+		return true
+	var map_id := _active_skull_map_id()
+	if map_id == SKULL_ROUNDS_MAP_ID or map_id == SKULL_BR_MAP_ID:
+		return true
+	if multiplayer != null and multiplayer.multiplayer_peer != null and multiplayer.is_server():
+		var lobby_id := _active_skull_lobby_id()
+		if lobby_id > 0:
+			var lobby_map_id := _lobby_map_id(lobby_id)
+			return lobby_map_id == SKULL_ROUNDS_MAP_ID or lobby_map_id == SKULL_BR_MAP_ID
+	return false
+
+func _normalize_skull_ruleset_id(value: String) -> String:
+	var normalized := value.strip_edges().to_lower()
+	if normalized == SKULL_RULESET_ROUND_SURVIVAL:
+		return SKULL_RULESET_ROUND_SURVIVAL
+	if normalized == SKULL_RULESET_KILL_RACE:
+		return SKULL_RULESET_KILL_RACE
+	if normalized == SKULL_RULESET_TIMED_KILLS:
+		return SKULL_RULESET_TIMED_KILLS
+	return ""
+
+func _capture_pending_skull_match_config() -> void:
+	_rt_pending_skull_ruleset = _normalize_skull_ruleset_id(
+		str(ProjectSettings.get_setting(PENDING_SKULL_RULESET_SETTING, ""))
+	)
+	_rt_pending_skull_target_score = maxi(0, int(ProjectSettings.get_setting(PENDING_SKULL_TARGET_SCORE_SETTING, -1)))
+	_rt_pending_skull_time_limit_sec = maxi(0, int(ProjectSettings.get_setting(PENDING_SKULL_TIME_LIMIT_SEC_SETTING, -1)))
+	ProjectSettings.set_setting(PENDING_SKULL_RULESET_SETTING, "")
+	ProjectSettings.set_setting(PENDING_SKULL_TARGET_SCORE_SETTING, -1)
+	ProjectSettings.set_setting(PENDING_SKULL_TIME_LIMIT_SEC_SETTING, -1)
+
 func _active_skull_ruleset() -> String:
 	if not _is_skull_ffa_match_scene():
 		return ""
+	var handler = _active_skull_mode_handler()
+	if handler == null:
+		return ""
+	return str(handler.call("ruleset_id", self))
+
+func _resolve_deathmatch_skull_ruleset() -> String:
 	var lobby_id := _active_skull_lobby_id()
-	if lobby_id <= 0 or lobby_service == null:
-		return SKULL_RULESET_KILL_RACE
-	return str(lobby_service.skull_ruleset(lobby_id)).strip_edges().to_lower()
+	var resolved := ""
+	if lobby_id > 0 and lobby_service != null:
+		resolved = _normalize_skull_ruleset_id(str(lobby_service.skull_ruleset(lobby_id)))
+	elif not active_lobby_room_state.is_empty():
+		resolved = _normalize_skull_ruleset_id(str(active_lobby_room_state.get("skull_ruleset", "")))
+	elif not _rt_pending_skull_ruleset.is_empty():
+		resolved = _rt_pending_skull_ruleset
+	elif _rt_skull_timed_remaining_sec >= 0.0:
+		resolved = SKULL_RULESET_TIMED_KILLS
+	elif not _rt_skull_round_wins_by_peer.is_empty():
+		resolved = SKULL_RULESET_ROUND_SURVIVAL
+	else:
+		resolved = SKULL_RULESET_KILL_RACE
+	return resolved
+
+func _active_skull_mode_handler():
+	if not _is_skull_ffa_match_scene():
+		return null
+	var map_id := _active_skull_map_id()
+	var ruleset_hint := _normalize_skull_ruleset_id(_rt_pending_skull_ruleset)
+	if map_id == SKULL_BR_MAP_ID or scene_file_path == SKULL_BR_SCENE_PATH or _active_game_mode() == GAME_MODE_BATTLE_ROYALE:
+		return _rt_skull_mode_br
+	if map_id == SKULL_ROUNDS_MAP_ID or scene_file_path == SKULL_ROUNDS_SCENE_PATH:
+		return _rt_skull_mode_rounds
+	if ruleset_hint == SKULL_RULESET_ROUND_SURVIVAL:
+		return _rt_skull_mode_rounds
+	if _is_forced_round_survival_scene():
+		return _rt_skull_mode_rounds
+	return _rt_skull_mode_deathmatch
+
+func _should_show_round_wins_scoreboard() -> bool:
+	var handler = _active_skull_mode_handler()
+	if handler == null:
+		return false
+	return bool(handler.call("should_show_round_wins_scoreboard", self))
 
 func _skull_target_score() -> int:
 	var lobby_id := _active_skull_lobby_id()
-	if lobby_id <= 0 or lobby_service == null:
-		return 10
-	return int(lobby_service.skull_target_score(lobby_id))
+	if lobby_id > 0 and lobby_service != null:
+		return int(lobby_service.skull_target_score(lobby_id))
+	if not active_lobby_room_state.is_empty():
+		return int(active_lobby_room_state.get("skull_target_score", 10))
+	if _rt_pending_skull_target_score > 0:
+		return _rt_pending_skull_target_score
+	return 10
 
 func _skull_time_limit_sec() -> int:
 	var lobby_id := _active_skull_lobby_id()
-	if lobby_id <= 0 or lobby_service == null:
-		return 180
-	return int(lobby_service.skull_time_limit_sec(lobby_id))
+	if lobby_id > 0 and lobby_service != null:
+		return int(lobby_service.skull_time_limit_sec(lobby_id))
+	if not active_lobby_room_state.is_empty():
+		return int(active_lobby_room_state.get("skull_time_limit_sec", 180))
+	if _rt_pending_skull_time_limit_sec > 0:
+		return _rt_pending_skull_time_limit_sec
+	return 180
 
 func _server_handle_special_respawn(peer_id: int, player: NetPlayer) -> bool:
 	if not multiplayer.is_server():
 		return false
-	var ruleset := _active_skull_ruleset()
-	if ruleset.is_empty() or _rt_skull_match_locked:
+	var handler = _active_skull_mode_handler()
+	if handler == null:
 		return false
-	if ruleset == SKULL_RULESET_ROUND_SURVIVAL:
-		_server_handle_skull_round_elimination(peer_id, player)
-		return true
-	_server_queue_skull_respawn(peer_id, player, SKULL_RESPAWN_DELAY_SEC)
-	return true
+	return bool(handler.call("handle_special_respawn", self, peer_id, player))
 
 func _server_blocks_input_for_peer(peer_id: int) -> bool:
 	if _rt_skull_match_locked:
@@ -858,14 +1064,10 @@ func _server_blocks_input_for_peer(peer_id: int) -> bool:
 func _server_handle_skull_kill_event(attacker_peer_id: int, _target_peer_id: int) -> void:
 	if not multiplayer.is_server() or _rt_skull_match_locked:
 		return
-	var ruleset := _active_skull_ruleset()
-	if ruleset == SKULL_RULESET_KILL_RACE:
-		if attacker_peer_id <= 0:
-			return
-		var stats := player_stats.get(attacker_peer_id, {}) as Dictionary
-		var kills := int(stats.get("kills", 0))
-		if kills >= _skull_target_score():
-			_server_finish_skull_match(_display_name_for_peer(attacker_peer_id))
+	var handler = _active_skull_mode_handler()
+	if handler == null:
+		return
+	handler.call("handle_kill_event", self, attacker_peer_id, _target_peer_id)
 
 func _server_tick_skull_mode(delta: float) -> void:
 	if not multiplayer.is_server():
@@ -923,27 +1125,72 @@ func _server_queue_skull_respawn(peer_id: int, player: NetPlayer, delay_sec: flo
 		player.set_health(0)
 		_server_broadcast_player_state(peer_id, player)
 
+func _assign_random_skull_spawn_slot(peer_id: int) -> void:
+	if peer_id <= 0 or spawn_points.is_empty():
+		return
+	spawn_slots[peer_id] = int(randi() % spawn_points.size())
+
 func _server_handle_skull_round_elimination(peer_id: int, player: NetPlayer) -> void:
+	if _rt_skull_match_locked or _rt_skull_round_restart_due_msec > 0:
+		print("[BR ROUND DBG] elimination ignored peer=%d locked=%s restart_due=%d" % [
+			peer_id,
+			str(_rt_skull_match_locked),
+			_rt_skull_round_restart_due_msec
+		])
+		return
+	_rt_skull_respawn_due_msec_by_peer.erase(peer_id)
 	_rt_skull_round_eliminated_by_peer[peer_id] = true
 	var lobby_id := _active_skull_lobby_id()
 	if player != null:
+		player.set_forced_hidden("respawn_wait", true)
+		player.set_forced_sfx_suppressed("respawn_wait", true)
 		player.set_health(0)
 		_server_broadcast_player_state(peer_id, player)
-	if _rt_skull_round_restart_due_msec > 0:
-		return
 	var alive := _alive_round_participant_peer_ids()
+	print("[BR ROUND DBG] eliminated peer=%d scene=%s ruleset=%s alive=%s round=%d lobby=%d" % [
+		peer_id,
+		scene_file_path,
+		_active_skull_ruleset(),
+		str(alive),
+		_rt_skull_round_number,
+		lobby_id
+	])
 	if alive.size() > 1:
 		return
 	var winner_peer_id := int(alive[0]) if alive.size() == 1 else 0
+	var completed_round_number := _rt_skull_round_number
 	if winner_peer_id > 0:
 		var wins := int(_rt_skull_round_wins_by_peer.get(winner_peer_id, 0)) + 1
 		_rt_skull_round_wins_by_peer[winner_peer_id] = wins
 		_server_sync_round_wins(lobby_id, winner_peer_id, wins)
+		_server_send_match_message_to_peer(winner_peer_id, _pick_round_winner_taunt())
 		var target := _skull_target_score()
-		_server_broadcast_match_message(lobby_id, "Round winner: %s (%d/%d)" % [_display_name_for_peer(winner_peer_id), wins, target])
+		_server_broadcast_match_message(
+			lobby_id,
+			"%s%s|%d|%.2f" % [
+				SKULL_ROUND_RESULT_MESSAGE_PREFIX,
+				_display_name_for_peer(winner_peer_id),
+				completed_round_number,
+				SKULL_ROUND_END_FREEZE_SEC
+			]
+		)
 		if wins >= target:
 			_server_finish_skull_match(_display_name_for_peer(winner_peer_id))
 			return
+	elif lobby_id > 0:
+		_server_broadcast_match_message(
+			lobby_id,
+			"%sRound draw|%d|%.2f" % [
+				SKULL_ROUND_RESULT_MESSAGE_PREFIX,
+				completed_round_number,
+				SKULL_ROUND_END_FREEZE_SEC
+			]
+		)
+	print("[BR ROUND DBG] scheduling round restart winner_peer=%d completed_round=%d due_in=%.2f" % [
+		winner_peer_id,
+		completed_round_number,
+		SKULL_ROUND_END_FREEZE_SEC
+	])
 	_rt_skull_round_restart_due_msec = Time.get_ticks_msec() + int(round(SKULL_ROUND_END_FREEZE_SEC * 1000.0))
 	_activate_gameplay_lock(SKULL_ROUND_END_FREEZE_SEC)
 
@@ -953,8 +1200,20 @@ func _server_tick_skull_round_restart() -> void:
 	if Time.get_ticks_msec() < _rt_skull_round_restart_due_msec:
 		return
 	_rt_skull_round_restart_due_msec = 0
+	_rt_round_transition_due_msec = 0
+	_rt_round_transition_message = ""
+	_rt_skull_round_number += 1
 	_rt_skull_round_eliminated_by_peer.clear()
+	_rt_skull_respawn_due_msec_by_peer.clear()
+	print("[BR ROUND DBG] restarting round new_round=%d scene=%s" % [
+		_rt_skull_round_number,
+		scene_file_path
+	])
 	_server_randomize_round_spawn_slots()
+	if _is_battle_royale_match_scene() and battle_royale_zone_controller != null and battle_royale_zone_controller.has_method("reset_match"):
+		battle_royale_zone_controller.call("reset_match")
+		_schedule_battle_royale_zone_start(BATTLE_ROYALE_ZONE_START_DELAY_SEC)
+		_server_broadcast_battle_royale_zone_state()
 	for peer_value in players.keys():
 		var peer_id := int(peer_value)
 		var player := players.get(peer_id, null) as NetPlayer
@@ -977,7 +1236,7 @@ func _server_tick_skull_round_restart() -> void:
 				intro_duration_sec = float(_rt_skull_intro.call("recommended_duration_sec", ordered_peer_ids.size()))
 			_activate_gameplay_lock(intro_duration_sec)
 			for member_value in _lobby_members(lobby_id):
-				_rpc_skull_match_intro.rpc_id(int(member_value), ordered_peer_ids, intro_duration_sec)
+				_server_send_skull_match_intro_to_peer(int(member_value), ordered_peer_ids, intro_duration_sec)
 
 func _server_randomize_round_spawn_slots() -> void:
 	if spawn_points.is_empty():
@@ -1025,6 +1284,15 @@ func _server_randomize_round_spawn_slots() -> void:
 		var slot := int(assigned.get(peer_id, 0))
 		spawn_slots[peer_id] = slot
 		_rt_prev_round_spawn_slots[peer_id] = slot
+
+func _schedule_battle_royale_zone_start(delay_sec: float) -> void:
+	var due_msec := Time.get_ticks_msec() + int(round(maxf(0.0, delay_sec) * 1000.0))
+	_rt_battle_royale_zone_unfreeze_due_msec = maxi(_rt_battle_royale_zone_unfreeze_due_msec, due_msec)
+
+func _is_battle_royale_zone_frozen() -> bool:
+	if _is_gameplay_locked():
+		return true
+	return _rt_battle_royale_zone_unfreeze_due_msec > Time.get_ticks_msec()
 
 func _alive_round_participant_peer_ids() -> Array:
 	var out: Array = []
@@ -1092,11 +1360,65 @@ func _server_broadcast_skull_time_remaining() -> void:
 			continue
 		_rpc_sync_skull_time_remaining.rpc_id(member_id, _rt_skull_timed_remaining_sec)
 
+func _server_send_match_message_to_peer(peer_id: int, text: String) -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if peer_id <= 0:
+		return
+	var trimmed := text.strip_edges()
+	if trimmed.is_empty():
+		return
+	if peer_id == multiplayer.get_unique_id():
+		_rpc_match_message(trimmed)
+		return
+	_rpc_match_message.rpc_id(peer_id, trimmed)
+
+func _server_send_skull_match_intro_to_peer(peer_id: int, participant_peer_ids: Array, duration_sec: float) -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if peer_id <= 0:
+		return
+	if peer_id == multiplayer.get_unique_id():
+		_start_local_skull_match_intro(participant_peer_ids, duration_sec)
+		return
+	_rpc_skull_match_intro.rpc_id(peer_id, participant_peer_ids, duration_sec)
+
+func _is_round_winner_taunt_text(text: String) -> bool:
+	var normalized := text.strip_edges().to_lower()
+	if normalized.is_empty():
+		return false
+	for taunt_value in ROUND_WIN_TAUNTS_GREEKLISH:
+		if normalized == str(taunt_value).strip_edges().to_lower():
+			return true
+	return false
+
+func _show_priority_center_message(text: String, duration_sec: float) -> void:
+	var normalized := text.strip_edges()
+	if normalized.is_empty():
+		return
+	_rt_priority_center_message_text = normalized
+	_rt_priority_center_message_until_msec = Time.get_ticks_msec() + int(round(maxf(0.2, duration_sec) * 1000.0))
+	_show_center_message(_rt_priority_center_message_text, true)
+
 func _handle_match_message_text(text: String) -> void:
 	var lowered := text.strip_edges().to_lower()
+	if text.begins_with(SKULL_ROUND_RESULT_MESSAGE_PREFIX):
+		var payload := text.substr(SKULL_ROUND_RESULT_MESSAGE_PREFIX.length())
+		var parts := payload.split("|", false)
+		var winner_name := str(parts[0] if parts.size() > 0 else "").strip_edges()
+		var round_number := int(str(parts[1] if parts.size() > 1 else "0"))
+		var duration_sec := float(str(parts[2] if parts.size() > 2 else str(SKULL_ROUND_END_FREEZE_SEC)))
+		var winner_text := "%s won round %d" % [winner_name, round_number] if not winner_name.is_empty() and winner_name.to_lower() != "round draw" else "Round draw"
+		_rt_round_transition_message = winner_text
+		_rt_round_transition_due_msec = Time.get_ticks_msec() + int(round(maxf(0.2, duration_sec) * 1000.0))
+		_show_center_message(winner_text, true)
+		return
 	if lowered.begins_with("the winner is"):
 		_rt_winner_screen_active = true
 		_show_center_message(text, true)
+		return
+	if _is_round_winner_taunt_text(text):
+		_show_priority_center_message(text, 2.0)
 
 func _server_finish_skull_match(winner_name: String) -> void:
 	var lobby_id := _active_skull_lobby_id()
@@ -1189,53 +1511,110 @@ func _tick_skull_runtime_hud(delta: float) -> void:
 		return
 	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
 	var local_player := players.get(local_peer_id, null) as NetPlayer
-	var is_kill_style := _active_skull_ruleset() == SKULL_RULESET_KILL_RACE or _active_skull_ruleset() == SKULL_RULESET_TIMED_KILLS
-	if not is_kill_style:
+	var ruleset := _active_skull_ruleset()
+	var is_kill_style := ruleset == SKULL_RULESET_KILL_RACE or ruleset == SKULL_RULESET_TIMED_KILLS
+	var is_round_style := ruleset == SKULL_RULESET_ROUND_SURVIVAL
+	var now_msec := Time.get_ticks_msec()
+	var has_priority_message := _rt_priority_center_message_until_msec > now_msec and not _rt_priority_center_message_text.is_empty()
+	var round_transition_active := is_round_style and _rt_round_transition_due_msec > now_msec and not _rt_round_transition_message.is_empty()
+	if not is_kill_style and not is_round_style:
 		_rt_local_respawn_countdown_remaining_sec = 0.0
 		_rt_local_respawn_countdown_active = false
 		_rt_local_respawn_was_dead = false
+		_rt_local_death_taunt = ""
+		_rt_priority_center_message_text = ""
+		_rt_priority_center_message_until_msec = 0
 		_show_center_message("", false)
+		if _rt_center_message_label != null:
+			_rt_center_message_label.visible = false
+			_rt_center_message_label.text = ""
 		return
-	var local_dead := local_player != null and local_player.get_health() <= 0 and is_kill_style
+	var local_dead := local_player != null and local_player.get_health() <= 0 and (is_kill_style or is_round_style)
 	if local_dead and not _rt_local_respawn_was_dead:
-		_rt_local_respawn_countdown_remaining_sec = SKULL_RESPAWN_DELAY_SEC
-		_rt_local_respawn_countdown_active = true
+		_rt_local_death_taunt = _pick_random_death_taunt()
+		if is_kill_style:
+			_rt_local_respawn_countdown_remaining_sec = SKULL_RESPAWN_DELAY_SEC
+			_rt_local_respawn_countdown_active = true
+	if round_transition_active:
+		var round_seconds_left := maxi(1, int(ceil(float(_rt_round_transition_due_msec - now_msec) / 1000.0)))
+		_show_center_message("%s\nNext round in %d..." % [_rt_round_transition_message, round_seconds_left], true)
+		_rt_local_respawn_was_dead = local_dead
+		return
+	if is_round_style:
+		_rt_local_respawn_countdown_remaining_sec = 0.0
+		_rt_local_respawn_countdown_active = false
+		if local_dead:
+			var taunt_only := _rt_local_death_taunt if not _rt_local_death_taunt.is_empty() else "pe8anes malaka"
+			_show_center_message(taunt_only, true)
+		elif has_priority_message:
+			_show_center_message(_rt_priority_center_message_text, true)
+		elif not _rt_winner_screen_active:
+			_rt_local_death_taunt = ""
+			_show_center_message("", false)
+		_rt_local_respawn_was_dead = local_dead
+		return
 	if _rt_local_respawn_countdown_active:
 		_rt_local_respawn_countdown_remaining_sec = maxf(0.0, _rt_local_respawn_countdown_remaining_sec - delta)
 		var sec_left := maxi(1, int(ceil(_rt_local_respawn_countdown_remaining_sec)))
-		_show_center_message("Respawning in %d..." % sec_left, true)
+		var top_line := _rt_local_death_taunt if not _rt_local_death_taunt.is_empty() else "pe8anes malaka"
+		_show_center_message("%s\nRespawning in %d..." % [top_line, sec_left], true)
 		if _rt_local_respawn_countdown_remaining_sec <= 0.0 and not local_dead:
 			_rt_local_respawn_countdown_active = false
+			_rt_local_death_taunt = ""
 			_show_center_message("", false)
 	elif not local_dead and not _rt_winner_screen_active:
+		if has_priority_message:
+			_show_center_message(_rt_priority_center_message_text, true)
+			_rt_local_respawn_was_dead = local_dead
+			return
+		_rt_local_death_taunt = ""
 		_show_center_message("", false)
 	_rt_local_respawn_was_dead = local_dead
+
+func _pick_random_death_taunt() -> String:
+	if DEATH_TAUNTS_GREEKLISH.is_empty():
+		return "pe8anes malaka"
+	return str(DEATH_TAUNTS_GREEKLISH[randi() % DEATH_TAUNTS_GREEKLISH.size()])
+
+func _pick_round_winner_taunt() -> String:
+	if ROUND_WIN_TAUNTS_GREEKLISH.is_empty():
+		return "nikises malaka"
+	return str(ROUND_WIN_TAUNTS_GREEKLISH[randi() % ROUND_WIN_TAUNTS_GREEKLISH.size()])
 
 @rpc("authority", "reliable")
 func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:
 		return
-	_activate_gameplay_lock(_duration_sec)
+	_start_local_skull_match_intro(_participant_peer_ids, _duration_sec)
+
+func _start_local_skull_match_intro(participant_peer_ids: Array, duration_sec: float) -> void:
+	_activate_gameplay_lock(duration_sec)
 	if _rt_skull_intro != null and _rt_skull_intro.has_method("start") and multiplayer != null:
-		_rt_skull_intro.call("start", _participant_peer_ids, multiplayer.get_unique_id(), _duration_sec)
+		_rt_skull_intro.call("start", participant_peer_ids, multiplayer.get_unique_id(), duration_sec)
 
 func _update_score_labels() -> void:
 	super._update_score_labels()
 	if _ctf_enabled() or ui_controller == null:
 		return
 	var ruleset := _active_skull_ruleset()
-	if ruleset == SKULL_RULESET_ROUND_SURVIVAL:
+	if _should_show_round_wins_scoreboard():
 		if kd_label != null:
 			var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
+			var local_stats := player_stats.get(local_peer_id, {}) as Dictionary
 			var wins := int(_rt_skull_round_wins_by_peer.get(local_peer_id, 0))
-			kd_label.text = "ROUND WINS: %d/%d" % [wins, _skull_target_score()]
+			kd_label.text = "K/D : %d/%d  |  ROUND WINS: %d/%d" % [
+				int(local_stats.get("kills", 0)),
+				int(local_stats.get("deaths", 0)),
+				wins,
+				_skull_target_score()
+			]
 		if ui_controller.has_method("update_scoreboard_round_wins"):
 			var scoreboard_rounds: Dictionary = _rt_skull_round_wins_by_peer.duplicate(true) as Dictionary
 			for peer_value in player_stats.keys():
 				var peer_id := int(peer_value)
 				if not scoreboard_rounds.has(peer_id):
 					scoreboard_rounds[peer_id] = 0
-			ui_controller.call("update_scoreboard_round_wins", scoreboard_rounds, player_display_names)
+			ui_controller.call("update_scoreboard_round_wins", scoreboard_rounds, player_display_names, player_stats)
 	elif ruleset == SKULL_RULESET_TIMED_KILLS and _rt_skull_timed_remaining_sec >= 0.0:
 		if kd_label != null:
 			kd_label.text = "TIME LEFT: %ds" % int(ceil(_rt_skull_timed_remaining_sec))

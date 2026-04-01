@@ -149,6 +149,19 @@ func follow_local_player_camera(delta: float) -> void:
 	else:
 		main_camera.global_position = _camera_follow_position + camera_shake.step_offset(delta)
 
+func snap_camera_to_local_player(reset_mouse_look: bool = true) -> void:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	if main_camera == null:
+		return
+	var local_player := players.get(multiplayer.get_unique_id(), null) as NetPlayer
+	if local_player == null:
+		return
+	if reset_mouse_look:
+		_camera_mouse_look_offset = Vector2.ZERO
+	_camera_follow_position = local_player.global_position + _camera_mouse_look_offset
+	main_camera.global_position = _camera_follow_position
+
 func _camera_mouse_look_target() -> Vector2:
 	if main_camera == null:
 		return Vector2.ZERO

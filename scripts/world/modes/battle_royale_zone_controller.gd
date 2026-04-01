@@ -22,8 +22,8 @@ const OVERLAY_LAYER := 0
 @export var zone_center := Vector2(1024.0, 1024.0)
 @export var start_radius := 1320.0
 @export var end_radius := 260.0
-@export var shrink_delay_sec := 12.0
-@export var shrink_duration_sec := 50.0
+@export var shrink_delay_sec := 0.0
+@export var shrink_duration_sec := 24.0
 
 var _elapsed_sec := 0.0
 var _current_radius := start_radius

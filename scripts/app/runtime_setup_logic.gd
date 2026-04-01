@@ -111,6 +111,8 @@ func _init_scene_map_context() -> void:
 		selected_game_mode,
 		str(_uses_lobby_scene_flow())
 	])
+	if has_method("_append_log"):
+		call("_append_log", "MAP TRACE: loaded scene=%s map=%s mode=%s" % [scene_file_path, selected_map_id, selected_game_mode])
 
 	spawn_flow_service.apply_map_controller_bounds(
 		map_controller,
@@ -179,6 +181,8 @@ func _configure_services() -> void:
 			"send_sync_player_state": Callable(self, "_send_sync_player_state_rpc"),
 			"send_sync_player_stats": Callable(self, "_send_sync_player_stats_rpc"),
 			"send_kill_feed": Callable(self, "_send_kill_feed_rpc"),
+			"play_respawn_sfx_local": Callable(self, "_play_respawn_sfx_local"),
+			"send_play_respawn_sfx": Callable(self, "_send_play_respawn_sfx_rpc"),
 			"append_log": Callable(self, "_append_log")
 		},
 		{
@@ -200,6 +204,8 @@ func _configure_services() -> void:
 			"get_peer_lobby": Callable(self, "_peer_lobby"),
 			"get_lobby_members": Callable(self, "_lobby_members"),
 			"register_kill_death": Callable(self, "_server_register_kill_death"),
+			"should_use_round_survival_elimination": Callable(self, "_should_use_round_survival_elimination"),
+			"server_handle_round_survival_elimination": Callable(self, "_server_handle_skull_round_elimination"),
 			"server_respawn_player": Callable(self, "_server_respawn_player"),
 			"server_broadcast_player_state": Callable(self, "_server_broadcast_player_state"),
 			"get_projectile": Callable(projectile_system, "get_projectile"),
@@ -208,7 +214,8 @@ func _configure_services() -> void:
 			"send_play_death_sfx": Callable(self, "_send_play_death_sfx_rpc"),
 			"spawn_blood_particles_local": Callable(combat_effects, "spawn_blood_particles"),
 			"send_spawn_blood_particles": Callable(self, "_send_spawn_blood_particles_rpc"),
-			"can_damage_peer": Callable(self, "_can_damage_peer")
+			"can_damage_peer": Callable(self, "_can_damage_peer"),
+			"character_id_for_peer": Callable(self, "_warrior_id_for_peer")
 		},
 		{
 			"player_history_ms": PLAYER_HISTORY_MS

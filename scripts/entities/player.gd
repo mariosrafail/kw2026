@@ -190,6 +190,7 @@ func _ready() -> void:
 	if visual_root != null:
 		visual_root.position = Vector2.ZERO
 	_init_modular_visual()
+	_capture_erebus_immune_base_size()
 	_init_damage_flash_overlays()
 	_init_outrage_boost_overlays()
 	_apply_player_facing_from_angle(target_aim_angle)
@@ -320,6 +321,8 @@ func _apply_erebus_immune_size() -> void:
 		torso_sprite.position = _erebus_immune_base_torso_position + Vector2(0.0, EREBUS_IMMUNE_TORSO_Y_OFFSET)
 
 func _restore_erebus_immune_size() -> void:
+	if not _erebus_immune_size_captured:
+		return
 	if body_collision_shape != null:
 		body_collision_shape.scale = _erebus_immune_base_collision_scale
 		body_collision_shape.position = _erebus_immune_base_collision_position

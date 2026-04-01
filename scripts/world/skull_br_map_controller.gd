@@ -3,7 +3,7 @@ class_name SkullBrMapController
 
 func _init() -> void:
 	map_id = "skull_br"
-	map_label = "Skull BR"
+	map_label = "BR"
 	scene_path = "res://scenes/skull_br.tscn"
 	max_players = 5
 	supported_modes = ["battle_royale"]

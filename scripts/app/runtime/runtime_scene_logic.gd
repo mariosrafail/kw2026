@@ -281,7 +281,30 @@ func _switch_to_map_scene(map_id: String, forced_mode_id: String = "") -> void:
 	if not forced_mode_id.strip_edges().is_empty():
 		next_mode = map_flow_service.normalize_mode_id(forced_mode_id)
 	ProjectSettings.set_setting("kw/pending_game_mode", next_mode)
+	var skull_ruleset := ""
+	var skull_target_score := -1
+	var skull_time_limit_sec := -1
+	if not active_lobby_room_state.is_empty():
+		skull_ruleset = str(active_lobby_room_state.get("skull_ruleset", "")).strip_edges().to_lower()
+		skull_target_score = int(active_lobby_room_state.get("skull_target_score", -1))
+		skull_time_limit_sec = int(active_lobby_room_state.get("skull_time_limit_sec", -1))
+	elif lobby_service != null and client_lobby_id > 0 and lobby_service.has_lobby(client_lobby_id):
+		var lobby := lobby_service.get_lobby_data(client_lobby_id)
+		if not lobby.is_empty():
+			skull_ruleset = str(lobby.get("skull_ruleset", "")).strip_edges().to_lower()
+			skull_target_score = int(lobby.get("skull_target_score", -1))
+			skull_time_limit_sec = int(lobby.get("skull_time_limit_sec", -1))
+	ProjectSettings.set_setting("kw/pending_skull_ruleset", skull_ruleset)
+	ProjectSettings.set_setting("kw/pending_skull_target_score", skull_target_score)
+	ProjectSettings.set_setting("kw/pending_skull_time_limit_sec", skull_time_limit_sec)
 	pending_scene_switch = scene_path
+	print("[MAP TRACE] switch_request current_scene=%s target_scene=%s map=%s mode=%s lobby_id=%d" % [
+		scene_file_path,
+		scene_path,
+		normalized_map,
+		next_mode,
+		client_lobby_id
+	])
 	_append_log("Scene switch request: lobby_id=%d map=%s mode=%s scene=%s" % [client_lobby_id, normalized_map, next_mode, scene_path])
 	call_deferred("_deferred_scene_switch")
 

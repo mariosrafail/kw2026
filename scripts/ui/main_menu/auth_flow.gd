@@ -802,7 +802,11 @@ func _normalize_api_base_url(raw: String) -> String:
 	if api_base.is_empty():
 		return api_base
 	if api_base == "http://85.75.243.92:8081/auth" or api_base == "http://85.75.243.92:8081":
-		return "http://127.0.0.1:8081/auth"
+		return "http://updates.outrage.ink:8081/auth"
+	if api_base == "http://127.0.0.1:8081/auth" or api_base == "http://127.0.0.1:8081":
+		return "http://updates.outrage.ink:8081/auth"
+	if api_base == "http://localhost:8081/auth" or api_base == "http://localhost:8081":
+		return "http://updates.outrage.ink:8081/auth"
 	return api_base
 
 func copy_weapon_skins_dict(src: Dictionary) -> Dictionary:

@@ -47,7 +47,7 @@ shader_parameter/edge_color = Color(0.02, 0.03, 0.08, 0.72)
 shader_parameter/center_tint = Color(0, 0, 0, 0)
 shader_parameter/pulse_sec = 0.0
 
-[node name="GameRoot2" type="Control" unique_id=1511535630]
+[node name="GameRoot" type="Control" unique_id=1511535630]
 layout_mode = 3
 anchors_preset = 0
 script = ExtResource("1_ndd11")

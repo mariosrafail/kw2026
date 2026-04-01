@@ -154,6 +154,16 @@ func _send_play_death_sfx_rpc(target_client_peer_id: int, target_peer_id: int, i
 		return
 	_rpc_play_death_sfx.rpc_id(target_client_peer_id, target_peer_id, impact_position, incoming_velocity)
 
+func _play_respawn_sfx_local(target_peer_id: int, respawn_position: Vector2) -> void:
+	if multiplayer == null or not multiplayer.is_server():
+		return
+	if target_peer_id != multiplayer.get_unique_id():
+		return
+	client_rpc_flow_service.rpc_play_respawn_sfx(respawn_position, RESPAWN_SFX)
+
+func _send_play_respawn_sfx_rpc(target_client_peer_id: int, respawn_position: Vector2) -> void:
+	_send_play_death_sfx_rpc(target_client_peer_id, 0, respawn_position, RESPAWN_RPC_SENTINEL)
+
 func _send_spawn_outrage_bomb_rpc(target_peer_id: int, caster_peer_id: int, world_position: Vector2, fuse_sec: float) -> void:
 	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
 		_rpc_spawn_outrage_bomb(caster_peer_id, world_position, fuse_sec)

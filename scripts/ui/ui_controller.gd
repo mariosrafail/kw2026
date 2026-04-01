@@ -194,32 +194,39 @@ func update_scoreboard_label(player_stats: Dictionary, player_display_names: Dic
 		_scoreboard_row_cell(str(deaths), false)
 		_scoreboard_row_cell(ratio_text, false)
 
-func update_scoreboard_round_wins(round_wins_by_peer: Dictionary, player_display_names: Dictionary) -> void:
+func update_scoreboard_round_wins(round_wins_by_peer: Dictionary, player_display_names: Dictionary, player_stats: Dictionary = {}) -> void:
 	if _scoreboard_grid == null or not is_instance_valid(_scoreboard_grid):
 		_ensure_scoreboard_ui()
 	if _scoreboard_grid == null or not is_instance_valid(_scoreboard_grid):
 		return
 	var peer_ids := round_wins_by_peer.keys()
+	for peer_id_value in player_stats.keys():
+		var peer_id := int(peer_id_value)
+		if not peer_ids.has(peer_id):
+			peer_ids.append(peer_id)
 	peer_ids.sort_custom(func(a, b) -> bool:
 		return _display_order_for_peer(int(a), player_display_names) < _display_order_for_peer(int(b), player_display_names)
 	)
 	for child in _scoreboard_grid.get_children():
 		child.queue_free()
 	_scoreboard_header_cell("PLAYER", true)
+	_scoreboard_header_cell("K", false)
+	_scoreboard_header_cell("D", false)
 	_scoreboard_header_cell("RW", false)
-	_scoreboard_header_cell("-", false)
-	_scoreboard_header_cell("-", false)
 	if _scoreboard_empty != null:
 		_scoreboard_empty.visible = peer_ids.is_empty()
 	if peer_ids.is_empty():
 		return
 	for peer_id_value in peer_ids:
 		var peer_id := int(peer_id_value)
+		var stats := player_stats.get(peer_id, {}) as Dictionary
+		var kills := int(stats.get("kills", 0))
+		var deaths := int(stats.get("deaths", 0))
 		var wins := int(round_wins_by_peer.get(peer_id, 0))
 		_scoreboard_row_cell(_display_name_for_peer(peer_id, player_display_names), true)
+		_scoreboard_row_cell(str(kills), false)
+		_scoreboard_row_cell(str(deaths), false)
 		_scoreboard_row_cell(str(wins), false)
-		_scoreboard_row_cell("", false)
-		_scoreboard_row_cell("", false)
 
 func selected_lobby_id() -> int:
 	if lobby_list == null:

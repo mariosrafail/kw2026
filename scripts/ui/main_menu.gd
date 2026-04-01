@@ -26,7 +26,7 @@ const TOXIC_CHAT_BOX_SIZE := Vector2(196.0, 82.0)
 const TOXIC_CHAT_MARGIN_X := 5
 const TOXIC_CHAT_MARGIN_Y := 4
 const TOXIC_CHAT_ROW_SEPARATION := 1
-const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8081/auth"
+const AUTH_API_BASE_URL_DEFAULT := "http://updates.outrage.ink:8081/auth"
 const ENABLE_MENU_LOADING_OVERLAY := false
 var MENU_CLR_BASE := MENU_PALETTE.base()
 var MENU_CLR_ACCENT := MENU_PALETTE.accent()
@@ -329,8 +329,9 @@ func _ready() -> void:
 	add_child(_fx_layer)
 	_ensure_background_crack_layer()
 	_rebuild_background_cracks()
-	_ensure_toxic_bubble_layer()
-	_start_toxic_bubble_loop()
+	# Temporary: keep the scripted auto-chat hidden on the main menu.
+	# _ensure_toxic_bubble_layer()
+	# _start_toxic_bubble_loop()
 	set_process(true)
 
 	_menu_transition_ctrl.configure(
@@ -1414,6 +1415,12 @@ func _sync_lobby_overlay_interaction_state() -> void:
 		return
 	var allow_interaction := _current_screen == screen_main
 	_lobby_overlay_ctrl.set_interaction_enabled(allow_interaction)
+
+func _sync_active_lobby_loadout_selection() -> void:
+	if _lobby_overlay_ctrl == null:
+		return
+	if _lobby_overlay_ctrl.has_method("sync_current_loadout_to_lobby"):
+		_lobby_overlay_ctrl.call("sync_current_loadout_to_lobby")
 
 func _prepare_player_preview(player: Node) -> void:
 	if player == null:

@@ -125,7 +125,7 @@ func _rpc_match_message(_text: String) -> void:
 	var text := str(_text).strip_edges()
 	if text.is_empty():
 		return
-	if ui_controller.has_method("push_combat_notification"):
+	if not text.begins_with("__kw_skull_round_result__|") and ui_controller.has_method("push_combat_notification"):
 		ui_controller.call("push_combat_notification", text)
 	_handle_match_message_text(text)
 
@@ -360,6 +360,9 @@ func _rpc_play_death_sfx(_target_or_impact: Variant, _impact_position: Vector2 =
 		resolved_impact_position = _target_or_impact as Vector2
 	else:
 		resolved_target_peer_id = int(_target_or_impact)
+	if _incoming_velocity.is_equal_approx(RESPAWN_RPC_SENTINEL):
+		client_rpc_flow_service.rpc_play_respawn_sfx(resolved_impact_position, RESPAWN_SFX)
+		return
 	client_rpc_flow_service.rpc_play_death_sfx(resolved_target_peer_id, resolved_impact_position, _incoming_velocity)
 
 func _rpc_request_lobby_list() -> void:
@@ -644,6 +647,19 @@ func _rpc_lobby_chat_message(_lobby_id: int, _peer_id: int, _display_name: Strin
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	if multiplayer.is_server() and role != Role.CLIENT:
 		return
+	var active_entry_skull_ruleset := ""
+	var active_entry_skull_target_score := -1
+	var active_entry_skull_time_limit_sec := -1
+	for entry_value in _entries:
+		if not (entry_value is Dictionary):
+			continue
+		var entry := entry_value as Dictionary
+		if int(entry.get("id", 0)) != _active_lobby_id:
+			continue
+		active_entry_skull_ruleset = str(entry.get("skull_ruleset", "")).strip_edges().to_lower()
+		active_entry_skull_target_score = int(entry.get("skull_target_score", -1))
+		active_entry_skull_time_limit_sec = int(entry.get("skull_time_limit_sec", -1))
+		break
 	var normalized := map_flow_service.normalize_client_lobby_entries(
 		_entries,
 		_active_lobby_id,
@@ -655,6 +671,11 @@ func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	client_target_map_id = str(normalized.get("client_target_map_id", selected_map_id))
 	if _active_lobby_id > 0 and lobby_mode_by_id.has(_active_lobby_id):
 		client_target_game_mode = str(lobby_mode_by_id.get(_active_lobby_id, GAME_MODE_DEATHMATCH))
+		ProjectSettings.set_setting("kw/pending_skull_ruleset", active_entry_skull_ruleset)
+		ProjectSettings.set_setting("kw/pending_skull_target_score", active_entry_skull_target_score)
+		ProjectSettings.set_setting("kw/pending_skull_time_limit_sec", active_entry_skull_time_limit_sec)
+		if has_method("_capture_pending_skull_match_config"):
+			call("_capture_pending_skull_match_config")
 		if (client_target_game_mode == GAME_MODE_CTF or client_target_game_mode == GAME_MODE_TDTH) and active_lobby_room_state.is_empty() and _is_client_connected():
 			_rpc_request_spawn.rpc_id(1)
 	elif _active_lobby_id <= 0:
@@ -679,6 +700,11 @@ func _rpc_lobby_room_state(_payload: Dictionary) -> void:
 		return
 	print("[CTF ROOM][CLIENT] room_state=%s" % str(_payload))
 	active_lobby_room_state = _payload.duplicate(true)
+	if has_method("_capture_pending_skull_match_config"):
+		ProjectSettings.set_setting("kw/pending_skull_ruleset", str(_payload.get("skull_ruleset", "")))
+		ProjectSettings.set_setting("kw/pending_skull_target_score", int(_payload.get("skull_target_score", -1)))
+		ProjectSettings.set_setting("kw/pending_skull_time_limit_sec", int(_payload.get("skull_time_limit_sec", -1)))
+		call("_capture_pending_skull_match_config")
 	peer_team_by_peer.clear()
 	var raw_team_by_peer := _payload.get("team_by_peer", {}) as Dictionary
 	for peer_value in raw_team_by_peer.keys():
@@ -689,6 +715,10 @@ func _rpc_lobby_room_state(_payload: Dictionary) -> void:
 	_refresh_ctf_room_ui()
 
 func _rpc_scene_switch_to_map(_map_id: String) -> void:
+	var normalized_map := map_flow_service.normalize_map_id(map_catalog, _map_id)
+	var target_scene := map_flow_service.scene_path_for_id(map_catalog, normalized_map)
+	print("[MAP TRACE] rpc_scene_switch_to_map map=%s target_scene=%s current_scene=%s" % [normalized_map, target_scene, scene_file_path])
+	_append_log("MAP TRACE: rpc switch map=%s scene=%s" % [normalized_map, target_scene])
 	_switch_to_map_scene(_map_id)
 
 func _rpc_lobby_set_team(_team_id: int) -> void:
@@ -807,6 +837,7 @@ func _server_start_deathmatch_lobby_match(peer_id: int) -> void:
 	if lobby_service == null:
 		return
 	var lobby_id := _peer_lobby(peer_id)
+	var lobby_map_id := _lobby_map_id(lobby_id)
 	var is_deathmatch := lobby_service.is_deathmatch_lobby(lobby_id)
 	var is_battle_royale := lobby_service.is_battle_royale_lobby(lobby_id)
 	if lobby_id <= 0 or (not is_deathmatch and not is_battle_royale):
@@ -819,10 +850,17 @@ func _server_start_deathmatch_lobby_match(peer_id: int) -> void:
 	if not can_start:
 		_server_send_lobby_action_result(peer_id, false, "All other players must be READY.", lobby_id, _lobby_map_id(lobby_id))
 		return
+	# Map policy:
+	# - Rounds and BR maps must always run round-survival.
+	# - Deathmatch map must never run round-survival.
+	if lobby_map_id == "skull_rounds" or lobby_map_id == "skull_br":
+		lobby_service.set_skull_ruleset(lobby_id, peer_id, "round_survival")
+	elif lobby_map_id == "skull_deathmatch" and lobby_service.skull_ruleset(lobby_id) == "round_survival":
+		lobby_service.set_skull_ruleset(lobby_id, peer_id, "kill_race")
 	lobby_service.set_lobby_started(lobby_id, true)
 	_server_broadcast_lobby_room_state(lobby_id)
 	_server_apply_deathmatch_bot_fill(lobby_id)
-	_server_switch_lobby_to_map_scene(lobby_id, _lobby_map_id(lobby_id), peer_id)
+	_server_switch_lobby_to_map_scene(lobby_id, lobby_map_id, peer_id)
 
 func _server_apply_deathmatch_bot_fill(lobby_id: int) -> void:
 	if lobby_service == null or lobby_id <= 0:
@@ -905,6 +943,8 @@ func _server_broadcast_match_message(lobby_id: int, text: String) -> void:
 	var trimmed := text.strip_edges()
 	if trimmed.is_empty():
 		return
+	var self_peer_id := multiplayer.get_unique_id()
+	var delivered_to_self := false
 	var recipients := _lobby_members(lobby_id)
 	if recipients.is_empty():
 		recipients = multiplayer.get_peers()
@@ -912,7 +952,12 @@ func _server_broadcast_match_message(lobby_id: int, text: String) -> void:
 		var member_id := int(member_value)
 		if member_id <= 0:
 			continue
+		if member_id == self_peer_id:
+			delivered_to_self = true
+			continue
 		_rpc_match_message.rpc_id(member_id, trimmed)
+	if self_peer_id > 0 and not delivered_to_self:
+		_rpc_match_message(trimmed)
 
 func _server_blocks_input_for_peer(_peer_id: int) -> bool:
 	return false

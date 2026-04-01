@@ -2,6 +2,11 @@ extends RefCounted
 class_name CombatFlowService
 
 const WARRIOR_FACTORY_SCRIPT := preload("res://scripts/warriors/warrior_factory.gd")
+const BLOOD_COLOR_BY_CHARACTER := {
+	"outrage": Color(0.98, 0.02, 0.07, 1.0),
+	"erebus": Color(0.72, 0.78, 1.0, 1.0),
+	"tasko": Color(1.0, 0.65, 0.92, 1.0),
+}
 
 var players: Dictionary = {}
 var input_states: Dictionary = {}
@@ -287,9 +292,7 @@ func _on_server_projectile_player_hit(
 		return
 	var target_player := players.get(target_peer_id, null) as NetPlayer
 	var target_blood_position := hit_position
-	var blood_color := Color(0.98, 0.02, 0.07, 1.0)
-	if target_player != null and target_player.has_method("get_torso_dominant_color"):
-		blood_color = target_player.call("get_torso_dominant_color") as Color
+	var blood_color := _target_blood_color(target_peer_id, target_player)
 	if target_player != null:
 		server_apply_projectile_damage(projectile_id, target_peer_id, target_player, impact_velocity, is_headshot)
 	if combat_effects != null:
@@ -419,9 +422,7 @@ func _apply_explosive_projectile_impact(projectile_id: int, impact_position: Vec
 		if health_after >= health_before:
 			continue
 		var blood_velocity := to_target.normalized() * 180.0 if to_target.length_squared() > 0.0001 else Vector2.UP * -120.0
-		var blood_color := Color(0.98, 0.02, 0.07, 1.0)
-		if target_player.has_method("get_torso_dominant_color"):
-			blood_color = target_player.call("get_torso_dominant_color") as Color
+		var blood_color := _target_blood_color(target_peer_id, target_player)
 		if combat_effects != null:
 			combat_effects.spawn_blood_particles(target_blood_position, blood_velocity, blood_color, 1.0)
 		for member_value in _lobby_members(projectile_lobby_id):
@@ -563,6 +564,16 @@ func _world_2d() -> World2D:
 	if get_world_2d_cb.is_valid():
 		return get_world_2d_cb.call() as World2D
 	return null
+
+func _target_blood_color(target_peer_id: int, target_player: NetPlayer) -> Color:
+	var warrior_id := _warrior_id_for_peer(target_peer_id)
+	if BLOOD_COLOR_BY_CHARACTER.has(warrior_id):
+		return BLOOD_COLOR_BY_CHARACTER[warrior_id] as Color
+	if target_player != null and target_player.has_method("get_torso_dominant_color"):
+		var color_value: Variant = target_player.call("get_torso_dominant_color")
+		if color_value is Color:
+			return color_value as Color
+	return Color(0.98, 0.02, 0.07, 1.0)
 
 func _peer_lobby(peer_id: int) -> int:
 	if get_peer_lobby_cb.is_valid():

@@ -35,6 +35,8 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 		warrior_name_label.text = "%s - %s" % [warrior_ui.warrior_display_name(str(host.get("selected_warrior_id"))), warrior_ui.warrior_skin_label(str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))]
 	host.call("_save_state")
 	host.call("_auth_sync_wallet")
+	if host != null and host.has_method("_sync_active_lobby_loadout_selection"):
+		host.call("_sync_active_lobby_loadout_selection")
 	host.call("_refresh_warrior_filter_button_state")
 	refresh_warrior_grid_texts(host)
 	refresh_warrior_action(host)
@@ -234,6 +236,8 @@ func equip_weapon_item(host: Control, weapon_id: String, skin_index: int) -> voi
 	host.call("_refresh_weapon_filter_button_state")
 	host.call("_save_state")
 	host.call("_auth_sync_wallet")
+	if host != null and host.has_method("_sync_active_lobby_loadout_selection"):
+		host.call("_sync_active_lobby_loadout_selection")
 	refresh_weapon_grid_texts(host)
 	if host != null and host.has_method("_refresh_selection_context_visuals"):
 		host.call("_refresh_selection_context_visuals")

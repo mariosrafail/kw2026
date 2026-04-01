@@ -33,6 +33,8 @@ var send_despawn_player_to_peer_cb: Callable = Callable()
 var send_sync_player_state_cb: Callable = Callable()
 var send_sync_player_stats_cb: Callable = Callable()
 var send_kill_feed_cb: Callable = Callable()
+var play_respawn_sfx_local_cb: Callable = Callable()
+var send_play_respawn_sfx_cb: Callable = Callable()
 var append_log_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
@@ -59,6 +61,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_sync_player_state_cb = callbacks.get("send_sync_player_state", Callable()) as Callable
 	send_sync_player_stats_cb = callbacks.get("send_sync_player_stats", Callable()) as Callable
 	send_kill_feed_cb = callbacks.get("send_kill_feed", Callable()) as Callable
+	play_respawn_sfx_local_cb = callbacks.get("play_respawn_sfx_local", Callable()) as Callable
+	send_play_respawn_sfx_cb = callbacks.get("send_play_respawn_sfx", Callable()) as Callable
 	append_log_cb = callbacks.get("append_log", Callable()) as Callable
 
 	max_input_packets_per_sec = int(config.get("max_input_packets_per_sec", max_input_packets_per_sec))
@@ -158,6 +162,21 @@ func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	input_states[peer_id] = state
 	fire_cooldowns[peer_id] = 0.0
 	player.set_aim_world(state["aim_world"] as Vector2)
+
+	var recipients: Array = []
+	var lobby_id := _peer_lobby(peer_id)
+	if lobby_id > 0:
+		recipients = _lobby_members(lobby_id)
+	if recipients.is_empty():
+		recipients = players.keys()
+	for recipient_value in recipients:
+		var recipient_peer_id := int(recipient_value)
+		if recipient_peer_id <= 0 or recipient_peer_id == peer_id:
+			continue
+		if play_respawn_sfx_local_cb.is_valid():
+			play_respawn_sfx_local_cb.call(recipient_peer_id, respawn_position)
+		if send_play_respawn_sfx_cb.is_valid():
+			send_play_respawn_sfx_cb.call(recipient_peer_id, respawn_position)
 
 func server_remove_player(peer_id: int, target_peers: Array, connected_peers: PackedInt32Array, server_peer_id: int) -> void:
 	if not players.has(peer_id):

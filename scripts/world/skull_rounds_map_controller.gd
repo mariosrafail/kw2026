@@ -1,10 +1,10 @@
 extends MapController
-class_name SkullFfaMapController
+class_name SkullRoundsMapController
 
 func _init() -> void:
-	map_id = "skull_ffa"
-	map_label = "FFA"
-	scene_path = "res://scenes/skull_ffa.tscn"
+	map_id = "skull_rounds"
+	map_label = "Rounds"
+	scene_path = "res://scenes/skull_rounds.tscn"
 	max_players = 5
 	supported_modes = ["deathmatch"]
 	mode_max_players = {

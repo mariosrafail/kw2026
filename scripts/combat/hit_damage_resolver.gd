@@ -3,6 +3,11 @@ class_name HitDamageResolver
 
 const HEADSHOT_TOP_PORTION := 1.5 / 5.0
 const HEADSHOT_DAMAGE_MULTIPLIER := 2
+const BLOOD_COLOR_BY_CHARACTER := {
+	"outrage": Color(0.98, 0.02, 0.07, 1.0),
+	"erebus": Color(0.72, 0.78, 1.0, 1.0),
+	"tasko": Color(1.0, 0.65, 0.92, 1.0),
+}
 
 var players: Dictionary = {}
 var player_history: Dictionary = {}
@@ -11,6 +16,8 @@ var player_history_ms := 800
 var get_peer_lobby_cb: Callable = Callable()
 var get_lobby_members_cb: Callable = Callable()
 var register_kill_death_cb: Callable = Callable()
+var should_use_round_survival_elimination_cb: Callable = Callable()
+var server_handle_round_survival_elimination_cb: Callable = Callable()
 var server_respawn_player_cb: Callable = Callable()
 var server_broadcast_player_state_cb: Callable = Callable()
 var get_projectile_cb: Callable = Callable()
@@ -20,6 +27,7 @@ var send_play_death_sfx_cb: Callable = Callable()
 var spawn_blood_particles_local_cb: Callable = Callable()
 var send_spawn_blood_particles_cb: Callable = Callable()
 var can_damage_peer_cb: Callable = Callable()
+var character_id_for_peer_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -28,6 +36,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	get_peer_lobby_cb = callbacks.get("get_peer_lobby", Callable()) as Callable
 	get_lobby_members_cb = callbacks.get("get_lobby_members", Callable()) as Callable
 	register_kill_death_cb = callbacks.get("register_kill_death", Callable()) as Callable
+	should_use_round_survival_elimination_cb = callbacks.get("should_use_round_survival_elimination", Callable()) as Callable
+	server_handle_round_survival_elimination_cb = callbacks.get("server_handle_round_survival_elimination", Callable()) as Callable
 	server_respawn_player_cb = callbacks.get("server_respawn_player", Callable()) as Callable
 	server_broadcast_player_state_cb = callbacks.get("server_broadcast_player_state", Callable()) as Callable
 	get_projectile_cb = callbacks.get("get_projectile", Callable()) as Callable
@@ -37,6 +47,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	spawn_blood_particles_local_cb = callbacks.get("spawn_blood_particles_local", Callable()) as Callable
 	send_spawn_blood_particles_cb = callbacks.get("send_spawn_blood_particles", Callable()) as Callable
 	can_damage_peer_cb = callbacks.get("can_damage_peer", Callable()) as Callable
+	character_id_for_peer_cb = callbacks.get("character_id_for_peer", Callable()) as Callable
 
 	player_history_ms = int(config.get("player_history_ms", player_history_ms))
 
@@ -186,7 +197,7 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 		if register_kill_death_cb.is_valid():
 			register_kill_death_cb.call(attacker_peer_id, target_peer_id)
 		var death_position := target_player.global_position
-		var death_blood_color := _target_blood_color(target_player)
+		var death_blood_color := _target_blood_color(target_peer_id, target_player)
 		var death_blood_velocity := incoming_velocity
 		if death_blood_velocity.length_squared() <= 0.0001:
 			death_blood_velocity = Vector2.UP * -120.0
@@ -200,7 +211,20 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 		if send_play_death_sfx_cb.is_valid():
 			for member_value in _lobby_members(target_lobby_id):
 				send_play_death_sfx_cb.call(int(member_value), target_peer_id, death_position, death_blood_velocity)
-		if server_respawn_player_cb.is_valid():
+		if _should_use_round_survival_elimination(target_peer_id):
+			print("[BR ROUND DBG] projectile death -> round elimination target=%d attacker=%d lobby=%d" % [
+				target_peer_id,
+				attacker_peer_id,
+				target_lobby_id
+			])
+			if server_handle_round_survival_elimination_cb.is_valid():
+				server_handle_round_survival_elimination_cb.call(target_peer_id, target_player)
+		elif server_respawn_player_cb.is_valid():
+			print("[BR ROUND DBG] projectile death -> normal respawn target=%d attacker=%d lobby=%d" % [
+				target_peer_id,
+				attacker_peer_id,
+				target_lobby_id
+			])
 			server_respawn_player_cb.call(target_peer_id, target_player)
 
 	if server_broadcast_player_state_cb.is_valid():
@@ -236,7 +260,7 @@ func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, targ
 		if register_kill_death_cb.is_valid():
 			register_kill_death_cb.call(attacker_peer_id, target_peer_id)
 		var death_position := target_player.global_position
-		var death_blood_color := _target_blood_color(target_player)
+		var death_blood_color := _target_blood_color(target_peer_id, target_player)
 		var death_blood_velocity := resolved_incoming_velocity
 		if death_blood_velocity.length_squared() <= 0.0001:
 			death_blood_velocity = Vector2.UP * -120.0
@@ -250,11 +274,29 @@ func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, targ
 		if send_play_death_sfx_cb.is_valid():
 			for member_value in _lobby_members(target_lobby_id):
 				send_play_death_sfx_cb.call(int(member_value), target_peer_id, death_position, death_blood_velocity)
-		if server_respawn_player_cb.is_valid():
+		if _should_use_round_survival_elimination(target_peer_id):
+			print("[BR ROUND DBG] direct death -> round elimination target=%d attacker=%d lobby=%d" % [
+				target_peer_id,
+				attacker_peer_id,
+				target_lobby_id
+			])
+			if server_handle_round_survival_elimination_cb.is_valid():
+				server_handle_round_survival_elimination_cb.call(target_peer_id, target_player)
+		elif server_respawn_player_cb.is_valid():
+			print("[BR ROUND DBG] direct death -> normal respawn target=%d attacker=%d lobby=%d" % [
+				target_peer_id,
+				attacker_peer_id,
+				target_lobby_id
+			])
 			server_respawn_player_cb.call(target_peer_id, target_player)
 	if server_broadcast_player_state_cb.is_valid():
 		server_broadcast_player_state_cb.call(target_peer_id, target_player)
 	return remaining_health
+
+func _should_use_round_survival_elimination(target_peer_id: int) -> bool:
+	if should_use_round_survival_elimination_cb.is_valid():
+		return bool(should_use_round_survival_elimination_cb.call(target_peer_id))
+	return false
 
 func _peer_lobby(peer_id: int) -> int:
 	if get_peer_lobby_cb.is_valid():
@@ -266,7 +308,11 @@ func _lobby_members(lobby_id: int) -> Array:
 		return get_lobby_members_cb.call(lobby_id) as Array
 	return []
 
-func _target_blood_color(target_player: NetPlayer) -> Color:
+func _target_blood_color(target_peer_id: int, target_player: NetPlayer) -> Color:
+	if character_id_for_peer_cb.is_valid():
+		var warrior_id := str(character_id_for_peer_cb.call(target_peer_id)).strip_edges().to_lower()
+		if BLOOD_COLOR_BY_CHARACTER.has(warrior_id):
+			return BLOOD_COLOR_BY_CHARACTER[warrior_id] as Color
 	if target_player != null and target_player.has_method("get_torso_dominant_color"):
 		var color_value: Variant = target_player.call("get_torso_dominant_color")
 		if color_value is Color:

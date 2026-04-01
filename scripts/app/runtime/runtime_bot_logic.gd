@@ -1,6 +1,30 @@
 extends "res://scripts/app/runtime/runtime_ctf_logic.gd"
 
+func _should_use_round_survival_elimination(_peer_id: int = 0) -> bool:
+	if multiplayer == null or not multiplayer.is_server():
+		return false
+	var resolved_skull_ruleset := ""
+	if has_method("_active_skull_ruleset"):
+		resolved_skull_ruleset = str(call("_active_skull_ruleset")).strip_edges().to_lower()
+	var is_round_style_skull := resolved_skull_ruleset == "round_survival"
+	var is_battle_royale_scene := false
+	if has_method("_is_battle_royale_match_scene"):
+		is_battle_royale_scene = bool(call("_is_battle_royale_match_scene"))
+	var peer_lobby_id := _peer_lobby(_peer_id)
+	var lobby_map_id := _lobby_map_id(peer_lobby_id)
+	return (
+		is_round_style_skull
+		or is_battle_royale_scene
+		or scene_file_path == "res://scenes/skull_rounds.tscn"
+		or scene_file_path == "res://scenes/skull_br.tscn"
+		or lobby_map_id == "skull_rounds"
+		or lobby_map_id == "skull_br"
+	)
+
 func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
+	if _should_use_round_survival_elimination(peer_id) and has_method("_server_handle_skull_round_elimination"):
+		call("_server_handle_skull_round_elimination", peer_id, player)
+		return
 	if _server_handle_special_respawn(peer_id, player):
 		return
 	var death_position := player.global_position if player != null else Vector2.ZERO

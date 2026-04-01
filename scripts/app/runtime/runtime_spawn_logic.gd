@@ -25,7 +25,18 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 				if existing.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
 					existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
 			if not _is_target_dummy_peer(peer_id):
-				existing.force_respawn(resolved_spawn)
+				var suppress_existing_spawn_respawn := false
+				if has_method("_is_skull_ffa_match_scene") and bool(call("_is_skull_ffa_match_scene")):
+					suppress_existing_spawn_respawn = true
+				if suppress_existing_spawn_respawn:
+					print("[BR ROUND DBG] suppress existing spawn sync peer=%d pos=%s health=%d scene=%s" % [
+						peer_id,
+						str(resolved_spawn),
+						existing.get_health(),
+						scene_file_path
+					])
+				else:
+					existing.force_respawn(resolved_spawn)
 		return
 
 	var player := PLAYER_SCENE.instantiate() as NetPlayer

@@ -1,9 +1,9 @@
 ﻿{
-    "published_at_utc":  "2026-03-10T21:25:40.0818675Z",
-    "version":  "alpha-0.1.28",
-    "package_url":  "http://85.75.243.92:8081/kw/kw_update_alpha-0.1.28.zip",
+    "published_at_utc":  "2026-04-01T19:13:23.8036564Z",
+    "version":  "alpha-0.1.30",
+    "package_url":  "http://updates.outrage.ink:8081/kw/kw_update_alpha-0.1.30.zip",
     "exe_sha256":  "e4a037e7ebb727feffe7930bf6d149040faf129e13b363b561a078fb63c2337b",
-    "pck_sha256":  "2320f0a66a30d1bbfc28bd9e06fd03844c3394f9fa18b8dc9d3d350dabefc544",
-    "exe_url":  "http://85.75.243.92:8081/kw/kw.exe",
-    "pck_url":  "http://85.75.243.92:8081/kw/kw.pck"
+    "pck_sha256":  "e0de6462214edacb392f1ad19bad2576282a1b1a2799b7f97f424b8a5d820d6a",
+    "exe_url":  "http://updates.outrage.ink:8081/kw/kw.exe",
+    "pck_url":  "http://updates.outrage.ink:8081/kw/kw.pck"
 }

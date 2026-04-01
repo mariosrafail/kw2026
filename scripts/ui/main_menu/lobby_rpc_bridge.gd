@@ -18,6 +18,10 @@ var _map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
 var _active_lobby_id := 0
 var _pending_mode_id := "deathmatch"
 var _lobby_mode_by_id: Dictionary = {}
+var _last_room_state: Dictionary = {}
+var _last_active_skull_ruleset := ""
+var _last_active_skull_target_score := -1
+var _last_active_skull_time_limit_sec := -1
 var _rpc_handoff_attempts := 0
 
 func _log(message: String) -> void:
@@ -262,6 +266,28 @@ func set_display_name(display_name: String) -> bool:
 	_rpc_lobby_set_display_name.rpc_id(1, trimmed)
 	return true
 
+func set_weapon(weapon_id: String) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_weapon blocked can_send=false")
+		return false
+	var normalized := weapon_id.strip_edges().to_lower()
+	if normalized.is_empty():
+		normalized = "ak47"
+	_log("set_weapon rpc_id(1) weapon_id=%s" % normalized)
+	_rpc_lobby_set_weapon.rpc_id(1, normalized)
+	return true
+
+func set_character(character_id: String) -> bool:
+	if not _can_send_server_rpc():
+		_log("set_character blocked can_send=false")
+		return false
+	var normalized := character_id.strip_edges().to_lower()
+	if normalized != "erebus" and normalized != "tasko":
+		normalized = "outrage"
+	_log("set_character rpc_id(1) character_id=%s" % normalized)
+	_rpc_lobby_set_character.rpc_id(1, normalized)
+	return true
+
 func send_lobby_chat_message(message: String) -> bool:
 	if not _can_send_server_rpc():
 		_log("send_lobby_chat_message blocked can_send=false")
@@ -500,6 +526,9 @@ func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [_entries.size(), _active_lobby_id])
 	self._active_lobby_id = _active_lobby_id
 	_lobby_mode_by_id.clear()
+	_last_active_skull_ruleset = ""
+	_last_active_skull_target_score = -1
+	_last_active_skull_time_limit_sec = -1
 	for entry_value in _entries:
 		if not (entry_value is Dictionary):
 			continue
@@ -510,6 +539,13 @@ func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 		_lobby_mode_by_id[lobby_id] = _map_flow_service.normalize_mode_id(str(entry.get("mode_id", "deathmatch")))
 		if lobby_id == _active_lobby_id:
 			_log("rpc lobby_list active_lobby_mode=%s raw_entry=%s" % [str(_lobby_mode_by_id[lobby_id]), str(entry)])
+			_last_active_skull_ruleset = str(entry.get("skull_ruleset", "")).strip_edges().to_lower()
+			_last_active_skull_target_score = int(entry.get("skull_target_score", -1))
+			_last_active_skull_time_limit_sec = int(entry.get("skull_time_limit_sec", -1))
+	if _active_lobby_id > 0:
+		ProjectSettings.set_setting("kw/pending_skull_ruleset", _last_active_skull_ruleset)
+		ProjectSettings.set_setting("kw/pending_skull_target_score", _last_active_skull_target_score)
+		ProjectSettings.set_setting("kw/pending_skull_time_limit_sec", _last_active_skull_time_limit_sec)
 	lobby_list_received.emit(_entries, _active_lobby_id)
 
 @rpc("authority", "reliable")
@@ -528,6 +564,7 @@ func _rpc_lobby_action_result(_success: bool, _message: String, _active_lobby_id
 @rpc("authority", "reliable")
 func _rpc_lobby_room_state(_payload: Dictionary) -> void:
 	_log("rpc lobby_room_state payload=%s" % str(_payload))
+	_last_room_state = _payload.duplicate(true)
 	lobby_room_state_received.emit(_payload)
 
 @rpc("authority", "reliable")
@@ -547,6 +584,12 @@ func _rpc_scene_switch_to_map(_map_id: String) -> void:
 		scene_path = _map_catalog.scene_path_for_id(default_map_id)
 	var mode_id := _map_flow_service.normalize_mode_id(str(_lobby_mode_by_id.get(_active_lobby_id, _pending_mode_id)))
 	ProjectSettings.set_setting("kw/pending_game_mode", mode_id)
+	var skull_ruleset := str(_last_room_state.get("skull_ruleset", _last_active_skull_ruleset)).strip_edges().to_lower()
+	var skull_target_score := int(_last_room_state.get("skull_target_score", _last_active_skull_target_score))
+	var skull_time_limit_sec := int(_last_room_state.get("skull_time_limit_sec", _last_active_skull_time_limit_sec))
+	ProjectSettings.set_setting("kw/pending_skull_ruleset", skull_ruleset)
+	ProjectSettings.set_setting("kw/pending_skull_target_score", skull_target_score)
+	ProjectSettings.set_setting("kw/pending_skull_time_limit_sec", skull_time_limit_sec)
 	_log("scene_switch source=SERVER_LOBBY map_id=%s mode=%s scene=%s" % [normalized, mode_id, scene_path])
 	if tree != null:
 		_release_game_root_before_scene_change()
