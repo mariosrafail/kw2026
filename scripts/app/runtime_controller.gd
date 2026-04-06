@@ -496,14 +496,7 @@ func _client_tick_skill_cooldowns_hud(delta: float) -> void:
 	if _rt_skill_hud != null:
 		_rt_skill_hud.visible = role == Role.CLIENT and _is_local_player_spawned()
 		_rt_skill_hud.set_character_id(_warrior_id_for_peer(local_peer_id))
-		if local_player != null and local_player.has_method("get_main_torso_ui_color"):
-			var torso_color_value: Variant = local_player.call("get_main_torso_ui_color")
-			if torso_color_value is Color:
-				_rt_skill_hud.set_tint(torso_color_value as Color)
-		elif local_player != null and local_player.has_method("get_torso_dominant_color"):
-			var torso_color_value: Variant = local_player.call("get_torso_dominant_color")
-			if torso_color_value is Color:
-				_rt_skill_hud.set_tint(torso_color_value as Color)
+		_rt_skill_hud.set_tint(_authoritative_skill_color_for_peer(local_peer_id))
 		var current_points := 0
 		if combat_flow_service != null:
 			current_points = combat_flow_service.skill_charge_points_for_peer(local_peer_id, 2)

@@ -1,0 +1,182 @@
+[gd_resource type="Resource" script_class="ServerSkinBloodColorsConfig" format=3 uid="uid://bky85v65mgixo"]
+
+[ext_resource type="Script" uid="uid://b0kxdr1fyfxq1" path="res://scripts/config/server_skin_blood_colors_config.gd" id="1_a1"]
+[ext_resource type="Script" uid="uid://djqugtcgfeiu7" path="res://scripts/config/skin_blood_color_entry.gd" id="2_b2"]
+
+[sub_resource type="Resource" id="Resource_outrage_default"]
+script = ExtResource("2_b2")
+blood_color = Color(0.52099836, 0.26046056, 0, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_erebus_default"]
+script = ExtResource("2_b2")
+character_id = "erebus"
+blood_color = Color(0.717647, 0.780392, 1, 1)
+skill_color = Color(0.717647, 0.780392, 1, 1)
+
+[sub_resource type="Resource" id="Resource_tasko_default"]
+script = ExtResource("2_b2")
+character_id = "tasko"
+blood_color = Color(1, 0.65098, 0.921569, 1)
+skill_color = Color(1, 0.65098, 0.921569, 1)
+
+[sub_resource type="Resource" id="Resource_juice_default"]
+script = ExtResource("2_b2")
+character_id = "juice"
+blood_color = Color(0.94902, 1, 0.560784, 1)
+skill_color = Color(0.94902, 1, 0.560784, 1)
+
+[sub_resource type="Resource" id="Resource_madam_default"]
+script = ExtResource("2_b2")
+character_id = "madam"
+blood_color = Color(0.858824, 0.478431, 0.419608, 1)
+skill_color = Color(0.858824, 0.478431, 0.419608, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_0"]
+script = ExtResource("2_b2")
+skin_index = 0
+blood_color = Color(1, 1, 1, 1)
+skill_color = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_1"]
+script = ExtResource("2_b2")
+skin_index = 1
+blood_color = Color(1, 0.43529412, 1, 1)
+skill_color = Color(1, 0.43529412, 1, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_2"]
+script = ExtResource("2_b2")
+skin_index = 2
+blood_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_3"]
+script = ExtResource("2_b2")
+skin_index = 3
+blood_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_4"]
+script = ExtResource("2_b2")
+skin_index = 4
+blood_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_5"]
+script = ExtResource("2_b2")
+skin_index = 5
+blood_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_6"]
+script = ExtResource("2_b2")
+skin_index = 6
+blood_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_7"]
+script = ExtResource("2_b2")
+skin_index = 7
+blood_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_outrage_8"]
+script = ExtResource("2_b2")
+skin_index = 8
+blood_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+skill_color = Color(0.980392, 0.0196078, 0.0705882, 1)
+
+[sub_resource type="Resource" id="Resource_erebus_0"]
+script = ExtResource("2_b2")
+character_id = "erebus"
+skin_index = 0
+blood_color = Color(0.717647, 0.780392, 1, 1)
+skill_color = Color(0.717647, 0.780392, 1, 1)
+
+[sub_resource type="Resource" id="Resource_erebus_1"]
+script = ExtResource("2_b2")
+character_id = "erebus"
+skin_index = 1
+blood_color = Color(0.717647, 0.780392, 1, 1)
+skill_color = Color(0.717647, 0.780392, 1, 1)
+
+[sub_resource type="Resource" id="Resource_erebus_2"]
+script = ExtResource("2_b2")
+character_id = "erebus"
+skin_index = 2
+blood_color = Color(0.717647, 0.780392, 1, 1)
+skill_color = Color(0.717647, 0.780392, 1, 1)
+
+[sub_resource type="Resource" id="Resource_erebus_3"]
+script = ExtResource("2_b2")
+character_id = "erebus"
+skin_index = 3
+blood_color = Color(0.717647, 0.780392, 1, 1)
+skill_color = Color(0.717647, 0.780392, 1, 1)
+
+[sub_resource type="Resource" id="Resource_tasko_0"]
+script = ExtResource("2_b2")
+character_id = "tasko"
+skin_index = 0
+blood_color = Color(1, 0.65098, 0.921569, 1)
+skill_color = Color(1, 0.65098, 0.921569, 1)
+
+[sub_resource type="Resource" id="Resource_tasko_1"]
+script = ExtResource("2_b2")
+character_id = "tasko"
+skin_index = 1
+blood_color = Color(1, 0.65098, 0.921569, 1)
+skill_color = Color(1, 0.65098, 0.921569, 1)
+
+[sub_resource type="Resource" id="Resource_tasko_2"]
+script = ExtResource("2_b2")
+character_id = "tasko"
+skin_index = 2
+blood_color = Color(1, 0.65098, 0.921569, 1)
+skill_color = Color(1, 0.65098, 0.921569, 1)
+
+[sub_resource type="Resource" id="Resource_tasko_3"]
+script = ExtResource("2_b2")
+character_id = "tasko"
+skin_index = 3
+blood_color = Color(1, 0.65098, 0.921569, 1)
+skill_color = Color(1, 0.65098, 0.921569, 1)
+
+[sub_resource type="Resource" id="Resource_juice_0"]
+script = ExtResource("2_b2")
+character_id = "juice"
+skin_index = 0
+blood_color = Color(0.94902, 1, 0.560784, 1)
+skill_color = Color(0.94902, 1, 0.560784, 1)
+
+[sub_resource type="Resource" id="Resource_juice_1"]
+script = ExtResource("2_b2")
+character_id = "juice"
+skin_index = 1
+blood_color = Color(0.321569, 1, 0.329412, 1)
+skill_color = Color(0.321569, 1, 0.329412, 1)
+
+[sub_resource type="Resource" id="Resource_juice_2"]
+script = ExtResource("2_b2")
+character_id = "juice"
+skin_index = 2
+blood_color = Color(1, 0.623529, 0.768627, 1)
+skill_color = Color(1, 0.623529, 0.768627, 1)
+
+[sub_resource type="Resource" id="Resource_juice_3"]
+script = ExtResource("2_b2")
+character_id = "juice"
+skin_index = 3
+blood_color = Color(1, 0.486275, 0.188235, 1)
+skill_color = Color(1, 0.486275, 0.188235, 1)
+
+[sub_resource type="Resource" id="Resource_madam_0"]
+script = ExtResource("2_b2")
+character_id = "madam"
+skin_index = 0
+blood_color = Color(0.858824, 0.478431, 0.419608, 1)
+skill_color = Color(0.858824, 0.478431, 0.419608, 1)
+
+[resource]
+script = ExtResource("1_a1")
+entries = Array[Resource]([SubResource("Resource_outrage_default"), SubResource("Resource_erebus_default"), SubResource("Resource_tasko_default"), SubResource("Resource_juice_default"), SubResource("Resource_madam_default"), SubResource("Resource_outrage_0"), SubResource("Resource_outrage_1"), SubResource("Resource_outrage_2"), SubResource("Resource_outrage_3"), SubResource("Resource_outrage_4"), SubResource("Resource_outrage_5"), SubResource("Resource_outrage_6"), SubResource("Resource_outrage_7"), SubResource("Resource_outrage_8"), SubResource("Resource_erebus_0"), SubResource("Resource_erebus_1"), SubResource("Resource_erebus_2"), SubResource("Resource_erebus_3"), SubResource("Resource_tasko_0"), SubResource("Resource_tasko_1"), SubResource("Resource_tasko_2"), SubResource("Resource_tasko_3"), SubResource("Resource_juice_0"), SubResource("Resource_juice_1"), SubResource("Resource_juice_2"), SubResource("Resource_juice_3"), SubResource("Resource_madam_0")])

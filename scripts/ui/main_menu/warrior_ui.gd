@@ -6,6 +6,8 @@ const WARRIOR_MANIFEST_PATHS := {
 	"outrage": "res://assets/warriors/outrage/skin_manifest.json",
 	"erebus": "res://assets/warriors/erebus/skin_manifest.json",
 	"tasko": "res://assets/warriors/tasko/skin_manifest.json",
+	"juice": "res://assets/warriors/juice/skin_manifest.json",
+	"madam": "res://assets/warriors/madam/skin_manifest.json",
 }
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 

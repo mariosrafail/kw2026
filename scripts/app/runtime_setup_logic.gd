@@ -138,6 +138,7 @@ func _refresh_spawn_points() -> void:
 			controller.update_spawn_points(spawn_points)
 
 func _configure_services() -> void:
+	_load_server_skin_blood_color_config()
 	projectile_system.configure(projectiles_root, PROJECTILE_SCENE, Callable(self, "_projectile_color"))
 	combat_effects.configure(projectiles_root, map_front_sprite, SPLASH_HIT_SFX, DEATH_HIT_SFX, BULLET_TOUCH_SFX, EXPLOSION_EFFECT_TEXTURE, HIT_EFFECT_TEXTURE)
 
@@ -215,7 +216,8 @@ func _configure_services() -> void:
 			"spawn_blood_particles_local": Callable(combat_effects, "spawn_blood_particles"),
 			"send_spawn_blood_particles": Callable(self, "_send_spawn_blood_particles_rpc"),
 			"can_damage_peer": Callable(self, "_can_damage_peer"),
-			"character_id_for_peer": Callable(self, "_warrior_id_for_peer")
+			"character_id_for_peer": Callable(self, "_warrior_id_for_peer"),
+			"authoritative_blood_color_for_peer": Callable(self, "_authoritative_blood_color_for_peer")
 		},
 		{
 			"player_history_ms": PLAYER_HISTORY_MS
@@ -323,6 +325,7 @@ func _configure_services() -> void:
 			"send_skill_charge": Callable(self, "_send_sync_skill_charge_rpc"),
 			"send_skill_cast": Callable(self, "_send_skill_cast_rpc"),
 			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer"),
+			"authoritative_blood_color_for_peer": Callable(self, "_authoritative_blood_color_for_peer"),
 			"is_gameplay_locked": Callable(self, "_is_gameplay_locked")
 		},
 		{

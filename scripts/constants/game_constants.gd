@@ -96,6 +96,8 @@ const WEAPONS := {
 const CHARACTER_ID_OUTRAGE := "outrage"
 const CHARACTER_ID_EREBUS := "erebus"
 const CHARACTER_ID_TASKO := "tasko"
+const CHARACTER_ID_JUICE := "juice"
+const CHARACTER_ID_MADAM := "madam"
 
 const CHARACTERS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -112,6 +114,16 @@ const CHARACTERS := {
 		"name": "Tasko",
 		"ability": "Invisibility + Mine",
 		"description": "Stealth field and persistent mine"
+	},
+	CHARACTER_ID_JUICE: {
+		"name": "Juice",
+		"ability": "Shrink",
+		"description": "Shrink body, hitbox and gun for 5 seconds"
+	},
+	CHARACTER_ID_MADAM: {
+		"name": "Madam",
+		"ability": "Dread Aura",
+		"description": "Heavy move-speed and fire-rate slow aura for 5 seconds"
 	}
 }
 

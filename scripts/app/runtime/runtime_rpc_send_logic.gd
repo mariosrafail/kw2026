@@ -219,3 +219,15 @@ func _send_skill_cast_rpc(target_peer_id: int, skill_number: int, caster_peer_id
 					_rpc_spawn_tasko_mine(caster_peer_id, target_world)
 				else:
 					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"juice":
+			if skill_number == 2:
+				if target_is_local_server:
+					_rpc_spawn_tasko_mine(caster_peer_id, target_world)
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"madam":
+			if skill_number == 2:
+				if target_is_local_server:
+					_rpc_spawn_tasko_mine(caster_peer_id, target_world)
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)

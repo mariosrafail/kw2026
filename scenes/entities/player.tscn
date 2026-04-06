@@ -49,6 +49,7 @@ region_enabled = true
 region_rect = Rect2(0, 0, 61, 2)
 
 [node name="head" type="Sprite2D" parent="VisualRoot" unique_id=975497308]
+z_index = 3
 texture_filter = 1
 position = Vector2(8, -14)
 scale = Vector2(1.5, 1.5)
@@ -57,12 +58,14 @@ region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
 
 [node name="torso" type="Sprite2D" parent="VisualRoot" unique_id=1816633150]
+z_index = 2
 texture_filter = 1
 texture = ExtResource("3_73kkf")
 region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
 
 [node name="leg1" type="Sprite2D" parent="VisualRoot" unique_id=2059918017]
+z_index = 1
 texture_filter = 1
 position = Vector2(-8, 15)
 texture = ExtResource("4_n5sgd")
@@ -70,6 +73,7 @@ region_enabled = true
 region_rect = Rect2(0, 0, 64, 64)
 
 [node name="leg2" type="Sprite2D" parent="VisualRoot" unique_id=298805812]
+z_index = 1
 texture_filter = 1
 position = Vector2(7, 15)
 texture = ExtResource("4_n5sgd")

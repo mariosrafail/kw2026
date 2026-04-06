@@ -36,6 +36,8 @@ const CHARACTER_E_ICON_COLUMNS := {
 	"outrage": 1,
 	"erebus": 3,
 	"tasko": 5,
+	"juice": 7,
+	"madam": 9,
 }
 
 var _e_slot: Control

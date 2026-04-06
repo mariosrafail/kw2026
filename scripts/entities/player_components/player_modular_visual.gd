@@ -5,6 +5,8 @@ class_name PlayerModularVisual
 const CHARACTER_ID_OUTRAGE := "outrage"
 const CHARACTER_ID_EREBUS := "erebus"
 const CHARACTER_ID_TASKO := "tasko"
+const CHARACTER_ID_JUICE := "juice"
+const CHARACTER_ID_MADAM := "madam"
 
 const LEGS_FRAME_SIZE := Vector2i(64, 64)
 const TORSO_FRAME_SIZE := Vector2i(64, 64)
@@ -13,6 +15,7 @@ const HEAD_FRAME_SIZE := Vector2i(64, 64)
 const OUTRAGE_WARRIOR_COLUMN := 1
 const EREBUS_WARRIOR_COLUMN := 2
 const TASKO_WARRIOR_COLUMN := 3
+const MADAM_WARRIOR_COLUMN := 4
 const WARRIOR_FRAME_OFFSET_X := 64
 const SYNC_POSE_LERP_SPEED := 18.0
 const HEAD_LEFT_SOCKET_CORRECTION := 2.0
@@ -38,6 +41,16 @@ const PART_TEXTURE_PATHS := {
 		"head": "res://assets/warriors/tasko/head.png",
 		"torso": "res://assets/warriors/tasko/torso.png",
 		"legs": "res://assets/warriors/tasko/legs.png",
+	},
+	CHARACTER_ID_JUICE: {
+		"head": "res://assets/warriors/juice/head.png",
+		"torso": "res://assets/warriors/juice/torso.png",
+		"legs": "res://assets/warriors/juice/legs.png",
+	},
+	CHARACTER_ID_MADAM: {
+		"head": "res://assets/warriors/madam/head.png",
+		"torso": "res://assets/warriors/madam/torso.png",
+		"legs": "res://assets/warriors/madam/legs.png",
 	},
 }
 
@@ -448,13 +461,15 @@ func _head_aim_offset_x() -> float:
 
 func set_character_visual(new_character_id: String) -> void:
 	var normalized := new_character_id.strip_edges().to_lower()
-	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO:
+	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM:
 		normalized = CHARACTER_ID_OUTRAGE
 	character_id = normalized
 	if normalized == CHARACTER_ID_EREBUS:
 		warrior_column_index = EREBUS_WARRIOR_COLUMN
 	elif normalized == CHARACTER_ID_TASKO:
 		warrior_column_index = TASKO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_MADAM:
+		warrior_column_index = MADAM_WARRIOR_COLUMN
 	else:
 		warrior_column_index = OUTRAGE_WARRIOR_COLUMN
 	_apply_modular_character_visuals()
@@ -490,6 +505,11 @@ func _apply_modular_character_visuals() -> void:
 	var tint := Color(0.78, 0.84, 1.0, 1.0) if character_id == CHARACTER_ID_EREBUS else Color(1, 1, 1, 1)
 	if character_id == CHARACTER_ID_TASKO:
 		tint = Color(1.0, 0.65, 0.92, 1.0)
+	elif character_id == CHARACTER_ID_JUICE:
+		# Juice body parts use their authored texture colors directly.
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_MADAM:
+		tint = Color(1, 1, 1, 1)
 	if _legs_sprite != null:
 		_legs_sprite.modulate = tint
 	if _legs_sprite_2 != null:

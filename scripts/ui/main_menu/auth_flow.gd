@@ -2,7 +2,7 @@ extends RefCounted
 class_name MainMenuAuthFlow
 
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
-const AUTH_REQUEST_TIMEOUT_SEC := 8.0
+const AUTH_REQUEST_TIMEOUT_SEC := 15.0
 const DEFAULT_AUTH_USERNAME := "BLACKSHADOW"
 const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
@@ -198,6 +198,7 @@ func auth_submit_login(host: Control) -> void:
 		payload["username"] = user_raw
 	host.set("_auth_login_payload", JSON.stringify(payload))
 	host.set("_auth_login_base_url_index", 0)
+	host.set("_auth_timeout_retry_attempts", 0)
 	host.set("_auth_pending_action", "login")
 	var auth_status_label := host.get("_auth_status_label") as Label
 	if auth_status_label != null:
@@ -400,6 +401,7 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 				auth_status_label.text = "Login failed (%d)" % response_code
 			if auth_login_button != null:
 				auth_login_button.disabled = false
+			host.set("_auth_timeout_retry_attempts", 0)
 			host.set("_auth_pending_action", "")
 			return
 		var data := parsed as Dictionary
@@ -414,8 +416,10 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 				auth_status_label.text = "Login failed: missing token"
 			if auth_login_button != null:
 				auth_login_button.disabled = false
+			host.set("_auth_timeout_retry_attempts", 0)
 			host.set("_auth_pending_action", "")
 			return
+		host.set("_auth_timeout_retry_attempts", 0)
 		host.set("_auth_pending_action", "")
 		auth_recreate_http_request(host)
 		host.call_deferred("_auth_request_profile")
@@ -597,7 +601,22 @@ func auth_rebuild_login_base_candidates(host: Control) -> void:
 	var result := PackedStringArray()
 	var normalized := str(host.get("_auth_api_base_url")).strip_edges()
 	if not normalized.is_empty():
-		result.append(normalized)
+		_append_login_base_candidate(result, normalized)
+		var parts := _split_base_url(normalized)
+		var scheme := str(parts.get("scheme", "http"))
+		var hostname := str(parts.get("hostname", ""))
+		var suffix := str(parts.get("suffix", ""))
+		var has_explicit_port := bool(parts.get("has_explicit_port", false))
+		var port := int(parts.get("port", -1))
+		if not hostname.is_empty():
+			if suffix == "/auth":
+				_append_login_base_candidate(result, _compose_base_url(scheme, hostname, -1, suffix, false))
+				_append_login_base_candidate(result, _compose_base_url("http", hostname, 8090, "", true))
+				if has_explicit_port and port == 8081:
+					_append_login_base_candidate(result, _compose_base_url(scheme, hostname, 8080, suffix, true))
+			elif suffix.is_empty():
+				_append_login_base_candidate(result, _compose_base_url(scheme, hostname, port, "/auth", has_explicit_port))
+				_append_login_base_candidate(result, _compose_base_url("http", hostname, 8090, "", true))
 	host.set("_auth_login_base_url_candidates", result)
 	host.set("_auth_login_base_url_index", 0)
 
@@ -687,14 +706,52 @@ func auth_on_request_watchdog_timeout(host: Control) -> void:
 	var auth_http := host.get("_auth_http") as HTTPRequest
 	if auth_http != null:
 		auth_http.cancel_request()
+	var auth_login_button := host.get("_auth_login_button") as Button
+	var auth_status_label := host.get("_auth_status_label") as Label
+	if action == "login":
+		var login_base_candidates := host.get("_auth_login_base_url_candidates") as PackedStringArray
+		var login_base_index := int(host.get("_auth_login_base_url_index"))
+		if login_base_index < login_base_candidates.size() - 1:
+			var failed_base := auth_login_current_base_url(host)
+			host.set("_auth_login_base_url_index", login_base_index + 1)
+			host.set("_auth_timeout_retry_attempts", 0)
+			host.set("_auth_pending_action", "login")
+			if auth_status_label != null:
+				auth_status_label.text = "Login timeout on %s, trying %s..." % [failed_base, auth_login_current_base_url(host)]
+			print("[AUTH][LOGIN] timeout on %s, retry with fallback %s" % [failed_base, auth_login_current_base_url(host)])
+			var fallback_err := auth_request_login_with_current_candidate(host)
+			if fallback_err == OK:
+				return
+			if auth_status_label != null:
+				auth_status_label.text = "Login fallback failed (%s)" % str(fallback_err)
+			if auth_login_button != null:
+				auth_login_button.disabled = false
+			host.set("_auth_pending_action", "")
+			return
+		var retries := int(host.get("_auth_timeout_retry_attempts"))
+		var retry_limit := maxi(0, int(host.get("_auth_timeout_retry_limit")))
+		if retries < retry_limit:
+			host.set("_auth_timeout_retry_attempts", retries + 1)
+			host.set("_auth_pending_action", "login")
+			if auth_status_label != null:
+				auth_status_label.text = "Login timeout, retrying (%d/%d)..." % [retries + 1, retry_limit]
+			var retry_err := auth_request_login_with_current_candidate(host)
+			if retry_err == OK:
+				return
+			if auth_status_label != null:
+				auth_status_label.text = "Login retry failed (%s)" % str(retry_err)
+			if auth_login_button != null:
+				auth_login_button.disabled = false
+			host.set("_auth_timeout_retry_attempts", 0)
+			host.set("_auth_pending_action", "")
+			return
 	host.set("_auth_pending_action", "")
 	host.set("_auth_pending_purchase_skin_index", -1)
-	var auth_login_button := host.get("_auth_login_button") as Button
 	if auth_login_button != null:
 		auth_login_button.disabled = false
-	var auth_status_label := host.get("_auth_status_label") as Label
 	if auth_status_label != null:
-		auth_status_label.text = "%s timeout. Check server/IP and try again." % action.capitalize()
+		auth_status_label.text = "%s timeout (%s). Check server/IP and try again." % [action.capitalize(), auth_login_current_base_url(host)]
+	host.set("_auth_timeout_retry_attempts", 0)
 	if action == "profile" and not auth_token.is_empty():
 		host.call("_auth_finalize_without_remote_profile", "Profile timeout. Logged in with local profile only.")
 		return
@@ -808,6 +865,77 @@ func _normalize_api_base_url(raw: String) -> String:
 	if api_base == "http://localhost:8081/auth" or api_base == "http://localhost:8081":
 		return "http://updates.outrage.ink:8081/auth"
 	return api_base
+
+func _append_login_base_candidate(candidates: PackedStringArray, candidate: String) -> void:
+	var normalized := candidate.strip_edges().trim_suffix("/")
+	if normalized.is_empty():
+		return
+	for existing in candidates:
+		if str(existing) == normalized:
+			return
+	candidates.append(normalized)
+
+func _split_base_url(base_url: String) -> Dictionary:
+	var trimmed := base_url.strip_edges().trim_suffix("/")
+	var scheme_idx := trimmed.find("://")
+	if scheme_idx < 0:
+		return {
+			"scheme": "http",
+			"hostname": "",
+			"port": -1,
+			"suffix": "",
+			"has_explicit_port": false,
+		}
+	var scheme := trimmed.substr(0, scheme_idx)
+	var rest := trimmed.substr(scheme_idx + 3)
+	var slash_idx := rest.find("/")
+	var host_port := rest
+	var suffix := ""
+	if slash_idx >= 0:
+		host_port = rest.substr(0, slash_idx)
+		suffix = rest.substr(slash_idx)
+	var hostname := host_port
+	var port := -1
+	var has_explicit_port := false
+	if host_port.begins_with("["):
+		var bracket_idx := host_port.find("]")
+		if bracket_idx >= 0:
+			hostname = host_port.substr(0, bracket_idx + 1)
+			if host_port.length() > bracket_idx + 1 and host_port.substr(bracket_idx + 1, 1) == ":":
+				port = int(host_port.substr(bracket_idx + 2))
+				has_explicit_port = true
+	else:
+		var colon_idx := host_port.rfind(":")
+		if colon_idx >= 0:
+			hostname = host_port.substr(0, colon_idx)
+			port = int(host_port.substr(colon_idx + 1))
+			has_explicit_port = true
+	return {
+		"scheme": scheme,
+		"hostname": hostname,
+		"port": port,
+		"suffix": suffix,
+		"has_explicit_port": has_explicit_port,
+	}
+
+func _compose_base_url(scheme: String, hostname: String, port: int, suffix: String, force_port: bool) -> String:
+	var normalized_scheme := scheme.strip_edges().to_lower()
+	if normalized_scheme.is_empty():
+		normalized_scheme = "http"
+	var normalized_host := hostname.strip_edges()
+	if normalized_host.is_empty():
+		return ""
+	var normalized_suffix := suffix.strip_edges()
+	if not normalized_suffix.is_empty() and not normalized_suffix.begins_with("/"):
+		normalized_suffix = "/" + normalized_suffix
+	var use_port := force_port or port > 0
+	if not force_port:
+		if (normalized_scheme == "http" and port == 80) or (normalized_scheme == "https" and port == 443):
+			use_port = false
+	var port_part := ""
+	if use_port and port > 0:
+		port_part = ":%d" % port
+	return "%s://%s%s%s" % [normalized_scheme, normalized_host, port_part, normalized_suffix]
 
 func copy_weapon_skins_dict(src: Dictionary) -> Dictionary:
 	var out: Dictionary = {}

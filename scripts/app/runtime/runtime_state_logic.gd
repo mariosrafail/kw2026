@@ -1,5 +1,25 @@
 extends "res://scripts/app/runtime/runtime_spawn_logic.gd"
 
+const SERVER_SKIN_BLOOD_COLORS_RESOURCE_PATH := "res://config/server_skin_blood_colors.tres"
+const DEFAULT_BLOOD_COLOR := Color(0.98, 0.02, 0.07, 1.0)
+const DEFAULT_SKILL_COLOR := Color(0.98, 0.02, 0.07, 1.0)
+const DEFAULT_BLOOD_COLOR_BY_CHARACTER := {
+	"outrage": Color(0.98, 0.02, 0.07, 1.0),
+	"erebus": Color(0.72, 0.78, 1.0, 1.0),
+	"tasko": Color(1.0, 0.65, 0.92, 1.0),
+	"juice": Color(0.95, 1.0, 0.56, 1.0),
+	"madam": Color(0.86, 0.48, 0.42, 1.0),
+}
+const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
+	"outrage": Color(0.98, 0.02, 0.07, 1.0),
+	"erebus": Color(0.72, 0.78, 1.0, 1.0),
+	"tasko": Color(1.0, 0.65, 0.92, 1.0),
+	"juice": Color(0.95, 1.0, 0.56, 1.0),
+	"madam": Color(0.86, 0.48, 0.42, 1.0),
+}
+
+var server_skin_blood_color_config: Dictionary = {}
+
 func _reset_runtime_state() -> void:
 	snapshot_accumulator = 0.0
 	escape_return_pending = false
@@ -257,6 +277,10 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		return CHARACTER_ID_OUTRAGE
 	if normalized == CHARACTER_ID_TASKO:
 		return CHARACTER_ID_TASKO
+	if normalized == CHARACTER_ID_JUICE:
+		return CHARACTER_ID_JUICE
+	if normalized == CHARACTER_ID_MADAM:
+		return CHARACTER_ID_MADAM
 	if lobby_service != null:
 		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
 		if persisted == CHARACTER_ID_EREBUS:
@@ -268,14 +292,167 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		if persisted == CHARACTER_ID_TASKO:
 			peer_character_ids[peer_id] = CHARACTER_ID_TASKO
 			return CHARACTER_ID_TASKO
+		if persisted == CHARACTER_ID_JUICE:
+			peer_character_ids[peer_id] = CHARACTER_ID_JUICE
+			return CHARACTER_ID_JUICE
+		if persisted == CHARACTER_ID_MADAM:
+			peer_character_ids[peer_id] = CHARACTER_ID_MADAM
+			return CHARACTER_ID_MADAM
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
 		if local_normalized == CHARACTER_ID_EREBUS:
 			return CHARACTER_ID_EREBUS
 		if local_normalized == CHARACTER_ID_TASKO:
 			return CHARACTER_ID_TASKO
+		if local_normalized == CHARACTER_ID_JUICE:
+			return CHARACTER_ID_JUICE
+		if local_normalized == CHARACTER_ID_MADAM:
+			return CHARACTER_ID_MADAM
 		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
+
+func _skin_index_for_peer(peer_id: int) -> int:
+	if peer_skin_indices_by_peer.has(peer_id):
+		return maxi(0, int(peer_skin_indices_by_peer.get(peer_id, 0)))
+	if lobby_service != null:
+		var persisted_skin := int(lobby_service.get_peer_skin(peer_id, 0))
+		if persisted_skin >= 0:
+			return persisted_skin
+	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
+		if lobby_service != null:
+			return maxi(0, int(lobby_service.get_local_selected_skin(_warrior_id_for_peer(peer_id), 0)))
+	return 0
+
+func _load_server_skin_blood_color_config() -> void:
+	server_skin_blood_color_config = {}
+	if _load_server_skin_blood_color_config_from_resource():
+		return
+	_append_log("Server color resource missing/invalid at %s; using defaults." % SERVER_SKIN_BLOOD_COLORS_RESOURCE_PATH)
+
+func _load_server_skin_blood_color_config_from_resource() -> bool:
+	if not ResourceLoader.exists(SERVER_SKIN_BLOOD_COLORS_RESOURCE_PATH):
+		return false
+	var resource := ResourceLoader.load(SERVER_SKIN_BLOOD_COLORS_RESOURCE_PATH)
+	if resource == null:
+		_append_log("Server blood-color resource load failed at %s; trying JSON fallback." % SERVER_SKIN_BLOOD_COLORS_RESOURCE_PATH)
+		return false
+	var entries_value: Variant = resource.get("entries")
+	if not (entries_value is Array):
+		_append_log("Server blood-color resource has invalid entries at %s; trying JSON fallback." % SERVER_SKIN_BLOOD_COLORS_RESOURCE_PATH)
+		return false
+	var characters: Dictionary = {}
+	var entries := entries_value as Array
+	for entry_value in entries:
+		var entry := entry_value as SkinBloodColorEntry
+		if entry == null:
+			continue
+		var character_id := str(entry.character_id).strip_edges().to_lower()
+		if character_id.is_empty():
+			continue
+		var skin_index := int(entry.skin_index)
+		var color := _color_from_variant(entry.blood_color, _default_blood_color_for_character(character_id))
+		var skill_color := _color_from_variant(entry.skill_color, _default_skill_color_for_character(character_id))
+		var character_entry: Dictionary = {}
+		if characters.has(character_id):
+			character_entry = characters.get(character_id, {}) as Dictionary
+		else:
+			character_entry = {
+				"blood_default": _default_blood_color_for_character(character_id),
+				"skill_default": _default_skill_color_for_character(character_id),
+				"blood_skins": {},
+				"skill_skins": {}
+			}
+		if skin_index < 0:
+			character_entry["blood_default"] = color
+			character_entry["skill_default"] = skill_color
+		else:
+			var blood_skins := character_entry.get("blood_skins", {}) as Dictionary
+			var skill_skins := character_entry.get("skill_skins", {}) as Dictionary
+			var safe_skin_index := str(maxi(0, skin_index))
+			blood_skins[safe_skin_index] = color
+			skill_skins[safe_skin_index] = skill_color
+			character_entry["blood_skins"] = blood_skins
+			character_entry["skill_skins"] = skill_skins
+		characters[character_id] = character_entry
+	server_skin_blood_color_config = {"characters": characters}
+	_append_log("Loaded server blood/skill colors from resource (%d entries)." % entries.size())
+	return true
+
+func _authoritative_blood_color_for_peer(peer_id: int) -> Color:
+	return _resolve_authoritative_character_color(peer_id, "blood")
+
+func _authoritative_skill_color_for_peer(peer_id: int) -> Color:
+	return _resolve_authoritative_character_color(peer_id, "skill")
+
+func _resolve_authoritative_character_color(peer_id: int, channel: String) -> Color:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var skin_index := _skin_index_for_peer(peer_id)
+	var normalized_channel := channel.strip_edges().to_lower()
+	var fallback := _default_blood_color_for_character(warrior_id)
+	if normalized_channel == "skill":
+		fallback = _default_skill_color_for_character(warrior_id)
+	if server_skin_blood_color_config.is_empty():
+		return fallback
+	var characters: Dictionary = server_skin_blood_color_config.get("characters", {}) as Dictionary
+	if not characters.has(warrior_id):
+		return fallback
+	var entry: Dictionary = characters.get(warrior_id, {}) as Dictionary
+	var default_key := "blood_default"
+	var skins_key := "blood_skins"
+	if normalized_channel == "skill":
+		default_key = "skill_default"
+		skins_key = "skill_skins"
+	var character_default := _color_from_variant(entry.get(default_key, fallback), fallback)
+	var skins: Dictionary = entry.get(skins_key, {}) as Dictionary
+	var skin_key := str(maxi(0, skin_index))
+	if skins.has(skin_key):
+		return _color_from_variant(skins.get(skin_key, character_default), character_default)
+	if skins.has(maxi(0, skin_index)):
+		return _color_from_variant(skins.get(maxi(0, skin_index), character_default), character_default)
+	return character_default
+
+func _default_blood_color_for_character(character_id: String) -> Color:
+	if DEFAULT_BLOOD_COLOR_BY_CHARACTER.has(character_id):
+		return DEFAULT_BLOOD_COLOR_BY_CHARACTER[character_id] as Color
+	return DEFAULT_BLOOD_COLOR
+
+func _default_skill_color_for_character(character_id: String) -> Color:
+	if DEFAULT_SKILL_COLOR_BY_CHARACTER.has(character_id):
+		return DEFAULT_SKILL_COLOR_BY_CHARACTER[character_id] as Color
+	return DEFAULT_SKILL_COLOR
+
+func _color_from_variant(value: Variant, fallback: Color) -> Color:
+	if value is Color:
+		return value as Color
+	if value is String:
+		return Color.from_string(str(value), fallback)
+	if value is Dictionary:
+		var payload := value as Dictionary
+		var r := float(payload.get("r", fallback.r))
+		var g := float(payload.get("g", fallback.g))
+		var b := float(payload.get("b", fallback.b))
+		var a := float(payload.get("a", fallback.a))
+		return Color(
+			clampf(r, 0.0, 1.0),
+			clampf(g, 0.0, 1.0),
+			clampf(b, 0.0, 1.0),
+			clampf(a, 0.0, 1.0)
+		)
+	if value is Array:
+		var arr := value as Array
+		if arr.size() < 3:
+			return fallback
+		var r := float(arr[0])
+		var g := float(arr[1])
+		var b := float(arr[2])
+		var a := float(arr[3]) if arr.size() > 3 else 1.0
+		return Color(
+			clampf(r, 0.0, 1.0),
+			clampf(g, 0.0, 1.0),
+			clampf(b, 0.0, 1.0),
+			clampf(a, 0.0, 1.0)
+		)
+	return fallback
 
 func _ensure_player_display_name(peer_id: int) -> String:
 	if lobby_service != null and lobby_service.has_method("get_peer_display_name"):

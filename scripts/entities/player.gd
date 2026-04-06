@@ -64,6 +64,14 @@ const EREBUS_IMMUNE_HEAD_Y_OFFSET := -3.5
 const EREBUS_IMMUNE_TORSO_Y_OFFSET := -2.0
 const EREBUS_IMMUNE_SPEED_MULTIPLIER := 0.72
 const EREBUS_IMMUNE_JUMP_MULTIPLIER := 0.74
+const JUICE_SHRINK_DEFAULT_SCALE := 0.46
+const JUICE_SHRINK_ENTER_POP_SCALE := 1.08
+const JUICE_SHRINK_EXIT_POP_SCALE := 1.1
+const JUICE_SHRINK_ENTER_POP_SEC := 0.06
+const JUICE_SHRINK_ENTER_SETTLE_SEC := 0.15
+const JUICE_SHRINK_EXIT_POP_SEC := 0.09
+const JUICE_SHRINK_EXIT_SETTLE_SEC := 0.12
+const JUICE_SHRINK_FOOT_ANCHOR_HEIGHT := 36.0
 const ULTI_DURATION_BAR_SIZE := Vector2(56.0, 4.0)
 const ULTI_DURATION_BAR_OFFSET := Vector2(-28.0, -72.0)
 const ULTI_DURATION_BAR_BG_COLOR := Color(0.04, 0.08, 0.12, 0.86)
@@ -132,6 +140,8 @@ var damage_push_direction := Vector2.ZERO
 var target_damage_push_direction := Vector2.ZERO
 var damage_slow_remaining_sec := 0.0
 var external_movement_speed_multiplier := 1.0
+var external_status_movement_speed_multiplier := 1.0
+var external_fire_rate_multiplier := 1.0
 var damage_part_scramble_remaining_sec := 0.0
 var damage_part_scramble_offsets: Dictionary = {}
 var damage_part_scramble_rotations: Dictionary = {}
@@ -150,6 +160,16 @@ var _erebus_immune_base_torso_scale := Vector2.ONE
 var _erebus_immune_base_head_position := Vector2.ZERO
 var _erebus_immune_base_torso_position := Vector2.ZERO
 var _erebus_immune_size_captured := false
+var juice_shrink_remaining_sec := 0.0
+var juice_shrink_scale := JUICE_SHRINK_DEFAULT_SCALE
+var _juice_shrink_base_visual_scale := Vector2.ONE
+var _juice_shrink_base_visual_position := Vector2.ZERO
+var _juice_shrink_base_collision_scale := Vector2.ONE
+var _juice_shrink_base_collision_position := Vector2.ZERO
+var _juice_shrink_base_captured := false
+var _juice_shrink_current_visual_scale := 1.0
+var _juice_shrink_visual_offset := Vector2.ZERO
+var _juice_shrink_tween: Tween
 var outrage_boost_screen_fire_layer: CanvasLayer
 var outrage_boost_screen_fire_root: Control
 var outrage_boost_screen_fire_nodes: Array = []
@@ -191,6 +211,8 @@ func _ready() -> void:
 		visual_root.position = Vector2.ZERO
 	_init_modular_visual()
 	_capture_erebus_immune_base_size()
+	_capture_juice_shrink_base_size()
+	_refresh_visual_root_offset()
 	_init_damage_flash_overlays()
 	_init_outrage_boost_overlays()
 	_apply_player_facing_from_angle(target_aim_angle)
@@ -333,6 +355,80 @@ func _restore_erebus_immune_size() -> void:
 		torso_sprite.scale = _erebus_immune_base_torso_scale
 		torso_sprite.position = _erebus_immune_base_torso_position
 
+func _capture_juice_shrink_base_size() -> void:
+	if _juice_shrink_base_captured:
+		return
+	if visual_root != null:
+		_juice_shrink_base_visual_scale = visual_root.scale
+		_juice_shrink_base_visual_position = visual_root.position
+	if body_collision_shape != null:
+		_juice_shrink_base_collision_scale = body_collision_shape.scale
+		_juice_shrink_base_collision_position = body_collision_shape.position
+	_juice_shrink_current_visual_scale = 1.0
+	_juice_shrink_visual_offset = Vector2.ZERO
+	_juice_shrink_base_captured = true
+
+func _kill_juice_shrink_tween() -> void:
+	if _juice_shrink_tween != null:
+		_juice_shrink_tween.kill()
+	_juice_shrink_tween = null
+
+func _refresh_visual_root_offset() -> void:
+	if visual_root == null:
+		return
+	visual_root.position = _juice_shrink_base_visual_position + visual_correction_offset + _juice_shrink_visual_offset
+
+func _apply_juice_shrink_scale_state(scale_factor: float) -> void:
+	_capture_juice_shrink_base_size()
+	var safe_scale := clampf(scale_factor, 0.2, JUICE_SHRINK_EXIT_POP_SCALE)
+	_juice_shrink_current_visual_scale = safe_scale
+	if visual_root != null:
+		visual_root.scale = _juice_shrink_base_visual_scale * safe_scale
+		var foot_anchor_offset := JUICE_SHRINK_FOOT_ANCHOR_HEIGHT * (1.0 - safe_scale)
+		_juice_shrink_visual_offset = Vector2(0.0, foot_anchor_offset)
+		_refresh_visual_root_offset()
+	if body_collision_shape != null:
+		body_collision_shape.scale = Vector2(
+			_juice_shrink_base_collision_scale.x * safe_scale,
+			_juice_shrink_base_collision_scale.y * safe_scale
+		)
+		var hitbox_delta := HIT_HEIGHT * (safe_scale - 1.0)
+		body_collision_shape.position = _juice_shrink_base_collision_position + Vector2(0.0, -hitbox_delta * 0.5)
+
+func _apply_juice_shrink_size() -> void:
+	_apply_juice_shrink_scale_state(juice_shrink_scale)
+
+func _restore_juice_shrink_size() -> void:
+	if not _juice_shrink_base_captured:
+		return
+	_apply_juice_shrink_scale_state(1.0)
+
+func _animate_juice_shrink_enter() -> void:
+	_kill_juice_shrink_tween()
+	var target_scale := clampf(juice_shrink_scale, 0.2, 1.0)
+	var start_scale := clampf(_juice_shrink_current_visual_scale, 0.2, JUICE_SHRINK_EXIT_POP_SCALE)
+	var pop_scale := maxf(start_scale, JUICE_SHRINK_ENTER_POP_SCALE)
+	_juice_shrink_tween = create_tween()
+	var pop_track := _juice_shrink_tween.tween_method(Callable(self, "_apply_juice_shrink_scale_state"), start_scale, pop_scale, JUICE_SHRINK_ENTER_POP_SEC)
+	pop_track.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var shrink_track := _juice_shrink_tween.tween_method(Callable(self, "_apply_juice_shrink_scale_state"), pop_scale, target_scale, JUICE_SHRINK_ENTER_SETTLE_SEC)
+	shrink_track.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_juice_shrink_tween.finished.connect(func() -> void:
+		_juice_shrink_tween = null
+	)
+
+func _animate_juice_shrink_exit() -> void:
+	_kill_juice_shrink_tween()
+	var start_scale := clampf(_juice_shrink_current_visual_scale, 0.2, JUICE_SHRINK_EXIT_POP_SCALE)
+	_juice_shrink_tween = create_tween()
+	var pop_track := _juice_shrink_tween.tween_method(Callable(self, "_apply_juice_shrink_scale_state"), start_scale, JUICE_SHRINK_EXIT_POP_SCALE, JUICE_SHRINK_EXIT_POP_SEC)
+	pop_track.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var settle_track := _juice_shrink_tween.tween_method(Callable(self, "_apply_juice_shrink_scale_state"), JUICE_SHRINK_EXIT_POP_SCALE, 1.0, JUICE_SHRINK_EXIT_SETTLE_SEC)
+	settle_track.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_juice_shrink_tween.finished.connect(func() -> void:
+		_juice_shrink_tween = null
+	)
+
 func _ensure_outrage_boost_materials() -> void:
 	if not outrage_boost_materials.is_empty():
 		return
@@ -450,6 +546,27 @@ func clear_erebus_immune_visual() -> void:
 	erebus_immune_visual_remaining_sec = 0.0
 	_restore_erebus_immune_size()
 	_apply_part_base_materials()
+
+func set_juice_shrink_visual(duration_sec: float, scale_factor: float = JUICE_SHRINK_DEFAULT_SCALE) -> void:
+	var was_inactive := juice_shrink_remaining_sec <= 0.0
+	juice_shrink_scale = clampf(scale_factor, 0.2, 1.0)
+	juice_shrink_remaining_sec = maxf(juice_shrink_remaining_sec, maxf(0.0, duration_sec))
+	if juice_shrink_remaining_sec <= 0.0:
+		clear_juice_shrink_visual(false)
+		return
+	if was_inactive:
+		_animate_juice_shrink_enter()
+	else:
+		_apply_juice_shrink_size()
+
+func clear_juice_shrink_visual(animate: bool = true) -> void:
+	juice_shrink_remaining_sec = 0.0
+	juice_shrink_scale = JUICE_SHRINK_DEFAULT_SCALE
+	if animate:
+		_animate_juice_shrink_exit()
+	else:
+		_kill_juice_shrink_tween()
+		_restore_juice_shrink_size()
 
 func _tick_erebus_immune_visual() -> void:
 	if erebus_immune_visual_remaining_sec <= 0.0:
@@ -826,6 +943,10 @@ func set_character_visual(character_id: String) -> void:
 			sprite.modulate = Color(0.72, 0.78, 1.0, 1.0)
 		"tasko":
 			sprite.modulate = Color(1.0, 0.65, 0.92, 1.0)
+		"juice":
+			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		"madam":
+			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		"outrage":
 			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		_:
@@ -1004,6 +1125,7 @@ func _apply_damage_feedback() -> void:
 
 func get_movement_speed_multiplier() -> float:
 	var multiplier := clampf(external_movement_speed_multiplier, 0.0, 1.0)
+	multiplier *= clampf(external_status_movement_speed_multiplier, 0.0, 1.0)
 	if damage_slow_remaining_sec > 0.0:
 		multiplier *= DAMAGE_SLOW_MULTIPLIER
 	if erebus_immune_visual_remaining_sec > 0.0:
@@ -1017,6 +1139,15 @@ func get_jump_velocity_multiplier() -> float:
 
 func set_external_movement_speed_multiplier(value: float) -> void:
 	external_movement_speed_multiplier = clampf(value, 0.0, 1.0)
+
+func set_external_status_movement_speed_multiplier(value: float) -> void:
+	external_status_movement_speed_multiplier = clampf(value, 0.0, 1.0)
+
+func set_external_fire_rate_multiplier(value: float) -> void:
+	external_fire_rate_multiplier = clampf(value, 0.05, 4.0)
+
+func get_external_fire_rate_multiplier() -> float:
+	return clampf(external_fire_rate_multiplier, 0.05, 4.0)
 
 func _play_damage_visual_feedback(push_direction := Vector2.ZERO) -> void:
 	if push_direction.length_squared() <= 0.0001:
@@ -1268,14 +1399,20 @@ func is_respawn_hidden() -> bool:
 	return bool(forced_hidden_reasons.get("respawn_wait", false))
 
 func get_hit_radius() -> float:
+	var radius := HIT_RADIUS
 	if erebus_immune_visual_remaining_sec > 0.0:
-		return HIT_RADIUS * EREBUS_IMMUNE_HITBOX_SCALE
-	return HIT_RADIUS
+		radius *= EREBUS_IMMUNE_HITBOX_SCALE
+	if juice_shrink_remaining_sec > 0.0:
+		radius *= clampf(juice_shrink_scale, 0.2, 1.0)
+	return radius
 
 func get_hit_height() -> float:
+	var height := HIT_HEIGHT
 	if erebus_immune_visual_remaining_sec > 0.0:
-		return HIT_HEIGHT * EREBUS_IMMUNE_HITBOX_SCALE
-	return HIT_HEIGHT
+		height *= EREBUS_IMMUNE_HITBOX_SCALE
+	if juice_shrink_remaining_sec > 0.0:
+		height *= clampf(juice_shrink_scale, 0.2, 1.0)
+	return height
 
 func force_respawn(spawn_position: Vector2) -> void:
 	global_position = spawn_position
@@ -1289,6 +1426,8 @@ func force_respawn(spawn_position: Vector2) -> void:
 	shield_remaining_sec = 0.0
 	damage_slow_remaining_sec = 0.0
 	external_movement_speed_multiplier = 1.0
+	external_status_movement_speed_multiplier = 1.0
+	external_fire_rate_multiplier = 1.0
 	damage_push_direction = Vector2.ZERO
 	target_damage_push_direction = Vector2.ZERO
 	damage_part_scramble_remaining_sec = 0.0
@@ -1296,6 +1435,7 @@ func force_respawn(spawn_position: Vector2) -> void:
 	damage_part_scramble_rotations.clear()
 	clear_ulti_duration_bar()
 	clear_erebus_immune_visual()
+	clear_juice_shrink_visual(false)
 	forced_hidden_reasons.clear()
 	forced_sfx_suppressed_reasons.clear()
 	target_respawn_hidden = false
@@ -1435,6 +1575,10 @@ func _physics_process(delta: float) -> void:
 		_tick_erebus_immune_visual()
 		if erebus_immune_visual_remaining_sec <= 0.0:
 			clear_erebus_immune_visual()
+	if juice_shrink_remaining_sec > 0.0:
+		juice_shrink_remaining_sec = maxf(0.0, juice_shrink_remaining_sec - delta)
+		if juice_shrink_remaining_sec <= 0.0:
+			clear_juice_shrink_visual()
 	if shield_remaining_sec > 0.0:
 		shield_remaining_sec = maxf(0.0, shield_remaining_sec - delta)
 		if shield_remaining_sec <= 0.0:
@@ -1518,7 +1662,7 @@ func apply_visual_correction(offset: Vector2) -> void:
 	if visual_root == null:
 		return
 	visual_correction_offset += offset
-	visual_root.position = visual_correction_offset
+	_refresh_visual_root_offset()
 
 func _trigger_weapon_shot_jolt(aim_angle: float) -> void:
 	if modular_visual != null:
@@ -1527,10 +1671,10 @@ func _trigger_weapon_shot_jolt(aim_angle: float) -> void:
 func _tick_visual_correction(delta: float) -> void:
 	if visual_correction_offset.length_squared() <= 0.0001:
 		visual_correction_offset = Vector2.ZERO
-		visual_root.position = Vector2.ZERO
+		_refresh_visual_root_offset()
 		return
 	visual_correction_offset = visual_correction_offset.lerp(Vector2.ZERO, min(1.0, delta * VISUAL_CORRECTION_DECAY))
-	visual_root.position = visual_correction_offset
+	_refresh_visual_root_offset()
 
 func _ensure_ulti_duration_bar() -> void:
 	if visual_root == null:

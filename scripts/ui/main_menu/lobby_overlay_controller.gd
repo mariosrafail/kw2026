@@ -292,7 +292,7 @@ func _selected_warrior_id() -> String:
 	var selected_character_id := "outrage"
 	if _host != null:
 		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam":
 		selected_character_id = "outrage"
 	return selected_character_id
 
@@ -1088,7 +1088,7 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 		requested_name = "My Lobby %d" % (_room_entries.size() + 1)
 	if selected_weapon_id.is_empty():
 		selected_weapon_id = "ak47"
-	if selected_character_id != "erebus" and selected_character_id != "tasko":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam":
 		selected_character_id = "outrage"
 	if map_id.is_empty():
 		map_id = default_map_id

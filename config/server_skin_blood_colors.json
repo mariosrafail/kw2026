@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "notes": "Server-authoritative blood colors by warrior and skin index. Edit on server only.",
+  "characters": {
+	"outrage": {
+	  "default": "#FA0512FF",
+	  "skins": {
+		"0": "#FA0512FF",
+		"1": "#FA0512FF",
+		"2": "#FA0512FF",
+		"3": "#FA0512FF",
+		"4": "#FA0512FF",
+		"5": "#FA0512FF",
+		"6": "#FA0512FF",
+		"7": "#FA0512FF",
+		"8": "#FA0512FF"
+	  }
+	},
+	"erebus": {
+	  "default": "#B7C7FFFF",
+	  "skins": {
+		"0": "#B7C7FFFF",
+		"1": "#B7C7FFFF",
+		"2": "#B7C7FFFF",
+		"3": "#B7C7FFFF"
+	  }
+	},
+	"tasko": {
+	  "default": "#FFA6EBFF",
+	  "skins": {
+		"0": "#FFA6EBFF",
+		"1": "#FFA6EBFF",
+		"2": "#FFA6EBFF",
+		"3": "#FFA6EBFF"
+	  }
+	},
+	"juice": {
+	  "default": "#F2FF8FFF",
+	  "skins": {
+		"0": "#F2FF8FFF",
+		"1": "#52FF54FF",
+		"2": "#FF9FC4FF",
+		"3": "#FF7C30FF"
+	  }
+	},
+	"madam": {
+	  "default": "#DB7A6BFF",
+	  "skins": {
+		"0": "#DB7A6BFF"
+	  }
+	}
+  }
+}

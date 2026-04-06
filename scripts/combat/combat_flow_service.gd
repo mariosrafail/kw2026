@@ -6,6 +6,8 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
 	"erebus": Color(0.72, 0.78, 1.0, 1.0),
 	"tasko": Color(1.0, 0.65, 0.92, 1.0),
+	"juice": Color(0.95, 1.0, 0.56, 1.0),
+	"madam": Color(0.86, 0.48, 0.42, 1.0),
 }
 
 var players: Dictionary = {}
@@ -27,6 +29,7 @@ var player_replication: PlayerReplication
 
 var send_skill_cast_cb: Callable = Callable()  # Generic skill callback
 var warrior_id_for_peer_cb: Callable = Callable()
+var authoritative_blood_color_for_peer_cb: Callable = Callable()
 var is_gameplay_locked_cb: Callable = Callable()
 
 var get_world_2d_cb: Callable = Callable()
@@ -91,6 +94,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_skill_charge_cb = callbacks.get("send_skill_charge", Callable()) as Callable
 	send_skill_cast_cb = callbacks.get("send_skill_cast", Callable()) as Callable
 	warrior_id_for_peer_cb = callbacks.get("warrior_id_for_peer", Callable()) as Callable
+	authoritative_blood_color_for_peer_cb = callbacks.get("authoritative_blood_color_for_peer", Callable()) as Callable
 	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
 
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
@@ -526,9 +530,9 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				ammo -= 1
 				ammo_by_peer[peer_id] = ammo
 				server_sync_player_ammo(peer_id)
-				cooldown = weapon_profile.fire_interval()
+				cooldown = _effective_fire_interval(player, weapon_profile)
 				if ammo <= 0:
-					pending_reload_delay_by_peer[peer_id] = _post_shot_reload_delay(weapon_profile)
+					pending_reload_delay_by_peer[peer_id] = _post_shot_reload_delay(player, weapon_profile)
 			else:
 				server_begin_reload(peer_id, weapon_profile)
 		fire_cooldowns[peer_id] = cooldown
@@ -555,10 +559,18 @@ func _is_gameplay_locked() -> bool:
 		return is_gameplay_locked_cb.call() == true
 	return false
 
-func _post_shot_reload_delay(weapon_profile: WeaponProfile) -> float:
+func _post_shot_reload_delay(player: NetPlayer, weapon_profile: WeaponProfile) -> float:
 	if weapon_profile == null:
 		return 0.12
-	return maxf(0.01, maxf(weapon_profile.fire_interval(), 0.12))
+	return maxf(0.01, maxf(_effective_fire_interval(player, weapon_profile), 0.12))
+
+func _effective_fire_interval(player: NetPlayer, weapon_profile: WeaponProfile) -> float:
+	if weapon_profile == null:
+		return 0.1
+	var rate_multiplier := 1.0
+	if player != null and player.has_method("get_external_fire_rate_multiplier"):
+		rate_multiplier = maxf(0.05, float(player.call("get_external_fire_rate_multiplier")))
+	return maxf(0.01, weapon_profile.fire_interval() / rate_multiplier)
 
 func _world_2d() -> World2D:
 	if get_world_2d_cb.is_valid():
@@ -566,6 +578,10 @@ func _world_2d() -> World2D:
 	return null
 
 func _target_blood_color(target_peer_id: int, target_player: NetPlayer) -> Color:
+	if authoritative_blood_color_for_peer_cb.is_valid():
+		var color_value: Variant = authoritative_blood_color_for_peer_cb.call(target_peer_id)
+		if color_value is Color:
+			return color_value as Color
 	var warrior_id := _warrior_id_for_peer(target_peer_id)
 	if BLOOD_COLOR_BY_CHARACTER.has(warrior_id):
 		return BLOOD_COLOR_BY_CHARACTER[warrior_id] as Color

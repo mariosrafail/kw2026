@@ -7,6 +7,8 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
 	"erebus": Color(0.72, 0.78, 1.0, 1.0),
 	"tasko": Color(1.0, 0.65, 0.92, 1.0),
+	"juice": Color(0.95, 1.0, 0.56, 1.0),
+	"madam": Color(0.86, 0.48, 0.42, 1.0),
 }
 
 var players: Dictionary = {}
@@ -28,6 +30,7 @@ var spawn_blood_particles_local_cb: Callable = Callable()
 var send_spawn_blood_particles_cb: Callable = Callable()
 var can_damage_peer_cb: Callable = Callable()
 var character_id_for_peer_cb: Callable = Callable()
+var authoritative_blood_color_for_peer_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -48,6 +51,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_spawn_blood_particles_cb = callbacks.get("send_spawn_blood_particles", Callable()) as Callable
 	can_damage_peer_cb = callbacks.get("can_damage_peer", Callable()) as Callable
 	character_id_for_peer_cb = callbacks.get("character_id_for_peer", Callable()) as Callable
+	authoritative_blood_color_for_peer_cb = callbacks.get("authoritative_blood_color_for_peer", Callable()) as Callable
 
 	player_history_ms = int(config.get("player_history_ms", player_history_ms))
 
@@ -309,6 +313,10 @@ func _lobby_members(lobby_id: int) -> Array:
 	return []
 
 func _target_blood_color(target_peer_id: int, target_player: NetPlayer) -> Color:
+	if authoritative_blood_color_for_peer_cb.is_valid():
+		var color_value: Variant = authoritative_blood_color_for_peer_cb.call(target_peer_id)
+		if color_value is Color:
+			return color_value as Color
 	if character_id_for_peer_cb.is_valid():
 		var warrior_id := str(character_id_for_peer_cb.call(target_peer_id)).strip_edges().to_lower()
 		if BLOOD_COLOR_BY_CHARACTER.has(warrior_id):

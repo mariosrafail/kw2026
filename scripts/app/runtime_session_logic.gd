@@ -438,7 +438,11 @@ func _setup_character_picker() -> void:
 	lobby_character_option.set_item_metadata(1, CHARACTER_ID_EREBUS)
 	lobby_character_option.add_item("Tasko")
 	lobby_character_option.set_item_metadata(2, CHARACTER_ID_TASKO)
-	print("[DBG SETUP] Character picker: added Outrage (meta: %s), Erebus (meta: %s), Tasko (meta: %s)" % [CHARACTER_ID_OUTRAGE, CHARACTER_ID_EREBUS, CHARACTER_ID_TASKO])
+	lobby_character_option.add_item("Juice")
+	lobby_character_option.set_item_metadata(3, CHARACTER_ID_JUICE)
+	lobby_character_option.add_item("Madam")
+	lobby_character_option.set_item_metadata(4, CHARACTER_ID_MADAM)
+	print("[DBG SETUP] Character picker: added Outrage (meta: %s), Erebus (meta: %s), Tasko (meta: %s), Juice (meta: %s), Madam (meta: %s)" % [CHARACTER_ID_OUTRAGE, CHARACTER_ID_EREBUS, CHARACTER_ID_TASKO, CHARACTER_ID_JUICE, CHARACTER_ID_MADAM])
 	var target_character := _normalize_character_id(selected_character_id)
 	print("[DBG SETUP] Character picker: looking for target character: %s" % target_character)
 	var found_index := -1
