@@ -1,6 +1,7 @@
 extends RefCounted
 class_name MainMenuAuthFlow
 
+const DATA := preload("res://scripts/ui/main_menu/data.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const AUTH_REQUEST_TIMEOUT_SEC := 15.0
 const DEFAULT_AUTH_USERNAME := "BLACKSHADOW"
@@ -8,6 +9,11 @@ const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
+const WEAPON_UZI := DATA.WEAPON_UZI
+const WEAPON_GRENADE := DATA.WEAPON_GRENADE
+const WEAPON_AK47 := DATA.WEAPON_AK47
+const WEAPON_KAR := DATA.WEAPON_KAR
+const WEAPON_SHOTGUN := DATA.WEAPON_SHOTGUN
 
 static var _runtime_session_token := ""
 static var _runtime_session_username := ""
@@ -364,6 +370,65 @@ func auth_maybe_flush_wallet_sync(host: Control) -> void:
 		return
 	host.set("_auth_wallet_sync_queued", false)
 	auth_sync_wallet(host)
+
+func default_warrior_id(host: Control) -> String:
+	var warrior_ui: Variant = host.get("_warrior_ui")
+	if warrior_ui != null and warrior_ui.has_method("default_warrior_id"):
+		return str(warrior_ui.call("default_warrior_id"))
+	return "outrage"
+
+func default_owned_warriors(host: Control) -> PackedStringArray:
+	var warrior_ui: Variant = host.get("_warrior_ui")
+	if warrior_ui != null and warrior_ui.has_method("default_owned_warriors"):
+		var value: Variant = warrior_ui.call("default_owned_warriors")
+		if value is PackedStringArray:
+			return value
+	return PackedStringArray(["outrage"])
+
+func default_owned_warrior_skins_by_warrior(host: Control) -> Dictionary:
+	var warrior_ui: Variant = host.get("_warrior_ui")
+	if warrior_ui != null and warrior_ui.has_method("default_owned_warrior_skins_by_warrior"):
+		var value: Variant = warrior_ui.call("default_owned_warrior_skins_by_warrior")
+		if value is Dictionary:
+			return (value as Dictionary).duplicate(true)
+	return {"outrage": PackedInt32Array([0])}
+
+func default_equipped_warrior_skin_by_warrior(host: Control) -> Dictionary:
+	var warrior_ui: Variant = host.get("_warrior_ui")
+	if warrior_ui != null and warrior_ui.has_method("default_equipped_warrior_skin_by_warrior"):
+		var value: Variant = warrior_ui.call("default_equipped_warrior_skin_by_warrior")
+		if value is Dictionary:
+			return (value as Dictionary).duplicate(true)
+	return {"outrage": 0}
+
+func normalize_owned_warrior_skins_dict(host: Control, src: Dictionary) -> Dictionary:
+	var out := default_owned_warrior_skins_by_warrior(host)
+	var warrior_ids: PackedStringArray = host.call("_warrior_ui_warrior_ids")
+	for wid in warrior_ids:
+		var normalized := str(wid).strip_edges().to_lower()
+		var source: Variant = src.get(normalized, src.get(wid, [0]))
+		var arr := PackedInt32Array([0])
+		if source is PackedInt32Array:
+			for value in source:
+				var idx := maxi(0, int(value))
+				if not arr.has(idx):
+					arr.append(idx)
+		elif source is Array:
+			for value in source:
+				var idx := maxi(0, int(value))
+				if not arr.has(idx):
+					arr.append(idx)
+		arr.sort()
+		out[normalized] = arr
+	return out
+
+func normalize_equipped_warrior_skins_dict(host: Control, src: Dictionary) -> Dictionary:
+	var out := default_equipped_warrior_skin_by_warrior(host)
+	var warrior_ids: PackedStringArray = host.call("_warrior_ui_warrior_ids")
+	for wid in warrior_ids:
+		var normalized := str(wid).strip_edges().to_lower()
+		out[normalized] = maxi(0, int(src.get(normalized, src.get(wid, 0))))
+	return out
 
 func auth_handle_http_completed(host: Control, response_code: int, body: PackedByteArray) -> void:
 	var action := str(host.get("_auth_pending_action"))
@@ -759,6 +824,256 @@ func auth_on_request_watchdog_timeout(host: Control) -> void:
 		host.set("_auth_wallet_sync_queued", true)
 		auth_schedule_wallet_retry(host)
 	print("[AUTH][TIMEOUT] action=%s base_url=%s" % [action, str(host.get("_auth_api_base_url"))])
+
+func auth_apply_profile(host: Control, profile: Dictionary) -> void:
+	host.set("wallet_coins", int(profile.get("coins", host.get("wallet_coins"))))
+	host.set("wallet_clk", int(profile.get("clk", host.get("wallet_clk"))))
+	host.set("player_username", str(profile.get("username", host.get("player_username"))).strip_edges())
+	if str(host.get("player_username")).is_empty():
+		host.set("player_username", "Player")
+
+	if profile.has("owned_warriors"):
+		var incoming_owned_warriors := PackedStringArray()
+		for item in profile.get("owned_warriors", []) as Array:
+			var wid := str(item).strip_edges().to_lower()
+			if not wid.is_empty() and not incoming_owned_warriors.has(wid):
+				incoming_owned_warriors.append(wid)
+		var default_warrior := str(host.call("_default_warrior_id"))
+		if not incoming_owned_warriors.has(default_warrior):
+			incoming_owned_warriors.append(default_warrior)
+		host.set("owned_warriors", incoming_owned_warriors)
+
+	var incoming_warrior_skins := host.call("_default_owned_warrior_skins_by_warrior") as Dictionary
+	if profile.has("owned_warrior_skins_by_warrior"):
+		var incoming_skin_dict := profile.get("owned_warrior_skins_by_warrior", {}) as Dictionary
+		for key in incoming_skin_dict.keys():
+			var wid := str(key).strip_edges().to_lower()
+			var source := incoming_skin_dict.get(key, [0]) as Array
+			var arr := PackedInt32Array([0])
+			if source != null:
+				for v in source:
+					var idx := maxi(0, int(v))
+					if not arr.has(idx):
+						arr.append(idx)
+			arr.sort()
+			incoming_warrior_skins[wid] = arr
+	elif profile.has("owned_skins"):
+		for item in profile.get("owned_skins", []) as Array:
+			if not (item is Dictionary):
+				continue
+			var d := item as Dictionary
+			var wid := str(d.get("character_id", "")).strip_edges().to_lower()
+			if wid.is_empty():
+				continue
+			var arr := incoming_warrior_skins.get(wid, PackedInt32Array([0])) as PackedInt32Array
+			var idx := maxi(0, int(d.get("skin_index", 0)))
+			if not arr.has(idx):
+				arr.append(idx)
+				arr.sort()
+			incoming_warrior_skins[wid] = arr
+			var owned_warriors := host.get("owned_warriors") as PackedStringArray
+			if not owned_warriors.has(wid):
+				owned_warriors.append(wid)
+				host.set("owned_warriors", owned_warriors)
+	host.set("owned_warrior_skins_by_warrior", incoming_warrior_skins)
+	host.set("owned_warrior_skins", incoming_warrior_skins.get(str(host.call("_default_warrior_id")), PackedInt32Array([0])) as PackedInt32Array)
+	if profile.has("equipped_warrior_skin_by_warrior"):
+		host.set("equipped_warrior_skin_by_warrior", host.call("_normalize_equipped_warrior_skins_dict", (profile.get("equipped_warrior_skin_by_warrior", {}) as Dictionary).duplicate(true)))
+	var next_selected_warrior_id := str(host.get("selected_warrior_id"))
+	if profile.has("selected_warrior_id"):
+		next_selected_warrior_id = str(profile.get("selected_warrior_id", host.get("selected_warrior_id"))).strip_edges().to_lower()
+	host.set("selected_warrior_id", next_selected_warrior_id)
+	var owned_warriors_after := host.get("owned_warriors") as PackedStringArray
+	if not owned_warriors_after.has(str(host.get("selected_warrior_id"))):
+		host.set("selected_warrior_id", str(host.call("_default_warrior_id")))
+	var next_selected_warrior_skin := int(host.get("selected_warrior_skin"))
+	if profile.has("selected_warrior_skin"):
+		next_selected_warrior_skin = maxi(0, int(profile.get("selected_warrior_skin", host.get("selected_warrior_skin"))))
+	elif profile.has("equipped_warrior_skin_by_warrior"):
+		next_selected_warrior_skin = int(host.call("_equipped_warrior_skin", str(host.get("selected_warrior_id"))))
+	if not bool(host.call("_warrior_skin_is_owned", str(host.get("selected_warrior_id")), next_selected_warrior_skin)):
+		next_selected_warrior_skin = 0
+	host.set("selected_warrior_skin", next_selected_warrior_skin)
+	host.call("_set_equipped_warrior_skin", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
+
+	if profile.has("owned_weapons"):
+		var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
+		var from_api := PackedStringArray()
+		for w in profile.get("owned_weapons", []) as Array:
+			var wid := str(w).strip_edges().to_lower()
+			if allowed.has(wid) and not from_api.has(wid):
+				from_api.append(wid)
+		if not from_api.has(WEAPON_UZI):
+			from_api.append(WEAPON_UZI)
+		if not from_api.has(WEAPON_GRENADE):
+			from_api.append(WEAPON_GRENADE)
+		host.set("owned_weapons", from_api)
+
+	if profile.has("owned_weapon_skins_by_weapon"):
+		var allowed_skins := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
+		var incoming := profile.get("owned_weapon_skins_by_weapon", {}) as Dictionary
+		var out: Dictionary = {}
+		for wid in allowed_skins:
+			var arr_src := incoming.get(wid, [0]) as Array
+			var arr_out := PackedInt32Array([0])
+			if arr_src != null:
+				for v in arr_src:
+					var idx := maxi(0, int(v))
+					if not arr_out.has(idx):
+						arr_out.append(idx)
+			arr_out.sort()
+			if not bool(host.call("_weapon_is_owned", wid)):
+				arr_out = PackedInt32Array([0])
+			out[wid] = arr_out
+		host.set("owned_weapon_skins_by_weapon", out)
+	if profile.has("equipped_weapon_skin_by_weapon"):
+		var incoming_equipped_weapon := profile.get("equipped_weapon_skin_by_weapon", {}) as Dictionary
+		for wid in PackedStringArray([host.get("WEAPON_UZI"), host.get("WEAPON_AK47"), host.get("WEAPON_KAR"), host.get("WEAPON_SHOTGUN"), host.get("WEAPON_GRENADE")]):
+			var equipped_weapon_skin_by_weapon := host.get("equipped_weapon_skin_by_weapon") as Dictionary
+			equipped_weapon_skin_by_weapon[wid] = maxi(0, int(incoming_equipped_weapon.get(wid, equipped_weapon_skin_by_weapon.get(wid, 0))))
+			host.set("equipped_weapon_skin_by_weapon", equipped_weapon_skin_by_weapon)
+	var next_selected_weapon_id := str(host.get("selected_weapon_id"))
+	if profile.has("selected_weapon_id"):
+		next_selected_weapon_id = str(profile.get("selected_weapon_id", host.get("selected_weapon_id"))).strip_edges().to_lower()
+	host.set("selected_weapon_id", next_selected_weapon_id)
+	if not bool(host.call("_weapon_is_owned", str(host.get("selected_weapon_id")))):
+		host.set("selected_weapon_id", WEAPON_UZI)
+	var next_selected_weapon_skin := int(host.get("selected_weapon_skin"))
+	if profile.has("selected_weapon_skin"):
+		next_selected_weapon_skin = maxi(0, int(profile.get("selected_weapon_skin", host.get("selected_weapon_skin"))))
+	elif profile.has("equipped_weapon_skin_by_weapon"):
+		next_selected_weapon_skin = int(host.call("_equipped_weapon_skin", str(host.get("selected_weapon_id"))))
+	if not bool(host.call("_weapon_skin_is_owned", str(host.get("selected_weapon_id")), next_selected_weapon_skin)):
+		next_selected_weapon_skin = 0
+	host.set("selected_weapon_skin", next_selected_weapon_skin)
+	host.call("_set_equipped_weapon_skin", str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))
+	auth_dev_unlock_all_for_mario(host)
+	host.set("_pending_warrior_id", str(host.get("selected_warrior_id")))
+	host.set("_pending_warrior_skin", int(host.get("selected_warrior_skin")))
+	host.set("_pending_weapon_id", str(host.get("selected_weapon_id")))
+	host.set("_pending_weapon_skin", int(host.get("selected_weapon_skin")))
+	host.set("_weapon_filter_weapon_id", str(host.get("selected_weapon_id")))
+	host.call("_apply_warrior_skin_to_player", host.get("main_warrior_preview"), str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
+	host.call("_apply_warrior_skin_to_player", host.get("warrior_shop_preview"), str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin")))
+	host.call("_set_weapon_icon_sprite", host.get("main_weapon_icon"), str(host.get("selected_weapon_id")), 1.0, int(host.get("selected_weapon_skin")))
+	host.call("_apply_weapon_skin_visual", host.get("main_weapon_icon"), str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))
+	host.call("_set_weapon_icon_sprite", host.get("weapon_shop_preview"), str(host.get("_pending_weapon_id")), 1.0, int(host.get("_pending_weapon_skin")))
+	host.call("_apply_weapon_skin_visual", host.get("weapon_shop_preview"), str(host.get("_pending_weapon_id")), int(host.get("_pending_weapon_skin")))
+	var warrior_name_label := host.get("warrior_name_label") as Label
+	if warrior_name_label != null:
+		warrior_name_label.text = "%s - %s" % [
+			str(host.call("_warrior_ui_warrior_display_name", str(host.get("_pending_warrior_id")))),
+			str(host.call("_warrior_ui_warrior_skin_label", str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin"))))
+		]
+	var weapon_name_label := host.get("weapon_name_label") as Label
+	if weapon_name_label != null:
+		weapon_name_label.text = "%s - %s" % [
+			str(host.call("_weapon_ui_weapon_display_name", str(host.get("_pending_weapon_id")))),
+			host.call("_weapon_skin_label", str(host.get("_pending_weapon_id")), int(host.get("_pending_weapon_skin")))
+		]
+
+	host.call("_update_wallet_labels", true)
+	host.call("_refresh_warrior_username_label")
+	host.call("_refresh_auth_footer")
+	host.call("_refresh_warrior_grid_texts")
+	host.call("_refresh_warrior_action")
+	host.call("_refresh_weapon_grid_texts")
+	host.call("_refresh_weapon_action")
+	host.call("_save_state")
+
+func auth_finalize_without_remote_profile(host: Control, reason: String = "") -> void:
+	if str(host.get("player_username")).is_empty():
+		host.set("player_username", "Player")
+	host.set("_auth_logged_in", true)
+	host.set("_auth_wallet_sync_supported", false)
+	auth_dev_unlock_all_for_mario(host)
+	host.call("_update_wallet_labels", true)
+	host.call("_refresh_warrior_username_label")
+	host.call("_refresh_warrior_grid_texts")
+	host.call("_refresh_warrior_action")
+	host.call("_refresh_weapon_grid_texts")
+	host.call("_refresh_weapon_action")
+	auth_save_runtime_session(host)
+	auth_save_persisted_session(host)
+	auth_set_ui_locked(host, false)
+	host.call("_refresh_auth_footer")
+	var auth_status_label := host.get("_auth_status_label") as Label
+	if auth_status_label != null:
+		auth_status_label.text = reason
+	var auth_login_button := host.get("_auth_login_button") as Button
+	if auth_login_button != null:
+		auth_login_button.disabled = false
+	host.call("_start_idle_loop")
+	host.call("_save_state")
+
+func auth_dev_unlock_all_for_mario(host: Control) -> void:
+	var dev_user := str(host.get("player_username")).strip_edges().to_lower()
+	if dev_user != "mario" and dev_user != "blackshadow":
+		return
+
+	var warrior_ids: PackedStringArray = PackedStringArray(host.call("_warrior_ui_warrior_ids"))
+	var all_owned_warriors: PackedStringArray = PackedStringArray()
+	for wid in warrior_ids:
+		var normalized: String = str(wid).strip_edges().to_lower()
+		if normalized.is_empty() or all_owned_warriors.has(normalized):
+			continue
+		all_owned_warriors.append(normalized)
+	host.set("owned_warriors", all_owned_warriors)
+
+	var all_warrior_skins: Dictionary = {}
+	for wid in all_owned_warriors:
+		all_warrior_skins[wid] = host.call("_warrior_ui_available_skin_indices_for", wid)
+	host.set("owned_warrior_skins_by_warrior", all_warrior_skins)
+
+	var all_weapons := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
+	host.set("owned_weapons", all_weapons)
+
+	var all_weapon_skins: Dictionary = {}
+	for wid in all_weapons:
+		var arr := PackedInt32Array([0])
+		for skin in host.call("_weapon_skins_for", wid):
+			var idx := maxi(0, int((skin as Dictionary).get("skin", 0)))
+			if not arr.has(idx):
+				arr.append(idx)
+		arr.sort()
+		all_weapon_skins[wid] = arr
+	host.set("owned_weapon_skins_by_weapon", all_weapon_skins)
+
+	var equipped_warrior_skin_by_warrior := host.get("equipped_warrior_skin_by_warrior") as Dictionary
+	var owned_warrior_skins_by_warrior := host.get("owned_warrior_skins_by_warrior") as Dictionary
+	for wid in warrior_ids:
+		var normalized := str(wid).strip_edges().to_lower()
+		var owned_arr := owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array
+		var equipped := maxi(0, int(equipped_warrior_skin_by_warrior.get(normalized, 0)))
+		if not owned_arr.has(equipped):
+			equipped_warrior_skin_by_warrior[normalized] = 0
+	host.set("equipped_warrior_skin_by_warrior", equipped_warrior_skin_by_warrior)
+
+	var equipped_weapon_skin_by_weapon := host.get("equipped_weapon_skin_by_weapon") as Dictionary
+	var owned_weapon_skins_by_weapon := host.get("owned_weapon_skins_by_weapon") as Dictionary
+	for wid in all_weapons:
+		var owned_arr := owned_weapon_skins_by_weapon.get(wid, PackedInt32Array([0])) as PackedInt32Array
+		var equipped := maxi(0, int(equipped_weapon_skin_by_weapon.get(wid, 0)))
+		if not owned_arr.has(equipped):
+			equipped_weapon_skin_by_weapon[wid] = 0
+	host.set("equipped_weapon_skin_by_weapon", equipped_weapon_skin_by_weapon)
+
+	if not (host.get("owned_warriors") as PackedStringArray).has(str(host.get("selected_warrior_id"))):
+		host.set("selected_warrior_id", str(host.call("_default_warrior_id")))
+	if not bool(host.call("_warrior_skin_is_owned", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))):
+		host.set("selected_warrior_skin", int(host.call("_equipped_warrior_skin", str(host.get("selected_warrior_id")))))
+	if not bool(host.call("_warrior_skin_is_owned", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))):
+		host.set("selected_warrior_skin", 0)
+	host.call("_set_equipped_warrior_skin", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
+	host.set("owned_warrior_skins", (host.get("owned_warrior_skins_by_warrior") as Dictionary).get(str(host.get("selected_warrior_id")), PackedInt32Array([0])) as PackedInt32Array)
+
+	if not (host.get("owned_weapons") as PackedStringArray).has(str(host.get("selected_weapon_id"))):
+		host.set("selected_weapon_id", WEAPON_UZI)
+	if not bool(host.call("_weapon_skin_is_owned", str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))):
+		host.set("selected_weapon_skin", int(host.call("_equipped_weapon_skin", str(host.get("selected_weapon_id")))))
+	if not bool(host.call("_weapon_skin_is_owned", str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))):
+		host.set("selected_weapon_skin", 0)
+	host.call("_set_equipped_weapon_skin", str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))
 
 func auth_restore_runtime_session(host: Control) -> bool:
 	var token := str(_runtime_session_token).strip_edges()

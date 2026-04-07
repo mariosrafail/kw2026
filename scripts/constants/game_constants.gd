@@ -100,6 +100,9 @@ const CHARACTER_ID_JUICE := "juice"
 const CHARACTER_ID_MADAM := "madam"
 const CHARACTER_ID_CELLER := "celler"
 const CHARACTER_ID_KOTRO := "kotro"
+const CHARACTER_ID_NOVA := "nova"
+const CHARACTER_ID_HINDI := "hindi"
+const CHARACTER_ID_LOKER := "loker"
 
 const CHARACTERS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -136,6 +139,21 @@ const CHARACTERS := {
 		"name": "Kotro",
 		"ability": "Remote Bomb",
 		"description": "Guide a bomb with the mouse while your body is locked in place"
+	},
+	CHARACTER_ID_NOVA: {
+		"name": "Nova",
+		"ability": "TBD",
+		"description": "Placeholder ultimate until the final design is ready"
+	},
+	CHARACTER_ID_HINDI: {
+		"name": "Hindi",
+		"ability": "Magic Bullets",
+		"description": "Enchants bullets to micro-stun enemies on hit"
+	},
+	CHARACTER_ID_LOKER: {
+		"name": "Loker",
+		"ability": "Overclock",
+		"description": "Gain increased fire rate and reload speed for 5 seconds"
 	}
 }
 

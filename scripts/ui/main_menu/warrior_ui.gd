@@ -10,6 +10,9 @@ const WARRIOR_MANIFEST_PATHS := {
 	"madam": "res://assets/warriors/madam/skin_manifest.json",
 	"celler": "res://assets/warriors/celler/skin_manifest.json",
 	"kotro": "res://assets/warriors/kotro/skin_manifest.json",
+	"nova": "res://assets/warriors/nova/skin_manifest.json",
+	"hindi": "res://assets/warriors/hindi/skin_manifest.json",
+	"loker": "res://assets/warriors/loker/skin_manifest.json",
 }
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 

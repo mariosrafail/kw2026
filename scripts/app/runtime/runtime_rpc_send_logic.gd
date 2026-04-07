@@ -258,3 +258,30 @@ func _send_skill_cast_rpc(target_peer_id: int, skill_number: int, caster_peer_id
 						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
 				else:
 					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"nova":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"hindi":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"loker":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)

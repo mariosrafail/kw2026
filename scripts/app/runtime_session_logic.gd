@@ -215,6 +215,12 @@ func _save_auth_session() -> void:
 func _clear_auth_session() -> void:
 	_runtime_auth_flow.clear_auth_session(self)
 
+func _save_account_loadout() -> void:
+	_runtime_auth_flow.save_account_loadout(self)
+
+func _load_account_loadout() -> void:
+	_runtime_auth_flow.load_account_loadout(self)
+
 func _resolve_auth_profile() -> void:
 	_runtime_auth_flow.resolve_auth_profile(self)
 
@@ -446,7 +452,13 @@ func _setup_character_picker() -> void:
 	lobby_character_option.set_item_metadata(5, CHARACTER_ID_CELLER)
 	lobby_character_option.add_item("Kotro")
 	lobby_character_option.set_item_metadata(6, CHARACTER_ID_KOTRO)
-	print("[DBG SETUP] Character picker: added Outrage (meta: %s), Erebus (meta: %s), Tasko (meta: %s), Juice (meta: %s), Madam (meta: %s), C3ll3r (meta: %s), Kotro (meta: %s)" % [CHARACTER_ID_OUTRAGE, CHARACTER_ID_EREBUS, CHARACTER_ID_TASKO, CHARACTER_ID_JUICE, CHARACTER_ID_MADAM, CHARACTER_ID_CELLER, CHARACTER_ID_KOTRO])
+	lobby_character_option.add_item("Nova")
+	lobby_character_option.set_item_metadata(7, CHARACTER_ID_NOVA)
+	lobby_character_option.add_item("Hindi")
+	lobby_character_option.set_item_metadata(8, CHARACTER_ID_HINDI)
+	lobby_character_option.add_item("Loker")
+	lobby_character_option.set_item_metadata(9, CHARACTER_ID_LOKER)
+	print("[DBG SETUP] Character picker: added Outrage (meta: %s), Erebus (meta: %s), Tasko (meta: %s), Juice (meta: %s), Madam (meta: %s), C3ll3r (meta: %s), Kotro (meta: %s), Nova (meta: %s), Hindi (meta: %s), Loker (meta: %s)" % [CHARACTER_ID_OUTRAGE, CHARACTER_ID_EREBUS, CHARACTER_ID_TASKO, CHARACTER_ID_JUICE, CHARACTER_ID_MADAM, CHARACTER_ID_CELLER, CHARACTER_ID_KOTRO, CHARACTER_ID_NOVA, CHARACTER_ID_HINDI, CHARACTER_ID_LOKER])
 	var target_character := _normalize_character_id(selected_character_id)
 	print("[DBG SETUP] Character picker: looking for target character: %s" % target_character)
 	var found_index := -1

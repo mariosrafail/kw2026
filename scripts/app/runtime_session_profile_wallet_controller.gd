@@ -41,7 +41,7 @@ func update_wallet_label(host: Node) -> void:
 
 func normalize_character_id(raw: String) -> String:
 	var normalized: String = raw.strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro":
+	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker":
 		normalized = "outrage"
 	return normalized
 

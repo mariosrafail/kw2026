@@ -10,6 +10,7 @@ var submit_input_cb: Callable = Callable()
 var is_gameplay_locked_cb: Callable = Callable()
 var override_input_state_cb: Callable = Callable()
 var camera_focus_state_cb: Callable = Callable()
+var weapon_id_for_peer_cb: Callable = Callable()
 var input_send_rate := 60.0
 var idle_input_send_rate := 12.0
 
@@ -21,6 +22,8 @@ var _last_sent_jump_held := false
 var _last_sent_shoot_held := false
 var _camera_follow_position := Vector2.ZERO
 var _camera_mouse_look_offset := Vector2.ZERO
+var _base_camera_zoom := Vector2.ONE
+var _camera_zoom_initialized := false
 
 const CAMERA_FOLLOW_LERP_SPEED := 8.0
 const CAMERA_MOUSE_LOOK_LERP_SPEED := 10.0
@@ -28,6 +31,9 @@ const CAMERA_MOUSE_LOOK_MAX_OFFSET := Vector2(80.0, 50.0)
 const CAMERA_MOUSE_LOOK_SHIFT_MULTIPLIER := 2.65
 const CAMERA_MOUSE_LOOK_DEADZONE := 0.24
 const CAMERA_MOUSE_LOOK_CURVE := 1.35
+const WEAPON_ID_KAR := "kar"
+const KAR_CAMERA_ZOOM := Vector2(0.84, 0.84)
+const CAMERA_ZOOM_LERP_SPEED := 7.0
 
 func configure(refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = refs.get("players", {}) as Dictionary
@@ -39,8 +45,12 @@ func configure(refs: Dictionary, callbacks: Dictionary, config: Dictionary = {})
 	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
 	override_input_state_cb = callbacks.get("override_input_state", Callable()) as Callable
 	camera_focus_state_cb = callbacks.get("camera_focus_state", Callable()) as Callable
+	weapon_id_for_peer_cb = callbacks.get("weapon_id_for_peer", Callable()) as Callable
 	input_send_rate = float(config.get("input_send_rate", input_send_rate))
 	idle_input_send_rate = float(config.get("idle_input_send_rate", idle_input_send_rate))
+	if main_camera != null:
+		_base_camera_zoom = main_camera.zoom
+		_camera_zoom_initialized = true
 
 func reset() -> void:
 	_input_send_accumulator = 0.0
@@ -51,6 +61,8 @@ func reset() -> void:
 	_last_sent_shoot_held = false
 	_camera_follow_position = Vector2.ZERO
 	_camera_mouse_look_offset = Vector2.ZERO
+	if main_camera != null:
+		main_camera.zoom = _resolved_base_camera_zoom()
 
 func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bool) -> void:
 	if multiplayer == null:
@@ -142,6 +154,7 @@ func follow_local_player_camera(delta: float) -> void:
 		return
 	if main_camera == null:
 		return
+	_ensure_camera_zoom_initialized()
 	var local_player := players.get(multiplayer.get_unique_id(), null) as NetPlayer
 	if local_player == null:
 		return
@@ -156,6 +169,7 @@ func follow_local_player_camera(delta: float) -> void:
 			main_camera.global_position = _camera_follow_position
 		else:
 			main_camera.global_position = _camera_follow_position + camera_shake.step_offset(delta)
+		_apply_weapon_camera_zoom(multiplayer.get_unique_id(), delta)
 		return
 	if _camera_follow_position == Vector2.ZERO:
 		_camera_follow_position = main_camera.global_position
@@ -167,6 +181,7 @@ func follow_local_player_camera(delta: float) -> void:
 		main_camera.global_position = _camera_follow_position
 	else:
 		main_camera.global_position = _camera_follow_position + camera_shake.step_offset(delta)
+	_apply_weapon_camera_zoom(multiplayer.get_unique_id(), delta)
 
 func snap_camera_to_local_player(reset_mouse_look: bool = true) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
@@ -180,6 +195,7 @@ func snap_camera_to_local_player(reset_mouse_look: bool = true) -> void:
 		_camera_mouse_look_offset = Vector2.ZERO
 	_camera_follow_position = local_player.global_position + _camera_mouse_look_offset
 	main_camera.global_position = _camera_follow_position
+	main_camera.zoom = _target_camera_zoom_for_peer(multiplayer.get_unique_id())
 
 func _camera_mouse_look_target() -> Vector2:
 	if main_camera == null:
@@ -266,3 +282,29 @@ func _camera_focus_state(peer_id: int) -> Dictionary:
 	if focus_value is Dictionary:
 		return focus_value as Dictionary
 	return {}
+
+func _apply_weapon_camera_zoom(peer_id: int, delta: float) -> void:
+	if main_camera == null:
+		return
+	var target_zoom := _target_camera_zoom_for_peer(peer_id)
+	main_camera.zoom = main_camera.zoom.lerp(target_zoom, min(1.0, delta * CAMERA_ZOOM_LERP_SPEED))
+
+func _target_camera_zoom_for_peer(peer_id: int) -> Vector2:
+	var weapon_id := _weapon_id_for_peer(peer_id)
+	if weapon_id == WEAPON_ID_KAR:
+		return KAR_CAMERA_ZOOM
+	return _resolved_base_camera_zoom()
+
+func _weapon_id_for_peer(peer_id: int) -> String:
+	if weapon_id_for_peer_cb.is_valid():
+		return str(weapon_id_for_peer_cb.call(peer_id)).strip_edges().to_lower()
+	return ""
+
+func _ensure_camera_zoom_initialized() -> void:
+	if _camera_zoom_initialized or main_camera == null:
+		return
+	_base_camera_zoom = main_camera.zoom
+	_camera_zoom_initialized = true
+
+func _resolved_base_camera_zoom() -> Vector2:
+	return _base_camera_zoom if _base_camera_zoom != Vector2.ZERO else Vector2.ONE

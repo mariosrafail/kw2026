@@ -24,6 +24,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 					existing.call("set_character_visual", _warrior_id_for_peer(peer_id))
 				if existing.has_method("set_skin_index") and peer_skin_indices_by_peer.has(peer_id):
 					existing.call("set_skin_index", int(peer_skin_indices_by_peer.get(peer_id, 0)))
+				if combat_flow_service != null:
+					combat_flow_service.ensure_peer_visual_state(peer_id)
 			if not _is_target_dummy_peer(peer_id):
 				var suppress_existing_spawn_respawn := false
 				if has_method("_is_skull_ffa_match_scene") and bool(call("_is_skull_ffa_match_scene")):
@@ -68,6 +70,8 @@ func _spawn_player_local(peer_id: int, spawn_position: Vector2) -> void:
 			player.set_ammo(int(ammo_by_peer[peer_id]), float(reload_remaining_by_peer.get(peer_id, 0.0)) > 0.0)
 
 	players[peer_id] = player
+	if combat_flow_service != null:
+		combat_flow_service.ensure_peer_visual_state(peer_id)
 	combat_flow_service.record_player_history(peer_id, resolved_spawn)
 	if role == Role.SERVER and multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		_server_ensure_bots_if_needed()
@@ -154,7 +158,10 @@ func _projectile_color(peer_id: int, weapon_id: String = "") -> Color:
 	if weapon_ui != null and weapon_ui.has_method("weapon_skin_dominant_color"):
 		var color_value = weapon_ui.call("weapon_skin_dominant_color", resolved_weapon_id, skin_index)
 		if color_value is Color:
-			return color_value as Color
+			var base_color := color_value as Color
+			if combat_flow_service != null and combat_flow_service.has_method("projectile_color_for_peer"):
+				return combat_flow_service.call("projectile_color_for_peer", peer_id, resolved_weapon_id, base_color) as Color
+			return base_color
 	return _player_color(peer_id)
 
 func _update_peer_labels() -> void:

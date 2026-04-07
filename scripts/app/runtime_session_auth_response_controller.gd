@@ -121,6 +121,7 @@ func on_auth_request_completed(host: Node, result: int, response_code: int, body
 			host.call("_set_auth_buttons_enabled", true)
 			return
 		host.set("auth_username", username)
+		host.call("_load_account_loadout")
 		host.call("_show_auth_panel", false)
 		host.call("_set_auth_status", "")
 		host.call("_set_auth_buttons_enabled", true)
@@ -137,6 +138,7 @@ func on_auth_request_completed(host: Node, result: int, response_code: int, body
 	host.set("auth_token", token)
 	host.set("auth_username", username2)
 	host.call("_save_auth_session")
+	host.call("_load_account_loadout")
 	host.call("_show_auth_panel", false)
 	host.call("_set_auth_status", "")
 	host.call("_set_auth_buttons_enabled", true)

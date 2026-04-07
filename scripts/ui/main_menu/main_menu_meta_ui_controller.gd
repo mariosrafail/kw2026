@@ -206,3 +206,13 @@ func refresh_warrior_username_label(host: Control) -> void:
 		return
 	label.text = str(host.get("player_username"))
 	refresh_meta_ui_visibility(host)
+
+func update_wallet_labels(host: Control, silent: bool) -> void:
+	var coins_label := host.get("coins_label") as Label
+	var clk_label := host.get("clk_label") as Label
+	if coins_label != null:
+		coins_label.text = "Coins: %d" % int(host.get("wallet_coins"))
+	if clk_label != null:
+		clk_label.text = "CLK: %d" % int(host.get("wallet_clk"))
+	if not silent:
+		host.call("_pop", host.get("wallet_panel"))

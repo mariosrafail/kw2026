@@ -61,6 +61,28 @@
 		"0": "#78EAD8FF",
 		"1": "#FFB45AFF"
 	  }
+	},
+	"nova": {
+	  "default": "#683D47FF",
+	  "skins": {
+		"0": "#683D47FF",
+		"1": "#9C30BEFF"
+	  }
+	},
+	"hindi": {
+	  "default": "#E08C5CFF",
+	  "skins": {
+		"0": "#E08C5CFF"
+	  }
+	},
+	"loker": {
+	  "default": "#216F25FF",
+	  "skins": {
+		"0": "#216F25FF",
+		"1": "#528606FF",
+		"2": "#421F19FF",
+		"3": "#4B5826FF"
+	  }
 	}
   }
 }

@@ -55,6 +55,7 @@ func show_auth_panel(host: Node, show: bool) -> void:
 		host.call("_set_loading", false)
 
 func logout_to_login(host: Node) -> void:
+	host.call("_save_account_loadout")
 	if bool(host.call("_is_client_connected")):
 		var session_controller: Object = host.get("session_controller") as Object
 		if session_controller != null:

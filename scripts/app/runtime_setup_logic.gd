@@ -139,7 +139,12 @@ func _refresh_spawn_points() -> void:
 
 func _configure_services() -> void:
 	_load_server_skin_blood_color_config()
-	projectile_system.configure(projectiles_root, PROJECTILE_SCENE, Callable(self, "_projectile_color"))
+	projectile_system.configure(
+		projectiles_root,
+		PROJECTILE_SCENE,
+		Callable(self, "_projectile_color"),
+		Callable(combat_flow_service, "projectile_visual_config_for_peer")
+	)
 	combat_effects.configure(projectiles_root, map_front_sprite, SPLASH_HIT_SFX, DEATH_HIT_SFX, BULLET_TOUCH_SFX, EXPLOSION_EFFECT_TEXTURE, HIT_EFFECT_TEXTURE)
 
 	spawn_identity.configure(
@@ -325,8 +330,11 @@ func _configure_services() -> void:
 			"send_skill_charge": Callable(self, "_send_sync_skill_charge_rpc"),
 			"send_skill_cast": Callable(self, "_send_skill_cast_rpc"),
 			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer"),
+			"skin_index_for_peer": Callable(self, "_skin_index_for_peer"),
+			"skill_color_for_peer": Callable(self, "_authoritative_skill_color_for_peer"),
 			"authoritative_blood_color_for_peer": Callable(self, "_authoritative_blood_color_for_peer"),
-			"is_gameplay_locked": Callable(self, "_is_gameplay_locked")
+			"is_gameplay_locked": Callable(self, "_is_gameplay_locked"),
+			"send_match_message_to_peer": Callable(self, "_server_send_match_message_to_peer")
 		},
 		{
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,
@@ -367,7 +375,8 @@ func _configure_services() -> void:
 			"submit_input": Callable(self, "_send_input_rpc"),
 			"is_gameplay_locked": Callable(self, "_is_gameplay_locked"),
 			"override_input_state": Callable(combat_flow_service, "override_local_input_state"),
-			"camera_focus_state": Callable(combat_flow_service, "camera_focus_state_for_peer")
+			"camera_focus_state": Callable(combat_flow_service, "camera_focus_state_for_peer"),
+			"weapon_id_for_peer": Callable(self, "_weapon_id_for_peer")
 		},
 		{
 			"input_send_rate": INPUT_SEND_RATE,

@@ -11,6 +11,9 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
 	"celler": Color(0.63, 0.74, 1.0, 1.0),
 	"kotro": Color(0.47, 0.92, 0.86, 1.0),
+	"nova": Color(0.41, 0.24, 0.28, 1.0),
+	"hindi": Color(0.88, 0.55, 0.36, 1.0),
+	"loker": Color(0.13, 0.44, 0.15, 1.0),
 }
 
 var players: Dictionary = {}

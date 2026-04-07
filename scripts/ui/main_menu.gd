@@ -19,6 +19,14 @@ const MENU_LOADING_OVERLAY_SCRIPT := preload("res://scripts/ui/main_menu/loading
 const MENU_THEME_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_theme_controller.gd")
 const MENU_META_UI_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_meta_ui_controller.gd")
 const MENU_NAV_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_navigation_controller.gd")
+const MENU_AMBIENT_FX_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_ambient_fx_controller.gd")
+const MENU_OPTIONS_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_options_controller.gd")
+const MENU_PREVIEW_FILTER_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_preview_filter_controller.gd")
+const MENU_SHOP_GRID_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_shop_grid_controller.gd")
+const MENU_LOBBY_FLOW_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_lobby_flow_controller.gd")
+const MENU_LAYOUT_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_layout_controller.gd")
+const MENU_LOADOUT_STATE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_loadout_state_controller.gd")
+const MENU_DIALOG_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_dialog_controller.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
 const PIXEL_FONT_CHAT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
@@ -109,6 +117,14 @@ var _menu_loading_overlay = MENU_LOADING_OVERLAY_SCRIPT.new()
 var _menu_theme := MENU_THEME_CTRL_SCRIPT.new()
 var _meta_ui := MENU_META_UI_CTRL_SCRIPT.new()
 var _menu_nav := MENU_NAV_CTRL_SCRIPT.new()
+var _ambient_fx := MENU_AMBIENT_FX_CTRL_SCRIPT.new()
+var _menu_options := MENU_OPTIONS_CTRL_SCRIPT.new()
+var _preview_filter_ctrl := MENU_PREVIEW_FILTER_CTRL_SCRIPT.new()
+var _shop_grid_ctrl := MENU_SHOP_GRID_CTRL_SCRIPT.new()
+var _lobby_flow_ctrl := MENU_LOBBY_FLOW_CTRL_SCRIPT.new()
+var _layout_ctrl := MENU_LAYOUT_CTRL_SCRIPT.new()
+var _loadout_state_ctrl := MENU_LOADOUT_STATE_CTRL_SCRIPT.new()
+var _dialog_ctrl := MENU_DIALOG_CTRL_SCRIPT.new()
 
 @onready var coins_label: Label = %CoinsLabel
 @onready var clk_label: Label = %ClkLabel
@@ -283,22 +299,33 @@ var _auth_footer_panel: PanelContainer
 var _auth_footer_label: Label
 var _meta_username_tween: Tween
 var _meta_footer_tween: Tween
-var _bg_crack_layer: Control
-var _toxic_bubble_layer: Control
-var _toxic_bubble_timer: Timer
-var _toxic_chat_box: Panel
-var _toxic_chat_list: VBoxContainer
-var _toxic_chat_entries: Array = []
-var _toxic_chat_locked_position := Vector2.ZERO
-var _toxic_chat_position_locked := false
 var particles_enabled := true
 var screen_shake_enabled := true
 
 func _ready() -> void:
 	_ensure_cursor_manager()
 	_menu_sfx.configure(self)
+	_menu_options.configure(self, _menu_sfx, _intro_fx)
+	_preview_filter_ctrl.configure(self)
+	_shop_grid_ctrl.configure(self)
+	_lobby_flow_ctrl.configure(self)
+	_layout_ctrl.configure(self)
+	_loadout_state_ctrl.configure(self)
+	_dialog_ctrl.configure(self, CONFIRM_OVERLAY_SCRIPT, CURSOR_MANAGER_NAME, ENABLE_MENU_LOADING_OVERLAY)
 	_menu_loading_overlay.configure(self)
 	_current_screen = screen_main
+	_ambient_fx.configure(
+		self,
+		PIXEL_FONT_BOLD,
+		PIXEL_FONT_CHAT,
+		screen_main,
+		TOXIC_CHAT_USERS,
+		TOXIC_BUBBLE_LINES,
+		Callable(self, "_get_current_screen"),
+		Callable(self, "_get_warrior_username_label"),
+		Callable(self, "_get_warrior_area"),
+		Callable(self, "_get_main_warrior_preview")
+	)
 	randomize()
 	_weapon_ui.weapon_icon_max_height_ratio = weapon_icon_max_height_ratio
 	_weapon_ui.weapons_menu_preview_scale_mult = weapons_menu_preview_scale_mult
@@ -570,270 +597,46 @@ func _auth_maybe_flush_wallet_sync() -> void:
 	_auth_flow.auth_maybe_flush_wallet_sync(self)
 
 func _default_warrior_id() -> String:
-	return _warrior_ui.default_warrior_id()
+	return _auth_flow.default_warrior_id(self)
 
 func _default_owned_warriors() -> PackedStringArray:
-	return _warrior_ui.default_owned_warriors()
+	return _auth_flow.default_owned_warriors(self)
 
 func _default_owned_warrior_skins_by_warrior() -> Dictionary:
-	return _warrior_ui.default_owned_warrior_skins_by_warrior()
+	return _auth_flow.default_owned_warrior_skins_by_warrior(self)
 
 func _default_equipped_warrior_skin_by_warrior() -> Dictionary:
-	return _warrior_ui.default_equipped_warrior_skin_by_warrior()
+	return _auth_flow.default_equipped_warrior_skin_by_warrior(self)
+
+func _warrior_ui_warrior_ids() -> PackedStringArray:
+	return _warrior_ui.warrior_ids()
+
+func _warrior_ui_available_skin_indices_for(warrior_id: String) -> PackedInt32Array:
+	return _warrior_ui.available_skin_indices_for(warrior_id)
+
+func _warrior_ui_warrior_display_name(warrior_id: String) -> String:
+	return _warrior_ui.warrior_display_name(warrior_id)
+
+func _warrior_ui_warrior_skin_label(warrior_id: String, skin_index: int) -> String:
+	return _warrior_ui.warrior_skin_label(warrior_id, skin_index)
+
+func _weapon_ui_weapon_display_name(weapon_id: String) -> String:
+	return _weapon_ui.weapon_display_name(weapon_id)
 
 func _normalize_owned_warrior_skins_dict(src: Dictionary) -> Dictionary:
-	var out := _default_owned_warrior_skins_by_warrior()
-	for wid in _warrior_ui.warrior_ids():
-		var normalized := str(wid).strip_edges().to_lower()
-		var source: Variant = src.get(normalized, src.get(wid, [0]))
-		var arr := PackedInt32Array([0])
-		if source is PackedInt32Array:
-			for value in source:
-				var idx := maxi(0, int(value))
-				if not arr.has(idx):
-					arr.append(idx)
-		elif source is Array:
-			for value in source:
-				var idx := maxi(0, int(value))
-				if not arr.has(idx):
-					arr.append(idx)
-		arr.sort()
-		out[normalized] = arr
-	return out
+	return _auth_flow.normalize_owned_warrior_skins_dict(self, src)
 
 func _normalize_equipped_warrior_skins_dict(src: Dictionary) -> Dictionary:
-	var out := _default_equipped_warrior_skin_by_warrior()
-	for wid in _warrior_ui.warrior_ids():
-		var normalized := str(wid).strip_edges().to_lower()
-		out[normalized] = maxi(0, int(src.get(normalized, src.get(wid, 0))))
-	return out
+	return _auth_flow.normalize_equipped_warrior_skins_dict(self, src)
 
 func _auth_apply_profile(profile: Dictionary) -> void:
-	wallet_coins = int(profile.get("coins", wallet_coins))
-	wallet_clk = int(profile.get("clk", wallet_clk))
-	player_username = str(profile.get("username", player_username)).strip_edges()
-	if player_username.is_empty():
-		player_username = "Player"
-
-	if profile.has("owned_warriors"):
-		var incoming_owned_warriors := PackedStringArray()
-		for item in profile.get("owned_warriors", []) as Array:
-			var wid := str(item).strip_edges().to_lower()
-			if not wid.is_empty() and not incoming_owned_warriors.has(wid):
-				incoming_owned_warriors.append(wid)
-		var default_warrior := _default_warrior_id()
-		if not incoming_owned_warriors.has(default_warrior):
-			incoming_owned_warriors.append(default_warrior)
-		owned_warriors = incoming_owned_warriors
-
-	var incoming_warrior_skins := _default_owned_warrior_skins_by_warrior()
-	if profile.has("owned_warrior_skins_by_warrior"):
-		var incoming_skin_dict := profile.get("owned_warrior_skins_by_warrior", {}) as Dictionary
-		for key in incoming_skin_dict.keys():
-			var wid := str(key).strip_edges().to_lower()
-			var source := incoming_skin_dict.get(key, [0]) as Array
-			var arr := PackedInt32Array([0])
-			if source != null:
-				for v in source:
-					var idx := maxi(0, int(v))
-					if not arr.has(idx):
-						arr.append(idx)
-			arr.sort()
-			incoming_warrior_skins[wid] = arr
-	elif profile.has("owned_skins"):
-		for item in profile.get("owned_skins", []) as Array:
-			if not (item is Dictionary):
-				continue
-			var d := item as Dictionary
-			var wid := str(d.get("character_id", "")).strip_edges().to_lower()
-			if wid.is_empty():
-				continue
-			var arr := incoming_warrior_skins.get(wid, PackedInt32Array([0])) as PackedInt32Array
-			var idx := maxi(0, int(d.get("skin_index", 0)))
-			if not arr.has(idx):
-				arr.append(idx)
-				arr.sort()
-			incoming_warrior_skins[wid] = arr
-			if not owned_warriors.has(wid):
-				owned_warriors.append(wid)
-	owned_warrior_skins_by_warrior = incoming_warrior_skins
-	owned_warrior_skins = owned_warrior_skins_by_warrior.get(_default_warrior_id(), PackedInt32Array([0])) as PackedInt32Array
-	if profile.has("equipped_warrior_skin_by_warrior"):
-		equipped_warrior_skin_by_warrior = _normalize_equipped_warrior_skins_dict((profile.get("equipped_warrior_skin_by_warrior", {}) as Dictionary).duplicate(true))
-	var next_selected_warrior_id := selected_warrior_id
-	if profile.has("selected_warrior_id"):
-		next_selected_warrior_id = str(profile.get("selected_warrior_id", selected_warrior_id)).strip_edges().to_lower()
-	selected_warrior_id = next_selected_warrior_id
-	if not owned_warriors.has(selected_warrior_id):
-		selected_warrior_id = _default_warrior_id()
-	var next_selected_warrior_skin := selected_warrior_skin
-	if profile.has("selected_warrior_skin"):
-		next_selected_warrior_skin = maxi(0, int(profile.get("selected_warrior_skin", selected_warrior_skin)))
-	elif profile.has("equipped_warrior_skin_by_warrior"):
-		next_selected_warrior_skin = _equipped_warrior_skin(selected_warrior_id)
-	if not _warrior_skin_is_owned(selected_warrior_id, next_selected_warrior_skin):
-		next_selected_warrior_skin = 0
-	selected_warrior_skin = next_selected_warrior_skin
-	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
-
-	if profile.has("owned_weapons"):
-		var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
-		var from_api := PackedStringArray()
-		for w in profile.get("owned_weapons", []) as Array:
-			var wid := str(w).strip_edges().to_lower()
-			if allowed.has(wid) and not from_api.has(wid):
-				from_api.append(wid)
-		if not from_api.has(WEAPON_UZI):
-			from_api.append(WEAPON_UZI)
-		if not from_api.has(WEAPON_GRENADE):
-			from_api.append(WEAPON_GRENADE)
-		owned_weapons = from_api
-
-	if profile.has("owned_weapon_skins_by_weapon"):
-		var allowed_skins := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
-		var incoming := profile.get("owned_weapon_skins_by_weapon", {}) as Dictionary
-		var out: Dictionary = {}
-		for wid in allowed_skins:
-			var arr_src := incoming.get(wid, [0]) as Array
-			var arr_out := PackedInt32Array([0])
-			if arr_src != null:
-				for v in arr_src:
-					var idx := maxi(0, int(v))
-					if not arr_out.has(idx):
-						arr_out.append(idx)
-			arr_out.sort()
-			if not owned_weapons.has(wid):
-				arr_out = PackedInt32Array([0])
-			out[wid] = arr_out
-		owned_weapon_skins_by_weapon = out
-	if profile.has("equipped_weapon_skin_by_weapon"):
-		var incoming_equipped_weapon := profile.get("equipped_weapon_skin_by_weapon", {}) as Dictionary
-		for wid in PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE]):
-			equipped_weapon_skin_by_weapon[wid] = maxi(0, int(incoming_equipped_weapon.get(wid, equipped_weapon_skin_by_weapon.get(wid, 0))))
-	var next_selected_weapon_id := selected_weapon_id
-	if profile.has("selected_weapon_id"):
-		next_selected_weapon_id = str(profile.get("selected_weapon_id", selected_weapon_id)).strip_edges().to_lower()
-	selected_weapon_id = next_selected_weapon_id
-	if not _weapon_is_owned(selected_weapon_id):
-		selected_weapon_id = WEAPON_UZI
-	var next_selected_weapon_skin := selected_weapon_skin
-	if profile.has("selected_weapon_skin"):
-		next_selected_weapon_skin = maxi(0, int(profile.get("selected_weapon_skin", selected_weapon_skin)))
-	elif profile.has("equipped_weapon_skin_by_weapon"):
-		next_selected_weapon_skin = _equipped_weapon_skin(selected_weapon_id)
-	if not _weapon_skin_is_owned(selected_weapon_id, next_selected_weapon_skin):
-		next_selected_weapon_skin = 0
-	selected_weapon_skin = next_selected_weapon_skin
-	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
-	_auth_dev_unlock_all_for_mario()
-	_pending_warrior_id = selected_warrior_id
-	_pending_warrior_skin = selected_warrior_skin
-	_pending_weapon_id = selected_weapon_id
-	_pending_weapon_skin = selected_weapon_skin
-	_weapon_filter_weapon_id = selected_weapon_id
-	_apply_warrior_skin_to_player(main_warrior_preview, selected_warrior_id, selected_warrior_skin)
-	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_id, _pending_warrior_skin)
-	_set_weapon_icon_sprite(main_weapon_icon, selected_weapon_id, 1.0, selected_weapon_skin)
-	_apply_weapon_skin_visual(main_weapon_icon, selected_weapon_id, selected_weapon_skin)
-	_set_weapon_icon_sprite(weapon_shop_preview, _pending_weapon_id, 1.0, _pending_weapon_skin)
-	_apply_weapon_skin_visual(weapon_shop_preview, _pending_weapon_id, _pending_weapon_skin)
-	warrior_name_label.text = "%s - %s" % [_warrior_ui.warrior_display_name(_pending_warrior_id), _warrior_ui.warrior_skin_label(_pending_warrior_id, _pending_warrior_skin)]
-	weapon_name_label.text = "%s - %s" % [_weapon_ui.weapon_display_name(_pending_weapon_id), _weapon_skin_label(_pending_weapon_id, _pending_weapon_skin)]
-
-	_update_wallet_labels(true)
-	_refresh_warrior_username_label()
-	_refresh_auth_footer()
-	_refresh_warrior_grid_texts()
-	_refresh_warrior_action()
-	_refresh_weapon_grid_texts()
-	_refresh_weapon_action()
-	_save_state()
+	_auth_flow.auth_apply_profile(self, profile)
 
 func _auth_finalize_without_remote_profile(reason: String = "") -> void:
-	if player_username.is_empty():
-		player_username = "Player"
-	_auth_logged_in = true
-	_auth_wallet_sync_supported = false
-	_auth_dev_unlock_all_for_mario()
-	_update_wallet_labels(true)
-	_refresh_warrior_username_label()
-	_refresh_warrior_grid_texts()
-	_refresh_warrior_action()
-	_refresh_weapon_grid_texts()
-	_refresh_weapon_action()
-	_auth_save_runtime_session()
-	_auth_save_persisted_session()
-	_auth_set_ui_locked(false)
-	_refresh_auth_footer()
-	if _auth_status_label != null:
-		_auth_status_label.text = reason
-	if _auth_login_button != null:
-		_auth_login_button.disabled = false
-	_start_idle_loop()
-	_save_state()
+	_auth_flow.auth_finalize_without_remote_profile(self, reason)
 
 func _auth_dev_unlock_all_for_mario() -> void:
-	var dev_user := player_username.strip_edges().to_lower()
-	if dev_user != "mario" and dev_user != "blackshadow":
-		return
-
-	var warrior_ids := _warrior_ui.warrior_ids()
-	var all_owned_warriors := PackedStringArray()
-	for wid in warrior_ids:
-		var normalized := str(wid).strip_edges().to_lower()
-		if normalized.is_empty() or all_owned_warriors.has(normalized):
-			continue
-		all_owned_warriors.append(normalized)
-	owned_warriors = all_owned_warriors
-
-	var all_warrior_skins: Dictionary = {}
-	for wid in all_owned_warriors:
-		all_warrior_skins[wid] = _warrior_ui.available_skin_indices_for(wid)
-	owned_warrior_skins_by_warrior = all_warrior_skins
-
-	var all_weapons := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
-	owned_weapons = all_weapons
-
-	var all_weapon_skins: Dictionary = {}
-	for wid in all_weapons:
-		var arr := PackedInt32Array([0])
-		for skin in _weapon_skins_for(wid):
-			var idx := maxi(0, int((skin as Dictionary).get("skin", 0)))
-			if not arr.has(idx):
-				arr.append(idx)
-		arr.sort()
-		all_weapon_skins[wid] = arr
-	owned_weapon_skins_by_weapon = all_weapon_skins
-
-	for wid in warrior_ids:
-		var normalized := str(wid).strip_edges().to_lower()
-		var owned_arr := owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array
-		var equipped := maxi(0, int(equipped_warrior_skin_by_warrior.get(normalized, 0)))
-		if not owned_arr.has(equipped):
-			equipped_warrior_skin_by_warrior[normalized] = 0
-
-	for wid in all_weapons:
-		var owned_arr := owned_weapon_skins_by_weapon.get(wid, PackedInt32Array([0])) as PackedInt32Array
-		var equipped := maxi(0, int(equipped_weapon_skin_by_weapon.get(wid, 0)))
-		if not owned_arr.has(equipped):
-			equipped_weapon_skin_by_weapon[wid] = 0
-
-	if not owned_warriors.has(selected_warrior_id):
-		selected_warrior_id = _default_warrior_id()
-	if not _warrior_skin_is_owned(selected_warrior_id, selected_warrior_skin):
-		selected_warrior_skin = _equipped_warrior_skin(selected_warrior_id)
-	if not _warrior_skin_is_owned(selected_warrior_id, selected_warrior_skin):
-		selected_warrior_skin = 0
-	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
-	owned_warrior_skins = owned_warrior_skins_by_warrior.get(selected_warrior_id, PackedInt32Array([0])) as PackedInt32Array
-
-	if not owned_weapons.has(selected_weapon_id):
-		selected_weapon_id = WEAPON_UZI
-	if not _weapon_skin_is_owned(selected_weapon_id, selected_weapon_skin):
-		selected_weapon_skin = _equipped_weapon_skin(selected_weapon_id)
-	if not _weapon_skin_is_owned(selected_weapon_id, selected_weapon_skin):
-		selected_weapon_skin = 0
-	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
+	_auth_flow.auth_dev_unlock_all_for_mario(self)
 
 func _on_auth_http_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_auth_flow.auth_handle_http_completed(self, response_code, body)
@@ -860,84 +663,25 @@ func _toggle_fullscreen() -> void:
 	_menu_nav.toggle_fullscreen()
 
 func _apply_center_pivots() -> void:
-	_center_pivot(warrior_area)
-	_center_pivot(weapon_area)
-	_center_pivot(play_button)
-	_center_pivot(options_button)
-	_center_pivot(exit_button)
-	_center_pivot(options_back_button)
-	_center_pivot(warriors_back_button)
-	_center_pivot(weapons_back_button)
-	_center_pivot(warrior_action_button)
-	_center_pivot(weapon_action_button)
+	_layout_ctrl.apply_center_pivots()
 
 func _sync_wallet_size_to_back_button() -> void:
-	if wallet_panel == null or warriors_back_button == null:
-		return
-	var target_size := warriors_back_button.get_combined_minimum_size().ceil()
-	if target_size.x <= 0.0 or target_size.y <= 0.0:
-		call_deferred("_sync_wallet_size_to_back_button")
-		return
-	wallet_panel.offset_left = wallet_panel.offset_right - target_size.x
-	wallet_panel.offset_bottom = wallet_panel.offset_top + target_size.y
+	_layout_ctrl.sync_wallet_size_to_back_button()
 
 func _sync_warriors_header_centering() -> void:
-	_sync_wallet_size_to_back_button()
-	if warriors_right_spacer != null:
-		warriors_right_spacer.custom_minimum_size = Vector2.ZERO
-	_pin_warriors_back_button()
+	_layout_ctrl.sync_warriors_header_centering()
 
 func _sync_weapons_header_centering() -> void:
-	if weapons_top_row == null or weapons_back_button == null or weapons_right_spacer == null:
-		return
-	if weapons_top_row.size.x <= 0.0:
-		call_deferred("_sync_weapons_header_centering")
-		return
-	var back_w := weapons_back_button.size.x
-	if back_w <= 0.0:
-		back_w = weapons_back_button.get_combined_minimum_size().x
-	var viewport_center_x := get_viewport_rect().size.x * 0.5
-	var row_left_x := weapons_top_row.global_position.x
-	var required_spacer_w := weapons_top_row.size.x + back_w - 2.0 * (viewport_center_x - row_left_x)
-	required_spacer_w = clampf(required_spacer_w, 0.0, weapons_top_row.size.x)
-	weapons_right_spacer.custom_minimum_size = Vector2(required_spacer_w, 0.0)
+	_layout_ctrl.sync_weapons_header_centering()
 
 func _on_viewport_size_changed() -> void:
-	call_deferred("_sync_warriors_header_centering")
-	call_deferred("_sync_weapons_header_centering")
-	call_deferred("_pin_warriors_back_button")
-	call_deferred("_rebuild_background_cracks")
-	call_deferred("_layout_toxic_chat_stack")
+	_layout_ctrl.on_viewport_size_changed()
 
 func _pin_warriors_back_button() -> void:
-	if warriors_back_button == null:
-		return
-	warriors_back_button.top_level = true
-	warriors_back_button.z_as_relative = false
-	warriors_back_button.z_index = 2500
-	warriors_back_button.position = WARRIORS_BACK_BUTTON_SCREEN_POS
-	if warriors_title != null:
-		warriors_title.top_level = true
-		warriors_title.z_as_relative = false
-		warriors_title.z_index = 2500
-		var title_size := warriors_title.get_combined_minimum_size().ceil()
-		if title_size.x <= 0.0:
-			title_size.x = maxf(1.0, warriors_title.size.x)
-		if title_size.y <= 0.0:
-			title_size.y = maxf(1.0, warriors_title.size.y)
-		warriors_title.size = title_size
-		warriors_title.pivot_offset = title_size * 0.5
-		var viewport_width := get_viewport_rect().size.x
-		var centered_x: float = floor((viewport_width - title_size.x) * 0.5)
-		warriors_title.position = Vector2(maxf(0.0, centered_x), WARRIORS_TITLE_SCREEN_Y)
+	_layout_ctrl.pin_warriors_back_button()
 
 func _center_pivot(c: Control) -> void:
-	if c == null:
-		return
-	if c.size.x <= 0.0 or c.size.y <= 0.0:
-		call_deferred("_center_pivot", c)
-		return
-	c.pivot_offset = c.size * 0.5
+	_layout_ctrl.center_pivot(c)
 
 func _play_intro_animation_safe() -> void:
 	_intro_fx.enable_intro_animation = enable_intro_animation
@@ -1017,195 +761,34 @@ func _connect_signals() -> void:
 		_bind_menu_sfx_button(screen_shake_toggle_button)
 
 func _on_play_pressed() -> void:
-	if _play_lobby_transition_running:
-		return
-	_button_press_anim(play_button)
-	await _run_play_lobby_transition()
-	_open_lobby_menu_flow()
-	_fade_out_play_lobby_transition()
+	await _lobby_flow_ctrl.on_play_pressed()
 
 func _open_lobby_menu_flow() -> void:
-	if _intro_fx != null and _intro_fx.has_method("set_lobby_music_active"):
-		_intro_fx.call("set_lobby_music_active", true, 0.55)
-	if _lobby_overlay_ctrl != null:
-		_lobby_overlay_ctrl.open(play_button)
-	_sync_lobby_overlay_interaction_state()
-	_refresh_global_overlay_ui_state()
-	_refresh_meta_ui_visibility()
+	_lobby_flow_ctrl.open_lobby_menu_flow()
 
 func _run_play_lobby_transition() -> void:
-	if _fx_layer == null or play_button == null:
-		return
-	_cleanup_play_lobby_transition()
-	_play_lobby_transition_running = true
-	_cache_play_lobby_fade_targets()
-
-	var panel := PanelContainer.new()
-	panel.name = "PlayLobbyTransition"
-	panel.z_index = 980
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.modulate = Color(1, 1, 1, 1)
-	panel.top_level = true
-
-	var source_rect := play_button.get_global_rect()
-	panel.global_position = source_rect.position
-	panel.size = source_rect.size
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(MENU_CLR_BASE.r, MENU_CLR_BASE.g, MENU_CLR_BASE.b, 0.0)
-	style.border_color = MENU_CLR_HIGHLIGHT
-	style.border_width_left = 3
-	style.border_width_top = 3
-	style.border_width_right = 3
-	style.border_width_bottom = 5
-	style.corner_radius_top_left = 3
-	style.corner_radius_top_right = 3
-	style.corner_radius_bottom_left = 3
-	style.corner_radius_bottom_right = 3
-	panel.add_theme_stylebox_override("panel", style)
-	_fx_layer.add_child(panel)
-	_play_lobby_panel = panel
-
-	var viewport_rect := get_viewport_rect()
-	var duration := maxf(0.12, play_lobby_expand_duration)
-	_play_lobby_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_play_lobby_tween.parallel().tween_property(panel, "global_position", viewport_rect.position, duration)
-	_play_lobby_tween.parallel().tween_property(panel, "size", viewport_rect.size, duration)
-	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(MENU_CLR_ACCENT.r, MENU_CLR_ACCENT.g, MENU_CLR_ACCENT.b, 0.0), duration * 0.75)
-	for target in _play_lobby_fade_targets:
-		if target == null or not is_instance_valid(target):
-			continue
-		var item_path := str(target.get_path())
-		var base_alpha := float(_play_lobby_fade_base_alpha.get(item_path, target.modulate.a))
-		target.modulate.a = clampf(base_alpha, 0.0, 1.0)
-		_play_lobby_tween.parallel().tween_property(target, "modulate:a", 0.0, duration * 0.82)
-	await _play_lobby_tween.finished
-	_play_lobby_tween = null
+	await _lobby_flow_ctrl.run_play_lobby_transition()
 
 func _fade_out_play_lobby_transition() -> void:
-	if _play_lobby_panel == null or not is_instance_valid(_play_lobby_panel):
-		_cleanup_play_lobby_transition()
-		return
-	var fade_duration := maxf(0.08, play_lobby_border_fade_duration)
-	var fade := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	fade.tween_property(_play_lobby_panel, "modulate:a", 0.0, fade_duration)
-	fade.finished.connect(_cleanup_play_lobby_transition)
+	_lobby_flow_ctrl.fade_out_play_lobby_transition()
 
 func _cleanup_play_lobby_transition() -> void:
-	if _play_lobby_tween != null:
-		_play_lobby_tween.kill()
-		_play_lobby_tween = null
-	if _play_lobby_panel != null and is_instance_valid(_play_lobby_panel):
-		_play_lobby_panel.queue_free()
-	_play_lobby_panel = null
-	_play_lobby_transition_running = false
+	_lobby_flow_ctrl.cleanup_play_lobby_transition()
 
 func _cache_play_lobby_fade_targets() -> void:
-	_play_lobby_fade_targets.clear()
-	_play_lobby_fade_base_alpha.clear()
-	var targets: Array[CanvasItem] = []
-	# Keep menu background visible during lobby transition to avoid
-	# revealing the engine's default gray clear color.
-	if play_button != null:
-		targets.append(play_button)
-	if options_button != null:
-		targets.append(options_button)
-	if exit_button != null:
-		targets.append(exit_button)
-	if _auth_footer_panel != null and is_instance_valid(_auth_footer_panel):
-		targets.append(_auth_footer_panel)
-	elif _auth_logout_button != null and is_instance_valid(_auth_logout_button):
-		targets.append(_auth_logout_button)
-	if logo_node != null and logo_node is CanvasItem:
-		targets.append(logo_node as CanvasItem)
-
-	for item in targets:
-		if item == null or not is_instance_valid(item):
-			continue
-		if _play_lobby_fade_targets.has(item):
-			continue
-		_play_lobby_fade_targets.append(item)
-		_play_lobby_fade_base_alpha[str(item.get_path())] = item.modulate.a
+	_lobby_flow_ctrl.cache_play_lobby_fade_targets()
 
 func _restore_play_lobby_fade_targets() -> void:
-	for item in _play_lobby_fade_targets:
-		if item == null or not is_instance_valid(item):
-			continue
-		var item_path := str(item.get_path())
-		item.modulate.a = clampf(float(_play_lobby_fade_base_alpha.get(item_path, 1.0)), 0.0, 1.0)
-	_play_lobby_fade_targets.clear()
-	_play_lobby_fade_base_alpha.clear()
+	_lobby_flow_ctrl.restore_play_lobby_fade_targets()
 
 func _run_play_lobby_reverse_transition() -> void:
-	if _play_lobby_fade_targets.is_empty():
-		return
-	if _fx_layer == null or play_button == null:
-		_restore_play_lobby_fade_targets()
-		return
-	_cleanup_play_lobby_transition()
-	_play_lobby_transition_running = true
-
-	var panel := PanelContainer.new()
-	panel.name = "PlayLobbyTransitionReverse"
-	panel.z_index = 980
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.modulate = Color(1, 1, 1, 1)
-	panel.top_level = true
-
-	var viewport_rect := get_viewport_rect()
-	panel.global_position = viewport_rect.position
-	panel.size = viewport_rect.size
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(MENU_CLR_ACCENT.r, MENU_CLR_ACCENT.g, MENU_CLR_ACCENT.b, 0.0)
-	style.border_color = MENU_CLR_HIGHLIGHT
-	style.border_width_left = 3
-	style.border_width_top = 3
-	style.border_width_right = 3
-	style.border_width_bottom = 5
-	style.corner_radius_top_left = 3
-	style.corner_radius_top_right = 3
-	style.corner_radius_bottom_left = 3
-	style.corner_radius_bottom_right = 3
-	panel.add_theme_stylebox_override("panel", style)
-	_fx_layer.add_child(panel)
-	_play_lobby_panel = panel
-
-	var target_rect := play_button.get_global_rect()
-	var duration := maxf(0.12, play_lobby_shrink_duration)
-	_play_lobby_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_play_lobby_tween.parallel().tween_property(panel, "global_position", target_rect.position, duration)
-	_play_lobby_tween.parallel().tween_property(panel, "size", target_rect.size, duration)
-	_play_lobby_tween.parallel().tween_property(style, "bg_color", Color(MENU_CLR_BASE.r, MENU_CLR_BASE.g, MENU_CLR_BASE.b, 0.0), duration * 0.86)
-
-	for target in _play_lobby_fade_targets:
-		if target == null or not is_instance_valid(target):
-			continue
-		var item_path := str(target.get_path())
-		var base_alpha := clampf(float(_play_lobby_fade_base_alpha.get(item_path, 1.0)), 0.0, 1.0)
-		target.modulate.a = 0.0
-		_play_lobby_tween.parallel().tween_property(target, "modulate:a", base_alpha, duration * 0.92)
-
-	await _play_lobby_tween.finished
-	_play_lobby_tween = null
-	_cleanup_play_lobby_transition()
-	_restore_play_lobby_fade_targets()
+	await _lobby_flow_ctrl.run_play_lobby_reverse_transition()
 
 func _run_lobby_menu_loading_sequence() -> void:
-	if _lobby_overlay_ctrl != null:
-		_show_menu_loading_overlay("LOADING LOBBIES...")
-		await _lobby_overlay_ctrl.run_loading_sequence()
-		_hide_menu_loading_overlay()
+	await _lobby_flow_ctrl.run_lobby_menu_loading_sequence()
 
 func _on_lobby_overlay_closed() -> void:
-	if _intro_fx != null and _intro_fx.has_method("set_lobby_music_active"):
-		_intro_fx.call("set_lobby_music_active", false, 0.55)
-	_hide_menu_loading_overlay()
-	await _run_play_lobby_reverse_transition()
-	_restore_play_lobby_fade_targets()
-	_sync_lobby_overlay_interaction_state()
-	_refresh_global_overlay_ui_state()
-	_refresh_meta_ui_visibility()
+	await _lobby_flow_ctrl.on_lobby_overlay_closed()
 
 func _on_exit_pressed() -> void:
 	_button_press_anim(exit_button)
@@ -1249,34 +832,19 @@ func _tween_meta_visibility(item: CanvasItem, should_show: bool, tween_slot: Str
 	_meta_ui.tween_meta_visibility(self, item, should_show, tween_slot)
 
 func _show_menu_loading_overlay(message: String = "LOADING...") -> void:
-	if not ENABLE_MENU_LOADING_OVERLAY:
-		return
-	_set_menu_cursor_hover_blocked(true)
-	if _menu_loading_overlay != null:
-		_menu_loading_overlay.show(message)
+	_dialog_ctrl.show_menu_loading_overlay(message)
 
 func _hide_menu_loading_overlay() -> void:
-	if not ENABLE_MENU_LOADING_OVERLAY:
-		return
-	if _menu_loading_overlay != null:
-		_menu_loading_overlay.hide()
+	_dialog_ctrl.hide_menu_loading_overlay()
 
 func _on_menu_loading_overlay_shown() -> void:
-	_set_menu_cursor_hover_blocked(true)
+	_dialog_ctrl.on_menu_loading_overlay_shown()
 
 func _on_menu_loading_overlay_hidden() -> void:
-	_set_menu_cursor_hover_blocked(false)
+	_dialog_ctrl.on_menu_loading_overlay_hidden()
 
 func _set_menu_cursor_hover_blocked(blocked: bool) -> void:
-	var tree := get_tree()
-	if tree == null:
-		return
-	var root := tree.get_root()
-	if root == null:
-		return
-	var cm := root.get_node_or_null(CURSOR_MANAGER_NAME)
-	if cm != null and cm.has_method("set_menu_hover_blocked"):
-		cm.call("set_menu_hover_blocked", blocked)
+	_dialog_ctrl.set_menu_cursor_hover_blocked(blocked)
 
 func _switch_to(target: Control, direction: int) -> void:
 	if target == null:
@@ -1471,219 +1039,40 @@ func _sync_active_lobby_loadout_selection() -> void:
 		_lobby_overlay_ctrl.call("sync_current_loadout_to_lobby")
 
 func _prepare_player_preview(player: Node) -> void:
-	if player == null:
-		return
-	player.process_mode = Node.PROCESS_MODE_DISABLED
-
-	var visual_root := player.get_node_or_null("VisualRoot") as Node
-	if visual_root == null:
-		return
-
-	var gun_pivot := visual_root.get_node_or_null("GunPivot") as CanvasItem
-	if gun_pivot != null:
-		gun_pivot.visible = false
-
-	for label_name in ["HealthLabel", "AmmoLabel", "NameLabel"]:
-		var label := visual_root.get_node_or_null(label_name) as CanvasItem
-		if label != null:
-			label.visible = false
+	_preview_filter_ctrl.prepare_player_preview(player)
 
 func _handle_warrior_preview_zoom_input(event: InputEvent) -> bool:
-	if _current_screen != screen_warriors:
-		return false
-	if warrior_preview_col == null or warrior_shop_preview == null:
-		return false
-	if not (warrior_shop_preview is Node2D):
-		return false
-	if not (event is InputEventMouseButton):
-		return false
-	var mouse_button := event as InputEventMouseButton
-	if not mouse_button.pressed:
-		return false
-	var zoom_delta := 0.0
-	if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP:
-		zoom_delta = WARRIOR_PREVIEW_ZOOM_STEP
-	elif mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-		zoom_delta = -WARRIOR_PREVIEW_ZOOM_STEP
-	else:
-		return false
-	if not warrior_preview_col.get_global_rect().has_point(mouse_button.position):
-		return false
-	_warrior_preview_zoom_mult = clampf(_warrior_preview_zoom_mult + zoom_delta, WARRIOR_PREVIEW_ZOOM_MIN, WARRIOR_PREVIEW_ZOOM_MAX)
-	_apply_warrior_preview_zoom()
-	get_viewport().set_input_as_handled()
-	return true
+	return _preview_filter_ctrl.handle_warrior_preview_zoom_input(event)
 
 func _apply_warrior_preview_zoom() -> void:
-	if not (warrior_shop_preview is Node2D):
-		return
-	var preview := warrior_shop_preview as Node2D
-	var base_zoom := clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
-	preview.scale = _warrior_shop_preview_base_scale * base_zoom * _warrior_preview_zoom_mult
+	_preview_filter_ctrl.apply_warrior_preview_zoom()
 
 func _apply_warrior_skin_to_player(player: Node, warrior_id: String, skin_index: int) -> void:
-	_warrior_ui.apply_warrior_menu_preview(player, warrior_id, skin_index)
+	_preview_filter_ctrl.apply_warrior_skin_to_player(player, warrior_id, skin_index)
 
 func _set_weapon_icon_sprite(target: Sprite2D, weapon_id: String, extra_mult: float = 1.0, skin_index: int = 0) -> void:
-	var normalized := weapon_id.strip_edges().to_lower()
-	var idx := maxi(0, skin_index)
-	if target != null:
-		target.set_meta("weapon_id", normalized)
-		target.set_meta("skin_index", idx)
-	if target == weapon_shop_preview:
-		_visible_weapon_id = normalized
-		_visible_weapon_skin = idx
-	_weapon_ui.set_weapon_icon_sprite(target, normalized, extra_mult, weapon_shop_preview, idx)
+	_preview_filter_ctrl.set_weapon_icon_sprite(target, weapon_id, extra_mult, skin_index)
 
 func _sync_visible_weapon_from_preview() -> void:
-	if weapon_shop_preview == null:
-		return
-	if weapon_shop_preview.has_meta("weapon_id"):
-		_visible_weapon_id = str(weapon_shop_preview.get_meta("weapon_id")).strip_edges().to_lower()
-	if weapon_shop_preview.has_meta("skin_index"):
-		_visible_weapon_skin = maxi(0, int(weapon_shop_preview.get_meta("skin_index")))
+	_preview_filter_ctrl.sync_visible_weapon_from_preview()
 
 func _make_filter_button(text: String) -> Button:
-	var btn := _make_shop_button()
-	btn.custom_minimum_size = Vector2(0, 26)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.text = text
-	btn.clip_text = false
-	btn.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	btn.add_theme_font_size_override("font_size", 9)
-	return btn
+	return _preview_filter_ctrl.make_filter_button(text)
 
 func _set_filter_btn_selected(btn: Button, selected: bool) -> void:
-	if btn == null:
-		return
-	btn.modulate = Color(1, 1, 1, 1) if selected else Color(1, 1, 1, 0.9)
+	_preview_filter_ctrl.set_filter_btn_selected(btn, selected)
 
 func _refresh_weapon_filter_button_state() -> void:
-	for key in _weapon_filter_weapon_buttons.keys():
-		_set_filter_btn_selected(_weapon_filter_weapon_buttons.get(key, null) as Button, str(key) == _weapon_filter_weapon_id)
-	for key in _weapon_filter_category_buttons.keys():
-		_set_filter_btn_selected(_weapon_filter_category_buttons.get(key, null) as Button, str(key) == _weapon_filter_category)
-
-	for key in _weapon_filter_weapon_buttons.keys():
-		var wid := str(key)
-		var btn := _weapon_filter_weapon_buttons.get(wid, null) as Button
-		if btn == null:
-			continue
-		if wid.is_empty():
-			btn.text = "ALL"
-			continue
-		btn.text = _weapon_ui.weapon_display_name(wid)
-	call_deferred("_update_weapon_filter_bridge")
+	_preview_filter_ctrl.refresh_weapon_filter_button_state()
 
 func _ensure_weapon_filter_ui() -> void:
-	if weapon_scroll == null:
-		return
-	var list_col := weapon_scroll.get_parent() as Control
-	if list_col == null:
-		return
-	if list_col.get_node_or_null("WeaponFilters") != null:
-		return
-	if list_col is VBoxContainer:
-		(list_col as VBoxContainer).add_theme_constant_override("separation", 0)
-
-	var filters := VBoxContainer.new()
-	filters.name = "WeaponFilters"
-	filters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	filters.add_theme_constant_override("separation", 0)
-	list_col.add_child(filters)
-	list_col.move_child(filters, 0)
-
-	var weapon_row := HFlowContainer.new()
-	weapon_row.name = "WeaponRow"
-	weapon_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	weapon_row.add_theme_constant_override("separation", 6)
-	filters.add_child(weapon_row)
-	_weapon_filters_row = weapon_row
-
-	var bridge_holder := Control.new()
-	bridge_holder.name = "WeaponFiltersBridgeHolder"
-	bridge_holder.custom_minimum_size = Vector2(0, 6)
-	bridge_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bridge_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	filters.add_child(bridge_holder)
-	_weapon_filters_bridge_holder = bridge_holder
-
-	var bridge := Panel.new()
-	bridge.name = "WeaponFiltersBridge"
-	bridge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var bridge_style := StyleBoxFlat.new()
-	bridge_style.bg_color = MENU_PALETTE.with_alpha(MENU_CLR_ACCENT, 1.0)
-	bridge_style.border_width_left = 1
-	bridge_style.border_width_top = 0
-	bridge_style.border_width_right = 1
-	bridge_style.border_width_bottom = 1
-	bridge_style.border_color = MENU_PALETTE.with_alpha(MENU_CLR_ACCENT, 1.0)
-	bridge.add_theme_stylebox_override("panel", bridge_style)
-	bridge_holder.add_child(bridge)
-	_weapon_filters_bridge = bridge
-	weapon_row.resized.connect(_update_weapon_filter_bridge)
-	bridge_holder.resized.connect(_update_weapon_filter_bridge)
-
-	_weapon_filter_weapon_buttons = {}
-	var weapon_items := [
-		{"label": "ALL", "id": ""},
-		{"label": _weapon_ui.weapon_display_name(WEAPON_UZI), "id": WEAPON_UZI},
-		{"label": _weapon_ui.weapon_display_name(WEAPON_AK47), "id": WEAPON_AK47},
-		{"label": _weapon_ui.weapon_display_name(WEAPON_KAR), "id": WEAPON_KAR},
-		{"label": _weapon_ui.weapon_display_name(WEAPON_SHOTGUN), "id": WEAPON_SHOTGUN},
-		{"label": _weapon_ui.weapon_display_name(WEAPON_GRENADE), "id": WEAPON_GRENADE},
-	]
-	for it in weapon_items:
-		var wid := str(it.get("id", ""))
-		var btn := _make_filter_button(str(it.get("label", "")))
-		btn.pressed.connect(func() -> void:
-			_weapon_filter_weapon_id = wid
-			if not wid.is_empty():
-				_select_weapon_skin(wid, _equipped_weapon_skin(wid), true)
-			_refresh_weapon_filter_button_state()
-			_build_weapon_shop_grid()
-		)
-		weapon_row.add_child(btn)
-		_weapon_filter_weapon_buttons[wid] = btn
-
-	_weapon_filter_category_buttons = {}
-	_weapon_filter_category = ""
-
-	_refresh_weapon_filter_button_state()
-	call_deferred("_update_weapon_filter_bridge")
+	_preview_filter_ctrl.ensure_weapon_filter_ui()
 
 func _update_weapon_filter_bridge() -> void:
-	if _weapon_filters_bridge_holder == null or not is_instance_valid(_weapon_filters_bridge_holder):
-		return
-	if _weapon_filters_bridge == null or not is_instance_valid(_weapon_filters_bridge):
-		return
-	if _weapon_filters_row == null or not is_instance_valid(_weapon_filters_row):
-		return
-	var key := _weapon_filter_weapon_id
-	if not _weapon_filter_weapon_buttons.has(key):
-		key = ""
-	var selected_btn := _weapon_filter_weapon_buttons.get(key, null) as Button
-	if selected_btn == null or not is_instance_valid(selected_btn):
-		_weapon_filters_bridge.visible = false
-		return
-	_weapon_filters_bridge.visible = true
-	var x := _weapon_filters_row.position.x + selected_btn.position.x
-	var w := selected_btn.size.x
-	_weapon_filters_bridge.position = Vector2(x, 0)
-	_weapon_filters_bridge.size = Vector2(maxf(1.0, w), _weapon_filters_bridge_holder.size.y)
+	_preview_filter_ctrl.update_weapon_filter_bridge()
 
 func _icon_global_rect(icon: CanvasItem) -> Rect2:
-	if icon == null:
-		return Rect2()
-	if icon is Control:
-		return (icon as Control).get_global_rect()
-	if icon is Sprite2D:
-		var s := icon as Sprite2D
-		if s.texture == null:
-			return Rect2(s.global_position, Vector2.ZERO)
-		var sz := s.texture.get_size() * s.global_scale
-		return Rect2(s.global_position - sz * 0.5, sz)
-	return Rect2(icon.get_global_transform().origin, Vector2.ZERO)
+	return _preview_filter_ctrl.icon_global_rect(icon)
 
 func _weapon_skins_for(weapon_id: String) -> Array:
 	return _weapon_ui.weapon_skins_for(weapon_id)
@@ -1705,99 +1094,25 @@ func _apply_weapon_skin_tint(target: CanvasItem, skin_index: int) -> void:
 	_apply_weapon_skin_visual(target, _pending_weapon_id, skin_index)
 
 func _build_warrior_shop_grid() -> void:
-	_clear_children(warrior_grid)
-	var warrior_list := _warrior_ui.warrior_ids()
-	for warrior_id in warrior_list:
-		var preview_skin_index := _equipped_warrior_skin(warrior_id)
-		var btn := _warrior_ui.make_warrior_item_button(self, Callable(self, "_make_shop_button"), warrior_id, preview_skin_index, "warrior")
-		btn.pressed.connect(Callable(self, "_on_warrior_select_button_pressed").bind(warrior_id))
-		warrior_grid.add_child(btn)
-		_center_pivot(btn)
-	_build_warrior_skin_grid(_pending_warrior_id)
+	_shop_grid_ctrl.build_warrior_shop_grid()
 
 func _build_warrior_skin_grid(warrior_id: String) -> void:
-	_clear_children(warrior_skin_grid)
-	if warrior_skin_grid == null:
-		return
-	var normalized := warrior_id.strip_edges().to_lower()
-	if normalized.is_empty():
-		normalized = selected_warrior_id
-	for skin in _warrior_ui.warrior_skins_for(normalized):
-		var skin_index := int((skin as Dictionary).get("index", 0))
-		var btn := _warrior_ui.make_warrior_item_button(self, Callable(self, "_make_shop_button"), normalized, skin_index, "skin")
-		btn.pressed.connect(Callable(self, "_on_warrior_skin_button_pressed").bind(normalized, skin_index))
-		warrior_skin_grid.add_child(btn)
-		_center_pivot(btn)
+	_shop_grid_ctrl.build_warrior_skin_grid(warrior_id)
 
 func _on_warrior_select_button_pressed(warrior_id: String) -> void:
-	var normalized := warrior_id.strip_edges().to_lower()
-	var target_skin := _equipped_warrior_skin(normalized)
-	if not _warrior_is_owned(normalized):
-		target_skin = 0
-	_select_warrior_skin(normalized, target_skin, false)
+	_shop_grid_ctrl.on_warrior_select_button_pressed(warrior_id)
 
 func _on_warrior_skin_button_pressed(warrior_id: String, skin_index: int) -> void:
-	_on_warrior_item_button_pressed(warrior_id, skin_index)
+	_shop_grid_ctrl.on_warrior_skin_button_pressed(warrior_id, skin_index)
 
 func _build_weapon_shop_grid() -> void:
-	_clear_children(weapon_grid)
-	if weapon_grid != null:
-		weapon_grid.columns = 4
-	var weapon_list := [WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE]
-	if not _weapon_filter_weapon_id.is_empty():
-		weapon_list = [_weapon_filter_weapon_id]
-	for weapon_id in weapon_list:
-		for skin in _weapon_skins_for(weapon_id):
-			var skin_index := int(skin.get("skin", 0))
-			var btn := _weapon_ui.make_weapon_item_button(self, Callable(self, "_make_shop_button"), weapon_id, skin_index)
-			btn.pressed.connect(Callable(self, "_on_weapon_item_button_pressed").bind(weapon_id, skin_index))
-			weapon_grid.add_child(btn)
-			_center_pivot(btn)
+	_shop_grid_ctrl.build_weapon_shop_grid()
 
 func _make_shop_button() -> Button:
-	var btn := Button.new()
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# GridContainer sizes columns from children's minimum widths; keep this non-zero
-	# so cells don't collapse into tiny boxes (which also hides the text).
-	btn.custom_minimum_size = Vector2(170, 32)
-	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	btn.clip_text = true
-	btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	btn.clip_contents = true
-
-	# Clone the look from an existing styled button in the scene.
-	_copy_button_look(options_button, btn)
-	_normalize_button_outline(btn, 0)
-	btn.add_theme_font_size_override("font_size", 11)
-	_add_hover_pop(btn)
-	btn.pressed.connect(func() -> void:
-		_button_press_anim(btn)
-	)
-	return btn
+	return _shop_grid_ctrl.make_shop_button()
 
 func _copy_button_look(src: Button, dst: Button) -> void:
-	if src == null or dst == null:
-		return
-	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
-		if src.has_theme_stylebox_override(sb_name):
-			var sb := src.get_theme_stylebox(sb_name)
-			dst.add_theme_stylebox_override(sb_name, sb)
-	for color_name in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
-		if src.has_theme_color_override(color_name):
-			var c := src.get_theme_color(color_name)
-			dst.add_theme_color_override(color_name, c)
-	if src.has_theme_font_override("font"):
-		var f := src.get_theme_font("font")
-		if f != null:
-			dst.add_theme_font_override("font", f)
-
-	# Ensure readable text even if the source doesn't override all states.
-	dst.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
-	dst.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
-	dst.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
-	dst.add_theme_color_override("font_disabled_color", MENU_PALETTE.text_dark(0.9))
-	dst.add_theme_constant_override("outline_size", 0)
-	_normalize_button_outline(dst, 0)
+	_shop_grid_ctrl.copy_button_look(src, dst)
 
 func _apply_uniform_button_outlines(root: Node, border_width: int = 0) -> void:
 	_menu_theme.apply_uniform_button_outlines(self, root, border_width)
@@ -1818,22 +1133,10 @@ func _brighten_button_bg(c: Color, state: String) -> Color:
 	return _menu_theme.brighten_button_bg(c, state)
 
 func _init_confirm_dialog() -> void:
-	var overlay := CONFIRM_OVERLAY_SCRIPT.new()
-	overlay.name = "ConfirmOverlay"
-	overlay.configure(
-		Callable(self, "_make_shop_button"),
-		Callable(self, "_set_weapon_icon_sprite"),
-		Callable(self, "_apply_weapon_skin_visual"),
-		Callable(self, "_center_pivot"),
-		Callable(self, "_add_hover_pop")
-	)
-	add_child(overlay)
-	_confirm_overlay_ui = overlay
+	_dialog_ctrl.init_confirm_dialog()
 
 func _ask_confirm(title: String, text: String, on_confirm: Callable, weapon_id: String = "", skin_index: int = 0) -> void:
-	if _confirm_overlay_ui == null:
-		return
-	_confirm_overlay_ui.call("ask", title, text, on_confirm, weapon_id, skin_index)
+	_dialog_ctrl.ask_confirm(title, text, on_confirm, weapon_id, skin_index)
 
 func _apply_pixel_slider_style(slider: HSlider) -> void:
 	_menu_theme.apply_pixel_slider_style(self, slider)
@@ -1863,28 +1166,16 @@ func _warrior_skin_cost(warrior_id: String, skin_index: int) -> int:
 	return _warrior_ui.warrior_skin_cost(warrior_id, skin_index)
 
 func _warrior_is_owned(warrior_id: String) -> bool:
-	return owned_warriors.has(warrior_id.strip_edges().to_lower())
+	return _loadout_state_ctrl.warrior_is_owned(warrior_id)
 
 func _warrior_skin_is_owned(warrior_id: String, skin_index: int) -> bool:
-	var normalized := warrior_id.strip_edges().to_lower()
-	var idx := maxi(0, skin_index)
-	if not _warrior_is_owned(normalized):
-		return false
-	if idx <= 0:
-		return true
-	var arr := owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array
-	if arr == null:
-		return false
-	return arr.has(idx)
+	return _loadout_state_ctrl.warrior_skin_is_owned(warrior_id, skin_index)
 
 func _equipped_warrior_skin(warrior_id: String) -> int:
-	var normalized := warrior_id.strip_edges().to_lower()
-	if equipped_warrior_skin_by_warrior.has(normalized):
-		return maxi(0, int(equipped_warrior_skin_by_warrior.get(normalized, 0)))
-	return 0
+	return _loadout_state_ctrl.equipped_warrior_skin(warrior_id)
 
 func _set_equipped_warrior_skin(warrior_id: String, skin_index: int) -> void:
-	equipped_warrior_skin_by_warrior[warrior_id.strip_edges().to_lower()] = maxi(0, skin_index)
+	_loadout_state_ctrl.set_equipped_warrior_skin(warrior_id, skin_index)
 
 func _ensure_warrior_filter_ui() -> void:
 	return
@@ -1927,47 +1218,22 @@ func _on_warrior_action_pressed() -> void:
 	_shop_controller.on_warrior_action_pressed(self)
 
 func _is_warrior_skin_owned(skin_index: int) -> bool:
-	return _warrior_skin_is_owned(selected_warrior_id, skin_index)
+	return _loadout_state_ctrl.is_warrior_skin_owned(skin_index)
 
 func _weapon_is_owned(weapon_id: String) -> bool:
-	return owned_weapons.has(weapon_id.strip_edges().to_lower())
+	return _loadout_state_ctrl.weapon_is_owned(weapon_id)
 
 func _weapon_skin_is_owned(weapon_id: String, skin_index: int) -> bool:
-	var normalized := weapon_id.strip_edges().to_lower()
-	if not owned_weapon_skins_by_weapon.has(normalized):
-		return skin_index == 0
-	var arr := owned_weapon_skins_by_weapon[normalized] as PackedInt32Array
-	if arr == null:
-		return skin_index == 0
-	return arr.has(skin_index)
+	return _loadout_state_ctrl.weapon_skin_is_owned(weapon_id, skin_index)
 
 func _equipped_weapon_skin(weapon_id: String) -> int:
-	var normalized := weapon_id.strip_edges().to_lower()
-	if equipped_weapon_skin_by_weapon.has(normalized):
-		return maxi(0, int(equipped_weapon_skin_by_weapon.get(normalized, 0)))
-	return 0
+	return _loadout_state_ctrl.equipped_weapon_skin(weapon_id)
 
 func _set_equipped_weapon_skin(weapon_id: String, skin_index: int) -> void:
-	var normalized := weapon_id.strip_edges().to_lower()
-	equipped_weapon_skin_by_weapon[normalized] = maxi(0, skin_index)
+	_loadout_state_ctrl.set_equipped_weapon_skin(weapon_id, skin_index)
 
 func _weapon_item_button_text(weapon_id: String, skin_index: int) -> String:
-	var w := weapon_id.to_upper()
-	var skin_name := _weapon_skin_label(weapon_id, skin_index)
-
-	var base := "%s  -  %s" % [w, skin_name]
-	if not _weapon_is_owned(weapon_id):
-		var weapon_cost := int(DATA.WEAPON_BASE_COST_BY_ID.get(weapon_id, 0))
-		if weapon_cost <= 0:
-			return "%s  [LOCKED]" % base
-		return "%s  (%d)  [LOCKED]" % [base, weapon_cost]
-
-	if _weapon_skin_is_owned(weapon_id, skin_index):
-		if weapon_id == selected_weapon_id and skin_index == selected_weapon_skin:
-			return "%s  [OWNED]" % base
-		return base
-
-	return "%s  (%d)  [LOCKED]" % [base, _weapon_skin_cost(weapon_id, skin_index)]
+	return _loadout_state_ctrl.weapon_item_button_text(weapon_id, skin_index)
 
 func _select_weapon_skin(weapon_id: String, skin_index: int, silent: bool) -> void:
 	_shop_controller.select_weapon_skin(self, weapon_id, skin_index, silent)
@@ -2051,173 +1317,10 @@ func _pixel_burst_at(global_pos: Vector2, color: Color) -> void:
 		t.tween_callback(func() -> void: p.queue_free())
 
 func _load_state_or_defaults() -> void:
-	var fallback_username := OS.get_environment("USERNAME").strip_edges()
-	if fallback_username.is_empty():
-		fallback_username = "Player"
-	var default_warrior := _default_warrior_id()
-	var default_owned_warriors := _default_owned_warriors()
-	var default_warrior_skins := _default_owned_warrior_skins_by_warrior()
-	var default_equipped_warrior_skins := _default_equipped_warrior_skin_by_warrior()
-	var defaults := {
-		"coins": 1000000,
-		"clk": 50000,
-		"music_volume": 0.8,
-		"sfx_volume": 0.4,
-		"particles_enabled": true,
-		"screen_shake_enabled": true,
-		"username": fallback_username,
-		"owned_warriors": Array(default_owned_warriors),
-		"owned_warrior_skins": [0],
-		"owned_warrior_skins_by_warrior": default_warrior_skins,
-		"equipped_warrior_skin_by_warrior": default_equipped_warrior_skins,
-		"selected_warrior_id": default_warrior,
-		"selected_warrior_skin": 0,
-		"owned_weapons": [WEAPON_UZI, WEAPON_GRENADE],
-		"owned_weapon_skins_by_weapon": {WEAPON_UZI: [0], WEAPON_GRENADE: [0], WEAPON_AK47: [0], WEAPON_KAR: [0], WEAPON_SHOTGUN: [0]},
-		"equipped_weapon_skin_by_weapon": {WEAPON_UZI: 0, WEAPON_GRENADE: 0, WEAPON_AK47: 0, WEAPON_KAR: 0, WEAPON_SHOTGUN: 0},
-		"selected_weapon_id": WEAPON_UZI,
-		"selected_weapon_skin": 0,
-	}
-	var st := _state_store.load_state_or_defaults(DATA.SHOP_STATE_PATH, defaults, WEAPON_UZI)
-	if music_slider != null:
-		music_slider.value = clampf(float(st.get("music_volume", 0.8)), 0.0, 1.0)
-	if sfx_slider != null:
-		sfx_slider.value = clampf(float(st.get("sfx_volume", 0.4)), 0.0, 1.0)
-	_set_particles_enabled(bool(st.get("particles_enabled", true)), false)
-	_set_screen_shake_enabled(bool(st.get("screen_shake_enabled", true)), false)
-
-	wallet_coins = int(st.get("coins", 0))
-	wallet_clk = int(st.get("clk", 0))
-	player_username = str(st.get("username", fallback_username)).strip_edges()
-	if player_username.is_empty():
-		player_username = fallback_username
-
-	owned_warriors = PackedStringArray(st.get("owned_warriors", Array(default_owned_warriors)) as Array)
-	owned_warrior_skins = PackedInt32Array(st.get("owned_warrior_skins", [0]) as Array)
-	selected_warrior_id = str(st.get("selected_warrior_id", default_warrior)).strip_edges().to_lower()
-	selected_warrior_skin = maxi(0, int(st.get("selected_warrior_skin", 0)))
-	var warrior_skin_dict := st.get("owned_warrior_skins_by_warrior", default_warrior_skins) as Dictionary
-	owned_warrior_skins_by_warrior = _normalize_owned_warrior_skins_dict(warrior_skin_dict)
-	var equipped_warrior := st.get("equipped_warrior_skin_by_warrior", default_equipped_warrior_skins) as Dictionary
-	equipped_warrior_skin_by_warrior = _normalize_equipped_warrior_skins_dict(equipped_warrior.duplicate(true))
-	for wid in _warrior_ui.warrior_ids():
-		if not owned_warrior_skins_by_warrior.has(wid):
-			owned_warrior_skins_by_warrior[wid] = PackedInt32Array([0])
-		if not equipped_warrior_skin_by_warrior.has(wid):
-			equipped_warrior_skin_by_warrior[wid] = 0
-
-	owned_weapons = PackedStringArray(st.get("owned_weapons", [WEAPON_UZI]) as Array)
-	selected_weapon_id = str(st.get("selected_weapon_id", WEAPON_UZI)).strip_edges().to_lower()
-	selected_weapon_skin = maxi(0, int(st.get("selected_weapon_skin", 0)))
-
-	# Sanitize weapon ids (remove weapons that no longer exist in this menu).
-	var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
-	var filtered_owned := PackedStringArray()
-	for wid in owned_weapons:
-		var w := str(wid).strip_edges().to_lower()
-		if allowed.has(w):
-			filtered_owned.append(w)
-	owned_weapons = filtered_owned
-	if not owned_weapons.has(WEAPON_UZI):
-		owned_weapons.append(WEAPON_UZI)
-	if not owned_weapons.has(WEAPON_GRENADE):
-		owned_weapons.append(WEAPON_GRENADE)
-	if not owned_warriors.has(default_warrior):
-		owned_warriors.append(default_warrior)
-
-	var out := {}
-	var skins_dict := st.get("owned_weapon_skins_by_weapon", {}) as Dictionary
-	for key in skins_dict.keys():
-		var wid := str(key).strip_edges().to_lower()
-		if not allowed.has(wid):
-			continue
-		var arr := skins_dict.get(key, [0]) as Array
-		out[wid] = PackedInt32Array(arr)
-	owned_weapon_skins_by_weapon = out
-
-	# Ensure required dictionaries exist for current weapons.
-	for wid in allowed:
-		if not owned_weapon_skins_by_weapon.has(wid):
-			owned_weapon_skins_by_weapon[wid] = PackedInt32Array([0])
-		if not equipped_weapon_skin_by_weapon.has(wid):
-			equipped_weapon_skin_by_weapon[wid] = 0
-
-	var eq := st.get("equipped_weapon_skin_by_weapon", {}) as Dictionary
-	if eq != null:
-		for key in eq.keys():
-			var wid := str(key).strip_edges().to_lower()
-			if not allowed.has(wid):
-				continue
-			equipped_weapon_skin_by_weapon[wid] = maxi(0, int(eq.get(key, 0)))
-
-	# Clamp selections to owned.
-	if not _warrior_is_owned(selected_warrior_id):
-		selected_warrior_id = default_warrior
-	if not _warrior_skin_is_owned(selected_warrior_id, selected_warrior_skin):
-		selected_warrior_skin = 0
-	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
-	_pending_warrior_id = selected_warrior_id
-	_pending_warrior_skin = selected_warrior_skin
-	if not _weapon_is_owned(selected_weapon_id):
-		selected_weapon_id = WEAPON_UZI
-	if not _weapon_skin_is_owned(selected_weapon_id, selected_weapon_skin):
-		selected_weapon_skin = 0
-	_set_equipped_weapon_skin(selected_weapon_id, selected_weapon_skin)
-	_pending_weapon_id = selected_weapon_id
-	_pending_weapon_skin = selected_weapon_skin
+	_state_store.apply_menu_state(self, DATA.SHOP_STATE_PATH)
 
 func _save_state() -> void:
-	var owned_warriors_list: Array = []
-	for wid in owned_warriors:
-		owned_warriors_list.append(str(wid))
-
-	var owned_warrior_skins_dict: Dictionary = {}
-	for wid in owned_warrior_skins_by_warrior.keys():
-		var warrior_arr := owned_warrior_skins_by_warrior.get(wid, PackedInt32Array([0])) as PackedInt32Array
-		var warrior_out: Array = []
-		if warrior_arr != null:
-			for s in warrior_arr:
-				warrior_out.append(int(s))
-		owned_warrior_skins_dict[str(wid)] = warrior_out
-
-	var owned_warrior_skin_list: Array = []
-	for v in owned_warrior_skins:
-		owned_warrior_skin_list.append(int(v))
-
-	var owned_weapons_list: Array = []
-	for w in owned_weapons:
-		owned_weapons_list.append(str(w))
-
-	var owned_weapon_skins_dict: Dictionary = {}
-	for wid in owned_weapon_skins_by_weapon.keys():
-		var arr := owned_weapon_skins_by_weapon.get(wid, PackedInt32Array([0])) as PackedInt32Array
-		var out_arr: Array = []
-		if arr != null:
-			for s in arr:
-				out_arr.append(int(s))
-		owned_weapon_skins_dict[str(wid)] = out_arr
-
-	var d := {
-		"coins": wallet_coins,
-		"clk": wallet_clk,
-		"music_volume": music_slider.value if music_slider != null else 0.8,
-		"sfx_volume": sfx_slider.value if sfx_slider != null else 0.4,
-		"particles_enabled": particles_enabled,
-		"screen_shake_enabled": screen_shake_enabled,
-		"username": player_username,
-		"owned_warriors": owned_warriors_list,
-		"owned_warrior_skins": owned_warrior_skin_list,
-		"owned_warrior_skins_by_warrior": owned_warrior_skins_dict,
-		"equipped_warrior_skin_by_warrior": equipped_warrior_skin_by_warrior,
-		"selected_warrior_id": selected_warrior_id,
-		"selected_warrior_skin": selected_warrior_skin,
-		"owned_weapons": owned_weapons_list,
-		"owned_weapon_skins_by_weapon": owned_weapon_skins_dict,
-		"equipped_weapon_skin_by_weapon": equipped_weapon_skin_by_weapon,
-		"selected_weapon_id": selected_weapon_id,
-		"selected_weapon_skin": selected_weapon_skin,
-	}
-	_state_store.save_state(DATA.SHOP_STATE_PATH, d)
+	_state_store.save_state(DATA.SHOP_STATE_PATH, _state_store.build_menu_state_snapshot(self))
 
 func _ensure_warrior_username_label() -> void:
 	_meta_ui.ensure_warrior_username_label(self)
@@ -2226,10 +1329,7 @@ func _refresh_warrior_username_label() -> void:
 	_meta_ui.refresh_warrior_username_label(self)
 
 func _update_wallet_labels(silent: bool) -> void:
-	coins_label.text = "Coins: %d" % wallet_coins
-	clk_label.text = "CLK: %d" % wallet_clk
-	if not silent:
-		_pop(wallet_panel)
+	_meta_ui.update_wallet_labels(self, silent)
 
 func _clear_children(node: Node) -> void:
 	if node == null:
@@ -2242,95 +1342,37 @@ func _add_hover_pop(btn: Button) -> void:
 	_ui_anim.add_hover_pop(btn)
 
 func _bind_menu_sfx_button(btn: BaseButton) -> void:
-	if _menu_sfx == null:
-		return
-	_menu_sfx.bind_button(btn)
+	_menu_options.bind_menu_sfx_button(btn)
 
 func _bind_menu_sfx_slider(slider: HSlider) -> void:
-	if _menu_sfx == null:
-		return
-	_menu_sfx.bind_slider(slider)
+	_menu_options.bind_menu_sfx_slider(slider)
 
 func _bind_menu_sfx_option(option: OptionButton) -> void:
-	if _menu_sfx == null:
-		return
-	_menu_sfx.bind_option(option)
+	_menu_options.bind_menu_sfx_option(option)
 
 func _on_music_slider_changed(value: float) -> void:
-	if _intro_fx == null:
-		return
-	if _intro_fx.has_method("set_menu_music_volume_linear"):
-		_intro_fx.call("set_menu_music_volume_linear", clampf(value, 0.0, 1.0))
-	_save_state()
+	_menu_options.on_music_slider_changed(value)
 
 func _on_sfx_slider_changed(value: float) -> void:
-	var clamped := clampf(value, 0.0, 1.0)
-	_set_sound_buses_volume_linear(clamped)
-	if _menu_sfx != null and _menu_sfx.has_method("set_output_volume_linear"):
-		_menu_sfx.call("set_output_volume_linear", clamped)
-	if _intro_fx != null and _intro_fx.has_method("set_menu_sfx_volume_linear"):
-		_intro_fx.call("set_menu_sfx_volume_linear", clamped)
-	_save_state()
+	_menu_options.on_sfx_slider_changed(value)
 
 func _on_particles_toggle_pressed() -> void:
-	if particles_toggle_button == null:
-		return
-	_set_particles_enabled(particles_toggle_button.button_pressed, true)
+	_menu_options.on_particles_toggle_pressed()
 
 func _set_particles_enabled(enabled: bool, save: bool) -> void:
-	particles_enabled = enabled
-	ProjectSettings.set_setting("kw/particles_enabled", particles_enabled)
-	if particles_toggle_button != null:
-		particles_toggle_button.set_pressed_no_signal(particles_enabled)
-		particles_toggle_button.text = "ON" if particles_enabled else "OFF"
-		particles_toggle_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if particles_enabled else Color(0.78, 0.78, 0.82, 1.0)
-	if save:
-		_save_state()
+	_menu_options.set_particles_enabled(enabled, save)
 
 func _on_screen_shake_toggle_pressed() -> void:
-	if screen_shake_toggle_button == null:
-		return
-	_set_screen_shake_enabled(screen_shake_toggle_button.button_pressed, true)
+	_menu_options.on_screen_shake_toggle_pressed()
 
 func _set_screen_shake_enabled(enabled: bool, save: bool) -> void:
-	screen_shake_enabled = enabled
-	ProjectSettings.set_setting("kw/screen_shake_enabled", screen_shake_enabled)
-	if screen_shake_toggle_button != null:
-		screen_shake_toggle_button.set_pressed_no_signal(screen_shake_enabled)
-		screen_shake_toggle_button.text = "ON" if screen_shake_enabled else "OFF"
-		screen_shake_toggle_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if screen_shake_enabled else Color(0.78, 0.78, 0.82, 1.0)
-	if save:
-		_save_state()
+	_menu_options.set_screen_shake_enabled(enabled, save)
 
 func _set_sound_buses_volume_linear(value: float) -> void:
-	var db := -80.0 if value <= 0.001 else linear_to_db(value)
-	var sfx_idx := _ensure_audio_bus("SFX", "Master")
-	if sfx_idx >= 0:
-		AudioServer.set_bus_volume_db(sfx_idx, db)
-	var target_names := {
-		"sounds": true,
-		"gamesfx": true,
-		"game_sfx": true,
-		"gameplay_sfx": true,
-	}
-	for i in range(AudioServer.get_bus_count()):
-		var bus_name := AudioServer.get_bus_name(i).to_lower()
-		if target_names.has(bus_name):
-			AudioServer.set_bus_volume_db(i, db)
+	_menu_options.set_sound_buses_volume_linear(value)
 
 func _ensure_audio_bus(bus_name: String, send_to: String = "Master") -> int:
-	var wanted := bus_name.strip_edges()
-	if wanted.is_empty():
-		return -1
-	for i in range(AudioServer.get_bus_count()):
-		if AudioServer.get_bus_name(i).to_lower() == wanted.to_lower():
-			return i
-	AudioServer.add_bus(AudioServer.get_bus_count())
-	var idx := AudioServer.get_bus_count() - 1
-	AudioServer.set_bus_name(idx, wanted)
-	if not send_to.strip_edges().is_empty():
-		AudioServer.set_bus_send(idx, send_to)
-	return idx
+	return _menu_options.ensure_audio_bus(bus_name, send_to)
 
 func _hover_area(area: Control, hovered: bool) -> void:
 	_ui_anim.hover_area(area, hovered)
@@ -2366,314 +1408,30 @@ func _stop_idle_loop() -> void:
 	_idle_anim.stop_idle_loop()
 
 func _ensure_background_crack_layer() -> void:
-	if _bg_crack_layer != null and is_instance_valid(_bg_crack_layer):
-		return
-	_bg_crack_layer = Control.new()
-	_bg_crack_layer.name = "BackgroundCrackLayer"
-	_bg_crack_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bg_crack_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_bg_crack_layer.z_index = 60
-	add_child(_bg_crack_layer)
-	var screens := get_node_or_null("Screens")
-	if screens != null:
-		move_child(_bg_crack_layer, screens.get_index())
+	_ambient_fx.ensure_background_crack_layer()
 
 func _rebuild_background_cracks() -> void:
-	if _bg_crack_layer == null or not is_instance_valid(_bg_crack_layer):
-		return
-	for child in _bg_crack_layer.get_children():
-		if child != null:
-			child.queue_free()
-	if not cracked_background_enabled:
-		return
-	var viewport_size := get_viewport_rect().size
-	if viewport_size.x <= 8.0 or viewport_size.y <= 8.0:
-		return
-	var impacts := clampi(cracked_background_impacts, 1, 7)
-	for i in range(impacts):
-		var impact_origin := Vector2(
-			randf_range(viewport_size.x * 0.12, viewport_size.x * 0.88),
-			randf_range(viewport_size.y * 0.12, viewport_size.y * 0.72)
-		)
-		_spawn_crack_impact(impact_origin, viewport_size)
-
-func _spawn_crack_impact(origin: Vector2, viewport_size: Vector2) -> void:
-	var branches := randi_range(6, 10)
-	var ring_radius := randf_range(6.0, 11.0)
-	for i in range(branches):
-		var base_angle := (TAU * float(i) / float(branches)) + randf_range(-0.12, 0.12)
-		var crack_len := randf_range(54.0, minf(viewport_size.x, viewport_size.y) * 0.34)
-		var p := origin + Vector2(cos(base_angle), sin(base_angle)) * ring_radius
-		var points := PackedVector2Array([origin, p])
-		var segs := randi_range(5, 10)
-		for s in range(segs):
-			var t := float(s + 1) / float(segs)
-			var spread := lerpf(1.4, 9.5, t)
-			var step_angle := base_angle + randf_range(-0.13, 0.13)
-			var next_p := origin + Vector2(cos(step_angle), sin(step_angle)) * (crack_len * t)
-			next_p += Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
-			next_p.x = clampf(next_p.x, 0.0, viewport_size.x)
-			next_p.y = clampf(next_p.y, 0.0, viewport_size.y)
-			points.append(next_p)
-		_add_crack_line(points, randf_range(1.05, 1.8), Color(0.82, 0.90, 1.0, randf_range(0.02, 0.08)))
-		if randf() < 0.72 and points.size() > 3:
-			var anchor_idx := randi_range(2, points.size() - 1)
-			var anchor := points[anchor_idx]
-			var twig_angle := base_angle + randf_range(-0.95, 0.95)
-			var twig_len := crack_len * randf_range(0.16, 0.34)
-			var twig_end := anchor + Vector2(cos(twig_angle), sin(twig_angle)) * twig_len
-			twig_end.x = clampf(twig_end.x, 0.0, viewport_size.x)
-			twig_end.y = clampf(twig_end.y, 0.0, viewport_size.y)
-			_add_crack_line(PackedVector2Array([anchor, twig_end]), randf_range(0.8, 1.2), Color(0.75, 0.85, 1.0, randf_range(0.05, 0.10)))
-
-func _add_crack_line(points: PackedVector2Array, width: float, color: Color) -> void:
-	if _bg_crack_layer == null or not is_instance_valid(_bg_crack_layer):
-		return
-	if points.size() < 2:
-		return
-	var glow := Line2D.new()
-	glow.points = points
-	glow.width = width + 1.2
-	glow.default_color = Color(color.r, color.g, color.b, color.a * 0.28)
-	glow.texture_mode = Line2D.LINE_TEXTURE_NONE
-	glow.antialiased = true
-	glow.z_index = 0
-	_bg_crack_layer.add_child(glow)
-
-	var line := Line2D.new()
-	line.points = points
-	line.width = width
-	line.default_color = color
-	line.texture_mode = Line2D.LINE_TEXTURE_NONE
-	line.antialiased = true
-	line.z_index = 1
-	_bg_crack_layer.add_child(line)
+	_ambient_fx.rebuild_background_cracks(cracked_background_enabled, cracked_background_impacts)
 
 func _ensure_toxic_bubble_layer() -> void:
-	if _toxic_bubble_layer != null and is_instance_valid(_toxic_bubble_layer):
-		_ensure_toxic_chat_box()
-		return
-	_toxic_bubble_layer = Control.new()
-	_toxic_bubble_layer.name = "ToxicBubbleLayer"
-	_toxic_bubble_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toxic_bubble_layer.top_level = true
-	_toxic_bubble_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_toxic_bubble_layer.z_index = 120
-	add_child(_toxic_bubble_layer)
-	var screens := get_node_or_null("Screens")
-	if screens != null:
-		move_child(_toxic_bubble_layer, screens.get_index())
-	_ensure_toxic_chat_box()
+	_ambient_fx.ensure_toxic_bubble_layer()
 
 func _start_toxic_bubble_loop() -> void:
-	if not toxic_bubbles_enabled:
-		return
-	_ensure_toxic_bubble_layer()
-	if _toxic_bubble_timer != null and is_instance_valid(_toxic_bubble_timer):
-		return
-	_toxic_bubble_timer = Timer.new()
-	_toxic_bubble_timer.name = "ToxicBubbleTimer"
-	_toxic_bubble_timer.one_shot = true
-	_toxic_bubble_timer.autostart = false
-	add_child(_toxic_bubble_timer)
-	_toxic_bubble_timer.timeout.connect(_on_toxic_bubble_timer_timeout)
-	_schedule_next_toxic_bubble()
-
-func _schedule_next_toxic_bubble() -> void:
-	if _toxic_bubble_timer == null or not is_instance_valid(_toxic_bubble_timer):
-		return
-	_toxic_bubble_timer.wait_time = randf_range(0.34, 0.9)
-	_toxic_bubble_timer.start()
-
-func _on_toxic_bubble_timer_timeout() -> void:
-	if toxic_bubbles_enabled and _current_screen == screen_main:
-		_spawn_toxic_bubble()
-	_schedule_next_toxic_bubble()
-
-func _spawn_toxic_bubble() -> void:
-	if _toxic_bubble_layer == null or not is_instance_valid(_toxic_bubble_layer):
-		return
-	_ensure_toxic_chat_box()
-	if _toxic_chat_list == null or not is_instance_valid(_toxic_chat_list):
-		return
-	var user := str(TOXIC_CHAT_USERS[randi() % TOXIC_CHAT_USERS.size()])
-	var msg := str(TOXIC_BUBBLE_LINES[randi() % TOXIC_BUBBLE_LINES.size()])
-	var row_bbcode := "[b]%s[/b]: %s" % [user, msg]
-
-	var label := RichTextLabel.new()
-	label.bbcode_enabled = true
-	label.text = row_bbcode
-	label.fit_content = true
-	label.scroll_active = false
-	label.selection_enabled = false
-	label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	label.visible_ratio = 1.0
-	label.clip_contents = false
-	label.custom_minimum_size = Vector2(0.0, 13.0)
-	label.add_theme_font_override("normal_font", PIXEL_FONT_CHAT)
-	label.add_theme_font_override("bold_font", PIXEL_FONT_BOLD)
-	label.add_theme_font_size_override("normal_font_size", 10)
-	label.add_theme_font_size_override("bold_font_size", 10)
-	label.add_theme_color_override("default_color", Color(0.95, 0.98, 1.0, 0.74))
-	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.0))
-	label.add_theme_constant_override("outline_size", 0)
-	_toxic_chat_list.add_child(label)
-	_toxic_chat_entries.append(label)
-	if _toxic_chat_entries.size() > 8:
-		var oldest = _toxic_chat_entries[0]
-		_toxic_chat_entries.remove_at(0)
-		if oldest != null and is_instance_valid(oldest):
-			var out_tw := create_tween()
-			out_tw.tween_property(oldest, "modulate:a", 0.0, 0.18)
-			out_tw.finished.connect(func() -> void:
-				if oldest != null and is_instance_valid(oldest):
-					oldest.queue_free()
-			)
-
-	_layout_toxic_chat_stack()
-
-	var tw := create_tween()
-	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tw.tween_property(label, "modulate:a", 1.0, 0.08)
+	_ambient_fx.start_toxic_bubble_loop(toxic_bubbles_enabled)
 
 func _layout_toxic_chat_stack() -> void:
-	if _toxic_bubble_layer == null or not is_instance_valid(_toxic_bubble_layer):
-		return
-	if _toxic_chat_box == null or not is_instance_valid(_toxic_chat_box):
-		return
-	var fixed_box_size := TOXIC_CHAT_BOX_SIZE
-	_toxic_chat_box.custom_minimum_size = fixed_box_size
-	_toxic_chat_box.size = fixed_box_size
-	_toxic_chat_box.scale = Vector2.ONE
-	if not _toxic_chat_position_locked:
-		var anchor := _main_warrior_message_anchor_pos()
-		var viewport_size := get_viewport_rect().size
-		var box_size := fixed_box_size
-		var x := clampf(anchor.x - box_size.x * 0.5, 8.0, maxf(10.0, viewport_size.x - box_size.x - 8.0))
-		var y := clampf(anchor.y - box_size.y - 10.0, 8.0, maxf(10.0, viewport_size.y - box_size.y - 8.0))
-		_toxic_chat_locked_position = Vector2(x, y)
-		_toxic_chat_position_locked = true
-	_toxic_chat_box.position = _toxic_chat_locked_position
-	_trim_toxic_chat_entries_to_fit()
-
-	for i in range(_toxic_chat_entries.size()):
-		var entry = _toxic_chat_entries[i]
-		if entry == null or not is_instance_valid(entry):
-			continue
-		var row := entry as RichTextLabel
-		if row == null:
-			continue
-		var age := (_toxic_chat_entries.size() - 1) - i
-		var alpha := clampf(0.82 - float(age) * 0.10, 0.20, 0.82)
-		row.modulate.a = alpha
+	_ambient_fx.layout_toxic_chat_stack()
 
 func _process(_delta: float) -> void:
-	if _toxic_chat_box == null or not is_instance_valid(_toxic_chat_box):
-		return
-	if _toxic_chat_box.custom_minimum_size != TOXIC_CHAT_BOX_SIZE:
-		_toxic_chat_box.custom_minimum_size = TOXIC_CHAT_BOX_SIZE
-	if _toxic_chat_box.size != TOXIC_CHAT_BOX_SIZE:
-		_toxic_chat_box.size = TOXIC_CHAT_BOX_SIZE
-	if _toxic_chat_box.scale != Vector2.ONE:
-		_toxic_chat_box.scale = Vector2.ONE
-	if _toxic_chat_position_locked and _toxic_chat_box.position != _toxic_chat_locked_position:
-		_toxic_chat_box.position = _toxic_chat_locked_position
+	_ambient_fx.process_tick()
+func _get_current_screen() -> Control:
+	return _current_screen
 
-func _trim_toxic_chat_entries_to_fit() -> void:
-	if _toxic_chat_box == null or not is_instance_valid(_toxic_chat_box):
-		return
-	if _toxic_chat_list == null or not is_instance_valid(_toxic_chat_list):
-		return
-	if _toxic_chat_entries.is_empty():
-		return
-	var max_rows_height := maxf(0.0, _toxic_chat_box.custom_minimum_size.y - float(TOXIC_CHAT_MARGIN_Y * 2))
-	var used_height := 0.0
-	var first_keep_index := 0
-	var needs_trim := false
-	for i in range(_toxic_chat_entries.size() - 1, -1, -1):
-		var row := _toxic_chat_entries[i] as RichTextLabel
-		if row == null or not is_instance_valid(row):
-			first_keep_index = i + 1
-			needs_trim = true
-			break
-		var row_height := maxf(row.custom_minimum_size.y, maxf(row.get_combined_minimum_size().y, row.size.y))
-		var required_height := row_height
-		if used_height > 0.0:
-			required_height += float(TOXIC_CHAT_ROW_SEPARATION)
-		if used_height + required_height > max_rows_height:
-			first_keep_index = i + 1
-			needs_trim = true
-			break
-		used_height += required_height
-	if not needs_trim or first_keep_index <= 0:
-		return
-	for i in range(first_keep_index):
-		var old_row = _toxic_chat_entries[i]
-		if old_row != null and is_instance_valid(old_row):
-			old_row.queue_free()
-	_toxic_chat_entries = _toxic_chat_entries.slice(first_keep_index, _toxic_chat_entries.size())
+func _get_warrior_username_label() -> Label:
+	return _warrior_username_label
 
-func _ensure_toxic_chat_box() -> void:
-	if _toxic_bubble_layer == null or not is_instance_valid(_toxic_bubble_layer):
-		return
-	if _toxic_chat_box != null and is_instance_valid(_toxic_chat_box):
-		return
-	_toxic_chat_box = Panel.new()
-	_toxic_chat_box.name = "ToxicChatBox"
-	_toxic_chat_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toxic_chat_box.top_level = true
-	_toxic_chat_box.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_toxic_chat_box.custom_minimum_size = TOXIC_CHAT_BOX_SIZE
-	_toxic_chat_box.size = _toxic_chat_box.custom_minimum_size
-	_toxic_chat_box.scale = Vector2.ONE
-	_toxic_chat_box.clip_contents = true
-	_toxic_chat_position_locked = false
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.05, 0.07, 0.14, 0.50)
-	sb.border_width_left = 0
-	sb.border_width_top = 0
-	sb.border_width_right = 0
-	sb.border_width_bottom = 0
-	sb.border_color = Color(0.0, 0.0, 0.0, 0.0)
-	sb.corner_radius_top_left = 0
-	sb.corner_radius_top_right = 0
-	sb.corner_radius_bottom_left = 0
-	sb.corner_radius_bottom_right = 0
-	_toxic_chat_box.add_theme_stylebox_override("panel", sb)
-	_toxic_bubble_layer.add_child(_toxic_chat_box)
+func _get_warrior_area() -> Control:
+	return warrior_area
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.clip_contents = true
-	margin.add_theme_constant_override("margin_left", TOXIC_CHAT_MARGIN_X)
-	margin.add_theme_constant_override("margin_right", TOXIC_CHAT_MARGIN_X)
-	margin.add_theme_constant_override("margin_top", TOXIC_CHAT_MARGIN_Y)
-	margin.add_theme_constant_override("margin_bottom", TOXIC_CHAT_MARGIN_Y)
-	_toxic_chat_box.add_child(margin)
-
-	_toxic_chat_list = VBoxContainer.new()
-	_toxic_chat_list.name = "Messages"
-	_toxic_chat_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_toxic_chat_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_toxic_chat_list.clip_contents = true
-	_toxic_chat_list.alignment = BoxContainer.ALIGNMENT_END
-	_toxic_chat_list.add_theme_constant_override("separation", TOXIC_CHAT_ROW_SEPARATION)
-	margin.add_child(_toxic_chat_list)
-	_layout_toxic_chat_stack()
-
-func _main_warrior_message_anchor_pos() -> Vector2:
-	var fallback := Vector2(get_viewport_rect().size.x * 0.5, get_viewport_rect().size.y * 0.5)
-	if _warrior_username_label != null and is_instance_valid(_warrior_username_label) and _warrior_username_label.visible:
-		var username_rect := _warrior_username_label.get_global_rect()
-		return username_rect.position + Vector2(username_rect.size.x * 0.5, 0.0)
-	if warrior_area != null:
-		var area_rect := warrior_area.get_global_rect()
-		fallback = area_rect.position + Vector2(area_rect.size.x * 0.5, area_rect.size.y * 0.28)
-	if main_warrior_preview == null:
-		return fallback
-	var head_node := main_warrior_preview.get_node_or_null("VisualRoot/head")
-	if head_node is Node2D:
-		return (head_node as Node2D).global_position
-	if main_warrior_preview is Node2D:
-		return (main_warrior_preview as Node2D).global_position + Vector2(0.0, -34.0)
-	return fallback
+func _get_main_warrior_preview() -> Node:
+	return main_warrior_preview

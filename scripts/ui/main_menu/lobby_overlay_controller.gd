@@ -5,6 +5,10 @@ const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
 const LOBBY_CHAT_CONTROLLER_SCRIPT := preload("res://scripts/ui/main_menu/lobby_chat_controller.gd")
+const LOBBY_CONNECTION_CONFIG_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/lobby_connection_config_controller.gd")
+const LOBBY_CONNECTION_LIFECYCLE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/lobby_connection_lifecycle_controller.gd")
+const LOBBY_ROOM_ACTIONS_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/lobby_room_actions_controller.gd")
+const LOBBY_ROOM_STATE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/lobby_room_state_controller.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const CONNECT_WATCHDOG_CHECK_INTERVAL_SEC := 1.0
 const CONNECT_WATCHDOG_MAX_WAIT_SEC := 35.0
@@ -100,6 +104,10 @@ var _map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
 var _selected_mode_id := "deathmatch"
 var _selected_map_id := ""
 var _lobby_chat_ctrl = LOBBY_CHAT_CONTROLLER_SCRIPT.new()
+var _connection_config_ctrl = LOBBY_CONNECTION_CONFIG_CTRL_SCRIPT.new()
+var _connection_lifecycle_ctrl = LOBBY_CONNECTION_LIFECYCLE_CTRL_SCRIPT.new()
+var _room_actions_ctrl = LOBBY_ROOM_ACTIONS_CTRL_SCRIPT.new()
+var _room_state_ctrl = LOBBY_ROOM_STATE_CTRL_SCRIPT.new()
 
 func _log(message: String) -> void:
 	print("[lobby_overlay] %s" % message)
@@ -123,6 +131,10 @@ func configure(
 	_center_of = center_of
 	_on_closed = on_closed
 	_lobby_chat_ctrl.configure(Callable(self, "_send_lobby_chat_message"))
+	_connection_config_ctrl.configure(self)
+	_connection_lifecycle_ctrl.configure(self, LOBBY_RPC_BRIDGE_SCRIPT)
+	_room_actions_ctrl.configure(self)
+	_room_state_ctrl.configure(self)
 
 func _send_lobby_chat_message(message: String) -> bool:
 	if _rpc_bridge == null or not is_instance_valid(_rpc_bridge):
@@ -292,7 +304,7 @@ func _selected_warrior_id() -> String:
 	var selected_character_id := "outrage"
 	if _host != null:
 		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro" and selected_character_id != "nova" and selected_character_id != "hindi" and selected_character_id != "loker":
 		selected_character_id = "outrage"
 	return selected_character_id
 
@@ -336,369 +348,52 @@ func sync_current_loadout_to_lobby() -> void:
 	_sync_selected_weapon_skin()
 
 func _resolve_server_host_port_from_args(host: String = "127.0.0.1", port: int = 8080) -> Dictionary:
-	var resolved_host := host.strip_edges()
-	var resolved_port := clampi(port, 1, 65535)
-	if resolved_host.is_empty():
-		resolved_host = "127.0.0.1"
-	if _host != null:
-		var args := OS.get_cmdline_user_args()
-		for arg in args:
-			if arg.begins_with("--host="):
-				resolved_host = arg.substr("--host=".length()).strip_edges()
-			elif arg.begins_with("--port="):
-				var parsed := int(arg.substr("--port=".length()))
-				if parsed >= 1 and parsed <= 65535:
-					resolved_port = parsed
-	if resolved_host.is_empty():
-		resolved_host = "127.0.0.1"
-	return {"host": resolved_host, "port": resolved_port}
+	return _connection_config_ctrl.resolve_server_host_port_from_args(host, port)
 
 func _read_launcher_config_defaults() -> Dictionary:
-	var candidate_paths := PackedStringArray()
-	var executable_config := OS.get_executable_path().get_base_dir().path_join("launcher_config.json")
-	candidate_paths.append(executable_config)
-	candidate_paths.append("res://build/release/launcher_config.json")
-	candidate_paths.append("res://build/launcher/launcher_config.json")
-	candidate_paths.append("res://launcher/launcher_config.json")
-
-	for path in candidate_paths:
-		if not FileAccess.file_exists(path):
-			continue
-		var file := FileAccess.open(path, FileAccess.READ)
-		if file == null:
-			continue
-		var parsed: Variant = JSON.parse_string(file.get_as_text())
-		if not (parsed is Dictionary):
-			continue
-		var payload := parsed as Dictionary
-		return {
-			"found": true,
-			"host": str(payload.get("default_host", "")).strip_edges(),
-			"port": int(payload.get("default_port", 8080))
-		}
-
-	return {"found": false}
+	return _connection_config_ctrl.read_launcher_config_defaults()
 
 func _resolve_server_host_port() -> Dictionary:
-	var host := "127.0.0.1"
-	var port := 8080
-	var config := _read_launcher_config_defaults()
-	if bool(config.get("found", false)):
-		var config_host := str(config.get("host", "")).strip_edges()
-		var config_port := int(config.get("port", 8080))
-		if not config_host.is_empty():
-			host = config_host
-		if config_port >= 1 and config_port <= 65535:
-			port = config_port
-	var resolved := _resolve_server_host_port_from_args(host, port)
-	_log("resolved primary server endpoint=%s:%d config_found=%s" % [
-		str(resolved.get("host", "")),
-		int(resolved.get("port", 0)),
-		str(bool(config.get("found", false)))
-	])
-	return resolved
+	return _connection_config_ctrl.resolve_server_host_port()
 
 func _resolve_auth_api_host_port() -> Dictionary:
-	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://updates.outrage.ink:8081/auth")).strip_edges()
-	if configured.is_empty():
-		return {"host": "", "port": 8080}
-	var scheme_idx := configured.find("://")
-	if scheme_idx >= 0:
-		configured = configured.substr(scheme_idx + 3)
-	var slash_idx := configured.find("/")
-	if slash_idx >= 0:
-		configured = configured.substr(0, slash_idx)
-	var host := configured
-	var port := 8080
-	var colon_idx := configured.rfind(":")
-	if colon_idx > 0:
-		host = configured.substr(0, colon_idx)
-		var parsed_port := int(configured.substr(colon_idx + 1))
-		if parsed_port >= 1 and parsed_port <= 65535:
-			port = parsed_port
-	return {"host": host.strip_edges(), "port": port}
+	return _connection_config_ctrl.resolve_auth_api_host_port()
 
 func _build_connect_candidates() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var seen := {}
-	var resolved_primary := _resolve_server_host_port()
-	var from_args := _resolve_server_host_port_from_args(
-		str(resolved_primary.get("host", "")).strip_edges(),
-		int(resolved_primary.get("port", 8080))
-	)
-	for endpoint in [resolved_primary, from_args]:
-		var host := str(endpoint.get("host", "")).strip_edges()
-		var port := int(endpoint.get("port", 8080))
-		if host.is_empty() or port < 1 or port > 65535:
-			continue
-		var host_lc := host.to_lower()
-		var is_localhost := host_lc == "localhost" or host_lc == "127.0.0.1" or host_lc == "::1"
-		if is_localhost and not ALLOW_LOCALHOST_LOBBY_CONNECT:
-			continue
-		var key := "%s:%d" % [host, port]
-		if seen.has(key):
-			continue
-		seen[key] = true
-		out.append({"host": host, "port": port})
-		for fallback_port_value in CONNECT_FALLBACK_PORTS:
-			var fallback_port := int(fallback_port_value)
-			if fallback_port < 1 or fallback_port > 65535 or fallback_port == port:
-				continue
-			var fallback_key := "%s:%d" % [host, fallback_port]
-			if seen.has(fallback_key):
-				continue
-			seen[fallback_key] = true
-			out.append({"host": host, "port": fallback_port})
-		# NAT loopback on UDP is often disabled on home routers.
-		# Add LAN/local fallbacks so same-network tests can still connect.
-		var local_hosts := _local_connect_fallback_hosts()
-		for local_host_value in local_hosts:
-			var local_host := str(local_host_value).strip_edges()
-			if local_host.is_empty():
-				continue
-			var local_key := "%s:%d" % [local_host, port]
-			if not seen.has(local_key):
-				seen[local_key] = true
-				out.append({"host": local_host, "port": port})
-			for fallback_port_value in CONNECT_FALLBACK_PORTS:
-				var fallback_port := int(fallback_port_value)
-				if fallback_port < 1 or fallback_port > 65535 or fallback_port == port:
-					continue
-				var local_fallback_key := "%s:%d" % [local_host, fallback_port]
-				if seen.has(local_fallback_key):
-					continue
-				seen[local_fallback_key] = true
-				out.append({"host": local_host, "port": fallback_port})
-	_log("connect candidates=%s" % str(out))
-	return out
+	return _connection_config_ctrl.build_connect_candidates()
 
 func _local_connect_fallback_hosts() -> PackedStringArray:
-	var out := PackedStringArray()
-	out.append("127.0.0.1")
-	out.append("localhost")
-	for address_value in IP.get_local_addresses():
-		var address := str(address_value).strip_edges()
-		if address.is_empty():
-			continue
-		if not address.contains("."):
-			continue
-		if address.begins_with("127."):
-			continue
-		if address.begins_with("169.254."):
-			continue
-		if out.has(address):
-			continue
-		out.append(address)
-	return out
+	return _connection_config_ctrl.local_connect_fallback_hosts()
 
 func _begin_connect_attempt(force_restart: bool, reason: String = "Connecting...", allow_while_connecting: bool = false) -> void:
-	if _rpc_bridge == null:
-		_log("begin_connect_attempt aborted rpc_bridge=null")
-		return
-	if not allow_while_connecting and not force_restart and bool(_rpc_bridge.call("is_connecting_to_server")):
-		_log("begin_connect_attempt skipped already connecting")
-		if _status_label != null:
-			_status_label.text = "Connecting to lobby server..."
-		_refresh_lobby_buttons_state()
-		return
-	if force_restart or _connect_candidates.is_empty():
-		_connect_candidates = _build_connect_candidates()
-		_connect_candidate_index = 0
-		_connect_attempt_in_candidate = 0
-	if _connect_candidate_index < 0 or _connect_candidate_index >= _connect_candidates.size():
-		_connect_candidates = _build_connect_candidates()
-		_connect_candidate_index = 0
-		_connect_attempt_in_candidate = 0
-	if _connect_candidates.is_empty():
-		_log("begin_connect_attempt failed no candidates")
-		if _status_label != null:
-			_status_label.text = "No lobby server host configured"
-		_action_inflight = false
-		_refresh_lobby_buttons_state()
-		return
-	var endpoint := _connect_candidates[_connect_candidate_index] as Dictionary
-	var host := str(endpoint.get("host", "127.0.0.1"))
-	var port := int(endpoint.get("port", 8080))
-	_connect_attempt_in_candidate += 1
-	_log("begin_connect_attempt force_restart=%s reason=%s candidate_index=%d target=%s:%d pending_create=%s" % [
-		str(force_restart),
-		reason,
-		_connect_candidate_index,
-		host,
-		port,
-		str(not _pending_create_request.is_empty())
-	])
-	_log("begin_connect_attempt candidate_try=%d/%d for %s:%d" % [
-		_connect_attempt_in_candidate,
-		CONNECT_ATTEMPTS_PER_CANDIDATE,
-		host,
-		port
-	])
-	if _status_label != null:
-		_status_label.text = "%s %s:%d..." % [reason, host, port]
-	_rpc_bridge.call("disconnect_from_server")
-	_rpc_bridge.call("connect_to_server", host, port)
-	_start_connect_watchdog()
-	_refresh_lobby_buttons_state()
+	_connection_lifecycle_ctrl.begin_connect_attempt(force_restart, reason, allow_while_connecting)
 
 func _start_connect_watchdog() -> void:
-	if _host == null or _host.get_tree() == null:
-		return
-	_connect_nonce += 1
-	var nonce := _connect_nonce
-	_log("start_connect_watchdog nonce=%d" % nonce)
-	_tick_connect_watchdog(nonce, 0.0)
+	_connection_lifecycle_ctrl.start_connect_watchdog()
 
 func _tick_connect_watchdog(nonce: int, elapsed_sec: float) -> void:
-	if _host == null or _host.get_tree() == null:
-		return
-	var timer := _host.get_tree().create_timer(CONNECT_WATCHDOG_CHECK_INTERVAL_SEC)
-	timer.timeout.connect(func() -> void:
-		if nonce != _connect_nonce:
-			return
-		if _rpc_bridge == null:
-			return
-		if bool(_rpc_bridge.call("can_send_lobby_rpc")):
-			_log("watchdog nonce=%d sees connected rpc bridge" % nonce)
-			return
-		var still_connecting := bool(_rpc_bridge.call("is_connecting_to_server"))
-		var next_elapsed := elapsed_sec + CONNECT_WATCHDOG_CHECK_INTERVAL_SEC
-		if still_connecting and next_elapsed < CONNECT_WATCHDOG_MAX_WAIT_SEC:
-			_tick_connect_watchdog(nonce, next_elapsed)
-			return
-		if still_connecting:
-			_log("watchdog nonce=%d max_wait reached (%.1fs) while connecting; advancing candidate" % [nonce, next_elapsed])
-			_handle_failed_connect_attempt("watchdog_max_wait")
-			return
-		_log("watchdog nonce=%d peer no longer connecting; advancing candidate" % nonce)
-		_handle_failed_connect_attempt("watchdog_not_connecting")
-	)
+	_connection_lifecycle_ctrl.tick_connect_watchdog(nonce, elapsed_sec)
 
 func _handle_failed_connect_attempt(source: String) -> void:
-	if _connect_candidate_index < 0 or _connect_candidate_index >= _connect_candidates.size():
-		_try_next_connect_candidate()
-		return
-	var endpoint := _connect_candidates[_connect_candidate_index] as Dictionary
-	var host := str(endpoint.get("host", "127.0.0.1"))
-	var port := int(endpoint.get("port", 8080))
-	_log("connect attempt failed source=%s candidate_index=%d try=%d/%d target=%s:%d" % [
-		source,
-		_connect_candidate_index,
-		_connect_attempt_in_candidate,
-		CONNECT_ATTEMPTS_PER_CANDIDATE,
-		host,
-		port
-	])
-	# Fast-fail when ENet already reported a hard failure for this endpoint.
-	if source == "connection_failed":
-		_try_next_connect_candidate()
-		return
-	if _connect_attempt_in_candidate < CONNECT_ATTEMPTS_PER_CANDIDATE:
-		_begin_connect_attempt(false, "Retrying", true)
-		return
-	_try_next_connect_candidate()
+	_connection_lifecycle_ctrl.handle_failed_connect_attempt(source)
 
 func _try_next_connect_candidate() -> void:
-	_connect_candidate_index += 1
-	_connect_attempt_in_candidate = 0
-	_log("try_next_connect_candidate next_index=%d total=%d" % [_connect_candidate_index, _connect_candidates.size()])
-	if _connect_candidate_index >= _connect_candidates.size():
-		var had_pending_create := not _pending_create_request.is_empty()
-		if _rpc_bridge != null:
-			_rpc_bridge.call("disconnect_from_server")
-		_action_inflight = false
-		_lobby_list_ready = true
-		_room_entries = []
-		_pending_create_request = {}
-		_log("all connect candidates exhausted")
-		if _status_label != null:
-			_status_label.text = "Lobby server unavailable. Online create failed." if had_pending_create else "Connection failed. Try Refresh."
-		_populate_lobby_room_list()
-		_refresh_lobby_selection_summary()
-		_refresh_lobby_buttons_state()
-		return
-	_begin_connect_attempt(false, "Retrying", true)
+	_connection_lifecycle_ctrl.try_next_connect_candidate()
 
 func _request_lobby_list_from_server() -> void:
-	if _rpc_bridge == null:
-		_log("request_lobby_list aborted rpc_bridge=null")
-		return
-	if _rpc_bridge.call("can_send_lobby_rpc"):
-		_log("request_lobby_list sending immediately")
-		_rpc_bridge.call("request_lobby_list")
-		_refresh_lobby_buttons_state()
-		return
-	if bool(_rpc_bridge.call("is_connecting_to_server")):
-		_log("request_lobby_list waiting existing connect attempt")
-		return
-	_log("request_lobby_list triggering connect first")
-	_begin_connect_attempt(false)
+	_connection_lifecycle_ctrl.request_lobby_list_from_server()
 
 func _ensure_rpc_bridge() -> void:
-	if _rpc_bridge != null and is_instance_valid(_rpc_bridge):
-		return
-	if _host == null or _host.get_tree() == null:
-		return
-	_rpc_bridge = LOBBY_RPC_BRIDGE_SCRIPT.new()
-	_rpc_bridge.call("ensure_attached", _host.get_tree())
-	if not _rpc_bridge.connected_to_lobby_server.is_connected(_on_rpc_connected):
-		_rpc_bridge.connected_to_lobby_server.connect(_on_rpc_connected)
-	if not _rpc_bridge.lobby_connection_failed.is_connected(_on_rpc_failed):
-		_rpc_bridge.lobby_connection_failed.connect(_on_rpc_failed)
-	if not _rpc_bridge.lobby_server_disconnected.is_connected(_on_rpc_disconnected):
-		_rpc_bridge.lobby_server_disconnected.connect(_on_rpc_disconnected)
-	if not _rpc_bridge.lobby_list_received.is_connected(_on_rpc_lobby_list):
-		_rpc_bridge.lobby_list_received.connect(_on_rpc_lobby_list)
-	if not _rpc_bridge.lobby_action_result_received.is_connected(_on_rpc_action_result):
-		_rpc_bridge.lobby_action_result_received.connect(_on_rpc_action_result)
-	if not _rpc_bridge.lobby_room_state_received.is_connected(_on_rpc_room_state):
-		_rpc_bridge.lobby_room_state_received.connect(_on_rpc_room_state)
-	if _rpc_bridge.has_signal("lobby_chat_received"):
-		if not _rpc_bridge.lobby_chat_received.is_connected(_on_rpc_lobby_chat_message):
-			_rpc_bridge.lobby_chat_received.connect(_on_rpc_lobby_chat_message)
+	_connection_lifecycle_ctrl.ensure_rpc_bridge()
 
 func _on_rpc_connected() -> void:
-	_connect_nonce += 1
-	_log("rpc connected peer_id=%s pending_create=%s" % [
-		str(_host.get_tree().get_multiplayer().get_unique_id() if _host != null and _host.get_tree() != null else -1),
-		str(not _pending_create_request.is_empty())
-	])
-	if _status_label != null:
-		_status_label.text = "Connected. Fetching lobbies..."
-	if _host != null:
-		var username := str(_host.get("player_username")).strip_edges()
-		if not username.is_empty():
-			_rpc_bridge.call("set_display_name", username)
-	_sync_selected_warrior_skin()
-	_sync_selected_weapon_skin()
-	if not _pending_create_request.is_empty():
-		_send_create_lobby_request(_pending_create_request)
-		return
-	_rpc_bridge.call("request_lobby_list")
-	_refresh_lobby_buttons_state()
+	_connection_lifecycle_ctrl.on_rpc_connected()
 
 func _on_rpc_failed() -> void:
-	_log("rpc connection_failed signal")
-	_handle_failed_connect_attempt("connection_failed")
+	_connection_lifecycle_ctrl.on_rpc_failed()
 
 func _on_rpc_disconnected() -> void:
-	_connect_nonce += 1
-	_lobby_list_ready = false
-	_joined_lobby_id = 0
-	_joined_room_name = ""
-	if _action_inflight:
-		_log("rpc disconnected while action inflight; keeping pending request")
-	else:
-		_pending_create_request = {}
-	_action_inflight = false
-	_ctf_room_state.clear()
-	_refresh_lobby_chat_context()
-	_log("rpc disconnected signal")
-	if _status_label != null:
-		_status_label.text = "Disconnected from server"
-	_hide_ctf_room()
-	_hide_dm_room()
-	_refresh_lobby_buttons_state()
+	_connection_lifecycle_ctrl.on_rpc_disconnected()
 
 func _on_rpc_lobby_list(entries: Array, active_lobby_id: int) -> void:
 	_log("lobby_list received entries=%d active_lobby_id=%d" % [entries.size(), active_lobby_id])
@@ -819,307 +514,40 @@ func _on_rpc_room_state(payload: Dictionary) -> void:
 	_hide_dm_room()
 
 func _begin_lobby_action(status_text: String) -> int:
-	_action_inflight = true
-	_action_nonce += 1
-	var nonce := _action_nonce
-	if _status_label != null:
-		_status_label.text = status_text
-	_refresh_lobby_buttons_state()
-	if _host != null and _host.get_tree() != null:
-		var timer := _host.get_tree().create_timer(6.0)
-		timer.timeout.connect(func() -> void:
-			if nonce != _action_nonce:
-				return
-			if not _action_inflight:
-				return
-			_action_inflight = false
-			if _status_label != null:
-				_status_label.text = "Lobby request timed out. Try refresh."
-			_refresh_lobby_buttons_state()
-		)
-	return nonce
+	return _room_actions_ctrl.begin_lobby_action(status_text)
 
 func _populate_lobby_room_list() -> void:
-	if _rooms_box == null:
-		return
-
-	for b in _room_buttons:
-		if b != null:
-			b.queue_free()
-	_room_buttons.clear()
-	_selected_room_index = -1
-
-	for i in range(_room_entries.size()):
-		var entry := _room_entries[i] as Dictionary
-		var btn: Button = (_make_button.call() as Button) if _make_button.is_valid() else Button.new()
-		btn.custom_minimum_size = Vector2(0, 30)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.add_theme_font_size_override("font_size", 8)
-		var lobby_id := int(entry.get("id", 0))
-		var room_name := str(entry.get("name", "Room"))
-		var players := int(entry.get("players", 0))
-		var max_players := int(entry.get("max_players", 2))
-		var map_id := str(entry.get("map_name", entry.get("map_id", "classic"))).to_upper()
-		var mode_id := str(entry.get("mode_name", entry.get("mode_id", "deathmatch"))).to_upper()
-		var in_room := lobby_id > 0 and lobby_id == _joined_lobby_id
-		var suffix := "  [IN]" if in_room else ""
-		btn.text = "#%d  %s   |   %d/%d   |   %s | %s%s" % [lobby_id, room_name, players, max_players, map_id, mode_id, suffix]
-		btn.set_meta("kw_room_base_text", btn.text)
-		btn.pressed.connect(func() -> void:
-			_select_lobby_room(i)
-		)
-		if _add_hover_pop.is_valid():
-			_add_hover_pop.call(btn)
-		_apply_button_palette(btn, MENU_PALETTE.accent(0.94), MENU_PALETTE.highlight(0.95))
-		btn.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
-		btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
-		btn.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_primary(1.0))
-		_rooms_box.add_child(btn)
-		if _center_pivot.is_valid():
-			_center_pivot.call(btn)
-		_room_buttons.append(btn)
-
-	if _room_entries.size() > 0:
-		var preselect := 0
-		for i in range(_room_entries.size()):
-			var entry := _room_entries[i] as Dictionary
-			if int(entry.get("id", 0)) == _joined_lobby_id:
-				preselect = i
-				break
-		_select_lobby_room(preselect)
-	else:
-		if _join_button != null:
-			_join_button.disabled = true
-		if _status_label != null:
-			_status_label.text = "No lobbies yet. Create one."
-	_refresh_lobby_buttons_state()
+	_room_actions_ctrl.populate_lobby_room_list()
 
 func _select_lobby_room(index: int) -> void:
-	if index < 0 or index >= _room_entries.size():
-		return
-	_selected_room_index = index
-	for i in range(_room_buttons.size()):
-		var btn := _room_buttons[i]
-		if btn == null:
-			continue
-		_apply_room_button_selected_style(btn, i == index)
-	if _join_button != null:
-		_join_button.disabled = false
-	_refresh_lobby_selection_summary()
-	_refresh_lobby_buttons_state()
+	_room_actions_ctrl.select_lobby_room(index)
 
 func _apply_room_button_selected_style(btn: Button, selected: bool) -> void:
-	if btn == null:
-		return
-	var base_text := str(btn.get_meta("kw_room_base_text", btn.text))
-	btn.text = ("> " + base_text) if selected else base_text
-	if selected:
-		btn.modulate = Color(1, 1, 1, 1)
-		btn.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
-		btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
-		var selected_style := StyleBoxFlat.new()
-		selected_style.bg_color = MENU_PALETTE.hot(0.96)
-		selected_style.border_width_left = 2
-		selected_style.border_width_top = 2
-		selected_style.border_width_right = 2
-		selected_style.border_width_bottom = 2
-		selected_style.border_color = MENU_PALETTE.highlight(1.0)
-		btn.add_theme_stylebox_override("normal", selected_style)
-		btn.add_theme_stylebox_override("hover", selected_style)
-		btn.add_theme_stylebox_override("pressed", selected_style)
-		btn.add_theme_stylebox_override("focus", selected_style)
-		return
-	btn.modulate = Color(1, 1, 1, 1)
-	_apply_button_palette(btn, MENU_PALETTE.accent(0.94), MENU_PALETTE.highlight(0.95))
-	btn.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
-	btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
-	btn.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_primary(1.0))
+	_room_actions_ctrl.apply_room_button_selected_style(btn, selected)
 
 func _refresh_lobby_selection_summary() -> void:
-	if _selection_label == null:
-		return
-	if not _ctf_room_state.is_empty() and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id)):
-		_selection_label.text = "Team room: %s" % _joined_room_name
-		return
-	if not _ctf_room_state.is_empty() and _is_free_for_all_mode_id(_active_lobby_mode_id(_joined_lobby_id)) and not bool(_ctf_room_state.get("started", false)):
-		_selection_label.text = "Waiting room: %s" % _joined_room_name
-		return
-	if _joined_room_name.is_empty():
-		if _room_entries.is_empty():
-			_selection_label.text = "No active lobbies"
-		else:
-			_selection_label.text = "Select a room and press JOIN"
-	else:
-		_selection_label.text = "In room: %s" % _joined_room_name
+	_room_actions_ctrl.refresh_lobby_selection_summary()
 
 func _join_selected_lobby_room() -> void:
-	if _selected_room_index < 0 or _selected_room_index >= _room_entries.size():
-		return
-	var room := _room_entries[_selected_room_index] as Dictionary
-	var lobby_id := int(room.get("id", 0))
-	var room_name := str(room.get("name", "room"))
-	if _rpc_bridge == null or lobby_id <= 0:
-		return
-
-	if _joined_lobby_id == lobby_id:
-		if _status_label != null:
-			_status_label.text = "Already in %s" % room_name
-		_refresh_lobby_selection_summary()
-		_refresh_lobby_buttons_state()
-		return
-
-	var selected_weapon_id := _selected_weapon_id()
-	var selected_character_id := _selected_warrior_id()
-	_persist_local_loadout_selection()
-	_sync_selected_warrior_skin()
-	_sync_selected_weapon_skin()
-	_begin_lobby_action("Joining %s..." % room_name)
-	var sent_join := bool(_rpc_bridge.call("join_lobby", lobby_id, selected_weapon_id, selected_character_id))
-	if _status_label != null:
-		_status_label.text = ("Joining %s..." % room_name) if sent_join else "Still connecting..."
-	if not sent_join:
-		_action_inflight = false
-		_request_lobby_list_from_server()
-	_refresh_lobby_selection_summary()
-	_refresh_lobby_buttons_state()
+	_room_actions_ctrl.join_selected_lobby_room()
 
 func _create_lobby_room() -> void:
-	if _rpc_bridge == null:
-		_log("create_lobby clicked but rpc_bridge=null")
-		return
-	var request := _build_create_lobby_request()
-	if _joined_lobby_id > 0:
-		_log("create_lobby while in lobby id=%d; leaving first then creating new lobby" % _joined_lobby_id)
-		_pending_create_request = request.duplicate(true)
-		if _status_label != null:
-			_status_label.text = "Leaving current lobby..."
-		_begin_lobby_action("Leaving current lobby...")
-		var sent_leave := bool(_rpc_bridge.call("leave_lobby"))
-		if not sent_leave:
-			_action_inflight = false
-			_request_lobby_list_from_server()
-		_refresh_lobby_buttons_state()
-		return
-	_log("create_lobby clicked request=%s can_send=%s" % [str(request), str(bool(_rpc_bridge.call("can_send_lobby_rpc")))])
-	if not bool(_rpc_bridge.call("can_send_lobby_rpc")):
-		_log("create_lobby has no active lobby-server connection; queueing reconnect for ONLINE lobby create")
-		_pending_create_request = request.duplicate(true)
-		if _status_label != null:
-			_status_label.text = "Connecting to lobby server..."
-		if bool(_rpc_bridge.call("is_connecting_to_server")):
-			_log("create_lobby queued while connect attempt is in-flight")
-		else:
-			_begin_connect_attempt(true, "Reconnecting")
-		_refresh_lobby_buttons_state()
-		return
-	_send_create_lobby_request(request)
+	_room_actions_ctrl.create_lobby_room()
 
 func _leave_lobby_room() -> void:
-	if _joined_lobby_id <= 0 and _joined_room_name.is_empty():
-		return
-	if _rpc_bridge == null:
-		return
-	var previous := _joined_room_name if not _joined_room_name.is_empty() else "lobby"
-	_begin_lobby_action("Leaving %s..." % previous)
-	var sent_leave := bool(_rpc_bridge.call("leave_lobby"))
-	if _status_label != null:
-		_status_label.text = ("Leaving %s..." % previous) if sent_leave else "Still connecting..."
-	if not sent_leave:
-		_action_inflight = false
-		_request_lobby_list_from_server()
-	_ctf_room_state.clear()
-	_hide_ctf_room()
-	_hide_dm_room()
-	_refresh_lobby_chat_context()
-	_refresh_lobby_selection_summary()
-	_refresh_lobby_buttons_state()
+	_room_actions_ctrl.leave_lobby_room()
 
 func _start_ctf_match() -> void:
 	_start_lobby_match("Starting CTF match...")
 
 func _start_lobby_match(status_text: String = "Starting match...") -> void:
-	if _rpc_bridge == null:
-		return
-	if _joined_lobby_id <= 0:
-		return
-	_begin_lobby_action(status_text)
-	var sent_start := bool(_rpc_bridge.call("start_lobby_match"))
-	if _status_label != null:
-		_status_label.text = status_text if sent_start else "Still connecting..."
-	if not sent_start:
-		_action_inflight = false
-		_request_lobby_list_from_server()
-	_refresh_lobby_buttons_state()
+	_room_actions_ctrl.start_lobby_match(status_text)
 
 func _build_create_lobby_request() -> Dictionary:
-	_ensure_valid_map_selection()
-	var dropdown_map_id := _selected_map_id
-	if _map_option != null:
-		var selected_index := _map_option.get_selected()
-		if selected_index >= 0 and selected_index < _map_option.get_item_count():
-			var selected_meta := str(_map_option.get_item_metadata(selected_index)).strip_edges().to_lower()
-			if not selected_meta.is_empty():
-				dropdown_map_id = _map_flow_service.normalize_map_id(_map_catalog, selected_meta)
-	_selected_map_id = dropdown_map_id
-	_selected_mode_id = _map_flow_service.select_mode_for_map(_map_catalog, _selected_map_id, _selected_mode_id)
-	var requested_name := "My Lobby %d" % (_room_entries.size() + 1)
-	var selected_weapon_id := _selected_weapon_id()
-	var selected_character_id := _selected_warrior_id()
-	var request := {
-		"name": requested_name,
-		"weapon_id": selected_weapon_id,
-		"character_id": selected_character_id,
-		"map_id": _selected_map_id,
-		"mode_id": _selected_mode_id,
-	}
-	_log("build_create_lobby_request selected_map_id=%s selected_mode_id=%s request=%s" % [_selected_map_id, _selected_mode_id, str(request)])
-	return request
+	return _room_actions_ctrl.build_create_lobby_request()
 
 func _send_create_lobby_request(request: Dictionary) -> void:
-	_pending_create_request = {}
-	_ensure_valid_map_selection()
-	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
-	var requested_name := str(request.get("name", "")).strip_edges()
-	var selected_weapon_id := str(request.get("weapon_id", "ak47")).strip_edges().to_lower()
-	var selected_character_id := str(request.get("character_id", "outrage")).strip_edges().to_lower()
-	var map_id := str(request.get("map_id", default_map_id)).strip_edges().to_lower()
-	var mode_id := str(request.get("mode_id", "deathmatch")).strip_edges().to_lower()
-	if requested_name.is_empty():
-		requested_name = "My Lobby %d" % (_room_entries.size() + 1)
-	if selected_weapon_id.is_empty():
-		selected_weapon_id = "ak47"
-	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro":
-		selected_character_id = "outrage"
-	if map_id.is_empty():
-		map_id = default_map_id
-	map_id = _map_flow_service.normalize_map_id(_map_catalog, map_id)
-	_last_create_requested_map_id = map_id
-	_forced_rounds_ruleset_lobby_id = 0
-	mode_id = _map_flow_service.select_mode_for_map(_map_catalog, map_id, mode_id)
-	_log("send_create_lobby_request name=%s weapon=%s character=%s map=%s mode=%s can_send=%s" % [
-		requested_name,
-		selected_weapon_id,
-		selected_character_id,
-		map_id,
-		mode_id,
-		str(bool(_rpc_bridge.call("can_send_lobby_rpc")))
-	])
-	_persist_local_loadout_selection()
-	_sync_selected_warrior_skin()
-	_sync_selected_weapon_skin()
-	_begin_lobby_action("Creating lobby...")
-	var sent_create := bool(_rpc_bridge.call("create_lobby", requested_name, selected_weapon_id, selected_character_id, map_id, mode_id))
-	_log("create_lobby rpc sent=%s" % str(sent_create))
-	if sent_create:
-		_log("create_lobby result=RPC_SENT awaiting server confirmation")
-	if _status_label != null:
-		_status_label.text = "Creating lobby..." if sent_create else "Still connecting..."
-	if not sent_create:
-		_action_inflight = false
-		_pending_create_request = request.duplicate(true)
-		_request_lobby_list_from_server()
-	_refresh_lobby_selection_summary()
-	_refresh_lobby_buttons_state()
+	_room_actions_ctrl.send_create_lobby_request(request)
 
 func _ensure_valid_map_selection() -> void:
 	var map_ids := _lobby_selectable_map_ids()
@@ -1219,94 +647,7 @@ func _skull_ruleset_policy_for_map(map_id: String) -> String:
 	return "none"
 
 func _refresh_lobby_buttons_state() -> void:
-	var can_send := _rpc_bridge != null and bool(_rpc_bridge.call("can_send_lobby_rpc"))
-	var in_waiting_room := not _ctf_room_state.is_empty() and _joined_lobby_id > 0 and not bool(_ctf_room_state.get("started", false))
-	var in_ctf_room := in_waiting_room and _is_team_mode_id(_active_lobby_mode_id(_joined_lobby_id))
-	var in_dm_room := in_waiting_room and _is_free_for_all_mode_id(_active_lobby_mode_id(_joined_lobby_id))
-	var supports_starting_animation_toggle := _supports_starting_animation_testing_toggle()
-	var skull_policy := _skull_ruleset_policy_for_map(_active_lobby_map_id(_joined_lobby_id))
-	var supports_skull_options := in_dm_room and skull_policy != "none"
-	var supports_ruleset_choice := supports_skull_options and skull_policy == "deathmatch_only"
-	var local_peer_id := _local_peer_id()
-	var is_owner := local_peer_id > 0 and local_peer_id == int(_ctf_room_state.get("owner_peer_id", 0))
-	if _create_button != null:
-		_create_button.visible = not in_waiting_room
-		_create_button.disabled = _joined_lobby_id > 0 or _action_inflight or in_waiting_room
-	if _join_button != null:
-		_join_button.visible = not in_waiting_room
-		_join_button.disabled = not can_send or _selected_room_index < 0 or _action_inflight or in_waiting_room
-	if _refresh_button != null:
-		_refresh_button.visible = not in_waiting_room
-		_refresh_button.disabled = _action_inflight or in_waiting_room
-	if _leave_button != null:
-		_leave_button.visible = false
-		_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
-	if _ctf_leave_button != null:
-		_ctf_leave_button.visible = in_ctf_room
-		_ctf_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
-	if _dm_leave_button != null:
-		_dm_leave_button.visible = in_dm_room
-		_dm_leave_button.disabled = not can_send or _joined_room_name.is_empty() or _action_inflight
-	if _back_button != null:
-		_back_button.visible = not in_waiting_room
-		_back_button.disabled = _action_inflight
-	if _preset_rounds_button != null:
-		_preset_rounds_button.disabled = in_waiting_room or _action_inflight
-	if _preset_deathmatch_button != null:
-		_preset_deathmatch_button.disabled = in_waiting_room or _action_inflight
-	if _preset_br_button != null:
-		_preset_br_button.disabled = in_waiting_room or _action_inflight
-	if _ctf_join_red_button != null:
-		_ctf_join_red_button.disabled = not can_send or _action_inflight or _local_team_id() == 0
-	if _ctf_join_blue_button != null:
-		_ctf_join_blue_button.disabled = not can_send or _action_inflight or _local_team_id() == 1
-	if _ctf_start_button != null:
-		_ctf_start_button.visible = in_ctf_room and is_owner
-		_ctf_start_button.disabled = not can_send or _action_inflight or _local_peer_id() != int(_ctf_room_state.get("owner_peer_id", 0)) or not bool(_ctf_room_state.get("can_start", false))
-	if _ctf_ready_button != null:
-		_ctf_ready_button.visible = in_ctf_room and not is_owner
-		_ctf_ready_button.disabled = not can_send or _action_inflight or not in_ctf_room
-	if _ctf_add_bots_check != null:
-		_ctf_add_bots_check.visible = in_ctf_room and is_owner
-		_ctf_add_bots_check.disabled = not can_send or _action_inflight or not in_ctf_room or not is_owner
-	if _ctf_show_starting_animation_check != null:
-		_ctf_show_starting_animation_check.visible = in_ctf_room and is_owner and supports_starting_animation_toggle
-		_ctf_show_starting_animation_check.disabled = not can_send or _action_inflight or not in_ctf_room or not is_owner or not supports_starting_animation_toggle
-	if _dm_ready_button != null:
-		_dm_ready_button.visible = in_dm_room and not is_owner
-		_dm_ready_button.disabled = not can_send or _action_inflight or not in_dm_room
-	if _dm_start_button != null:
-		_dm_start_button.visible = in_dm_room and is_owner
-		_dm_start_button.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner or not bool(_ctf_room_state.get("can_start", false))
-	if _dm_add_bots_check != null:
-		_dm_add_bots_check.visible = in_dm_room and is_owner
-		_dm_add_bots_check.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner
-	if _dm_show_starting_animation_check != null:
-		_dm_show_starting_animation_check.visible = in_dm_room and is_owner and supports_starting_animation_toggle
-		_dm_show_starting_animation_check.disabled = not can_send or _action_inflight or not in_dm_room or not is_owner or not supports_starting_animation_toggle
-	if _dm_ruleset_row != null:
-		_dm_ruleset_row.visible = supports_ruleset_choice
-	if _dm_target_row != null:
-		var selected_ruleset_target := str(_ctf_room_state.get("skull_ruleset", "kill_race"))
-		if skull_policy == "round_only":
-			_dm_target_row.visible = supports_skull_options
-		else:
-			_dm_target_row.visible = supports_skull_options and selected_ruleset_target != "timed_kills"
-	if _dm_time_row != null:
-		var selected_ruleset := str(_ctf_room_state.get("skull_ruleset", "kill_race"))
-		_dm_time_row.visible = supports_skull_options and skull_policy != "round_only" and selected_ruleset == "timed_kills"
-	if _dm_ruleset_option != null:
-		_dm_ruleset_option.disabled = not supports_ruleset_choice or not is_owner or not can_send or _action_inflight
-	if _dm_target_option != null:
-		_dm_target_option.disabled = not supports_skull_options or not is_owner or not can_send or _action_inflight
-	if _dm_time_option != null:
-		_dm_time_option.disabled = not supports_skull_options or not is_owner or not can_send or _action_inflight
-	var ready_by_peer := _ctf_room_state.get("ready_by_peer", {}) as Dictionary
-	var local_ready := bool(ready_by_peer.get(local_peer_id, false))
-	if _ctf_ready_button != null:
-		_apply_ready_button_state_style(_ctf_ready_button, local_ready)
-	if _dm_ready_button != null:
-		_apply_ready_button_state_style(_dm_ready_button, local_ready)
+	_room_state_ctrl.refresh_lobby_buttons_state()
 
 func _ensure_overlay() -> void:
 	if _overlay != null and is_instance_valid(_overlay):
@@ -2264,248 +1605,37 @@ func _style_lobby_chat_scrollbar(chat_list: RichTextLabel) -> void:
 		_host.call("_apply_pixel_scrollbar", v_scroll)
 
 func _show_ctf_room(payload: Dictionary) -> void:
-	if _ctf_room_box == null:
-		return
-	if _header_title != null:
-		_header_title.visible = false
-	if _rooms_title_label != null:
-		_rooms_title_label.visible = false
-	if _status_label != null:
-		_status_label.visible = false
-	if _selection_label != null:
-		_selection_label.visible = false
-	_set_rooms_list_visible(false)
-	if _preset_row != null:
-		_preset_row.visible = false
-	if _mode_row != null:
-		_mode_row.visible = false
-	if _waiting_room_title_label != null:
-		_waiting_room_title_label.visible = true
-		var mode_label := "CTF ROOM" if _active_lobby_mode_id(_joined_lobby_id) == "ctf" else "TDTH ROOM"
-		_waiting_room_title_label.text = "%s  |  %s" % [str(payload.get("name", "Team Room")), mode_label]
-	_ctf_room_box.visible = true
-	_refresh_lobby_chat_context()
-	if _ctf_room_title != null:
-		_ctf_room_title.visible = false
-		var mode_title := "CTF ROOM" if _active_lobby_mode_id(_joined_lobby_id) == "ctf" else "TDTH ROOM"
-		_ctf_room_title.text = "%s  |  %s" % [str(payload.get("name", "Team Room")), mode_title]
-	var teams := payload.get("teams", {}) as Dictionary
-	if _ctf_room_red_label != null:
-		_ctf_room_red_label.text = _team_text("RED TEAM", teams.get("red", []) as Array)
-	if _ctf_room_blue_label != null:
-		_ctf_room_blue_label.text = _team_text("BLUE TEAM", teams.get("blue", []) as Array)
-	var ready_by_peer := payload.get("ready_by_peer", {}) as Dictionary
-	var local_ready := bool(ready_by_peer.get(_local_peer_id(), false))
-	if _ctf_ready_button != null:
-		_ctf_ready_button.text = "UNREADY" if local_ready else "READY"
-		_apply_ready_button_state_style(_ctf_ready_button, local_ready)
-	if _ctf_add_bots_check != null:
-		var add_bots := bool(payload.get("add_bots", false))
-		if _ctf_add_bots_check.button_pressed != add_bots:
-			if _ctf_add_bots_check.has_method("set_pressed_no_signal"):
-				_ctf_add_bots_check.call("set_pressed_no_signal", add_bots)
-			else:
-				_ctf_add_bots_check.button_pressed = add_bots
-	if _ctf_show_starting_animation_check != null:
-		var show_starting_animation_ctf := bool(payload.get("show_starting_animation", false))
-		var skip_intro_ctf := not show_starting_animation_ctf
-		if _ctf_show_starting_animation_check.button_pressed != skip_intro_ctf:
-			if _ctf_show_starting_animation_check.has_method("set_pressed_no_signal"):
-				_ctf_show_starting_animation_check.call("set_pressed_no_signal", skip_intro_ctf)
-			else:
-				_ctf_show_starting_animation_check.button_pressed = skip_intro_ctf
-	_refresh_lobby_selection_summary()
-	_refresh_lobby_buttons_state()
+	_room_state_ctrl.show_ctf_room(payload)
 
 func _hide_ctf_room() -> void:
-	if _ctf_room_box != null:
-		_ctf_room_box.visible = false
-	if _header_title != null:
-		_header_title.visible = true
-	if _rooms_title_label != null:
-		_rooms_title_label.visible = true
-	if _status_label != null:
-		_status_label.visible = true
-	if _selection_label != null:
-		_selection_label.visible = true
-	_set_rooms_list_visible(true)
-	if _preset_row != null:
-		_preset_row.visible = true
-	if _mode_row != null:
-		_mode_row.visible = true
-	if _waiting_room_title_label != null:
-		_waiting_room_title_label.visible = false
+	_room_state_ctrl.hide_ctf_room()
 
 func _show_dm_room(payload: Dictionary) -> void:
-	if _dm_room_box == null:
-		return
-	if _header_title != null:
-		_header_title.visible = false
-	if _rooms_title_label != null:
-		_rooms_title_label.visible = false
-	if _status_label != null:
-		_status_label.visible = false
-	if _selection_label != null:
-		_selection_label.visible = false
-	_set_rooms_list_visible(false)
-	if _preset_row != null:
-		_preset_row.visible = false
-	if _mode_row != null:
-		_mode_row.visible = false
-	if _waiting_room_title_label != null:
-		_waiting_room_title_label.visible = true
-		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
-		var map_id := _active_lobby_map_id(_joined_lobby_id)
-		var waiting_room_type := "BR WAITING ROOM" if mode_id == "battle_royale" else "ROUNDS WAITING ROOM" if map_id == "skull_rounds" else "DEATHMATCH WAITING ROOM"
-		_waiting_room_title_label.text = "%s  |  %s" % [
-			str(payload.get("name", "FFA Room")),
-			waiting_room_type
-		]
-	_dm_room_box.visible = true
-	_refresh_lobby_chat_context()
-	if _dm_room_title != null:
-		_dm_room_title.visible = false
-		var mode_id := _active_lobby_mode_id(_joined_lobby_id)
-		var map_id := _active_lobby_map_id(_joined_lobby_id)
-		var waiting_room_type := "BR WAITING ROOM" if mode_id == "battle_royale" else "ROUNDS WAITING ROOM" if map_id == "skull_rounds" else "DEATHMATCH WAITING ROOM"
-		_dm_room_title.text = "%s  |  %s" % [
-			str(payload.get("name", "FFA Room")),
-			waiting_room_type
-		]
-	var members := payload.get("members", []) as Array
-	var lines := PackedStringArray()
-	for i in range(members.size()):
-		if not (members[i] is Dictionary):
-			continue
-		var member := members[i] as Dictionary
-		var display := str(member.get("display_name", "Player"))
-		var ready := bool(member.get("ready", false))
-		lines.append("%d. %s  [%s]" % [i + 1, display, "READY" if ready else "NOT READY"])
-	var max_players := int(payload.get("max_players", members.size()))
-	for i in range(members.size(), max_players):
-		lines.append("%d. [EMPTY]" % (i + 1))
-	if lines.is_empty():
-		lines.append("Waiting for players...")
-	if _dm_room_members_label != null:
-		_dm_room_members_label.text = "\n".join(lines)
-	var ready_by_peer := payload.get("ready_by_peer", {}) as Dictionary
-	var local_ready := bool(ready_by_peer.get(_local_peer_id(), false))
-	if _dm_ready_button != null:
-		_dm_ready_button.text = "UNREADY" if local_ready else "READY"
-		_apply_ready_button_state_style(_dm_ready_button, local_ready)
-	if _dm_add_bots_check != null:
-		var add_bots := bool(payload.get("add_bots", false))
-		if _dm_add_bots_check.button_pressed != add_bots:
-			if _dm_add_bots_check.has_method("set_pressed_no_signal"):
-				_dm_add_bots_check.call("set_pressed_no_signal", add_bots)
-			else:
-				_dm_add_bots_check.button_pressed = add_bots
-	if _dm_show_starting_animation_check != null:
-		var show_starting_animation := bool(payload.get("show_starting_animation", false))
-		var skip_intro := not show_starting_animation
-		if _dm_show_starting_animation_check.button_pressed != skip_intro:
-			if _dm_show_starting_animation_check.has_method("set_pressed_no_signal"):
-				_dm_show_starting_animation_check.call("set_pressed_no_signal", skip_intro)
-			else:
-				_dm_show_starting_animation_check.button_pressed = skip_intro
-	var map_id := _active_lobby_map_id(_joined_lobby_id)
-	var skull_policy := _skull_ruleset_policy_for_map(map_id)
-	if skull_policy != "none":
-		var skull_ruleset := str(payload.get("skull_ruleset", "kill_race")).strip_edges().to_lower()
-		if skull_policy == "round_only":
-			skull_ruleset = "round_survival"
-		elif skull_policy == "deathmatch_only" and skull_ruleset == "round_survival":
-			skull_ruleset = "kill_race"
-		var skull_target := int(payload.get("skull_target_score", 10))
-		var skull_time_limit := int(payload.get("skull_time_limit_sec", 180))
-		if _dm_ruleset_option != null:
-			_select_option_by_metadata(_dm_ruleset_option, skull_ruleset)
-		if _dm_target_option != null:
-			_select_option_by_metadata(_dm_target_option, skull_target)
-		if _dm_time_option != null:
-			_select_option_by_metadata(_dm_time_option, skull_time_limit)
-		if _dm_target_label != null:
-			_dm_target_label.text = "Choose Rounds:" if skull_ruleset == "round_survival" else "Choose Kills:"
-		if _dm_target_row != null:
-			_dm_target_row.visible = skull_policy == "round_only" or skull_ruleset != "timed_kills"
-		if _dm_time_row != null:
-			_dm_time_row.visible = skull_policy != "round_only" and skull_ruleset == "timed_kills"
-	_refresh_lobby_selection_summary()
-	_refresh_lobby_buttons_state()
+	_room_state_ctrl.show_dm_room(payload)
 
 func _hide_dm_room() -> void:
-	if _dm_room_box != null:
-		_dm_room_box.visible = false
-	if _header_title != null:
-		_header_title.visible = true
-	if _rooms_title_label != null:
-		_rooms_title_label.visible = true
-	if _status_label != null:
-		_status_label.visible = true
-	if _selection_label != null:
-		_selection_label.visible = true
-	_set_rooms_list_visible(true)
-	if _preset_row != null:
-		_preset_row.visible = true
-	if _mode_row != null:
-		_mode_row.visible = true
-	if _waiting_room_title_label != null:
-		_waiting_room_title_label.visible = false
+	_room_state_ctrl.hide_dm_room()
 
 func _active_lobby_mode_id(lobby_id: int) -> String:
-	for entry in _room_entries:
-		if not (entry is Dictionary):
-			continue
-		var data := entry as Dictionary
-		if int(data.get("id", 0)) != lobby_id:
-			continue
-		return _map_flow_service.normalize_mode_id(str(data.get("mode_id", "deathmatch")))
-	if not _ctf_room_state.is_empty() and int(_ctf_room_state.get("lobby_id", 0)) == lobby_id:
-		return _map_flow_service.normalize_mode_id(str(_ctf_room_state.get("mode_id", "deathmatch")))
-	return _map_flow_service.normalize_mode_id(_selected_mode_id)
+	return _room_state_ctrl.active_lobby_mode_id(lobby_id)
 
 func _active_lobby_map_id(lobby_id: int) -> String:
-	for entry in _room_entries:
-		if not (entry is Dictionary):
-			continue
-		var data := entry as Dictionary
-		if int(data.get("id", 0)) != lobby_id:
-			continue
-		return _map_flow_service.normalize_map_id(_map_catalog, str(data.get("map_id", "")))
-	if not _ctf_room_state.is_empty() and int(_ctf_room_state.get("lobby_id", 0)) == lobby_id:
-		return _map_flow_service.normalize_map_id(_map_catalog, str(_ctf_room_state.get("map_id", "")))
-	return _selected_map_id
+	return _room_state_ctrl.active_lobby_map_id(lobby_id)
 
 func _supports_starting_animation_testing_toggle() -> bool:
-	return not _ctf_room_state.is_empty()
+	return _room_state_ctrl.supports_starting_animation_testing_toggle()
 
 func _is_free_for_all_mode_id(mode_id: String) -> bool:
-	var normalized := _map_flow_service.normalize_mode_id(mode_id)
-	return normalized == "deathmatch" or normalized == "battle_royale"
+	return _room_state_ctrl.is_free_for_all_mode_id(mode_id)
 
 func _is_team_mode_id(mode_id: String) -> bool:
-	var normalized := _map_flow_service.normalize_mode_id(mode_id)
-	return normalized == "ctf" or normalized == "tdth"
+	return _room_state_ctrl.is_team_mode_id(mode_id)
 
 func _local_team_id() -> int:
-	if _ctf_room_state.is_empty():
-		return -1
-	var team_by_peer := _ctf_room_state.get("team_by_peer", {}) as Dictionary
-	return int(team_by_peer.get(_local_peer_id(), -1))
+	return _room_state_ctrl.local_team_id()
 
 func _team_text(title: String, members: Array) -> String:
-	var lines := PackedStringArray()
-	lines.append(title)
-	lines.append("")
-	for slot in range(2):
-		if slot < members.size() and members[slot] is Dictionary:
-			var entry := members[slot] as Dictionary
-			var display := str(entry.get("display_name", "Player"))
-			var ready := bool(entry.get("ready", false))
-			lines.append("%d. %s [%s]" % [slot + 1, display, "R" if ready else "-"])
-		else:
-			lines.append("%d. [EMPTY]" % (slot + 1))
-	return "\n".join(lines)
+	return _room_state_ctrl.team_text(title, members)
 
 func _position_option_popup_below(option: OptionButton, popup: PopupMenu) -> void:
 	if option == null or popup == null:

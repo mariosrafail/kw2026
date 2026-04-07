@@ -9,6 +9,9 @@ const CHARACTER_ID_JUICE := "juice"
 const CHARACTER_ID_MADAM := "madam"
 const CHARACTER_ID_CELLER := "celler"
 const CHARACTER_ID_KOTRO := "kotro"
+const CHARACTER_ID_NOVA := "nova"
+const CHARACTER_ID_HINDI := "hindi"
+const CHARACTER_ID_LOKER := "loker"
 
 const LEGS_FRAME_SIZE := Vector2i(64, 64)
 const TORSO_FRAME_SIZE := Vector2i(64, 64)
@@ -65,6 +68,21 @@ const PART_TEXTURE_PATHS := {
 		"head": "res://assets/warriors/kotro/head.png",
 		"torso": "res://assets/warriors/kotro/torso.png",
 		"legs": "res://assets/warriors/kotro/legs.png",
+	},
+	CHARACTER_ID_NOVA: {
+		"head": "res://assets/warriors/nova/head.png",
+		"torso": "res://assets/warriors/nova/torso.png",
+		"legs": "res://assets/warriors/nova/legs.png",
+	},
+	CHARACTER_ID_HINDI: {
+		"head": "res://assets/warriors/hindi/head.png",
+		"torso": "res://assets/warriors/hindi/torso.png",
+		"legs": "res://assets/warriors/hindi/legs.png",
+	},
+	CHARACTER_ID_LOKER: {
+		"head": "res://assets/warriors/loker/head.png",
+		"torso": "res://assets/warriors/loker/torso.png",
+		"legs": "res://assets/warriors/loker/legs.png",
 	},
 }
 
@@ -475,7 +493,7 @@ func _head_aim_offset_x() -> float:
 
 func set_character_visual(new_character_id: String) -> void:
 	var normalized := new_character_id.strip_edges().to_lower()
-	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO:
+	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO and normalized != CHARACTER_ID_NOVA and normalized != CHARACTER_ID_HINDI and normalized != CHARACTER_ID_LOKER:
 		normalized = CHARACTER_ID_OUTRAGE
 	character_id = normalized
 	if normalized == CHARACTER_ID_EREBUS:
@@ -487,6 +505,12 @@ func set_character_visual(new_character_id: String) -> void:
 	elif normalized == CHARACTER_ID_CELLER:
 		warrior_column_index = CELLER_WARRIOR_COLUMN
 	elif normalized == CHARACTER_ID_KOTRO:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_NOVA:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_HINDI:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_LOKER:
 		warrior_column_index = KOTRO_WARRIOR_COLUMN
 	else:
 		warrior_column_index = OUTRAGE_WARRIOR_COLUMN
@@ -531,6 +555,12 @@ func _apply_modular_character_visuals() -> void:
 	elif character_id == CHARACTER_ID_CELLER:
 		tint = Color(1, 1, 1, 1)
 	elif character_id == CHARACTER_ID_KOTRO:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_NOVA:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_HINDI:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_LOKER:
 		tint = Color(1, 1, 1, 1)
 	if _legs_sprite != null:
 		_legs_sprite.modulate = tint

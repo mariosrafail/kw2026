@@ -11,6 +11,9 @@ const DEFAULT_BLOOD_COLOR_BY_CHARACTER := {
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
 	"celler": Color(0.63, 0.74, 1.0, 1.0),
 	"kotro": Color(0.47, 0.92, 0.86, 1.0),
+	"nova": Color(0.41, 0.24, 0.28, 1.0),
+	"hindi": Color(0.88, 0.55, 0.36, 1.0),
+	"loker": Color(0.13, 0.44, 0.15, 1.0),
 }
 const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
@@ -20,6 +23,9 @@ const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
 	"celler": Color(0.63, 0.74, 1.0, 1.0),
 	"kotro": Color(0.47, 0.92, 0.86, 1.0),
+	"nova": Color(0.53, 0.20, 0.64, 1.0),
+	"hindi": Color(0.29, 0.83, 1.0, 1.0),
+	"loker": Color(0.56, 0.89, 0.16, 1.0),
 }
 
 var server_skin_blood_color_config: Dictionary = {}
@@ -289,6 +295,12 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		return CHARACTER_ID_CELLER
 	if normalized == CHARACTER_ID_KOTRO:
 		return CHARACTER_ID_KOTRO
+	if normalized == CHARACTER_ID_NOVA:
+		return CHARACTER_ID_NOVA
+	if normalized == CHARACTER_ID_HINDI:
+		return CHARACTER_ID_HINDI
+	if normalized == CHARACTER_ID_LOKER:
+		return CHARACTER_ID_LOKER
 	if lobby_service != null:
 		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
 		if persisted == CHARACTER_ID_EREBUS:
@@ -312,6 +324,15 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		if persisted == CHARACTER_ID_KOTRO:
 			peer_character_ids[peer_id] = CHARACTER_ID_KOTRO
 			return CHARACTER_ID_KOTRO
+		if persisted == CHARACTER_ID_NOVA:
+			peer_character_ids[peer_id] = CHARACTER_ID_NOVA
+			return CHARACTER_ID_NOVA
+		if persisted == CHARACTER_ID_HINDI:
+			peer_character_ids[peer_id] = CHARACTER_ID_HINDI
+			return CHARACTER_ID_HINDI
+		if persisted == CHARACTER_ID_LOKER:
+			peer_character_ids[peer_id] = CHARACTER_ID_LOKER
+			return CHARACTER_ID_LOKER
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
 		if local_normalized == CHARACTER_ID_EREBUS:
@@ -326,6 +347,12 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 			return CHARACTER_ID_CELLER
 		if local_normalized == CHARACTER_ID_KOTRO:
 			return CHARACTER_ID_KOTRO
+		if local_normalized == CHARACTER_ID_NOVA:
+			return CHARACTER_ID_NOVA
+		if local_normalized == CHARACTER_ID_HINDI:
+			return CHARACTER_ID_HINDI
+		if local_normalized == CHARACTER_ID_LOKER:
+			return CHARACTER_ID_LOKER
 		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
 

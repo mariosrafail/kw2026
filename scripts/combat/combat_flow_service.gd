@@ -10,6 +10,9 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
 	"celler": Color(0.63, 0.74, 1.0, 1.0),
 	"kotro": Color(0.47, 0.92, 0.86, 1.0),
+	"nova": Color(0.41, 0.24, 0.28, 1.0),
+	"hindi": Color(0.88, 0.55, 0.36, 1.0),
+	"loker": Color(0.13, 0.44, 0.15, 1.0),
 }
 
 var players: Dictionary = {}
@@ -31,8 +34,11 @@ var player_replication: PlayerReplication
 
 var send_skill_cast_cb: Callable = Callable()  # Generic skill callback
 var warrior_id_for_peer_cb: Callable = Callable()
+var skin_index_for_peer_cb: Callable = Callable()
+var skill_color_for_peer_cb: Callable = Callable()
 var authoritative_blood_color_for_peer_cb: Callable = Callable()
 var is_gameplay_locked_cb: Callable = Callable()
+var send_match_message_to_peer_cb: Callable = Callable()
 
 var get_world_2d_cb: Callable = Callable()
 var get_peer_lobby_cb: Callable = Callable()
@@ -96,8 +102,11 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_skill_charge_cb = callbacks.get("send_skill_charge", Callable()) as Callable
 	send_skill_cast_cb = callbacks.get("send_skill_cast", Callable()) as Callable
 	warrior_id_for_peer_cb = callbacks.get("warrior_id_for_peer", Callable()) as Callable
+	skin_index_for_peer_cb = callbacks.get("skin_index_for_peer", Callable()) as Callable
+	skill_color_for_peer_cb = callbacks.get("skill_color_for_peer", Callable()) as Callable
 	authoritative_blood_color_for_peer_cb = callbacks.get("authoritative_blood_color_for_peer", Callable()) as Callable
 	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
+	send_match_message_to_peer_cb = callbacks.get("send_match_message_to_peer", Callable()) as Callable
 
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
 	snapshot_rate = float(config.get("snapshot_rate", snapshot_rate))
@@ -108,6 +117,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 
 func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
 	if _is_gameplay_locked():
+		return
+	if is_player_action_locked(caster_peer_id):
 		return
 	if skill_number == 1:
 		return
@@ -124,6 +135,8 @@ func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vec
 		print("[SKILL ERROR] Warrior not found for id=%s (peer_id=%d)" % [warrior_id, caster_peer_id])
 
 func can_cast_skill_for_peer(peer_id: int, skill_number: int) -> bool:
+	if is_player_action_locked(peer_id):
+		return false
 	if skill_number == 1:
 		return false
 	var warrior_id := _warrior_id_for_peer(peer_id)
@@ -196,15 +209,17 @@ func server_broadcast_reload_audio(peer_id: int, weapon_id: String) -> void:
 func server_begin_reload(peer_id: int, weapon_profile: WeaponProfile) -> void:
 	if _is_gameplay_locked():
 		return
+	if is_player_action_locked(peer_id):
+		return
 	if weapon_profile == null:
 		weapon_profile = _weapon_profile_for_id(weapon_id_ak47)
 	var existing := float(reload_remaining_by_peer.get(peer_id, 0.0))
 	if existing > 0.0:
 		return
-	pending_reload_delay_by_peer[peer_id] = 0.0
-	reload_remaining_by_peer[peer_id] = maxf(0.05, weapon_profile.reload_duration())
-	var weapon_id := _weapon_id_for_peer(peer_id)
 	var player := players.get(peer_id, null) as NetPlayer
+	pending_reload_delay_by_peer[peer_id] = 0.0
+	reload_remaining_by_peer[peer_id] = _effective_reload_duration(player, weapon_profile)
+	var weapon_id := _weapon_id_for_peer(peer_id)
 	if player != null:
 		player.set_reload_audio_stream(_weapon_reload_sfx(weapon_id))
 		player.play_reload_audio()
@@ -232,9 +247,14 @@ func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: Wea
 	)
 	if shot_data.is_empty():
 		return
+	var projectile_ids: Array[int] = []
 	var shots: Variant = shot_data.get("shots", [])
 	if not (shots is Array) or shots.is_empty():
 		return
+	for shot_value in shots:
+		if not (shot_value is Dictionary):
+			continue
+		projectile_ids.append(int((shot_value as Dictionary).get("projectile_id", 0)))
 	var weapon_id := _weapon_id_for_peer(peer_id)
 	player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
 	player.play_shot_recoil()
@@ -261,6 +281,7 @@ func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: Wea
 				trail_origin,
 				weapon_id
 			)
+	_register_projectiles_for_skill(peer_id, weapon_id, projectile_ids)
 
 func server_tick_projectiles(delta: float) -> void:
 	_server_tick_warrior_cooldowns(delta)
@@ -297,10 +318,13 @@ func _on_server_projectile_player_hit(
 		_apply_explosive_projectile_impact(projectile_id, hit_position, projectile_lobby_id)
 		return
 	var target_player := players.get(target_peer_id, null) as NetPlayer
+	var projectile := projectile_system.get_projectile(projectile_id) if projectile_system != null else null
+	var attacker_peer_id := projectile.owner_peer_id if projectile != null else -1
 	var target_blood_position := hit_position
 	var blood_color := _target_blood_color(target_peer_id, target_player)
 	if target_player != null:
 		server_apply_projectile_damage(projectile_id, target_peer_id, target_player, impact_velocity, is_headshot)
+	_notify_projectile_player_hit(projectile_id, attacker_peer_id, target_peer_id, hit_position, impact_velocity, projectile_lobby_id)
 	if combat_effects != null:
 		combat_effects.spawn_blood_particles(target_blood_position, impact_velocity, blood_color, 1.0)
 	for member_value in _lobby_members(projectile_lobby_id):
@@ -340,6 +364,7 @@ func _on_server_projectile_impact(
 			send_projectile_impact_cb.call(int(member_value), projectile_id, impact_position)
 
 func _on_server_projectile_despawn(projectile_id: int, lobby_id: int) -> void:
+	_notify_projectile_despawn(projectile_id)
 	var recipients := _lobby_members(lobby_id)
 	if recipients.is_empty() and multiplayer != null:
 		recipients = multiplayer.get_peers()
@@ -482,6 +507,7 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 		if player == null:
 			continue
 		var state: Dictionary = input_states.get(peer_id, default_input_state()) as Dictionary
+		state = _apply_input_overrides_for_peer(peer_id, state)
 		var now_msec := Time.get_ticks_msec()
 		var last_packet_msec := int(state.get("last_packet_msec", 0))
 		if last_packet_msec > 0 and now_msec - last_packet_msec > max_input_stale_ms:
@@ -574,6 +600,14 @@ func _effective_fire_interval(player: NetPlayer, weapon_profile: WeaponProfile) 
 		rate_multiplier = maxf(0.05, float(player.call("get_external_fire_rate_multiplier")))
 	return maxf(0.01, weapon_profile.fire_interval() / rate_multiplier)
 
+func _effective_reload_duration(player: NetPlayer, weapon_profile: WeaponProfile) -> float:
+	if weapon_profile == null:
+		return 0.5
+	var speed_multiplier := 1.0
+	if player != null and player.has_method("get_external_reload_speed_multiplier"):
+		speed_multiplier = maxf(0.05, float(player.call("get_external_reload_speed_multiplier")))
+	return maxf(0.05, weapon_profile.reload_duration() / speed_multiplier)
+
 func _world_2d() -> World2D:
 	if get_world_2d_cb.is_valid():
 		return get_world_2d_cb.call() as World2D
@@ -654,7 +688,10 @@ func _init_warriors() -> void:
 					"get_peer_lobby": get_peer_lobby_cb,
 					"get_lobby_members": get_lobby_members_cb,
 					"send_skill_cast": send_skill_cast_cb,
-					"character_id_for_peer": warrior_id_for_peer_cb
+					"character_id_for_peer": warrior_id_for_peer_cb,
+					"skin_index_for_peer": skin_index_for_peer_cb,
+					"skill_color_for_peer": skill_color_for_peer_cb,
+					"send_match_message_to_peer": send_match_message_to_peer_cb
 				}
 			)
 			warriors_by_id[warrior_id] = warrior
@@ -733,22 +770,99 @@ func _has_full_skill_charge(peer_id: int) -> bool:
 func is_player_action_locked(peer_id: int) -> bool:
 	var warrior_id := _warrior_id_for_peer(peer_id)
 	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
-	if warrior == null or warrior.skill2 == null:
-		return false
-	if warrior.skill2.has_method("is_action_locked"):
-		return warrior.skill2.call("is_action_locked", peer_id) == true
+	if warrior != null and warrior.skill2 != null and warrior.skill2.has_method("is_action_locked"):
+		if warrior.skill2.call("is_action_locked", peer_id) == true:
+			return true
+	for warrior_value in warriors_by_id.values():
+		var iter_warrior := warrior_value as WarriorProfile
+		if iter_warrior == null or iter_warrior.skill2 == null:
+			continue
+		if iter_warrior.skill2.has_method("is_action_locked_for_peer") and iter_warrior.skill2.call("is_action_locked_for_peer", peer_id) == true:
+			return true
 	return false
 
-func override_local_input_state(peer_id: int, base_state: Dictionary) -> Dictionary:
+func projectile_color_for_peer(peer_id: int, weapon_id: String, base_color: Color) -> Color:
+	var resolved := base_color
+	for warrior_value in warriors_by_id.values():
+		var iter_warrior := warrior_value as WarriorProfile
+		if iter_warrior == null or iter_warrior.skill2 == null:
+			continue
+		if not iter_warrior.skill2.has_method("projectile_color_for_peer"):
+			continue
+		var value: Variant = iter_warrior.skill2.call("projectile_color_for_peer", peer_id, weapon_id, resolved)
+		if value is Color:
+			resolved = value as Color
+	return resolved
+
+func projectile_visual_config_for_peer(peer_id: int, weapon_id: String, base_visual_config: Dictionary) -> Dictionary:
+	var resolved := base_visual_config.duplicate(true)
+	for warrior_value in warriors_by_id.values():
+		var iter_warrior := warrior_value as WarriorProfile
+		if iter_warrior == null or iter_warrior.skill2 == null:
+			continue
+		if not iter_warrior.skill2.has_method("projectile_visual_config_for_peer"):
+			continue
+		var value: Variant = iter_warrior.skill2.call("projectile_visual_config_for_peer", peer_id, weapon_id, resolved)
+		if value is Dictionary:
+			resolved = value as Dictionary
+	return resolved
+
+func _register_projectiles_for_skill(peer_id: int, weapon_id: String, projectile_ids: Array[int]) -> void:
+	if projectile_ids.is_empty():
+		return
 	var warrior_id := _warrior_id_for_peer(peer_id)
 	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior == null or warrior.skill2 == null:
-		return base_state
-	if warrior.skill2.has_method("override_input_state"):
-		var value: Variant = warrior.skill2.call("override_input_state", peer_id, base_state)
+		return
+	if warrior.skill2.has_method("register_fired_projectiles"):
+		warrior.skill2.call("register_fired_projectiles", peer_id, weapon_id, projectile_ids)
+
+func _notify_projectile_player_hit(projectile_id: int, attacker_peer_id: int, target_peer_id: int, hit_position: Vector2, impact_velocity: Vector2, projectile_lobby_id: int) -> void:
+	for warrior_value in warriors_by_id.values():
+		var iter_warrior := warrior_value as WarriorProfile
+		if iter_warrior == null or iter_warrior.skill2 == null:
+			continue
+		if iter_warrior.skill2.has_method("on_projectile_player_hit"):
+			iter_warrior.skill2.call("on_projectile_player_hit", projectile_id, attacker_peer_id, target_peer_id, hit_position, impact_velocity, projectile_lobby_id)
+
+func _notify_projectile_despawn(projectile_id: int) -> void:
+	for warrior_value in warriors_by_id.values():
+		var iter_warrior := warrior_value as WarriorProfile
+		if iter_warrior == null or iter_warrior.skill2 == null:
+			continue
+		if iter_warrior.skill2.has_method("on_projectile_despawn"):
+			iter_warrior.skill2.call("on_projectile_despawn", projectile_id)
+
+func override_local_input_state(peer_id: int, base_state: Dictionary) -> Dictionary:
+	var resolved := _apply_input_overrides_for_peer(peer_id, base_state)
+	return resolved
+
+func _apply_input_overrides_for_peer(peer_id: int, base_state: Dictionary) -> Dictionary:
+	var resolved := base_state
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior != null and warrior.skill2 != null and warrior.skill2.has_method("override_input_state"):
+		var value: Variant = warrior.skill2.call("override_input_state", peer_id, resolved)
 		if value is Dictionary:
-			return value as Dictionary
-	return base_state
+			resolved = value as Dictionary
+	for warrior_value in warriors_by_id.values():
+		var iter_warrior := warrior_value as WarriorProfile
+		if iter_warrior == null or iter_warrior.skill2 == null:
+			continue
+		if not iter_warrior.skill2.has_method("override_input_state_for_peer"):
+			continue
+		var override_value: Variant = iter_warrior.skill2.call("override_input_state_for_peer", peer_id, resolved)
+		if override_value is Dictionary:
+			resolved = override_value as Dictionary
+	return resolved
+
+func ensure_peer_visual_state(peer_id: int) -> void:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null or warrior.skill2 == null:
+		return
+	if warrior.skill2.has_method("ensure_companion_visual"):
+		warrior.skill2.call("ensure_companion_visual", peer_id)
 
 func camera_focus_state_for_peer(peer_id: int) -> Dictionary:
 	var warrior_id := _warrior_id_for_peer(peer_id)

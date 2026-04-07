@@ -6,6 +6,7 @@ const MINIMAP_HIDDEN_VISIBILITY_LAYER := 1 << 1
 var projectiles_root: Node2D
 var projectile_scene: PackedScene
 var resolve_owner_color: Callable = Callable()
+var resolve_visual_config_override: Callable = Callable()
 var projectiles: Dictionary = {}
 var projectile_lobby_by_id: Dictionary = {}
 var projectile_damage_by_id: Dictionary = {}
@@ -13,10 +14,11 @@ var projectile_weapon_name_by_id: Dictionary = {}
 var projectile_weapon_id_by_id: Dictionary = {}
 var next_projectile_id: int = 1
 
-func configure(root: Node2D, scene: PackedScene, color_callback: Callable) -> void:
+func configure(root: Node2D, scene: PackedScene, color_callback: Callable, visual_config_callback: Callable = Callable()) -> void:
 	projectiles_root = root
 	projectile_scene = scene
 	resolve_owner_color = color_callback
+	resolve_visual_config_override = visual_config_callback
 
 func reset() -> void:
 	clear()
@@ -125,6 +127,10 @@ func spawn_projectile(
 		visual_config = weapon.projectile_visual_config()
 		hit_radius = weapon.projectile_hit_radius()
 		life_time = weapon.projectile_lifetime()
+		if resolve_visual_config_override.is_valid():
+			var override_value: Variant = resolve_visual_config_override.call(owner_peer_id, weapon.weapon_id(), visual_config)
+			if override_value is Dictionary:
+				visual_config = override_value as Dictionary
 	projectile.configure(
 		_owner_color(owner_peer_id, weapon),
 		velocity,

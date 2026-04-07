@@ -8,6 +8,7 @@ const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
 const DEFAULT_AUTH_USERNAME := "mario"
 const DEFAULT_AUTH_PASSWORD := "1234"
+const ACCOUNT_LOADOUT_PATH_PREFIX := "user://account_loadout"
 
 func setup_auth_flow(host: Node) -> void:
 	host.call("_resolve_auth_profile")
@@ -148,6 +149,59 @@ func clear_auth_session(host: Node) -> void:
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
+func save_account_loadout(host: Node) -> void:
+	var path := account_loadout_path(host)
+	if path.is_empty():
+		return
+	var selected_weapon_id := str(host.get("selected_weapon_id")).strip_edges().to_lower()
+	if selected_weapon_id.is_empty():
+		selected_weapon_id = "ak47"
+	var selected_character_id := str(host.call("_normalize_character_id", str(host.get("selected_character_id"))))
+	var lobby_service: Object = host.get("lobby_service") as Object
+	var selected_skin_index := 0
+	if lobby_service != null:
+		selected_skin_index = int(lobby_service.call("get_local_selected_skin", selected_character_id, 0))
+	var payload := {
+		"selected_weapon_id": selected_weapon_id,
+		"selected_weapon_skin": maxi(0, int(host.get("selected_weapon_skin"))),
+		"selected_character_id": selected_character_id,
+		"selected_skin_index": maxi(0, selected_skin_index)
+	}
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		host.call("_append_log", "[AUTH] Failed to write account loadout: %s" % ProjectSettings.globalize_path(path))
+		return
+	file.store_string(JSON.stringify(payload))
+
+func load_account_loadout(host: Node) -> void:
+	var path := account_loadout_path(host)
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+	var payload := parsed as Dictionary
+	var selected_weapon_id := str(payload.get("selected_weapon_id", host.get("selected_weapon_id"))).strip_edges().to_lower()
+	if selected_weapon_id.is_empty():
+		selected_weapon_id = "ak47"
+	var selected_character_id := str(host.call("_normalize_character_id", str(payload.get("selected_character_id", host.get("selected_character_id")))))
+	var selected_weapon_skin := maxi(0, int(payload.get("selected_weapon_skin", host.get("selected_weapon_skin"))))
+	var selected_skin_index := maxi(0, int(payload.get("selected_skin_index", 0)))
+	host.set("selected_weapon_id", selected_weapon_id)
+	host.set("selected_weapon_skin", selected_weapon_skin)
+	host.set("selected_character_id", selected_character_id)
+	var lobby_service: Object = host.get("lobby_service") as Object
+	if lobby_service != null:
+		lobby_service.call("set_local_selected_weapon", selected_weapon_id)
+		lobby_service.call("set_local_selected_weapon_skin", selected_weapon_id, selected_weapon_skin)
+		lobby_service.call("set_local_selected_character", selected_character_id)
+		lobby_service.call("set_local_selected_skin", selected_character_id, selected_skin_index)
+	host.call("_setup_weapon_picker")
+	host.call("_setup_character_picker")
+
 func resolve_auth_profile(host: Node) -> void:
 	var configured := str(ProjectSettings.get_setting(AUTH_PROFILE_SETTING, "default")).strip_edges()
 	if not configured.is_empty():
@@ -173,6 +227,34 @@ func _main_menu_session_path(host: Node) -> String:
 	if str(host.get("_auth_profile")) == "default":
 		return MAIN_MENU_AUTH_SESSION_PATH
 	return "user://main_menu_auth_session_%s.json" % str(host.get("_auth_profile"))
+
+func account_loadout_path(host: Node) -> String:
+	var username := str(host.get("auth_username")).strip_edges().to_lower()
+	if username.is_empty():
+		return ""
+	var profile := str(host.get("_auth_profile")).strip_edges().to_lower()
+	if profile.is_empty():
+		profile = "default"
+	return "%s_%s_%s.json" % [
+		ACCOUNT_LOADOUT_PATH_PREFIX,
+		_sanitize_path_fragment(profile),
+		_sanitize_path_fragment(username)
+	]
+
+func _sanitize_path_fragment(value: String) -> String:
+	var trimmed := value.strip_edges().to_lower()
+	if trimmed.is_empty():
+		return "default"
+	var result := ""
+	for i in range(trimmed.length()):
+		var ch := trimmed.unicode_at(i)
+		var is_digit := ch >= 48 and ch <= 57
+		var is_lower := ch >= 97 and ch <= 122
+		if is_digit or is_lower:
+			result += char(ch)
+		else:
+			result += "_"
+	return result
 
 func auth_me(host: Node) -> void:
 	if bool(host.get("_auth_inflight")):
