@@ -98,6 +98,8 @@ const CHARACTER_ID_EREBUS := "erebus"
 const CHARACTER_ID_TASKO := "tasko"
 const CHARACTER_ID_JUICE := "juice"
 const CHARACTER_ID_MADAM := "madam"
+const CHARACTER_ID_CELLER := "celler"
+const CHARACTER_ID_KOTRO := "kotro"
 
 const CHARACTERS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -124,6 +126,16 @@ const CHARACTERS := {
 		"name": "Madam",
 		"ability": "Dread Aura",
 		"description": "Heavy move-speed and fire-rate slow aura for 5 seconds"
+	},
+	CHARACTER_ID_CELLER: {
+		"name": "C3ll3r",
+		"ability": "Moonfall",
+		"description": "Grow a moon above yourself that detonates after 5 seconds"
+	},
+	CHARACTER_ID_KOTRO: {
+		"name": "Kotro",
+		"ability": "Remote Bomb",
+		"description": "Guide a bomb with the mouse while your body is locked in place"
 	}
 }
 

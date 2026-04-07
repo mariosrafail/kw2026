@@ -935,7 +935,7 @@ func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> vo
 	if multiplayer.is_server():
 		return
 	combat_flow_service.client_receive_skill_cast(2, _caster_peer_id, _world_position)
-	_push_ultimate_notification(_caster_peer_id, CHARACTER_ID_TASKO)
+	_push_ultimate_notification(_caster_peer_id, _warrior_id_for_peer(_caster_peer_id))
 
 
 func _server_broadcast_match_message(lobby_id: int, text: String) -> void:

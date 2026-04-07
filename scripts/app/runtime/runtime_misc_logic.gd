@@ -32,6 +32,10 @@ func _normalize_character_id(character_id: String) -> String:
 		return CHARACTER_ID_JUICE
 	if normalized == CHARACTER_ID_MADAM:
 		return CHARACTER_ID_MADAM
+	if normalized == CHARACTER_ID_CELLER:
+		return CHARACTER_ID_CELLER
+	if normalized == CHARACTER_ID_KOTRO:
+		return CHARACTER_ID_KOTRO
 	return CHARACTER_ID_OUTRAGE
 
 func _lobby_name_value() -> String:

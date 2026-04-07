@@ -9,6 +9,8 @@ const DEFAULT_BLOOD_COLOR_BY_CHARACTER := {
 	"tasko": Color(1.0, 0.65, 0.92, 1.0),
 	"juice": Color(0.95, 1.0, 0.56, 1.0),
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
+	"celler": Color(0.63, 0.74, 1.0, 1.0),
+	"kotro": Color(0.47, 0.92, 0.86, 1.0),
 }
 const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
@@ -16,6 +18,8 @@ const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"tasko": Color(1.0, 0.65, 0.92, 1.0),
 	"juice": Color(0.95, 1.0, 0.56, 1.0),
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
+	"celler": Color(0.63, 0.74, 1.0, 1.0),
+	"kotro": Color(0.47, 0.92, 0.86, 1.0),
 }
 
 var server_skin_blood_color_config: Dictionary = {}
@@ -281,6 +285,10 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		return CHARACTER_ID_JUICE
 	if normalized == CHARACTER_ID_MADAM:
 		return CHARACTER_ID_MADAM
+	if normalized == CHARACTER_ID_CELLER:
+		return CHARACTER_ID_CELLER
+	if normalized == CHARACTER_ID_KOTRO:
+		return CHARACTER_ID_KOTRO
 	if lobby_service != null:
 		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
 		if persisted == CHARACTER_ID_EREBUS:
@@ -298,6 +306,12 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		if persisted == CHARACTER_ID_MADAM:
 			peer_character_ids[peer_id] = CHARACTER_ID_MADAM
 			return CHARACTER_ID_MADAM
+		if persisted == CHARACTER_ID_CELLER:
+			peer_character_ids[peer_id] = CHARACTER_ID_CELLER
+			return CHARACTER_ID_CELLER
+		if persisted == CHARACTER_ID_KOTRO:
+			peer_character_ids[peer_id] = CHARACTER_ID_KOTRO
+			return CHARACTER_ID_KOTRO
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
 		if local_normalized == CHARACTER_ID_EREBUS:
@@ -308,6 +322,10 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 			return CHARACTER_ID_JUICE
 		if local_normalized == CHARACTER_ID_MADAM:
 			return CHARACTER_ID_MADAM
+		if local_normalized == CHARACTER_ID_CELLER:
+			return CHARACTER_ID_CELLER
+		if local_normalized == CHARACTER_ID_KOTRO:
+			return CHARACTER_ID_KOTRO
 		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
 

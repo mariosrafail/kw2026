@@ -1,0 +1,28 @@
+{
+  "warrior_id": "kotro",
+  "display_name": "Kotro",
+  "warrior_cost": 3200,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/kotro/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/kotro/head.png",
+    "torso": "res://assets/warriors/kotro/torso.png",
+    "legs": "res://assets/warriors/kotro/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Classic",
+      "unlock_type": "free",
+      "cost": 0
+    },
+    {
+      "id": "alt_01",
+      "index": 1,
+      "name": "Alt 01",
+      "unlock_type": "free",
+      "cost": 0
+    }
+  ]
+}

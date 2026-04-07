@@ -653,7 +653,7 @@ size_flags_vertical = 3
 theme_override_constants/separation = 14
 
 [node name="PreviewCol" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow" unique_id=973612042]
-custom_minimum_size = Vector2(190, 0)
+custom_minimum_size = Vector2(236, 0)
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 8
@@ -677,10 +677,45 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_soft_white_glow")
 
 [node name="WarriorShopPreview" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=126348019 instance=ExtResource("4_player")]
 unique_name_in_owner = true
-position = Vector2(95, 120)
+position = Vector2(118, 114)
 scale = Vector2(2.2, 2.2)
 
-[node name="WarriorNameLabel" type="Label" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=1743055141]
+[node name="ListCol" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow" unique_id=2122181160]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="WarriorTopSpacer" type="Control" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol" unique_id=907193111]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+
+[node name="WarriorCenter" type="CenterContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol" unique_id=719311131]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="WarriorScroll" type="ScrollContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorCenter" unique_id=1931113194]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_horizontal = 3
+horizontal_scroll_mode = 0
+
+[node name="WarriorGrid" type="GridContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorCenter/WarriorScroll" unique_id=1221873478]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 6
+
+[node name="SkinSection" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox" unique_id=208517403]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SkinSectionVBox" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/SkinSection" unique_id=1743055141]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="WarriorNameLabel" type="Label" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/SkinSection/SkinSectionVBox" unique_id=1243055141]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.98, 0.97, 0.95, 1)
@@ -690,7 +725,19 @@ theme_override_font_sizes/font_size = 18
 text = "Skin"
 horizontal_alignment = 1
 
-[node name="WarriorActionButton" type="Button" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol" unique_id=679315921]
+[node name="WarriorSkinScroll" type="ScrollContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/SkinSection/SkinSectionVBox" unique_id=1101743055]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+vertical_scroll_mode = 0
+
+[node name="WarriorSkinGrid" type="GridContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/SkinSection/SkinSectionVBox/WarriorSkinScroll" unique_id=1754305591]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 12
+
+[node name="WarriorActionButton" type="Button" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/SkinSection/SkinSectionVBox" unique_id=679315921]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -703,24 +750,6 @@ theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
 text = "BUY"
-
-[node name="ListCol" type="VBoxContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow" unique_id=2122181160]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_constants/separation = 8
-
-[node name="WarriorScroll" type="ScrollContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol" unique_id=1931113194]
-custom_minimum_size = Vector2(0, 190)
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-horizontal_scroll_mode = 0
-
-[node name="WarriorGrid" type="GridContainer" parent="Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorScroll" unique_id=1221873478]
-unique_name_in_owner = true
-layout_mode = 2
-columns = 4
 
 [node name="ScreenWeapons" type="Control" parent="Screens" unique_id=1598157277]
 unique_name_in_owner = true

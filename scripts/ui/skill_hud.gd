@@ -38,6 +38,8 @@ const CHARACTER_E_ICON_COLUMNS := {
 	"tasko": 5,
 	"juice": 7,
 	"madam": 9,
+	"celler": 9,
+	"kotro": 9,
 }
 
 var _e_slot: Control

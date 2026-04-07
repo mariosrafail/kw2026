@@ -9,6 +9,8 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"tasko": Color(1.0, 0.65, 0.92, 1.0),
 	"juice": Color(0.95, 1.0, 0.56, 1.0),
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
+	"celler": Color(0.63, 0.74, 1.0, 1.0),
+	"kotro": Color(0.47, 0.92, 0.86, 1.0),
 }
 
 var players: Dictionary = {}

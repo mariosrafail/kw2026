@@ -8,6 +8,8 @@ var camera_shake: CameraShake
 
 var submit_input_cb: Callable = Callable()
 var is_gameplay_locked_cb: Callable = Callable()
+var override_input_state_cb: Callable = Callable()
+var camera_focus_state_cb: Callable = Callable()
 var input_send_rate := 60.0
 var idle_input_send_rate := 12.0
 
@@ -35,6 +37,8 @@ func configure(refs: Dictionary, callbacks: Dictionary, config: Dictionary = {})
 
 	submit_input_cb = callbacks.get("submit_input", Callable()) as Callable
 	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
+	override_input_state_cb = callbacks.get("override_input_state", Callable()) as Callable
+	camera_focus_state_cb = callbacks.get("camera_focus_state", Callable()) as Callable
 	input_send_rate = float(config.get("input_send_rate", input_send_rate))
 	idle_input_send_rate = float(config.get("idle_input_send_rate", idle_input_send_rate))
 
@@ -56,6 +60,7 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 		return
 
 	var state: Dictionary = _cached_local_input_state if not _cached_local_input_state.is_empty() else _read_local_input_state(damage_boost_enabled)
+	state = _apply_input_override(local_id, state)
 	var axis := float(state.get("axis", 0.0))
 	var jump_pressed := bool(state.get("jump_pressed", false))
 	var jump_held := bool(state.get("jump_held", false))
@@ -104,6 +109,7 @@ func client_predict_local_player(delta: float, damage_boost_enabled: bool) -> vo
 		return
 
 	var state: Dictionary = _read_local_input_state(damage_boost_enabled)
+	state = _apply_input_override(local_id, state)
 	_cached_local_input_state = state
 	local_player.set_aim_world(state.get("aim_world", local_player.global_position + Vector2.RIGHT * 120.0) as Vector2)
 	local_player.simulate_authoritative(
@@ -123,6 +129,7 @@ func local_host_apply_input(delta: float, damage_boost_enabled: bool, input_stat
 	if local_player == null:
 		return
 	var state: Dictionary = _read_local_input_state(damage_boost_enabled)
+	state = _apply_input_override(local_id, state)
 	_cached_local_input_state = state
 	local_player.set_aim_world(state.get("aim_world", local_player.global_position + Vector2.RIGHT * 120.0) as Vector2)
 	var authoritative_state := state.duplicate(true)
@@ -137,6 +144,18 @@ func follow_local_player_camera(delta: float) -> void:
 		return
 	var local_player := players.get(multiplayer.get_unique_id(), null) as NetPlayer
 	if local_player == null:
+		return
+	var focus_state := _camera_focus_state(multiplayer.get_unique_id())
+	if bool(focus_state.get("active", false)):
+		var focus_position := focus_state.get("position", local_player.global_position) as Vector2
+		if _camera_follow_position == Vector2.ZERO:
+			_camera_follow_position = main_camera.global_position
+		_camera_mouse_look_offset = Vector2.ZERO
+		_camera_follow_position = _camera_follow_position.lerp(focus_position, min(1.0, delta * CAMERA_FOLLOW_LERP_SPEED))
+		if camera_shake == null:
+			main_camera.global_position = _camera_follow_position
+		else:
+			main_camera.global_position = _camera_follow_position + camera_shake.step_offset(delta)
 		return
 	if _camera_follow_position == Vector2.ZERO:
 		_camera_follow_position = main_camera.global_position
@@ -231,3 +250,19 @@ func _read_local_input_state(damage_boost_enabled: bool) -> Dictionary:
 		"shoot_held": Input.is_action_pressed("shoot"),
 		"boost_damage": damage_boost_enabled
 	}
+
+func _apply_input_override(peer_id: int, base_state: Dictionary) -> Dictionary:
+	if not override_input_state_cb.is_valid():
+		return base_state
+	var override_value: Variant = override_input_state_cb.call(peer_id, base_state)
+	if override_value is Dictionary:
+		return override_value as Dictionary
+	return base_state
+
+func _camera_focus_state(peer_id: int) -> Dictionary:
+	if not camera_focus_state_cb.is_valid():
+		return {}
+	var focus_value: Variant = camera_focus_state_cb.call(peer_id)
+	if focus_value is Dictionary:
+		return focus_value as Dictionary
+	return {}

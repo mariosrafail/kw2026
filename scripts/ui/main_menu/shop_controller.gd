@@ -10,6 +10,8 @@ func select_warrior_skin(host: Control, warrior_id: String, skin_index: int, sil
 	var warrior_name_label = host.get("warrior_name_label") as Label
 	if warrior_name_label != null:
 		warrior_name_label.text = "%s - %s" % [warrior_ui.warrior_display_name(str(host.get("_pending_warrior_id"))), warrior_ui.warrior_skin_label(str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin")))]
+	if host != null and host.has_method("_build_warrior_skin_grid"):
+		host.call("_build_warrior_skin_grid", str(host.get("_pending_warrior_id")))
 	host.call("_refresh_warrior_filter_button_state")
 	refresh_warrior_grid_texts(host)
 	refresh_warrior_action(host)
@@ -33,6 +35,8 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 	var warrior_name_label = host.get("warrior_name_label") as Label
 	if warrior_name_label != null:
 		warrior_name_label.text = "%s - %s" % [warrior_ui.warrior_display_name(str(host.get("selected_warrior_id"))), warrior_ui.warrior_skin_label(str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))]
+	if host != null and host.has_method("_build_warrior_skin_grid"):
+		host.call("_build_warrior_skin_grid", str(host.get("selected_warrior_id")))
 	host.call("_save_state")
 	host.call("_auth_sync_wallet")
 	if host != null and host.has_method("_sync_active_lobby_loadout_selection"):
@@ -158,13 +162,15 @@ func on_warrior_item_button_pressed(host: Control, warrior_id: String, skin_inde
 
 func refresh_warrior_grid_texts(host: Control) -> void:
 	var warrior_grid = host.get("warrior_grid") as GridContainer
+	var warrior_skin_grid = host.get("warrior_skin_grid") as GridContainer
 	var warrior_ui = host.get("_warrior_ui")
-	if warrior_grid == null:
-		return
-	for child in warrior_grid.get_children():
-		var button = child as Button
-		if button != null:
-			warrior_ui.update_warrior_item_button(host, button)
+	for grid in [warrior_grid, warrior_skin_grid]:
+		if grid == null:
+			continue
+		for child in grid.get_children():
+			var button = child as Button
+			if button != null:
+				warrior_ui.update_warrior_item_button(host, button)
 
 func refresh_warrior_action(host: Control) -> void:
 	var warrior_action_button = host.get("warrior_action_button") as Button

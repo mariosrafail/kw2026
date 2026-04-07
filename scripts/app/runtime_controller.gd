@@ -544,6 +544,8 @@ func _try_cast_skill2() -> void:
 	var local_peer_id := multiplayer.get_unique_id()
 	if local_peer_id <= 0 or combat_flow_service == null:
 		return
+	if combat_flow_service.has_method("is_player_action_locked") and combat_flow_service.call("is_player_action_locked", local_peer_id) == true:
+		return
 	if not combat_flow_service.can_cast_skill_for_peer(local_peer_id, 2):
 		return
 	var target_world := main_camera.get_global_mouse_position()
@@ -574,8 +576,12 @@ func _try_reload() -> void:
 		return
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return
+	var local_peer_id := multiplayer.get_unique_id()
+	if local_peer_id <= 0:
+		return
+	if combat_flow_service != null and combat_flow_service.has_method("is_player_action_locked") and combat_flow_service.call("is_player_action_locked", local_peer_id) == true:
+		return
 	if role == Role.SERVER:
-		var local_peer_id := multiplayer.get_unique_id()
 		var player := players.get(local_peer_id, null) as NetPlayer
 		var weapon_profile := _weapon_profile_for_peer(local_peer_id)
 		if player != null and weapon_profile != null:

@@ -365,7 +365,9 @@ func _configure_services() -> void:
 		},
 		{
 			"submit_input": Callable(self, "_send_input_rpc"),
-			"is_gameplay_locked": Callable(self, "_is_gameplay_locked")
+			"is_gameplay_locked": Callable(self, "_is_gameplay_locked"),
+			"override_input_state": Callable(combat_flow_service, "override_local_input_state"),
+			"camera_focus_state": Callable(combat_flow_service, "camera_focus_state_for_peer")
 		},
 		{
 			"input_send_rate": INPUT_SEND_RATE,

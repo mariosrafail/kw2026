@@ -4,7 +4,7 @@ const MADAM_AURA_VFX := preload("res://scripts/warriors/vfx/madam_aura_vfx.gd")
 
 const CHARACTER_ID_MADAM := "madam"
 const AURA_DURATION_SEC := 5.0
-const AURA_RADIUS_PX := 138.0
+const AURA_RADIUS_PX := 178.0
 const MOVE_SPEED_MULTIPLIER := 0.28
 const FIRE_RATE_MULTIPLIER := 0.33
 const STATUS_TEXT := "Dread Aura"
@@ -74,9 +74,11 @@ func server_tick(delta: float) -> void:
 		if lobby_id <= 0:
 			continue
 
-		for member_value in _get_lobby_members(lobby_id):
-			var target_peer_id := int(member_value)
+		for target_peer_value in players.keys():
+			var target_peer_id := int(target_peer_value)
 			if target_peer_id == caster_peer_id:
+				continue
+			if _get_peer_lobby(target_peer_id) != lobby_id:
 				continue
 			touched_peers[target_peer_id] = true
 			var target := players.get(target_peer_id, null) as NetPlayer
@@ -93,11 +95,11 @@ func server_tick(delta: float) -> void:
 		_auras_by_peer.erase(caster_peer_id)
 
 	var peers_to_update: Dictionary = _affected_peers_last_tick.duplicate(true)
-	for peer_value in touched_peers.keys():
-		peers_to_update[int(peer_value)] = true
+	for touched_peer_value in touched_peers.keys():
+		peers_to_update[int(touched_peer_value)] = true
 
-	for peer_value in peers_to_update.keys():
-		var peer_id := int(peer_value)
+	for affected_peer_value in peers_to_update.keys():
+		var peer_id := int(affected_peer_value)
 		var player := players.get(peer_id, null) as NetPlayer
 		if player == null:
 			continue

@@ -292,7 +292,7 @@ func _selected_warrior_id() -> String:
 	var selected_character_id := "outrage"
 	if _host != null:
 		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro":
 		selected_character_id = "outrage"
 	return selected_character_id
 
@@ -1088,7 +1088,7 @@ func _send_create_lobby_request(request: Dictionary) -> void:
 		requested_name = "My Lobby %d" % (_room_entries.size() + 1)
 	if selected_weapon_id.is_empty():
 		selected_weapon_id = "ak47"
-	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro":
 		selected_character_id = "outrage"
 	if map_id.is_empty():
 		map_id = default_map_id
@@ -1139,7 +1139,15 @@ func _ensure_valid_map_selection() -> void:
 	_refresh_map_dropdown_selection()
 
 func _lobby_selectable_map_ids() -> Array[String]:
-	var preferred_order := ["skull_deathmatch", "skull_rounds", "skull_br"]
+	var preferred_order := [
+		"skull_deathmatch",
+		"skull_rounds",
+		"skull_br",
+		"skull_ffa",
+		"main_ffa",
+		"main_tdth",
+		"main_ctf"
+	]
 	var available := _map_catalog.all_map_ids()
 	var selected: Array[String] = []
 	for map_id_value in preferred_order:
@@ -1148,10 +1156,10 @@ func _lobby_selectable_map_ids() -> Array[String]:
 			selected.append(map_id)
 	if not selected.is_empty():
 		return selected
-	# Fallback safety if custom skull maps are missing for any reason.
+	# Fallback safety if some catalog entries are missing for any reason.
 	for map_id_value in available:
 		var map_id := str(map_id_value).strip_edges().to_lower()
-		if map_id.begins_with("skull_"):
+		if not map_id.is_empty():
 			selected.append(map_id)
 	return selected
 
@@ -1887,34 +1895,33 @@ func _ensure_overlay() -> void:
 	match_actions.add_child(start_btn)
 	_ctf_start_button = start_btn
 
-	# Temporary: hide the Add Bots / Starting Animation toggles from the lobby UI.
-	# var ctf_add_bots_check := CheckBox.new()
-	# ctf_add_bots_check.text = "Add Bots"
-	# ctf_add_bots_check.add_theme_font_size_override("font_size", 9)
-	# _apply_pixel_checkbox_style(ctf_add_bots_check)
-	# ctf_add_bots_check.button_pressed = false
-	# ctf_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
-	# 	if _rpc_bridge != null:
-	# 		_rpc_bridge.call("set_lobby_add_bots", toggled_on)
-	# )
-	# if _add_hover_pop.is_valid():
-	# 	_add_hover_pop.call(ctf_add_bots_check)
-	# ctf_room_box.add_child(ctf_add_bots_check)
-	# _ctf_add_bots_check = ctf_add_bots_check
+	var ctf_add_bots_check := CheckBox.new()
+	ctf_add_bots_check.text = "Add Bots"
+	ctf_add_bots_check.add_theme_font_size_override("font_size", 9)
+	_apply_pixel_checkbox_style(ctf_add_bots_check)
+	ctf_add_bots_check.button_pressed = false
+	ctf_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_add_bots", toggled_on)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(ctf_add_bots_check)
+	ctf_room_box.add_child(ctf_add_bots_check)
+	_ctf_add_bots_check = ctf_add_bots_check
 
-	# var ctf_show_starting_animation_check := CheckBox.new()
-	# ctf_show_starting_animation_check.text = "Show Starting Animation"
-	# ctf_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
-	# _apply_pixel_checkbox_style(ctf_show_starting_animation_check)
-	# ctf_show_starting_animation_check.button_pressed = false
-	# ctf_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
-	# 	if _rpc_bridge != null:
-	# 		_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
-	# )
-	# if _add_hover_pop.is_valid():
-	# 	_add_hover_pop.call(ctf_show_starting_animation_check)
-	# ctf_room_box.add_child(ctf_show_starting_animation_check)
-	# _ctf_show_starting_animation_check = ctf_show_starting_animation_check
+	var ctf_show_starting_animation_check := CheckBox.new()
+	ctf_show_starting_animation_check.text = "Skip Intro"
+	ctf_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
+	_apply_pixel_checkbox_style(ctf_show_starting_animation_check)
+	ctf_show_starting_animation_check.button_pressed = false
+	ctf_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_show_starting_animation", not toggled_on)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(ctf_show_starting_animation_check)
+	ctf_room_box.add_child(ctf_show_starting_animation_check)
+	_ctf_show_starting_animation_check = ctf_show_starting_animation_check
 	_add_lobby_chat_section(ctf_room_box, "ctf")
 
 	var dm_room_box := VBoxContainer.new()
@@ -2118,34 +2125,33 @@ func _ensure_overlay() -> void:
 	dm_time_row.add_child(dm_time_option)
 	_dm_time_option = dm_time_option
 
-	# Temporary: hide the Add Bots / Starting Animation toggles from the lobby UI.
-	# var dm_add_bots_check := CheckBox.new()
-	# dm_add_bots_check.text = "Add Bots"
-	# dm_add_bots_check.add_theme_font_size_override("font_size", 9)
-	# _apply_pixel_checkbox_style(dm_add_bots_check)
-	# dm_add_bots_check.button_pressed = false
-	# dm_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
-	# 	if _rpc_bridge != null:
-	# 		_rpc_bridge.call("set_lobby_add_bots", toggled_on)
-	# )
-	# if _add_hover_pop.is_valid():
-	# 	_add_hover_pop.call(dm_add_bots_check)
-	# dm_room_box.add_child(dm_add_bots_check)
-	# _dm_add_bots_check = dm_add_bots_check
+	var dm_add_bots_check := CheckBox.new()
+	dm_add_bots_check.text = "Add Bots"
+	dm_add_bots_check.add_theme_font_size_override("font_size", 9)
+	_apply_pixel_checkbox_style(dm_add_bots_check)
+	dm_add_bots_check.button_pressed = false
+	dm_add_bots_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_add_bots", toggled_on)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(dm_add_bots_check)
+	dm_room_box.add_child(dm_add_bots_check)
+	_dm_add_bots_check = dm_add_bots_check
 
-	# var dm_show_starting_animation_check := CheckBox.new()
-	# dm_show_starting_animation_check.text = "Show Starting Animation"
-	# dm_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
-	# _apply_pixel_checkbox_style(dm_show_starting_animation_check)
-	# dm_show_starting_animation_check.button_pressed = false
-	# dm_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
-	# 	if _rpc_bridge != null:
-	# 		_rpc_bridge.call("set_lobby_show_starting_animation", toggled_on)
-	# )
-	# if _add_hover_pop.is_valid():
-	# 	_add_hover_pop.call(dm_show_starting_animation_check)
-	# dm_room_box.add_child(dm_show_starting_animation_check)
-	# _dm_show_starting_animation_check = dm_show_starting_animation_check
+	var dm_show_starting_animation_check := CheckBox.new()
+	dm_show_starting_animation_check.text = "Skip Intro"
+	dm_show_starting_animation_check.add_theme_font_size_override("font_size", 9)
+	_apply_pixel_checkbox_style(dm_show_starting_animation_check)
+	dm_show_starting_animation_check.button_pressed = false
+	dm_show_starting_animation_check.toggled.connect(func(toggled_on: bool) -> void:
+		if _rpc_bridge != null:
+			_rpc_bridge.call("set_lobby_show_starting_animation", not toggled_on)
+	)
+	if _add_hover_pop.is_valid():
+		_add_hover_pop.call(dm_show_starting_animation_check)
+	dm_room_box.add_child(dm_show_starting_animation_check)
+	_dm_show_starting_animation_check = dm_show_starting_animation_check
 	_add_lobby_chat_section(dm_room_box, "dm")
 
 	_refresh_lobby_selection_summary()
@@ -2302,11 +2308,12 @@ func _show_ctf_room(payload: Dictionary) -> void:
 				_ctf_add_bots_check.button_pressed = add_bots
 	if _ctf_show_starting_animation_check != null:
 		var show_starting_animation_ctf := bool(payload.get("show_starting_animation", false))
-		if _ctf_show_starting_animation_check.button_pressed != show_starting_animation_ctf:
+		var skip_intro_ctf := not show_starting_animation_ctf
+		if _ctf_show_starting_animation_check.button_pressed != skip_intro_ctf:
 			if _ctf_show_starting_animation_check.has_method("set_pressed_no_signal"):
-				_ctf_show_starting_animation_check.call("set_pressed_no_signal", show_starting_animation_ctf)
+				_ctf_show_starting_animation_check.call("set_pressed_no_signal", skip_intro_ctf)
 			else:
-				_ctf_show_starting_animation_check.button_pressed = show_starting_animation_ctf
+				_ctf_show_starting_animation_check.button_pressed = skip_intro_ctf
 	_refresh_lobby_selection_summary()
 	_refresh_lobby_buttons_state()
 
@@ -2395,11 +2402,12 @@ func _show_dm_room(payload: Dictionary) -> void:
 				_dm_add_bots_check.button_pressed = add_bots
 	if _dm_show_starting_animation_check != null:
 		var show_starting_animation := bool(payload.get("show_starting_animation", false))
-		if _dm_show_starting_animation_check.button_pressed != show_starting_animation:
+		var skip_intro := not show_starting_animation
+		if _dm_show_starting_animation_check.button_pressed != skip_intro:
 			if _dm_show_starting_animation_check.has_method("set_pressed_no_signal"):
-				_dm_show_starting_animation_check.call("set_pressed_no_signal", show_starting_animation)
+				_dm_show_starting_animation_check.call("set_pressed_no_signal", skip_intro)
 			else:
-				_dm_show_starting_animation_check.button_pressed = show_starting_animation
+				_dm_show_starting_animation_check.button_pressed = skip_intro
 	var map_id := _active_lobby_map_id(_joined_lobby_id)
 	var skull_policy := _skull_ruleset_policy_for_map(map_id)
 	if skull_policy != "none":

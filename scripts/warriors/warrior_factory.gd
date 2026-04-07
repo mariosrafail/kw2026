@@ -12,6 +12,8 @@ const EREBUS_WARRIOR := preload("res://scripts/warriors/erebus_warrior.gd")
 const TASKO_WARRIOR := preload("res://scripts/warriors/tasko_warrior.gd")
 const JUICE_WARRIOR := preload("res://scripts/warriors/juice_warrior.gd")
 const MADAM_WARRIOR := preload("res://scripts/warriors/madam_warrior.gd")
+const CELLER_WARRIOR := preload("res://scripts/warriors/celler_warrior.gd")
+const KOTRO_WARRIOR := preload("res://scripts/warriors/kotro_warrior.gd")
 
 static func create_warrior(warrior_id: String) -> WarriorProfile:
 	match warrior_id.to_lower():
@@ -25,15 +27,19 @@ static func create_warrior(warrior_id: String) -> WarriorProfile:
 			return JUICE_WARRIOR.new()
 		"madam":
 			return MADAM_WARRIOR.new()
+		"celler":
+			return CELLER_WARRIOR.new()
+		"kotro":
+			return KOTRO_WARRIOR.new()
 		_:
 			push_error("Unknown warrior: %s" % warrior_id)
 			return null
 
 static func is_valid_warrior(warrior_id: String) -> bool:
-	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam"]
+	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro"]
 
 static func get_all_warrior_ids() -> Array[String]:
-	return ["outrage", "erebus", "tasko", "juice", "madam"]
+	return ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro"]
 
 static func get_warrior_name(warrior_id: String) -> String:
 	match warrior_id.to_lower():
@@ -47,5 +53,9 @@ static func get_warrior_name(warrior_id: String) -> String:
 			return "Juice"
 		"madam":
 			return "Madam"
+		"celler":
+			return "C3ll3r"
+		"kotro":
+			return "Kotro"
 		_:
 			return "Unknown"

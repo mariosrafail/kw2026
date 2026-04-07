@@ -136,6 +136,7 @@ var logo_node: Node = null
 
 @onready var options_back_button: Button = %OptionsBackButton
 @onready var warriors_back_button: Button = %WarriorsBackButton
+@onready var warriors_title: Label = %WarriorsTitle
 @onready var weapons_back_button: Button = %WeaponsBackButton
 @onready var warriors_right_spacer: Control = %WarriorsRightSpacer
 @onready var warriors_top_row: HBoxContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/TopRow
@@ -152,10 +153,19 @@ var logo_node: Node = null
 @onready var intro_plate: PanelContainer = $Intro/IntroPlate
 @onready var intro_label: Label = $Intro/IntroLabel
 
+const WARRIORS_BACK_BUTTON_SCREEN_POS := Vector2(16.0, 16.0)
+const WARRIORS_TITLE_SCREEN_Y := 44.0
+const WARRIOR_PREVIEW_ZOOM_STEP := 0.1
+const WARRIOR_PREVIEW_ZOOM_MIN := 0.85
+const WARRIOR_PREVIEW_ZOOM_MAX := 2.4
+
 @onready var warrior_grid: GridContainer = %WarriorGrid
-@onready var warrior_scroll: ScrollContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorScroll
+@onready var warrior_scroll: ScrollContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorCenter/WarriorScroll
+@onready var warrior_skin_grid: GridContainer = %WarriorSkinGrid
+@onready var warrior_skin_scroll: ScrollContainer = %WarriorSkinScroll
 @onready var warriors_panel: PanelContainer = $Screens/ScreenWarriors/WarriorsPanel
 @onready var warriors_body_row: HBoxContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow
+@onready var warrior_preview_col: Control = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/PreviewCol
 @onready var warrior_shop_preview: Node = %WarriorShopPreview
 @onready var warrior_name_label: Label = %WarriorNameLabel
 @onready var warrior_action_button: Button = %WarriorActionButton
@@ -228,6 +238,7 @@ var _play_lobby_fade_base_alpha: Dictionary = {}
 var _main_warrior_preview_base_scale := Vector2.ONE
 var _warrior_shop_preview_base_scale := Vector2.ONE
 var _weapon_shop_preview_base_scale := Vector2.ONE
+var _warrior_preview_zoom_mult := 1.0
 var _confirm_overlay_ui: Control
 
 var _logo_base_pos := Vector2.ZERO
@@ -390,6 +401,7 @@ func _ready() -> void:
 	call_deferred("_sync_wallet_size_to_back_button")
 	call_deferred("_sync_warriors_header_centering")
 	call_deferred("_sync_weapons_header_centering")
+	call_deferred("_pin_warriors_back_button")
 	var viewport := get_viewport()
 	if viewport != null:
 		var size_cb := Callable(self, "_on_viewport_size_changed")
@@ -398,12 +410,17 @@ func _ready() -> void:
 	_apply_pixel_slider_style(music_slider)
 	_apply_pixel_slider_style(sfx_slider)
 	_apply_pixel_scroll_style(warrior_scroll)
+	_apply_pixel_scroll_style(warrior_skin_scroll)
 	_apply_pixel_scroll_style(weapon_scroll)
 	_apply_grid_spacing(warrior_grid)
+	_apply_grid_spacing(warrior_skin_grid)
 	_apply_grid_spacing(weapon_grid)
 	if warrior_grid != null:
-		warrior_grid.add_theme_constant_override("h_separation", 6)
-		warrior_grid.add_theme_constant_override("v_separation", 6)
+		warrior_grid.add_theme_constant_override("h_separation", 8)
+		warrior_grid.add_theme_constant_override("v_separation", 8)
+	if warrior_skin_grid != null:
+		warrior_skin_grid.add_theme_constant_override("h_separation", 6)
+		warrior_skin_grid.add_theme_constant_override("v_separation", 6)
 	_ensure_auth_logout_button()
 	if warrior_action_button != null:
 		warrior_action_button.visible = false
@@ -431,7 +448,6 @@ func _ready() -> void:
 
 	_update_wallet_labels(true)
 	_apply_menu_background_palette()
-	_ensure_warrior_filter_ui()
 	_build_warrior_shop_grid()
 	_ensure_weapon_filter_ui()
 	_build_weapon_shop_grid()
@@ -831,6 +847,8 @@ func _apply_menu_cursor_context() -> void:
 func _input(event: InputEvent) -> void:
 	if intro != null and intro.visible:
 		return
+	if _handle_warrior_preview_zoom_input(event):
+		return
 	_menu_nav.handle_input(self, event)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -865,19 +883,9 @@ func _sync_wallet_size_to_back_button() -> void:
 
 func _sync_warriors_header_centering() -> void:
 	_sync_wallet_size_to_back_button()
-	if warriors_top_row == null or warriors_back_button == null or warriors_right_spacer == null:
-		return
-	if warriors_top_row.size.x <= 0.0:
-		call_deferred("_sync_warriors_header_centering")
-		return
-	var back_w := warriors_back_button.size.x
-	if back_w <= 0.0:
-		back_w = warriors_back_button.get_combined_minimum_size().x
-	var viewport_center_x := get_viewport_rect().size.x * 0.5
-	var row_left_x := warriors_top_row.global_position.x
-	var required_spacer_w := warriors_top_row.size.x + back_w - 2.0 * (viewport_center_x - row_left_x)
-	required_spacer_w = clampf(required_spacer_w, 0.0, warriors_top_row.size.x)
-	warriors_right_spacer.custom_minimum_size = Vector2(required_spacer_w, 0.0)
+	if warriors_right_spacer != null:
+		warriors_right_spacer.custom_minimum_size = Vector2.ZERO
+	_pin_warriors_back_button()
 
 func _sync_weapons_header_centering() -> void:
 	if weapons_top_row == null or weapons_back_button == null or weapons_right_spacer == null:
@@ -897,8 +905,31 @@ func _sync_weapons_header_centering() -> void:
 func _on_viewport_size_changed() -> void:
 	call_deferred("_sync_warriors_header_centering")
 	call_deferred("_sync_weapons_header_centering")
+	call_deferred("_pin_warriors_back_button")
 	call_deferred("_rebuild_background_cracks")
 	call_deferred("_layout_toxic_chat_stack")
+
+func _pin_warriors_back_button() -> void:
+	if warriors_back_button == null:
+		return
+	warriors_back_button.top_level = true
+	warriors_back_button.z_as_relative = false
+	warriors_back_button.z_index = 2500
+	warriors_back_button.position = WARRIORS_BACK_BUTTON_SCREEN_POS
+	if warriors_title != null:
+		warriors_title.top_level = true
+		warriors_title.z_as_relative = false
+		warriors_title.z_index = 2500
+		var title_size := warriors_title.get_combined_minimum_size().ceil()
+		if title_size.x <= 0.0:
+			title_size.x = maxf(1.0, warriors_title.size.x)
+		if title_size.y <= 0.0:
+			title_size.y = maxf(1.0, warriors_title.size.y)
+		warriors_title.size = title_size
+		warriors_title.pivot_offset = title_size * 0.5
+		var viewport_width := get_viewport_rect().size.x
+		var centered_x: float = floor((viewport_width - title_size.x) * 0.5)
+		warriors_title.position = Vector2(maxf(0.0, centered_x), WARRIORS_TITLE_SCREEN_Y)
 
 func _center_pivot(c: Control) -> void:
 	if c == null:
@@ -1349,6 +1380,8 @@ func _open_warriors_menu() -> void:
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
+	_warrior_preview_zoom_mult = 1.0
+	_apply_warrior_preview_zoom()
 	_apply_meta_ui_visibility(false)
 	_menu_transition_ctrl.open_warriors_menu()
 	call_deferred("_sync_warriors_header_centering")
@@ -1363,6 +1396,19 @@ func _close_warriors_menu() -> void:
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
+	selected_warrior_id = _pending_warrior_id
+	selected_warrior_skin = _pending_warrior_skin
+	_set_equipped_warrior_skin(selected_warrior_id, selected_warrior_skin)
+	owned_warrior_skins = owned_warrior_skins_by_warrior.get(selected_warrior_id, PackedInt32Array([0])) as PackedInt32Array
+	_apply_warrior_skin_to_player(main_warrior_preview, _pending_warrior_id, _pending_warrior_skin)
+	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_id, _pending_warrior_skin)
+	if warrior_name_label != null:
+		warrior_name_label.text = "%s - %s" % [_warrior_ui.warrior_display_name(_pending_warrior_id), _warrior_ui.warrior_skin_label(_pending_warrior_id, _pending_warrior_skin)]
+	_build_warrior_skin_grid(_pending_warrior_id)
+	_refresh_warrior_grid_texts()
+	_refresh_warrior_action()
+	_save_state()
+	_sync_active_lobby_loadout_selection()
 	_menu_transition_ctrl.close_warriors_menu()
 
 func _close_warriors_menu_stage2() -> void:
@@ -1441,6 +1487,39 @@ func _prepare_player_preview(player: Node) -> void:
 		var label := visual_root.get_node_or_null(label_name) as CanvasItem
 		if label != null:
 			label.visible = false
+
+func _handle_warrior_preview_zoom_input(event: InputEvent) -> bool:
+	if _current_screen != screen_warriors:
+		return false
+	if warrior_preview_col == null or warrior_shop_preview == null:
+		return false
+	if not (warrior_shop_preview is Node2D):
+		return false
+	if not (event is InputEventMouseButton):
+		return false
+	var mouse_button := event as InputEventMouseButton
+	if not mouse_button.pressed:
+		return false
+	var zoom_delta := 0.0
+	if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP:
+		zoom_delta = WARRIOR_PREVIEW_ZOOM_STEP
+	elif mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		zoom_delta = -WARRIOR_PREVIEW_ZOOM_STEP
+	else:
+		return false
+	if not warrior_preview_col.get_global_rect().has_point(mouse_button.position):
+		return false
+	_warrior_preview_zoom_mult = clampf(_warrior_preview_zoom_mult + zoom_delta, WARRIOR_PREVIEW_ZOOM_MIN, WARRIOR_PREVIEW_ZOOM_MAX)
+	_apply_warrior_preview_zoom()
+	get_viewport().set_input_as_handled()
+	return true
+
+func _apply_warrior_preview_zoom() -> void:
+	if not (warrior_shop_preview is Node2D):
+		return
+	var preview := warrior_shop_preview as Node2D
+	var base_zoom := clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
+	preview.scale = _warrior_shop_preview_base_scale * base_zoom * _warrior_preview_zoom_mult
 
 func _apply_warrior_skin_to_player(player: Node, warrior_id: String, skin_index: int) -> void:
 	_warrior_ui.apply_warrior_menu_preview(player, warrior_id, skin_index)
@@ -1628,15 +1707,37 @@ func _apply_weapon_skin_tint(target: CanvasItem, skin_index: int) -> void:
 func _build_warrior_shop_grid() -> void:
 	_clear_children(warrior_grid)
 	var warrior_list := _warrior_ui.warrior_ids()
-	if not _warrior_filter_warrior_id.is_empty():
-		warrior_list = [_warrior_filter_warrior_id]
 	for warrior_id in warrior_list:
-		for skin in _warrior_ui.warrior_skins_for(warrior_id):
-			var skin_index := int((skin as Dictionary).get("index", 0))
-			var btn := _warrior_ui.make_warrior_item_button(self, Callable(self, "_make_shop_button"), warrior_id, skin_index)
-			btn.pressed.connect(Callable(self, "_on_warrior_item_button_pressed").bind(warrior_id, skin_index))
-			warrior_grid.add_child(btn)
-			_center_pivot(btn)
+		var preview_skin_index := _equipped_warrior_skin(warrior_id)
+		var btn := _warrior_ui.make_warrior_item_button(self, Callable(self, "_make_shop_button"), warrior_id, preview_skin_index, "warrior")
+		btn.pressed.connect(Callable(self, "_on_warrior_select_button_pressed").bind(warrior_id))
+		warrior_grid.add_child(btn)
+		_center_pivot(btn)
+	_build_warrior_skin_grid(_pending_warrior_id)
+
+func _build_warrior_skin_grid(warrior_id: String) -> void:
+	_clear_children(warrior_skin_grid)
+	if warrior_skin_grid == null:
+		return
+	var normalized := warrior_id.strip_edges().to_lower()
+	if normalized.is_empty():
+		normalized = selected_warrior_id
+	for skin in _warrior_ui.warrior_skins_for(normalized):
+		var skin_index := int((skin as Dictionary).get("index", 0))
+		var btn := _warrior_ui.make_warrior_item_button(self, Callable(self, "_make_shop_button"), normalized, skin_index, "skin")
+		btn.pressed.connect(Callable(self, "_on_warrior_skin_button_pressed").bind(normalized, skin_index))
+		warrior_skin_grid.add_child(btn)
+		_center_pivot(btn)
+
+func _on_warrior_select_button_pressed(warrior_id: String) -> void:
+	var normalized := warrior_id.strip_edges().to_lower()
+	var target_skin := _equipped_warrior_skin(normalized)
+	if not _warrior_is_owned(normalized):
+		target_skin = 0
+	_select_warrior_skin(normalized, target_skin, false)
+
+func _on_warrior_skin_button_pressed(warrior_id: String, skin_index: int) -> void:
+	_on_warrior_item_button_pressed(warrior_id, skin_index)
 
 func _build_weapon_shop_grid() -> void:
 	_clear_children(weapon_grid)
@@ -1786,101 +1887,13 @@ func _set_equipped_warrior_skin(warrior_id: String, skin_index: int) -> void:
 	equipped_warrior_skin_by_warrior[warrior_id.strip_edges().to_lower()] = maxi(0, skin_index)
 
 func _ensure_warrior_filter_ui() -> void:
-	if warrior_scroll == null:
-		return
-	var list_col := warrior_scroll.get_parent() as Control
-	if list_col == null or list_col.get_node_or_null("WarriorFilters") != null:
-		return
-	if list_col is VBoxContainer:
-		(list_col as VBoxContainer).add_theme_constant_override("separation", 0)
-	var filters := HBoxContainer.new()
-	filters.name = "WarriorFilters"
-	filters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	filters.add_theme_constant_override("separation", 4)
-	list_col.add_child(filters)
-	list_col.move_child(filters, 0)
-	_warrior_filters_row = filters
-
-	var bridge_holder := Control.new()
-	bridge_holder.name = "WarriorFiltersBridgeHolder"
-	bridge_holder.custom_minimum_size = Vector2(0, 6)
-	bridge_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bridge_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	list_col.add_child(bridge_holder)
-	list_col.move_child(bridge_holder, 1)
-	_warrior_filters_bridge_holder = bridge_holder
-
-	var bridge := Panel.new()
-	bridge.name = "WarriorFiltersBridge"
-	bridge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var bridge_style := StyleBoxFlat.new()
-	bridge_style.bg_color = MENU_PALETTE.with_alpha(MENU_CLR_ACCENT, 1.0)
-	bridge_style.border_width_left = 1
-	bridge_style.border_width_top = 0
-	bridge_style.border_width_right = 1
-	bridge_style.border_width_bottom = 1
-	bridge_style.border_color = MENU_PALETTE.with_alpha(MENU_CLR_ACCENT, 1.0)
-	bridge.add_theme_stylebox_override("panel", bridge_style)
-	bridge_holder.add_child(bridge)
-	_warrior_filters_bridge = bridge
-	filters.resized.connect(_update_warrior_filter_bridge)
-	bridge_holder.resized.connect(_update_warrior_filter_bridge)
-	_warrior_filter_warrior_buttons = {}
-	var all_btn := _make_filter_button("ALL")
-	all_btn.pressed.connect(func() -> void:
-		_warrior_filter_warrior_id = ""
-		_refresh_warrior_filter_button_state()
-		_build_warrior_shop_grid()
-	)
-	filters.add_child(all_btn)
-	_warrior_filter_warrior_buttons[""] = all_btn
-	for warrior_id in _warrior_ui.warrior_ids():
-		var wid := str(warrior_id)
-		var btn := _make_filter_button(_warrior_ui.warrior_display_name(wid).to_upper())
-		btn.pressed.connect(func() -> void:
-			_warrior_filter_warrior_id = wid
-			_select_warrior_skin(wid, _equipped_warrior_skin(wid), true)
-			_refresh_warrior_filter_button_state()
-			_build_warrior_shop_grid()
-		)
-		filters.add_child(btn)
-		_warrior_filter_warrior_buttons[wid] = btn
-	_refresh_warrior_filter_button_state()
-	call_deferred("_update_warrior_filter_bridge")
+	return
 
 func _refresh_warrior_filter_button_state() -> void:
-	for key in _warrior_filter_warrior_buttons.keys():
-		var btn := _warrior_filter_warrior_buttons.get(key, null) as Button
-		_set_filter_btn_selected(btn, str(key) == _warrior_filter_warrior_id)
-		if btn == null:
-			continue
-		if str(key).is_empty():
-			btn.text = "ALL"
-			continue
-		var wid := str(key)
-		var title := _warrior_ui.warrior_display_name(wid).to_upper()
-		btn.text = title
-	call_deferred("_update_warrior_filter_bridge")
+	return
 
 func _update_warrior_filter_bridge() -> void:
-	if _warrior_filters_bridge_holder == null or not is_instance_valid(_warrior_filters_bridge_holder):
-		return
-	if _warrior_filters_bridge == null or not is_instance_valid(_warrior_filters_bridge):
-		return
-	if _warrior_filters_row == null or not is_instance_valid(_warrior_filters_row):
-		return
-	var key := _warrior_filter_warrior_id
-	if not _warrior_filter_warrior_buttons.has(key):
-		key = ""
-	var selected_btn := _warrior_filter_warrior_buttons.get(key, null) as Button
-	if selected_btn == null or not is_instance_valid(selected_btn):
-		_warrior_filters_bridge.visible = false
-		return
-	_warrior_filters_bridge.visible = true
-	var x := _warrior_filters_row.position.x + selected_btn.position.x
-	var w := selected_btn.size.x
-	_warrior_filters_bridge.position = Vector2(x, 0)
-	_warrior_filters_bridge.size = Vector2(maxf(1.0, w), _warrior_filters_bridge_holder.size.y)
+	return
 
 func _select_warrior_skin(warrior_id: String, skin_index: int, silent: bool) -> void:
 	_shop_controller.select_warrior_skin(self, warrior_id, skin_index, silent)

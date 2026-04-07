@@ -8,6 +8,8 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"tasko": Color(1.0, 0.65, 0.92, 1.0),
 	"juice": Color(0.95, 1.0, 0.56, 1.0),
 	"madam": Color(0.86, 0.48, 0.42, 1.0),
+	"celler": Color(0.63, 0.74, 1.0, 1.0),
+	"kotro": Color(0.47, 0.92, 0.86, 1.0),
 }
 
 var players: Dictionary = {}
@@ -727,6 +729,37 @@ func server_sync_skill_charge(peer_id: int, target_peer_id: int = 0) -> void:
 func _has_full_skill_charge(peer_id: int) -> bool:
 	var required := skill_charge_required_for_peer(peer_id, 2)
 	return required > 0 and skill_charge_points_for_peer(peer_id, 2) >= required
+
+func is_player_action_locked(peer_id: int) -> bool:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null or warrior.skill2 == null:
+		return false
+	if warrior.skill2.has_method("is_action_locked"):
+		return warrior.skill2.call("is_action_locked", peer_id) == true
+	return false
+
+func override_local_input_state(peer_id: int, base_state: Dictionary) -> Dictionary:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null or warrior.skill2 == null:
+		return base_state
+	if warrior.skill2.has_method("override_input_state"):
+		var value: Variant = warrior.skill2.call("override_input_state", peer_id, base_state)
+		if value is Dictionary:
+			return value as Dictionary
+	return base_state
+
+func camera_focus_state_for_peer(peer_id: int) -> Dictionary:
+	var warrior_id := _warrior_id_for_peer(peer_id)
+	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
+	if warrior == null or warrior.skill2 == null:
+		return {}
+	if warrior.skill2.has_method("camera_focus_state"):
+		var value: Variant = warrior.skill2.call("camera_focus_state", peer_id)
+		if value is Dictionary:
+			return value as Dictionary
+	return {}
 
 func _server_tick_warrior_cooldowns(delta: float) -> void:
 	"""Tick cooldowns and per-skill server logic for all warriors"""

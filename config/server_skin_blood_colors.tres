@@ -177,6 +177,39 @@ skin_index = 0
 blood_color = Color(0.858824, 0.478431, 0.419608, 1)
 skill_color = Color(0.858824, 0.478431, 0.419608, 1)
 
+[sub_resource type="Resource" id="Resource_celler_default"]
+script = ExtResource("2_b2")
+character_id = "celler"
+blood_color = Color(0.631373, 0.737255, 1, 1)
+skill_color = Color(0.631373, 0.737255, 1, 1)
+
+[sub_resource type="Resource" id="Resource_celler_0"]
+script = ExtResource("2_b2")
+character_id = "celler"
+skin_index = 0
+blood_color = Color(0.631373, 0.737255, 1, 1)
+skill_color = Color(0.631373, 0.737255, 1, 1)
+
+[sub_resource type="Resource" id="Resource_kotro_default"]
+script = ExtResource("2_b2")
+character_id = "kotro"
+blood_color = Color(0.470588, 0.917647, 0.847059, 1)
+skill_color = Color(0.470588, 0.917647, 0.847059, 1)
+
+[sub_resource type="Resource" id="Resource_kotro_0"]
+script = ExtResource("2_b2")
+character_id = "kotro"
+skin_index = 0
+blood_color = Color(0.470588, 0.917647, 0.847059, 1)
+skill_color = Color(0.470588, 0.917647, 0.847059, 1)
+
+[sub_resource type="Resource" id="Resource_kotro_1"]
+script = ExtResource("2_b2")
+character_id = "kotro"
+skin_index = 1
+blood_color = Color(1, 0.705882, 0.352941, 1)
+skill_color = Color(1, 0.705882, 0.352941, 1)
+
 [resource]
 script = ExtResource("1_a1")
-entries = Array[Resource]([SubResource("Resource_outrage_default"), SubResource("Resource_erebus_default"), SubResource("Resource_tasko_default"), SubResource("Resource_juice_default"), SubResource("Resource_madam_default"), SubResource("Resource_outrage_0"), SubResource("Resource_outrage_1"), SubResource("Resource_outrage_2"), SubResource("Resource_outrage_3"), SubResource("Resource_outrage_4"), SubResource("Resource_outrage_5"), SubResource("Resource_outrage_6"), SubResource("Resource_outrage_7"), SubResource("Resource_outrage_8"), SubResource("Resource_erebus_0"), SubResource("Resource_erebus_1"), SubResource("Resource_erebus_2"), SubResource("Resource_erebus_3"), SubResource("Resource_tasko_0"), SubResource("Resource_tasko_1"), SubResource("Resource_tasko_2"), SubResource("Resource_tasko_3"), SubResource("Resource_juice_0"), SubResource("Resource_juice_1"), SubResource("Resource_juice_2"), SubResource("Resource_juice_3"), SubResource("Resource_madam_0")])
+entries = Array[Resource]([SubResource("Resource_outrage_default"), SubResource("Resource_erebus_default"), SubResource("Resource_tasko_default"), SubResource("Resource_juice_default"), SubResource("Resource_madam_default"), SubResource("Resource_celler_default"), SubResource("Resource_kotro_default"), SubResource("Resource_outrage_0"), SubResource("Resource_outrage_1"), SubResource("Resource_outrage_2"), SubResource("Resource_outrage_3"), SubResource("Resource_outrage_4"), SubResource("Resource_outrage_5"), SubResource("Resource_outrage_6"), SubResource("Resource_outrage_7"), SubResource("Resource_outrage_8"), SubResource("Resource_erebus_0"), SubResource("Resource_erebus_1"), SubResource("Resource_erebus_2"), SubResource("Resource_erebus_3"), SubResource("Resource_tasko_0"), SubResource("Resource_tasko_1"), SubResource("Resource_tasko_2"), SubResource("Resource_tasko_3"), SubResource("Resource_juice_0"), SubResource("Resource_juice_1"), SubResource("Resource_juice_2"), SubResource("Resource_juice_3"), SubResource("Resource_madam_0"), SubResource("Resource_celler_0"), SubResource("Resource_kotro_0"), SubResource("Resource_kotro_1")])

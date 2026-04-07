@@ -16,6 +16,7 @@ const DEFAULT_MUZZLE_POSITION := Vector2(27.0, -1.0)
 const DEFAULT_SHOT_FRAME_DURATION_SEC := 0.03
 const DEFAULT_RELOAD_FRAME_DURATION_SEC := 0.065
 const MIN_SHOT_FRAME_DURATION_SEC := 0.01
+const GUN_Z_INDEX := 4
 const GUN_RELOAD_SCALE_MULTIPLIER := 1.12
 const GUN_RELOAD_SCALE_UP_TIME := 0.08
 const GUN_RELOAD_SCALE_DOWN_TIME := 0.1
@@ -77,6 +78,7 @@ func configure(
 	_sfx_suppressed_cb = sfx_suppressed_cb
 	_shot_jolt_cb = shot_jolt_cb
 	_normalize_gun_sprite_anchor()
+	_apply_gun_render_order()
 	if _gun != null:
 		_gun_base_scale_abs = Vector2(absf(_gun.scale.x), absf(_gun.scale.y))
 
@@ -282,6 +284,10 @@ func _normalize_gun_sprite_anchor() -> void:
 	gun_sprite.position += draw_size * 0.5
 	gun_sprite.position.y += GUN_CENTERING_Y_TWEAK
 	gun_sprite.centered = true
+
+func _apply_gun_render_order() -> void:
+	if _gun != null and _gun is CanvasItem:
+		(_gun as CanvasItem).z_index = GUN_Z_INDEX
 
 func _apply_gun_horizontal_flip_from_angle(angle: float) -> void:
 	if _gun == null:

@@ -48,6 +48,19 @@
 	  "skins": {
 		"0": "#DB7A6BFF"
 	  }
+	},
+	"celler": {
+	  "default": "#A1BCFFFF",
+	  "skins": {
+		"0": "#A1BCFFFF"
+	  }
+	},
+	"kotro": {
+	  "default": "#78EAD8FF",
+	  "skins": {
+		"0": "#78EAD8FF",
+		"1": "#FFB45AFF"
+	  }
 	}
   }
 }

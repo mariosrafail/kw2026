@@ -115,7 +115,7 @@ func encode_create_lobby_payload(
 	if normalize_weapon_id_cb.is_valid():
 		normalized_weapon = str(normalize_weapon_id_cb.call(weapon_id))
 	var normalized_character := character_id.strip_edges().to_lower()
-	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam":
+	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro":
 		normalized_character = "outrage"
 	var normalized_map := normalize_map_id(map_catalog, map_id)
 	var normalized_mode := select_mode_for_map(map_catalog, normalized_map, mode_id)
@@ -180,7 +180,7 @@ func decode_create_lobby_payload(
 	if raw_map_id.is_empty():
 		raw_map_id = fallback_map_id
 	var normalized_character_part := str(character_part).strip_edges().to_lower()
-	if normalized_character_part != "erebus" and normalized_character_part != "tasko" and normalized_character_part != "juice" and normalized_character_part != "madam":
+	if normalized_character_part != "erebus" and normalized_character_part != "tasko" and normalized_character_part != "juice" and normalized_character_part != "madam" and normalized_character_part != "celler" and normalized_character_part != "kotro":
 		normalized_character_part = "outrage"
 
 	var normalized_weapon_part := weapon_part

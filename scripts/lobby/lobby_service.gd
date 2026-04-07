@@ -59,6 +59,10 @@ func reset(keep_local_selection: bool = false) -> void:
 			_global_local_selected_character = "juice"
 		elif normalized_saved == "madam":
 			_global_local_selected_character = "madam"
+		elif normalized_saved == "celler":
+			_global_local_selected_character = "celler"
+		elif normalized_saved == "kotro":
+			_global_local_selected_character = "kotro"
 		else:
 			_global_local_selected_character = "outrage"
 		_global_local_selected_skin_by_character = saved_skins
@@ -617,7 +621,7 @@ func set_peer_character(peer_id: int, character_id: String) -> void:
 	if peer_id <= 0:
 		return
 	var normalized := str(character_id).strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam":
+	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro":
 		normalized = "outrage"
 	_global_peer_character_by_peer[peer_id] = normalized
 
@@ -692,6 +696,10 @@ func get_peer_character(peer_id: int, fallback: String = "outrage") -> String:
 			return "juice"
 		if normalized_fallback == "madam":
 			return "madam"
+		if normalized_fallback == "celler":
+			return "celler"
+		if normalized_fallback == "kotro":
+			return "kotro"
 		return "outrage"
 	if character_id == "erebus":
 		return "erebus"
@@ -701,11 +709,15 @@ func get_peer_character(peer_id: int, fallback: String = "outrage") -> String:
 		return "juice"
 	if character_id == "madam":
 		return "madam"
+	if character_id == "celler":
+		return "celler"
+	if character_id == "kotro":
+		return "kotro"
 	return "outrage"
 
 func set_local_selected_character(character_id: String) -> void:
 	var normalized := str(character_id).strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam":
+	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro":
 		normalized = "outrage"
 	_global_local_selected_character = normalized
 
@@ -733,6 +745,10 @@ func get_local_selected_character(fallback: String = "outrage") -> String:
 			return "juice"
 		if normalized_fallback == "madam":
 			return "madam"
+		if normalized_fallback == "celler":
+			return "celler"
+		if normalized_fallback == "kotro":
+			return "kotro"
 		return "outrage"
 	if normalized == "erebus":
 		return "erebus"
@@ -742,6 +758,10 @@ func get_local_selected_character(fallback: String = "outrage") -> String:
 		return "juice"
 	if normalized == "madam":
 		return "madam"
+	if normalized == "celler":
+		return "celler"
+	if normalized == "kotro":
+		return "kotro"
 	return "outrage"
 
 func set_lobby_members(lobby_id: int, members: Array) -> void:

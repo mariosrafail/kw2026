@@ -947,6 +947,10 @@ func set_character_visual(character_id: String) -> void:
 			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		"madam":
 			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		"celler":
+			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		"kotro":
+			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		"outrage":
 			sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		_:

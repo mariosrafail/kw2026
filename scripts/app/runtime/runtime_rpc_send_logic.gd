@@ -216,18 +216,45 @@ func _send_skill_cast_rpc(target_peer_id: int, skill_number: int, caster_peer_id
 					_rpc_spawn_tasko_invis_field.rpc_id(target_peer_id, caster_peer_id, target_world)
 			elif skill_number == 2:
 				if target_is_local_server:
-					_rpc_spawn_tasko_mine(caster_peer_id, target_world)
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
 				else:
 					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
 		"juice":
 			if skill_number == 2:
 				if target_is_local_server:
-					_rpc_spawn_tasko_mine(caster_peer_id, target_world)
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
 				else:
 					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
 		"madam":
 			if skill_number == 2:
 				if target_is_local_server:
-					_rpc_spawn_tasko_mine(caster_peer_id, target_world)
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"celler":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"kotro":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
 				else:
 					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
