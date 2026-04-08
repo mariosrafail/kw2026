@@ -1,0 +1,42 @@
+{
+  "warrior_id": "krog",
+  "display_name": "Krog",
+  "warrior_cost": 3600,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/krog/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/krog/head.png",
+    "torso": "res://assets/warriors/krog/torso.png",
+    "legs": "res://assets/warriors/krog/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Crimson Core",
+      "unlock_type": "free",
+      "cost": 0
+    },
+    {
+      "id": "skin_01",
+      "index": 1,
+      "name": "Ash Volt",
+      "unlock_type": "shop",
+      "cost": 460
+    },
+    {
+      "id": "skin_02",
+      "index": 2,
+      "name": "Molten Drift",
+      "unlock_type": "shop",
+      "cost": 620
+    },
+    {
+      "id": "skin_03",
+      "index": 3,
+      "name": "Iron Ember",
+      "unlock_type": "shop",
+      "cost": 780
+    }
+  ]
+}

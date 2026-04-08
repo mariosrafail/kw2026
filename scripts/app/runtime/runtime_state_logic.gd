@@ -16,6 +16,10 @@ const DEFAULT_BLOOD_COLOR_BY_CHARACTER := {
 	"loker": Color(0.13, 0.44, 0.15, 1.0),
 	"gan": Color(0.24, 0.82, 0.96, 1.0),
 	"veila": Color(0.16, 0.18, 0.28, 1.0),
+	"krog": Color(0.78, 0.22, 0.18, 1.0),
+	"aevilok": Color(0.62, 0.18, 0.09, 1.0),
+	"franky": Color(0.18, 0.78, 0.44, 1.0),
+	"varn": Color(0.56, 0.61, 0.12, 1.0),
 }
 const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
@@ -30,6 +34,10 @@ const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"loker": Color(0.56, 0.89, 0.16, 1.0),
 	"gan": Color(0.38, 0.86, 1.0, 1.0),
 	"veila": Color(0.48, 0.2, 0.72, 1.0),
+	"krog": Color(0.94, 0.36, 0.16, 1.0),
+	"aevilok": Color(1.0, 0.47, 0.16, 1.0),
+	"franky": Color(0.32, 0.92, 0.55, 1.0),
+	"varn": Color(0.78, 0.88, 0.22, 1.0),
 }
 
 var server_skin_blood_color_config: Dictionary = {}
@@ -309,6 +317,14 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		return CHARACTER_ID_GAN
 	if normalized == CHARACTER_ID_VEILA:
 		return CHARACTER_ID_VEILA
+	if normalized == CHARACTER_ID_KROG:
+		return CHARACTER_ID_KROG
+	if normalized == CHARACTER_ID_AEVILOK:
+		return CHARACTER_ID_AEVILOK
+	if normalized == CHARACTER_ID_FRANKY:
+		return CHARACTER_ID_FRANKY
+	if normalized == CHARACTER_ID_VARN:
+		return CHARACTER_ID_VARN
 	if lobby_service != null:
 		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
 		if persisted == CHARACTER_ID_EREBUS:
@@ -347,6 +363,18 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		if persisted == CHARACTER_ID_VEILA:
 			peer_character_ids[peer_id] = CHARACTER_ID_VEILA
 			return CHARACTER_ID_VEILA
+		if persisted == CHARACTER_ID_KROG:
+			peer_character_ids[peer_id] = CHARACTER_ID_KROG
+			return CHARACTER_ID_KROG
+		if persisted == CHARACTER_ID_AEVILOK:
+			peer_character_ids[peer_id] = CHARACTER_ID_AEVILOK
+			return CHARACTER_ID_AEVILOK
+		if persisted == CHARACTER_ID_FRANKY:
+			peer_character_ids[peer_id] = CHARACTER_ID_FRANKY
+			return CHARACTER_ID_FRANKY
+		if persisted == CHARACTER_ID_VARN:
+			peer_character_ids[peer_id] = CHARACTER_ID_VARN
+			return CHARACTER_ID_VARN
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
 		if local_normalized == CHARACTER_ID_EREBUS:
@@ -371,6 +399,14 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 			return CHARACTER_ID_GAN
 		if local_normalized == CHARACTER_ID_VEILA:
 			return CHARACTER_ID_VEILA
+		if local_normalized == CHARACTER_ID_KROG:
+			return CHARACTER_ID_KROG
+		if local_normalized == CHARACTER_ID_AEVILOK:
+			return CHARACTER_ID_AEVILOK
+		if local_normalized == CHARACTER_ID_FRANKY:
+			return CHARACTER_ID_FRANKY
+		if local_normalized == CHARACTER_ID_VARN:
+			return CHARACTER_ID_VARN
 		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
 

@@ -137,8 +137,9 @@ func _ensure_darkness_overlay() -> void:
 		_darkness_layer = CanvasLayer.new()
 		_darkness_layer.name = "VeilaDarknessLayer"
 		_darkness_layer.layer = OVERLAY_LAYER
-		_darkness_layer.follow_viewport_enabled = true
 		host.add_child(_darkness_layer)
+	_darkness_layer.layer = OVERLAY_LAYER
+	_darkness_layer.follow_viewport_enabled = false
 	_darkness_rect = ColorRect.new()
 	_darkness_rect.name = "VeilaDarknessRect"
 	_darkness_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE

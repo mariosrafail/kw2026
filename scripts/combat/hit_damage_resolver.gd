@@ -16,6 +16,10 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"loker": Color(0.13, 0.44, 0.15, 1.0),
 	"gan": Color(0.24, 0.82, 0.96, 1.0),
 	"veila": Color(0.16, 0.18, 0.28, 1.0),
+	"krog": Color(0.78, 0.22, 0.18, 1.0),
+	"aevilok": Color(0.62, 0.18, 0.09, 1.0),
+	"franky": Color(0.18, 0.78, 0.44, 1.0),
+	"varn": Color(0.56, 0.61, 0.12, 1.0),
 }
 
 var players: Dictionary = {}

@@ -1,0 +1,21 @@
+{
+  "warrior_id": "aevilok",
+  "display_name": "Aevilok",
+  "warrior_cost": 3700,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/aevilok/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/aevilok/head.png",
+    "torso": "res://assets/warriors/aevilok/torso.png",
+    "legs": "res://assets/warriors/aevilok/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Hellborn",
+      "unlock_type": "free",
+      "cost": 0
+    }
+  ]
+}

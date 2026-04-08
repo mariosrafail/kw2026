@@ -115,7 +115,7 @@ func encode_create_lobby_payload(
 	if normalize_weapon_id_cb.is_valid():
 		normalized_weapon = str(normalize_weapon_id_cb.call(weapon_id))
 	var normalized_character := character_id.strip_edges().to_lower()
-	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila":
+	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn":
 		normalized_character = "outrage"
 	var normalized_map := normalize_map_id(map_catalog, map_id)
 	var normalized_mode := select_mode_for_map(map_catalog, normalized_map, mode_id)
@@ -180,7 +180,7 @@ func decode_create_lobby_payload(
 	if raw_map_id.is_empty():
 		raw_map_id = fallback_map_id
 	var normalized_character_part := str(character_part).strip_edges().to_lower()
-	if normalized_character_part != "erebus" and normalized_character_part != "tasko" and normalized_character_part != "juice" and normalized_character_part != "madam" and normalized_character_part != "celler" and normalized_character_part != "kotro" and normalized_character_part != "nova" and normalized_character_part != "hindi" and normalized_character_part != "loker" and normalized_character_part != "gan" and normalized_character_part != "veila":
+	if normalized_character_part != "erebus" and normalized_character_part != "tasko" and normalized_character_part != "juice" and normalized_character_part != "madam" and normalized_character_part != "celler" and normalized_character_part != "kotro" and normalized_character_part != "nova" and normalized_character_part != "hindi" and normalized_character_part != "loker" and normalized_character_part != "gan" and normalized_character_part != "veila" and normalized_character_part != "krog" and normalized_character_part != "aevilok" and normalized_character_part != "franky" and normalized_character_part != "varn":
 		normalized_character_part = "outrage"
 
 	var normalized_weapon_part := weapon_part

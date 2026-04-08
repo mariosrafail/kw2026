@@ -105,6 +105,10 @@ const CHARACTER_ID_HINDI := "hindi"
 const CHARACTER_ID_LOKER := "loker"
 const CHARACTER_ID_GAN := "gan"
 const CHARACTER_ID_VEILA := "veila"
+const CHARACTER_ID_KROG := "krog"
+const CHARACTER_ID_AEVILOK := "aevilok"
+const CHARACTER_ID_FRANKY := "franky"
+const CHARACTER_ID_VARN := "varn"
 
 const CHARACTERS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -166,6 +170,26 @@ const CHARACTERS := {
 		"name": "Veila",
 		"ability": "Darkness",
 		"description": "Darkens enemy vision for 5 seconds and gains extra mobility"
+	},
+	CHARACTER_ID_KROG: {
+		"name": "Krog",
+		"ability": "Laser",
+		"description": "Channels a continuous laser beam that stops on walls"
+	},
+	CHARACTER_ID_AEVILOK: {
+		"name": "Aevilok",
+		"ability": "Flamethrower",
+		"description": "Ignites a short warmup burst then sprays fire in head rotation direction"
+	},
+	CHARACTER_ID_FRANKY: {
+		"name": "Franky",
+		"ability": "Healing Circle",
+		"description": "Creates a stationary healing zone for self and teammates"
+	},
+	CHARACTER_ID_VARN: {
+		"name": "Varn",
+		"ability": "Fly Swarm",
+		"description": "Summons disruptive flies that swarm enemies and scramble aiming control"
 	}
 }
 

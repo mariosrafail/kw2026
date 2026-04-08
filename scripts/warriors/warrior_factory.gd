@@ -19,6 +19,10 @@ const HINDI_WARRIOR := preload("res://scripts/warriors/hindi_warrior.gd")
 const LOKER_WARRIOR := preload("res://scripts/warriors/loker_warrior.gd")
 const GAN_WARRIOR := preload("res://scripts/warriors/gan_warrior.gd")
 const VEILA_WARRIOR := preload("res://scripts/warriors/veila_warrior.gd")
+const KROG_WARRIOR := preload("res://scripts/warriors/krog_warrior.gd")
+const AEVILOK_WARRIOR := preload("res://scripts/warriors/aevilok_warrior.gd")
+const FRANKY_WARRIOR := preload("res://scripts/warriors/franky_warrior.gd")
+const VARN_WARRIOR := preload("res://scripts/warriors/varn_warrior.gd")
 
 static func create_warrior(warrior_id: String) -> WarriorProfile:
 	match warrior_id.to_lower():
@@ -46,15 +50,23 @@ static func create_warrior(warrior_id: String) -> WarriorProfile:
 			return GAN_WARRIOR.new()
 		"veila":
 			return VEILA_WARRIOR.new()
+		"krog":
+			return KROG_WARRIOR.new()
+		"aevilok":
+			return AEVILOK_WARRIOR.new()
+		"franky":
+			return FRANKY_WARRIOR.new()
+		"varn":
+			return VARN_WARRIOR.new()
 		_:
 			push_error("Unknown warrior: %s" % warrior_id)
 			return null
 
 static func is_valid_warrior(warrior_id: String) -> bool:
-	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila"]
+	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn"]
 
 static func get_all_warrior_ids() -> Array[String]:
-	return ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila"]
+	return ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn"]
 
 static func get_warrior_name(warrior_id: String) -> String:
 	match warrior_id.to_lower():
@@ -82,5 +94,13 @@ static func get_warrior_name(warrior_id: String) -> String:
 			return "Gan"
 		"veila":
 			return "Veila"
+		"krog":
+			return "Krog"
+		"aevilok":
+			return "Aevilok"
+		"franky":
+			return "Franky"
+		"varn":
+			return "Varn"
 		_:
 			return "Unknown"

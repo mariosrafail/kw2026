@@ -312,7 +312,7 @@ func send_create_lobby_request(request: Dictionary) -> void:
 		requested_name = "My Lobby %d" % (room_entries.size() + 1)
 	if selected_weapon_id.is_empty():
 		selected_weapon_id = "ak47"
-	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro" and selected_character_id != "nova" and selected_character_id != "hindi" and selected_character_id != "loker" and selected_character_id != "gan" and selected_character_id != "veila":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro" and selected_character_id != "nova" and selected_character_id != "hindi" and selected_character_id != "loker" and selected_character_id != "gan" and selected_character_id != "veila" and selected_character_id != "krog" and selected_character_id != "aevilok" and selected_character_id != "franky" and selected_character_id != "varn":
 		selected_character_id = "outrage"
 	if map_id.is_empty():
 		map_id = default_map_id

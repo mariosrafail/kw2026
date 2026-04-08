@@ -15,6 +15,10 @@ const WARRIOR_MANIFEST_PATHS := {
 	"loker": "res://assets/warriors/loker/skin_manifest.json",
 	"gan": "res://assets/warriors/gan/skin_manifest.json",
 	"veila": "res://assets/warriors/veila/skin_manifest.json",
+	"krog": "res://assets/warriors/krog/skin_manifest.json",
+	"aevilok": "res://assets/warriors/aevilok/skin_manifest.json",
+	"franky": "res://assets/warriors/franky/skin_manifest.json",
+	"varn": "res://assets/warriors/varn/skin_manifest.json",
 }
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const GAN_HAIR_WIND_SHADER := preload("res://assets/shaders/gan_hair_wind.gdshader")
@@ -31,6 +35,10 @@ const SKILL_SUMMARY_BY_WARRIOR := {
 	"loker": "Ulti: boosts fire rate and reload speed for 5s.",
 	"gan": "Ulti: places a static barrier that pushes enemies outward.",
 	"veila": "Ulti: darkens enemy vision while she moves and jumps faster.",
+	"krog": "Ulti: channels a continuous laser that burns along his aim.",
+	"aevilok": "Ulti: warmup cast then sprays a flamethrower in head direction.",
+	"franky": "Ulti: deploys a healing zone that restores him and allies.",
+	"varn": "Ulti: sends fly swarms to enemies and scrambles their aim control.",
 }
 
 var _manifest_cache: Dictionary = {}

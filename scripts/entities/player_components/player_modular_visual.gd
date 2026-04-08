@@ -14,6 +14,10 @@ const CHARACTER_ID_HINDI := "hindi"
 const CHARACTER_ID_LOKER := "loker"
 const CHARACTER_ID_GAN := "gan"
 const CHARACTER_ID_VEILA := "veila"
+const CHARACTER_ID_KROG := "krog"
+const CHARACTER_ID_AEVILOK := "aevilok"
+const CHARACTER_ID_FRANKY := "franky"
+const CHARACTER_ID_VARN := "varn"
 const GAN_HAIR_WIND_SHADER := preload("res://assets/shaders/gan_hair_wind.gdshader")
 
 const LEGS_FRAME_SIZE := Vector2i(64, 64)
@@ -96,6 +100,26 @@ const PART_TEXTURE_PATHS := {
 		"head": "res://assets/warriors/veila/head.png",
 		"torso": "res://assets/warriors/veila/torso.png",
 		"legs": "res://assets/warriors/veila/legs.png",
+	},
+	CHARACTER_ID_KROG: {
+		"head": "res://assets/warriors/krog/head.png",
+		"torso": "res://assets/warriors/krog/torso.png",
+		"legs": "res://assets/warriors/krog/legs.png",
+	},
+	CHARACTER_ID_AEVILOK: {
+		"head": "res://assets/warriors/aevilok/head.png",
+		"torso": "res://assets/warriors/aevilok/torso.png",
+		"legs": "res://assets/warriors/aevilok/legs.png",
+	},
+	CHARACTER_ID_FRANKY: {
+		"head": "res://assets/warriors/franky/head.png",
+		"torso": "res://assets/warriors/franky/torso.png",
+		"legs": "res://assets/warriors/franky/legs.png",
+	},
+	CHARACTER_ID_VARN: {
+		"head": "res://assets/warriors/varn/head.png",
+		"torso": "res://assets/warriors/varn/torso.png",
+		"legs": "res://assets/warriors/varn/legs.png",
 	},
 }
 
@@ -510,7 +534,7 @@ func _head_aim_offset_x() -> float:
 
 func set_character_visual(new_character_id: String) -> void:
 	var normalized := new_character_id.strip_edges().to_lower()
-	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO and normalized != CHARACTER_ID_NOVA and normalized != CHARACTER_ID_HINDI and normalized != CHARACTER_ID_LOKER and normalized != CHARACTER_ID_GAN and normalized != CHARACTER_ID_VEILA:
+	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO and normalized != CHARACTER_ID_NOVA and normalized != CHARACTER_ID_HINDI and normalized != CHARACTER_ID_LOKER and normalized != CHARACTER_ID_GAN and normalized != CHARACTER_ID_VEILA and normalized != CHARACTER_ID_KROG and normalized != CHARACTER_ID_AEVILOK and normalized != CHARACTER_ID_FRANKY and normalized != CHARACTER_ID_VARN:
 		normalized = CHARACTER_ID_OUTRAGE
 	character_id = normalized
 	if normalized == CHARACTER_ID_EREBUS:
@@ -532,6 +556,14 @@ func set_character_visual(new_character_id: String) -> void:
 	elif normalized == CHARACTER_ID_GAN:
 		warrior_column_index = KOTRO_WARRIOR_COLUMN
 	elif normalized == CHARACTER_ID_VEILA:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_KROG:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_AEVILOK:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_FRANKY:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_VARN:
 		warrior_column_index = KOTRO_WARRIOR_COLUMN
 	else:
 		warrior_column_index = OUTRAGE_WARRIOR_COLUMN
@@ -587,6 +619,14 @@ func _apply_modular_character_visuals() -> void:
 	elif character_id == CHARACTER_ID_GAN:
 		tint = Color(1, 1, 1, 1)
 	elif character_id == CHARACTER_ID_VEILA:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_KROG:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_AEVILOK:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_FRANKY:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_VARN:
 		tint = Color(1, 1, 1, 1)
 	if _legs_sprite != null:
 		_legs_sprite.modulate = tint

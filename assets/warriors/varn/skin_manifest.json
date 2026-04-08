@@ -1,0 +1,21 @@
+﻿{
+  "warrior_id": "varn",
+  "display_name": "Varn",
+  "warrior_cost": 3600,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/varn/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/varn/head.png",
+    "torso": "res://assets/warriors/varn/torso.png",
+    "legs": "res://assets/warriors/varn/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Swarm Prime",
+      "unlock_type": "free",
+      "cost": 0
+    }
+  ]
+}
