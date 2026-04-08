@@ -58,6 +58,7 @@ var _gun_reload_texture_frames: Array = []
 var _gun_reload_frame_duration_sec := DEFAULT_RELOAD_FRAME_DURATION_SEC
 var _gun_reload_animation_tween: Tween
 var _gun_reload_animation_nonce := 0
+var _reload_animation_speed_multiplier := 1.0
 
 func configure(
 	player: Node2D,
@@ -253,7 +254,8 @@ func play_shot_recoil(aim_angle: float) -> void:
 	_gun_recoil_tween.tween_property(_gun, "scale", Vector2(sign_x * base_scale.x, sign_y * base_scale.y), _gun_recoil_back_time).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_gun_recoil_tween.parallel().tween_property(_gun, "rotation", 0.0, _gun_recoil_back_time).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
-func play_reload_audio() -> void:
+func play_reload_audio(reload_animation_speed_multiplier: float = 1.0) -> void:
+	_reload_animation_speed_multiplier = maxf(0.05, reload_animation_speed_multiplier)
 	_start_gun_reload_scale_animation()
 	_start_gun_reload_rotation_animation()
 	_play_gun_reload_animation()
@@ -413,12 +415,13 @@ func _play_gun_reload_animation() -> void:
 		_gun_reload_animation_tween.kill()
 
 	_gun_reload_animation_tween = _player.create_tween()
+	var frame_duration_sec := _effective_reload_frame_duration_sec()
 	for frame_value in _gun_reload_texture_frames:
 		if not (frame_value is Texture2D):
 			continue
 		var frame_texture: Texture2D = frame_value
 		_gun_reload_animation_tween.tween_callback(Callable(self, "_apply_gun_reload_frame").bind(nonce, frame_texture))
-		_gun_reload_animation_tween.tween_interval(_gun_reload_frame_duration_sec)
+		_gun_reload_animation_tween.tween_interval(frame_duration_sec)
 	_gun_reload_animation_tween.tween_callback(Callable(self, "_finish_gun_reload_animation").bind(nonce))
 
 func _reset_gun_reload_animation() -> void:
@@ -484,7 +487,7 @@ func _start_gun_reload_rotation_animation() -> void:
 	if _gun_reload_rotation_tween != null:
 		_gun_reload_rotation_tween.kill()
 	_gun.rotation = 0.0
-	var total_duration := maxf(GUN_RELOAD_SPIN_UP_TIME, float(_gun_reload_texture_frames.size()) * _gun_reload_frame_duration_sec)
+	var total_duration := maxf(GUN_RELOAD_SPIN_UP_TIME, float(_gun_reload_texture_frames.size()) * _effective_reload_frame_duration_sec())
 	_gun_reload_rotation_tween = _player.create_tween()
 	_gun_reload_rotation_tween.tween_property(_gun, "rotation", GUN_RELOAD_SPIN_RADIANS, total_duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 
@@ -501,3 +504,6 @@ func _reset_gun_reload_rotation_animation(immediate: bool = false) -> void:
 
 func _is_sfx_suppressed() -> bool:
 	return _sfx_suppressed_cb.is_valid() and bool(_sfx_suppressed_cb.call())
+
+func _effective_reload_frame_duration_sec() -> float:
+	return maxf(MIN_SHOT_FRAME_DURATION_SEC, _gun_reload_frame_duration_sec / maxf(0.05, _reload_animation_speed_multiplier))

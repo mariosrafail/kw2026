@@ -50,27 +50,7 @@ func reset(keep_local_selection: bool = false) -> void:
 	if keep_local_selection:
 		_global_local_selected_weapon = str(saved_weapon).strip_edges().to_lower()
 		_global_local_selected_weapon_skin_by_weapon = saved_weapon_skins
-		var normalized_saved := str(saved_character).strip_edges().to_lower()
-		if normalized_saved == "erebus":
-			_global_local_selected_character = "erebus"
-		elif normalized_saved == "tasko":
-			_global_local_selected_character = "tasko"
-		elif normalized_saved == "juice":
-			_global_local_selected_character = "juice"
-		elif normalized_saved == "madam":
-			_global_local_selected_character = "madam"
-		elif normalized_saved == "celler":
-			_global_local_selected_character = "celler"
-		elif normalized_saved == "kotro":
-			_global_local_selected_character = "kotro"
-		elif normalized_saved == "nova":
-			_global_local_selected_character = "nova"
-		elif normalized_saved == "hindi":
-			_global_local_selected_character = "hindi"
-		elif normalized_saved == "loker":
-			_global_local_selected_character = "loker"
-		else:
-			_global_local_selected_character = "outrage"
+		_global_local_selected_character = _normalize_character_id(str(saved_character), "outrage")
 		_global_local_selected_skin_by_character = saved_skins
 	else:
 		_global_local_selected_weapon = "ak47"
@@ -626,9 +606,7 @@ func get_local_selected_weapon_skin(weapon_id: String, fallback: int = 0) -> int
 func set_peer_character(peer_id: int, character_id: String) -> void:
 	if peer_id <= 0:
 		return
-	var normalized := str(character_id).strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker":
-		normalized = "outrage"
+	var normalized := _normalize_character_id(character_id, "outrage")
 	_global_peer_character_by_peer[peer_id] = normalized
 
 func set_peer_skin(peer_id: int, skin_index: int) -> void:
@@ -693,51 +671,11 @@ func get_lobby_chat_history(lobby_id: int) -> Array:
 func get_peer_character(peer_id: int, fallback: String = "outrage") -> String:
 	var character_id := str(_global_peer_character_by_peer.get(peer_id, "")).strip_edges().to_lower()
 	if character_id.is_empty():
-		var normalized_fallback := fallback.strip_edges().to_lower()
-		if normalized_fallback == "erebus":
-			return "erebus"
-		if normalized_fallback == "tasko":
-			return "tasko"
-		if normalized_fallback == "juice":
-			return "juice"
-		if normalized_fallback == "madam":
-			return "madam"
-		if normalized_fallback == "celler":
-			return "celler"
-		if normalized_fallback == "kotro":
-			return "kotro"
-		if normalized_fallback == "nova":
-			return "nova"
-		if normalized_fallback == "hindi":
-			return "hindi"
-		if normalized_fallback == "loker":
-			return "loker"
-		return "outrage"
-	if character_id == "erebus":
-		return "erebus"
-	if character_id == "tasko":
-		return "tasko"
-	if character_id == "juice":
-		return "juice"
-	if character_id == "madam":
-		return "madam"
-	if character_id == "celler":
-		return "celler"
-	if character_id == "kotro":
-		return "kotro"
-	if character_id == "nova":
-		return "nova"
-	if character_id == "hindi":
-		return "hindi"
-	if character_id == "loker":
-		return "loker"
-	return "outrage"
+		return _normalize_character_id(fallback, "outrage")
+	return _normalize_character_id(character_id, "outrage")
 
 func set_local_selected_character(character_id: String) -> void:
-	var normalized := str(character_id).strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker":
-		normalized = "outrage"
-	_global_local_selected_character = normalized
+	_global_local_selected_character = _normalize_character_id(character_id, "outrage")
 
 func set_local_selected_skin(character_id: String, skin_index: int) -> void:
 	var normalized_character := str(character_id).strip_edges().to_lower()
@@ -754,45 +692,8 @@ func get_local_selected_skin(character_id: String, fallback: int = 0) -> int:
 func get_local_selected_character(fallback: String = "outrage") -> String:
 	var normalized := _global_local_selected_character.strip_edges().to_lower()
 	if normalized.is_empty():
-		var normalized_fallback := fallback.strip_edges().to_lower()
-		if normalized_fallback == "erebus":
-			return "erebus"
-		if normalized_fallback == "tasko":
-			return "tasko"
-		if normalized_fallback == "juice":
-			return "juice"
-		if normalized_fallback == "madam":
-			return "madam"
-		if normalized_fallback == "celler":
-			return "celler"
-		if normalized_fallback == "kotro":
-			return "kotro"
-		if normalized_fallback == "nova":
-			return "nova"
-		if normalized_fallback == "hindi":
-			return "hindi"
-		if normalized_fallback == "loker":
-			return "loker"
-		return "outrage"
-	if normalized == "erebus":
-		return "erebus"
-	if normalized == "tasko":
-		return "tasko"
-	if normalized == "juice":
-		return "juice"
-	if normalized == "madam":
-		return "madam"
-	if normalized == "celler":
-		return "celler"
-	if normalized == "kotro":
-		return "kotro"
-	if normalized == "nova":
-		return "nova"
-	if normalized == "hindi":
-		return "hindi"
-	if normalized == "loker":
-		return "loker"
-	return "outrage"
+		return _normalize_character_id(fallback, "outrage")
+	return _normalize_character_id(normalized, "outrage")
 
 func set_lobby_members(lobby_id: int, members: Array) -> void:
 	if not _global_server_lobbies.has(lobby_id):
@@ -852,6 +753,35 @@ func _preferred_team_for_lobby(lobby_id: int) -> int:
 func _is_team_mode(mode_id: String) -> bool:
 	var normalized := mode_id.strip_edges().to_lower()
 	return normalized == GAME_MODE_CTF or normalized == GAME_MODE_TDTH
+
+func _normalize_character_id(character_id: String, fallback: String = "outrage") -> String:
+	var normalized := str(character_id).strip_edges().to_lower()
+	if normalized == "erebus":
+		return "erebus"
+	if normalized == "tasko":
+		return "tasko"
+	if normalized == "juice":
+		return "juice"
+	if normalized == "madam":
+		return "madam"
+	if normalized == "celler":
+		return "celler"
+	if normalized == "kotro":
+		return "kotro"
+	if normalized == "nova":
+		return "nova"
+	if normalized == "hindi":
+		return "hindi"
+	if normalized == "loker":
+		return "loker"
+	if normalized == "gan":
+		return "gan"
+	if normalized == "veila":
+		return "veila"
+	var fallback_normalized := str(fallback).strip_edges().to_lower()
+	if fallback_normalized != normalized:
+		return _normalize_character_id(fallback_normalized, "outrage")
+	return "outrage"
 
 func _normalize_skull_ruleset_id(ruleset_id: String) -> String:
 	var normalized := ruleset_id.strip_edges().to_lower()

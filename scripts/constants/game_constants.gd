@@ -103,6 +103,8 @@ const CHARACTER_ID_KOTRO := "kotro"
 const CHARACTER_ID_NOVA := "nova"
 const CHARACTER_ID_HINDI := "hindi"
 const CHARACTER_ID_LOKER := "loker"
+const CHARACTER_ID_GAN := "gan"
+const CHARACTER_ID_VEILA := "veila"
 
 const CHARACTERS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -154,6 +156,16 @@ const CHARACTERS := {
 		"name": "Loker",
 		"ability": "Overclock",
 		"description": "Gain increased fire rate and reload speed for 5 seconds"
+	},
+	CHARACTER_ID_GAN: {
+		"name": "Gan",
+		"ability": "No Entry",
+		"description": "Deploy a stationary barrier that pushes enemies out"
+	},
+	CHARACTER_ID_VEILA: {
+		"name": "Veila",
+		"ability": "Darkness",
+		"description": "Darkens enemy vision for 5 seconds and gains extra mobility"
 	}
 }
 

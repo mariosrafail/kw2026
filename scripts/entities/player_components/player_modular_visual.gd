@@ -12,6 +12,9 @@ const CHARACTER_ID_KOTRO := "kotro"
 const CHARACTER_ID_NOVA := "nova"
 const CHARACTER_ID_HINDI := "hindi"
 const CHARACTER_ID_LOKER := "loker"
+const CHARACTER_ID_GAN := "gan"
+const CHARACTER_ID_VEILA := "veila"
+const GAN_HAIR_WIND_SHADER := preload("res://assets/shaders/gan_hair_wind.gdshader")
 
 const LEGS_FRAME_SIZE := Vector2i(64, 64)
 const TORSO_FRAME_SIZE := Vector2i(64, 64)
@@ -84,6 +87,16 @@ const PART_TEXTURE_PATHS := {
 		"torso": "res://assets/warriors/loker/torso.png",
 		"legs": "res://assets/warriors/loker/legs.png",
 	},
+	CHARACTER_ID_GAN: {
+		"head": "res://assets/warriors/gan/head.png",
+		"torso": "res://assets/warriors/gan/torso.png",
+		"legs": "res://assets/warriors/gan/legs.png",
+	},
+	CHARACTER_ID_VEILA: {
+		"head": "res://assets/warriors/veila/head.png",
+		"torso": "res://assets/warriors/veila/torso.png",
+		"legs": "res://assets/warriors/veila/legs.png",
+	},
 }
 
 var _player: CharacterBody2D
@@ -118,6 +131,9 @@ var _smoothed_velocity := Vector2.ZERO
 var _velocity_impulse := Vector2.ZERO
 var _shot_jolt_offset := Vector2.ZERO
 var _shot_jolt_rotation := 0.0
+var _gan_hair_material: ShaderMaterial
+var _gan_hair_overlay_material: ShaderMaterial
+var _gan_hair_overlay_sprite: Sprite2D
 
 func configure(player: CharacterBody2D, player_sprite: Node2D, legs_sprite: Sprite2D, legs_sprite_2: Sprite2D = null, torso_sprite: Sprite2D = null, head_sprite: Sprite2D = null) -> void:
 	_player = player
@@ -190,6 +206,7 @@ func update_walk_animation(delta: float, velocity: Vector2, on_floor: bool, stai
 	var horizontal_speed := absf(velocity.x)
 	var movement_sign := signf(velocity.x)
 	var speed_ratio := clampf(horizontal_speed / 245.0, 0.0, 1.8)
+	_update_gan_hair_wind(horizontal_speed, on_floor)
 	var grounded := on_floor and horizontal_speed > 8.0
 	var idle_grounded := on_floor and not grounded
 	_pose_blend_speed = 42.0 if grounded else 28.0 if on_floor else 20.0
@@ -493,7 +510,7 @@ func _head_aim_offset_x() -> float:
 
 func set_character_visual(new_character_id: String) -> void:
 	var normalized := new_character_id.strip_edges().to_lower()
-	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO and normalized != CHARACTER_ID_NOVA and normalized != CHARACTER_ID_HINDI and normalized != CHARACTER_ID_LOKER:
+	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO and normalized != CHARACTER_ID_NOVA and normalized != CHARACTER_ID_HINDI and normalized != CHARACTER_ID_LOKER and normalized != CHARACTER_ID_GAN and normalized != CHARACTER_ID_VEILA:
 		normalized = CHARACTER_ID_OUTRAGE
 	character_id = normalized
 	if normalized == CHARACTER_ID_EREBUS:
@@ -511,6 +528,10 @@ func set_character_visual(new_character_id: String) -> void:
 	elif normalized == CHARACTER_ID_HINDI:
 		warrior_column_index = KOTRO_WARRIOR_COLUMN
 	elif normalized == CHARACTER_ID_LOKER:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_GAN:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_VEILA:
 		warrior_column_index = KOTRO_WARRIOR_COLUMN
 	else:
 		warrior_column_index = OUTRAGE_WARRIOR_COLUMN
@@ -543,6 +564,7 @@ func _apply_modular_character_visuals() -> void:
 		_head_sprite.texture = head_tex
 		_head_sprite.region_enabled = true
 		_head_sprite.region_rect = _region_from_index(_head_sprite.texture, selected_head_index, HEAD_FRAME_SIZE)
+	_update_gan_hair_wind(0.0, false)
 
 	var tint := Color(0.78, 0.84, 1.0, 1.0) if character_id == CHARACTER_ID_EREBUS else Color(1, 1, 1, 1)
 	if character_id == CHARACTER_ID_TASKO:
@@ -561,6 +583,10 @@ func _apply_modular_character_visuals() -> void:
 	elif character_id == CHARACTER_ID_HINDI:
 		tint = Color(1, 1, 1, 1)
 	elif character_id == CHARACTER_ID_LOKER:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_GAN:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_VEILA:
 		tint = Color(1, 1, 1, 1)
 	if _legs_sprite != null:
 		_legs_sprite.modulate = tint
@@ -626,3 +652,98 @@ func _apply_snapshot_to_sprite(sprite: Sprite2D, snapshot: Variant, weight: floa
 	var scale_value = pose.get("scale", sprite.scale)
 	if scale_value is Vector2:
 		sprite.scale = sprite.scale.lerp(scale_value, weight)
+
+func _ensure_gan_hair_material() -> void:
+	if _gan_hair_material != null:
+		if _gan_hair_overlay_material != null:
+			return
+	else:
+		_gan_hair_material = ShaderMaterial.new()
+		_gan_hair_material.shader = GAN_HAIR_WIND_SHADER
+	_ensure_gan_hair_overlay_material()
+	_gan_hair_material.set_shader_parameter("walk_strength", 0.0)
+	_gan_hair_material.set_shader_parameter("air_factor", 0.0)
+	_gan_hair_material.set_shader_parameter("facing_sign", 1.0)
+	_gan_hair_overlay_material.set_shader_parameter("walk_strength", 1.0)
+	_gan_hair_overlay_material.set_shader_parameter("air_factor", 0.25)
+	_gan_hair_overlay_material.set_shader_parameter("facing_sign", 1.0)
+
+func _ensure_gan_hair_overlay_material() -> void:
+	if _gan_hair_overlay_material != null:
+		return
+	_gan_hair_overlay_material = ShaderMaterial.new()
+	_gan_hair_overlay_material.shader = GAN_HAIR_WIND_SHADER
+
+func _ensure_gan_hair_overlay_sprite() -> void:
+	if _head_sprite == null:
+		return
+	if _gan_hair_overlay_sprite != null and is_instance_valid(_gan_hair_overlay_sprite):
+		return
+	var parent_node := _head_sprite.get_parent()
+	if not (parent_node is Node):
+		return
+	var parent := parent_node as Node
+	var overlay := Sprite2D.new()
+	overlay.name = "GanHairWindOverlay"
+	overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	overlay.centered = _head_sprite.centered
+	overlay.visible = false
+	parent.add_child(overlay)
+	if parent is Node2D:
+		var parent_2d := parent as Node2D
+		parent_2d.move_child(overlay, mini(parent_2d.get_child_count() - 1, _head_sprite.get_index() + 1))
+	_gan_hair_overlay_sprite = overlay
+
+func _sync_gan_hair_overlay_from_head() -> void:
+	if _head_sprite == null:
+		return
+	_ensure_gan_hair_overlay_sprite()
+	if _gan_hair_overlay_sprite == null:
+		return
+	_gan_hair_overlay_sprite.texture = _head_sprite.texture
+	_gan_hair_overlay_sprite.region_enabled = _head_sprite.region_enabled
+	_gan_hair_overlay_sprite.region_rect = _head_sprite.region_rect
+	_gan_hair_overlay_sprite.hframes = _head_sprite.hframes
+	_gan_hair_overlay_sprite.vframes = _head_sprite.vframes
+	_gan_hair_overlay_sprite.frame = _head_sprite.frame
+	_gan_hair_overlay_sprite.frame_coords = _head_sprite.frame_coords
+	_gan_hair_overlay_sprite.flip_h = _head_sprite.flip_h
+	_gan_hair_overlay_sprite.flip_v = _head_sprite.flip_v
+	_gan_hair_overlay_sprite.offset = _head_sprite.offset
+	_gan_hair_overlay_sprite.position = _head_sprite.position + Vector2(0.0, -1.0)
+	_gan_hair_overlay_sprite.rotation = _head_sprite.rotation
+	_gan_hair_overlay_sprite.scale = _head_sprite.scale * Vector2(1.05, 1.05)
+	_gan_hair_overlay_sprite.z_as_relative = _head_sprite.z_as_relative
+	_gan_hair_overlay_sprite.z_index = _head_sprite.z_index + 1
+	_gan_hair_overlay_sprite.modulate = Color(1.18, 1.22, 1.3, 0.88)
+	_gan_hair_overlay_sprite.material = _gan_hair_overlay_material
+
+func _update_gan_hair_wind(horizontal_speed: float, on_floor: bool) -> void:
+	if _head_sprite == null:
+		return
+	if character_id != CHARACTER_ID_GAN:
+		if _head_sprite.material == _gan_hair_material:
+			_head_sprite.material = null
+		if _gan_hair_overlay_sprite != null and is_instance_valid(_gan_hair_overlay_sprite):
+			_gan_hair_overlay_sprite.visible = false
+		return
+
+	_ensure_gan_hair_material()
+	_ensure_gan_hair_overlay_sprite()
+	_sync_gan_hair_overlay_from_head()
+	var foreign_material_active := _head_sprite.material != null and _head_sprite.material != _gan_hair_material
+	if not foreign_material_active and _head_sprite.material != _gan_hair_material:
+		_head_sprite.material = _gan_hair_material
+
+	var walk_strength := clampf(horizontal_speed / 230.0, 0.0, 1.0)
+	walk_strength = maxf(walk_strength, 0.45)
+	var air_factor := 0.0 if on_floor else clampf(horizontal_speed / 320.0, 0.0, 0.45)
+	if _head_sprite.material == _gan_hair_material:
+		_gan_hair_material.set_shader_parameter("walk_strength", walk_strength)
+		_gan_hair_material.set_shader_parameter("air_factor", air_factor)
+		_gan_hair_material.set_shader_parameter("facing_sign", _facing_sign)
+	if _gan_hair_overlay_sprite != null and is_instance_valid(_gan_hair_overlay_sprite):
+		_gan_hair_overlay_sprite.visible = true
+		_gan_hair_overlay_material.set_shader_parameter("walk_strength", maxf(0.95, walk_strength * 1.35))
+		_gan_hair_overlay_material.set_shader_parameter("air_factor", maxf(0.25, air_factor * 1.6))
+		_gan_hair_overlay_material.set_shader_parameter("facing_sign", _facing_sign)

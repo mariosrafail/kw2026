@@ -26,6 +26,7 @@ var _auth_inflight := false
 var _auth_pending_action := ""
 var _auth_logout_token := ""
 var _auth_profile := "default"
+var _auth_selection_sync_queued := false
 @export var auth_require_login_on_startup := true
 
 @export var dev_auto_login_on_autostart := false
@@ -323,6 +324,16 @@ func _auth_submit_credentials(action: String, username: String, password: String
 func _auth_input_username() -> String:
 	return _runtime_auth_flow.auth_input_username(self)
 
+func _sync_selected_loadout_to_server() -> void:
+	_runtime_auth_flow.sync_selected_loadout_to_server(self)
+
+func _flush_queued_selected_loadout_sync() -> void:
+	if not _auth_selection_sync_queued:
+		return
+	if _auth_inflight:
+		return
+	_sync_selected_loadout_to_server()
+
 func _on_auth_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_runtime_session_auth_response_controller.on_auth_request_completed(self, result, response_code, body)
 
@@ -458,7 +469,11 @@ func _setup_character_picker() -> void:
 	lobby_character_option.set_item_metadata(8, CHARACTER_ID_HINDI)
 	lobby_character_option.add_item("Loker")
 	lobby_character_option.set_item_metadata(9, CHARACTER_ID_LOKER)
-	print("[DBG SETUP] Character picker: added Outrage (meta: %s), Erebus (meta: %s), Tasko (meta: %s), Juice (meta: %s), Madam (meta: %s), C3ll3r (meta: %s), Kotro (meta: %s), Nova (meta: %s), Hindi (meta: %s), Loker (meta: %s)" % [CHARACTER_ID_OUTRAGE, CHARACTER_ID_EREBUS, CHARACTER_ID_TASKO, CHARACTER_ID_JUICE, CHARACTER_ID_MADAM, CHARACTER_ID_CELLER, CHARACTER_ID_KOTRO, CHARACTER_ID_NOVA, CHARACTER_ID_HINDI, CHARACTER_ID_LOKER])
+	lobby_character_option.add_item("Gan")
+	lobby_character_option.set_item_metadata(10, CHARACTER_ID_GAN)
+	lobby_character_option.add_item("Veila")
+	lobby_character_option.set_item_metadata(11, CHARACTER_ID_VEILA)
+	print("[DBG SETUP] Character picker: added Outrage (meta: %s), Erebus (meta: %s), Tasko (meta: %s), Juice (meta: %s), Madam (meta: %s), C3ll3r (meta: %s), Kotro (meta: %s), Nova (meta: %s), Hindi (meta: %s), Loker (meta: %s), Gan (meta: %s), Veila (meta: %s)" % [CHARACTER_ID_OUTRAGE, CHARACTER_ID_EREBUS, CHARACTER_ID_TASKO, CHARACTER_ID_JUICE, CHARACTER_ID_MADAM, CHARACTER_ID_CELLER, CHARACTER_ID_KOTRO, CHARACTER_ID_NOVA, CHARACTER_ID_HINDI, CHARACTER_ID_LOKER, CHARACTER_ID_GAN, CHARACTER_ID_VEILA])
 	var target_character := _normalize_character_id(selected_character_id)
 	print("[DBG SETUP] Character picker: looking for target character: %s" % target_character)
 	var found_index := -1

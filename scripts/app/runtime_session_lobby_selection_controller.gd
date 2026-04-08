@@ -105,6 +105,7 @@ func persist_local_weapon_selection(host: Node) -> void:
 	var selected_weapon_id: String = str(host.get("selected_weapon_id"))
 	lobby_service.call("set_local_selected_weapon", selected_weapon_id)
 	host.call("_save_account_loadout")
+	host.call("_sync_selected_loadout_to_server")
 	var multiplayer_api: MultiplayerAPI = host.get("multiplayer") as MultiplayerAPI
 	if multiplayer_api == null or multiplayer_api.multiplayer_peer == null:
 		return
@@ -120,6 +121,7 @@ func persist_local_character_selection(host: Node) -> void:
 	var selected_character_id: String = str(host.get("selected_character_id"))
 	lobby_service.call("set_local_selected_character", selected_character_id)
 	host.call("_save_account_loadout")
+	host.call("_sync_selected_loadout_to_server")
 	var multiplayer_api: MultiplayerAPI = host.get("multiplayer") as MultiplayerAPI
 	if multiplayer_api == null or multiplayer_api.multiplayer_peer == null:
 		return
@@ -134,6 +136,7 @@ func persist_local_skin_selection(host: Node, character_id: String, skin_index: 
 		return
 	lobby_service.call("set_local_selected_skin", character_id, skin_index)
 	host.call("_save_account_loadout")
+	host.call("_sync_selected_loadout_to_server")
 	var multiplayer_api: MultiplayerAPI = host.get("multiplayer") as MultiplayerAPI
 	if multiplayer_api == null or multiplayer_api.multiplayer_peer == null:
 		return

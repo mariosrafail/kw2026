@@ -23,8 +23,10 @@ var shield_remaining_sec := 0.0
 var damage_slow_remaining_sec := 0.0
 var external_movement_speed_multiplier := 1.0
 var external_status_movement_speed_multiplier := 1.0
+var external_status_jump_velocity_multiplier := 1.0
 var external_fire_rate_multiplier := 1.0
 var external_reload_speed_multiplier := 1.0
+var reload_animation_speed_multiplier := 1.0
 
 func configure(
 	player: CharacterBody2D,
@@ -60,8 +62,10 @@ func reset_for_respawn() -> void:
 	damage_slow_remaining_sec = 0.0
 	external_movement_speed_multiplier = 1.0
 	external_status_movement_speed_multiplier = 1.0
+	external_status_jump_velocity_multiplier = 1.0
 	external_fire_rate_multiplier = 1.0
 	external_reload_speed_multiplier = 1.0
+	reload_animation_speed_multiplier = 1.0
 
 func initialize_defaults() -> void:
 	set_health(MAX_HEALTH)
@@ -106,7 +110,7 @@ func set_ammo(value: int, reloading: bool = false) -> void:
 func play_reload_audio(is_sfx_suppressed: bool, fallback_audio: AudioStreamPlayer2D = null) -> void:
 	var weapon_visual_component: Variant = _weapon_visual_component()
 	if weapon_visual_component != null:
-		weapon_visual_component.play_reload_audio()
+		weapon_visual_component.play_reload_audio(get_reload_animation_speed_multiplier())
 		return
 	if is_sfx_suppressed:
 		return
@@ -137,7 +141,7 @@ func apply_damage(amount: int, incoming_velocity: Vector2 = Vector2.ZERO) -> int
 
 func get_movement_speed_multiplier() -> float:
 	var multiplier: float = clampf(external_movement_speed_multiplier, 0.0, 1.0)
-	multiplier *= clampf(external_status_movement_speed_multiplier, 0.0, 1.0)
+	multiplier *= clampf(external_status_movement_speed_multiplier, 0.0, 3.0)
 	if damage_slow_remaining_sec > 0.0:
 		multiplier *= DAMAGE_SLOW_MULTIPLIER
 	var status_visuals_component: Variant = _status_visuals_component()
@@ -146,16 +150,20 @@ func get_movement_speed_multiplier() -> float:
 	return multiplier
 
 func get_jump_velocity_multiplier() -> float:
+	var multiplier := clampf(external_status_jump_velocity_multiplier, 0.25, 3.0)
 	var status_visuals_component: Variant = _status_visuals_component()
 	if status_visuals_component != null:
-		return float(status_visuals_component.get_jump_velocity_multiplier())
-	return 1.0
+		multiplier *= float(status_visuals_component.get_jump_velocity_multiplier())
+	return multiplier
 
 func set_external_movement_speed_multiplier(value: float) -> void:
 	external_movement_speed_multiplier = clampf(value, 0.0, 1.0)
 
 func set_external_status_movement_speed_multiplier(value: float) -> void:
-	external_status_movement_speed_multiplier = clampf(value, 0.0, 1.0)
+	external_status_movement_speed_multiplier = clampf(value, 0.0, 3.0)
+
+func set_external_status_jump_velocity_multiplier(value: float) -> void:
+	external_status_jump_velocity_multiplier = clampf(value, 0.25, 3.0)
 
 func set_external_fire_rate_multiplier(value: float) -> void:
 	external_fire_rate_multiplier = clampf(value, 0.05, 4.0)
@@ -168,6 +176,12 @@ func set_external_reload_speed_multiplier(value: float) -> void:
 
 func get_external_reload_speed_multiplier() -> float:
 	return clampf(external_reload_speed_multiplier, 0.05, 4.0)
+
+func set_reload_animation_speed_multiplier(value: float) -> void:
+	reload_animation_speed_multiplier = clampf(value, 0.05, 4.0)
+
+func get_reload_animation_speed_multiplier() -> float:
+	return clampf(reload_animation_speed_multiplier, 0.05, 4.0)
 
 func set_damage_immune(duration_sec: float) -> void:
 	damage_immune_remaining_sec = maxf(damage_immune_remaining_sec, maxf(0.0, duration_sec))

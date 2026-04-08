@@ -13,8 +13,25 @@ const WARRIOR_MANIFEST_PATHS := {
 	"nova": "res://assets/warriors/nova/skin_manifest.json",
 	"hindi": "res://assets/warriors/hindi/skin_manifest.json",
 	"loker": "res://assets/warriors/loker/skin_manifest.json",
+	"gan": "res://assets/warriors/gan/skin_manifest.json",
+	"veila": "res://assets/warriors/veila/skin_manifest.json",
 }
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
+const GAN_HAIR_WIND_SHADER := preload("res://assets/shaders/gan_hair_wind.gdshader")
+const SKILL_SUMMARY_BY_WARRIOR := {
+	"outrage": "Ulti: damage boost for 5s to win fast duels.",
+	"erebus": "Ulti: short immunity window to survive burst damage.",
+	"tasko": "Ulti: turns invisible for 5s to reposition safely.",
+	"juice": "Ulti: shrink for 5s to become harder to hit.",
+	"madam": "Ulti: creates a slow aura around her for 5s.",
+	"celler": "Ulti: summons a moon above him that explodes after 5s.",
+	"kotro": "Ulti: remote-controls a bomb while standing still.",
+	"nova": "Ulti: deploys an echo field that flips horizontal movement.",
+	"hindi": "Ulti: enchants bullets with mini-stun on hit.",
+	"loker": "Ulti: boosts fire rate and reload speed for 5s.",
+	"gan": "Ulti: places a static barrier that pushes enemies outward.",
+	"veila": "Ulti: darkens enemy vision while she moves and jumps faster.",
+}
 
 var _manifest_cache: Dictionary = {}
 var _texture_cache: Dictionary = {}
@@ -122,6 +139,12 @@ func warrior_skin_label(warrior_id: String, skin_index: int) -> String:
 func warrior_skin_cost(warrior_id: String, skin_index: int) -> int:
 	var entry := warrior_skin_entry(warrior_id, skin_index)
 	return maxi(0, int(entry.get("cost", 0)))
+
+func warrior_skill_description_short(warrior_id: String) -> String:
+	var normalized := warrior_id.strip_edges().to_lower()
+	if SKILL_SUMMARY_BY_WARRIOR.has(normalized):
+		return str(SKILL_SUMMARY_BY_WARRIOR[normalized])
+	return "Ulti: unique signature ability for this warrior."
 
 func warrior_preview_texture_for(warrior_id: String, skin_index: int) -> Texture2D:
 	var normalized := warrior_id.strip_edges().to_lower()
@@ -502,6 +525,59 @@ func apply_warrior_menu_preview(player: Node, warrior_id: String, skin_index: in
 		legacy_body.texture = preview_tex
 		legacy_body.region_enabled = false
 		legacy_body.modulate = Color(1, 1, 1, 1)
+		if normalized == "gan":
+			var gan_material: ShaderMaterial = null
+			if legacy_body.has_meta("_gan_hair_menu_material"):
+				var cached: Variant = legacy_body.get_meta("_gan_hair_menu_material")
+				if cached is ShaderMaterial:
+					gan_material = cached as ShaderMaterial
+			if gan_material == null:
+				gan_material = ShaderMaterial.new()
+				gan_material.shader = GAN_HAIR_WIND_SHADER
+				legacy_body.set_meta("_gan_hair_menu_material", gan_material)
+			gan_material.set_shader_parameter("walk_strength", 1.0)
+			gan_material.set_shader_parameter("air_factor", 0.2)
+			gan_material.set_shader_parameter("facing_sign", 1.0)
+			legacy_body.material = gan_material
+			var overlay := visual_root.get_node_or_null("GanHairWindOverlay") as Sprite2D
+			if overlay == null:
+				overlay = Sprite2D.new()
+				overlay.name = "GanHairWindOverlay"
+				overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+				overlay.centered = true
+				visual_root.add_child(overlay)
+				if visual_root is Node2D:
+					var visual_root_2d := visual_root as Node2D
+					visual_root_2d.move_child(overlay, visual_root_2d.get_child_count() - 1)
+			var overlay_material: ShaderMaterial = null
+			if overlay.has_meta("_gan_hair_menu_overlay_material"):
+				var overlay_cached: Variant = overlay.get_meta("_gan_hair_menu_overlay_material")
+				if overlay_cached is ShaderMaterial:
+					overlay_material = overlay_cached as ShaderMaterial
+			if overlay_material == null:
+				overlay_material = ShaderMaterial.new()
+				overlay_material.shader = GAN_HAIR_WIND_SHADER
+				overlay.set_meta("_gan_hair_menu_overlay_material", overlay_material)
+			overlay.texture = preview_tex
+			overlay.region_enabled = false
+			overlay.position = legacy_body.position + Vector2(0.0, -1.0)
+			overlay.rotation = legacy_body.rotation
+			overlay.scale = legacy_body.scale * Vector2(1.08, 1.08)
+			overlay.modulate = Color(1.2, 1.25, 1.36, 0.9)
+			overlay.z_as_relative = legacy_body.z_as_relative
+			overlay.z_index = legacy_body.z_index + 1
+			overlay.visible = true
+			overlay_material.set_shader_parameter("walk_strength", 1.0)
+			overlay_material.set_shader_parameter("air_factor", 0.35)
+			overlay_material.set_shader_parameter("facing_sign", 1.0)
+			overlay.material = overlay_material
+		elif legacy_body.material is ShaderMaterial and legacy_body.has_meta("_gan_hair_menu_material"):
+			var stored: Variant = legacy_body.get_meta("_gan_hair_menu_material")
+			if stored is ShaderMaterial and legacy_body.material == stored:
+				legacy_body.material = null
+			var hidden_overlay := visual_root.get_node_or_null("GanHairWindOverlay") as Sprite2D
+			if hidden_overlay != null:
+				hidden_overlay.visible = false
 
 func apply_warrior_game_visual(player: Node, warrior_id: String, skin_index: int, fallback_heads: Texture2D = null, fallback_torso: Texture2D = null, fallback_legs: Texture2D = null) -> void:
 	if player == null:

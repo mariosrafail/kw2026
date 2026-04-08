@@ -10,6 +10,8 @@ func select_warrior_skin(host: Control, warrior_id: String, skin_index: int, sil
 	var warrior_name_label = host.get("warrior_name_label") as Label
 	if warrior_name_label != null:
 		warrior_name_label.text = "%s - %s" % [warrior_ui.warrior_display_name(str(host.get("_pending_warrior_id"))), warrior_ui.warrior_skin_label(str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin")))]
+	if host != null and host.has_method("_refresh_warrior_skill_description_label"):
+		host.call("_refresh_warrior_skill_description_label", str(host.get("_pending_warrior_id")))
 	if host != null and host.has_method("_build_warrior_skin_grid"):
 		host.call("_build_warrior_skin_grid", str(host.get("_pending_warrior_id")))
 	host.call("_refresh_warrior_filter_button_state")
@@ -17,8 +19,6 @@ func select_warrior_skin(host: Control, warrior_id: String, skin_index: int, sil
 	refresh_warrior_action(host)
 	if host != null and host.has_method("_refresh_selection_context_visuals"):
 		host.call("_refresh_selection_context_visuals")
-	if not silent:
-		host.call("_pop", host.get("warrior_shop_preview"))
 
 func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> void:
 	host.set("selected_warrior_id", warrior_id.strip_edges().to_lower())
@@ -35,6 +35,8 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 	var warrior_name_label = host.get("warrior_name_label") as Label
 	if warrior_name_label != null:
 		warrior_name_label.text = "%s - %s" % [warrior_ui.warrior_display_name(str(host.get("selected_warrior_id"))), warrior_ui.warrior_skin_label(str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))]
+	if host != null and host.has_method("_refresh_warrior_skill_description_label"):
+		host.call("_refresh_warrior_skill_description_label", str(host.get("selected_warrior_id")))
 	if host != null and host.has_method("_build_warrior_skin_grid"):
 		host.call("_build_warrior_skin_grid", str(host.get("selected_warrior_id")))
 	host.call("_save_state")
@@ -46,7 +48,6 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 	refresh_warrior_action(host)
 	if host != null and host.has_method("_refresh_selection_context_visuals"):
 		host.call("_refresh_selection_context_visuals")
-	host.call("_pop", host.get("warrior_shop_preview"))
 
 func buy_warrior_if_needed(host: Control, warrior_id: String) -> bool:
 	var normalized = warrior_id.strip_edges().to_lower()

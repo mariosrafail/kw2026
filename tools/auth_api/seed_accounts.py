@@ -13,7 +13,7 @@ ENV_PATH = ROOT / ".env"
 ACCOUNT_USERNAMES = ["Markos", "Giannis", "Erebus", "Kostas"]
 ACCOUNT_PASSWORD = "1234"
 
-ALLOWED_WARRIORS = ["outrage", "erebus", "tasko"]
+ALLOWED_WARRIORS = ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila"]
 ALLOWED_WEAPONS = ["uzi", "ak47", "shotgun", "grenade"]
 
 
@@ -119,8 +119,8 @@ def ensure_schema(cur) -> None:
         create table if not exists account_loadouts (
             account_id uuid primary key references accounts(id) on delete cascade,
             owned_warriors jsonb not null default '["outrage"]'::jsonb,
-            owned_warrior_skins_by_warrior jsonb not null default '{"outrage":[0],"erebus":[0],"tasko":[0]}'::jsonb,
-            equipped_warrior_skin_by_warrior jsonb not null default '{"outrage":0,"erebus":0,"tasko":0}'::jsonb,
+            owned_warrior_skins_by_warrior jsonb not null default '{"outrage":[0],"erebus":[0],"tasko":[0],"juice":[0],"madam":[0],"celler":[0],"kotro":[0],"nova":[0],"hindi":[0],"loker":[0],"gan":[0],"veila":[0]}'::jsonb,
+            equipped_warrior_skin_by_warrior jsonb not null default '{"outrage":0,"erebus":0,"tasko":0,"juice":0,"madam":0,"celler":0,"kotro":0,"nova":0,"hindi":0,"loker":0,"gan":0,"veila":0}'::jsonb,
             selected_warrior_id text not null default 'outrage',
             selected_warrior_skin integer not null default 0,
             equipped_weapon_skin_by_weapon jsonb not null default '{"uzi":0,"ak47":0,"shotgun":0,"grenade":0}'::jsonb,
@@ -225,7 +225,7 @@ def upsert_account(cur, username: str, password_hash: str, warrior_skins: dict[s
             account_id,
             json.dumps(ALLOWED_WARRIORS),
             json.dumps(warrior_skins),
-            json.dumps({"outrage": 0, "erebus": 0, "tasko": 0}),
+            json.dumps({warrior_id: 0 for warrior_id in ALLOWED_WARRIORS}),
             "outrage",
             0,
             json.dumps({"uzi": 0, "ak47": 0, "shotgun": 0, "grenade": 0}),

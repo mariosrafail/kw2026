@@ -14,6 +14,8 @@ const DEFAULT_BLOOD_COLOR_BY_CHARACTER := {
 	"nova": Color(0.41, 0.24, 0.28, 1.0),
 	"hindi": Color(0.88, 0.55, 0.36, 1.0),
 	"loker": Color(0.13, 0.44, 0.15, 1.0),
+	"gan": Color(0.24, 0.82, 0.96, 1.0),
+	"veila": Color(0.16, 0.18, 0.28, 1.0),
 }
 const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
@@ -26,6 +28,8 @@ const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"nova": Color(0.53, 0.20, 0.64, 1.0),
 	"hindi": Color(0.29, 0.83, 1.0, 1.0),
 	"loker": Color(0.56, 0.89, 0.16, 1.0),
+	"gan": Color(0.38, 0.86, 1.0, 1.0),
+	"veila": Color(0.48, 0.2, 0.72, 1.0),
 }
 
 var server_skin_blood_color_config: Dictionary = {}
@@ -301,6 +305,10 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		return CHARACTER_ID_HINDI
 	if normalized == CHARACTER_ID_LOKER:
 		return CHARACTER_ID_LOKER
+	if normalized == CHARACTER_ID_GAN:
+		return CHARACTER_ID_GAN
+	if normalized == CHARACTER_ID_VEILA:
+		return CHARACTER_ID_VEILA
 	if lobby_service != null:
 		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
 		if persisted == CHARACTER_ID_EREBUS:
@@ -333,6 +341,12 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		if persisted == CHARACTER_ID_LOKER:
 			peer_character_ids[peer_id] = CHARACTER_ID_LOKER
 			return CHARACTER_ID_LOKER
+		if persisted == CHARACTER_ID_GAN:
+			peer_character_ids[peer_id] = CHARACTER_ID_GAN
+			return CHARACTER_ID_GAN
+		if persisted == CHARACTER_ID_VEILA:
+			peer_character_ids[peer_id] = CHARACTER_ID_VEILA
+			return CHARACTER_ID_VEILA
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
 		if local_normalized == CHARACTER_ID_EREBUS:
@@ -353,6 +367,10 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 			return CHARACTER_ID_HINDI
 		if local_normalized == CHARACTER_ID_LOKER:
 			return CHARACTER_ID_LOKER
+		if local_normalized == CHARACTER_ID_GAN:
+			return CHARACTER_ID_GAN
+		if local_normalized == CHARACTER_ID_VEILA:
+			return CHARACTER_ID_VEILA
 		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
 

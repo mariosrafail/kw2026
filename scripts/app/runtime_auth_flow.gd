@@ -176,20 +176,36 @@ func save_account_loadout(host: Node) -> void:
 func load_account_loadout(host: Node) -> void:
 	var path := account_loadout_path(host)
 	if path.is_empty() or not FileAccess.file_exists(path):
+		host.call("_append_log", "[AUTH][loadout_local] no local loadout file for user=%s path=%s" % [
+			str(host.get("auth_username")),
+			ProjectSettings.globalize_path(path)
+		])
 		return
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
+		host.call("_append_log", "[AUTH][loadout_local] failed to open loadout file path=%s" % ProjectSettings.globalize_path(path))
 		return
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if not (parsed is Dictionary):
+		host.call("_append_log", "[AUTH][loadout_local] invalid json payload path=%s" % ProjectSettings.globalize_path(path))
 		return
 	var payload := parsed as Dictionary
 	var selected_weapon_id := str(payload.get("selected_weapon_id", host.get("selected_weapon_id"))).strip_edges().to_lower()
 	if selected_weapon_id.is_empty():
 		selected_weapon_id = "ak47"
-	var selected_character_id := str(host.call("_normalize_character_id", str(payload.get("selected_character_id", host.get("selected_character_id")))))
+	var raw_selected_character_id := str(payload.get("selected_character_id", host.get("selected_character_id"))).strip_edges().to_lower()
+	var selected_character_id := str(host.call("_normalize_character_id", raw_selected_character_id))
 	var selected_weapon_skin := maxi(0, int(payload.get("selected_weapon_skin", host.get("selected_weapon_skin"))))
 	var selected_skin_index := maxi(0, int(payload.get("selected_skin_index", 0)))
+	host.call("_append_log", "[AUTH][loadout_local] user=%s path=%s raw_character=%s normalized_character=%s weapon=%s weapon_skin=%d warrior_skin=%d" % [
+		str(host.get("auth_username")),
+		ProjectSettings.globalize_path(path),
+		raw_selected_character_id,
+		selected_character_id,
+		selected_weapon_id,
+		selected_weapon_skin,
+		selected_skin_index
+	])
 	host.set("selected_weapon_id", selected_weapon_id)
 	host.set("selected_weapon_skin", selected_weapon_skin)
 	host.set("selected_character_id", selected_character_id)
@@ -329,3 +345,52 @@ func auth_input_username(host: Node) -> String:
 	if not str(host.get("auth_username")).strip_edges().is_empty():
 		return str(host.get("auth_username")).strip_edges()
 	return str(host.get("dev_auto_login_username")).strip_edges()
+
+func sync_selected_loadout_to_server(host: Node) -> void:
+	var token := str(host.get("auth_token")).strip_edges()
+	if token.is_empty():
+		return
+	if bool(host.get("_auth_inflight")):
+		host.set("_auth_selection_sync_queued", true)
+		return
+	var auth_request := host.get("auth_request") as HTTPRequest
+	if auth_request == null:
+		return
+
+	var selected_weapon_id := str(host.get("selected_weapon_id")).strip_edges().to_lower()
+	if selected_weapon_id.is_empty():
+		selected_weapon_id = "ak47"
+	var selected_character_id := str(host.call("_normalize_character_id", str(host.get("selected_character_id"))))
+	var selected_weapon_skin := maxi(0, int(host.get("selected_weapon_skin")))
+	var selected_warrior_skin := 0
+	var lobby_service: Object = host.get("lobby_service") as Object
+	if lobby_service != null:
+		selected_warrior_skin = maxi(0, int(lobby_service.call("get_local_selected_skin", selected_character_id, 0)))
+
+	var body := JSON.stringify({
+		"selected_warrior_id": selected_character_id,
+		"selected_warrior_skin": selected_warrior_skin,
+		"selected_weapon_id": selected_weapon_id,
+		"selected_weapon_skin": selected_weapon_skin
+	})
+	var url := "%s/wallet/update" % auth_api_base_url(host)
+	host.call("_append_log", "[AUTH][wallet_update_selection] request user=%s warrior=%s warrior_skin=%d weapon=%s weapon_skin=%d url=%s" % [
+		str(host.get("auth_username")),
+		selected_character_id,
+		selected_warrior_skin,
+		selected_weapon_id,
+		selected_weapon_skin,
+		url
+	])
+	host.set("_auth_inflight", true)
+	host.set("_auth_pending_action", "wallet_update_selection")
+	host.set("_auth_selection_sync_queued", false)
+	var headers := PackedStringArray([
+		"Authorization: Bearer %s" % token,
+		"Content-Type: application/json"
+	])
+	var err := auth_request.request(url, headers, HTTPClient.METHOD_POST, body)
+	if err != OK:
+		host.set("_auth_inflight", false)
+		host.set("_auth_pending_action", "")
+		host.call("_append_log", "[AUTH][wallet_update_selection] request failed err=%d" % err)

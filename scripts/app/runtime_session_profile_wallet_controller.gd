@@ -22,8 +22,25 @@ func apply_profile_payload(host: Node, payload: Dictionary) -> void:
 			arr.append(skin_index)
 		owned_skins_by_character[character_id] = arr
 	host.set("owned_skins_by_character", owned_skins_by_character)
+	var selected_character_id: String = str(host.get("selected_character_id"))
+	if payload.has("selected_warrior_id"):
+		selected_character_id = normalize_character_id(str(payload.get("selected_warrior_id", selected_character_id)))
+	host.set("selected_character_id", selected_character_id)
+	if payload.has("selected_weapon_id"):
+		host.set("selected_weapon_id", str(payload.get("selected_weapon_id", host.get("selected_weapon_id"))).strip_edges().to_lower())
+	if payload.has("selected_weapon_skin"):
+		host.set("selected_weapon_skin", maxi(0, int(payload.get("selected_weapon_skin", host.get("selected_weapon_skin")))))
+	var selected_warrior_skin: int = maxi(0, int(payload.get("selected_warrior_skin", 0)))
+	var lobby_service: Object = host.get("lobby_service") as Object
+	if lobby_service != null:
+		lobby_service.call("set_local_selected_character", selected_character_id)
+		lobby_service.call("set_local_selected_weapon", str(host.get("selected_weapon_id")))
+		lobby_service.call("set_local_selected_weapon_skin", str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))
+		lobby_service.call("set_local_selected_skin", selected_character_id, selected_warrior_skin)
 
 	update_wallet_label(host)
+	host.call("_setup_weapon_picker")
+	host.call("_setup_character_picker")
 	host.call("_setup_skin_picker")
 
 func set_wallet(host: Node, coins: int, clk: int) -> void:
@@ -41,7 +58,7 @@ func update_wallet_label(host: Node) -> void:
 
 func normalize_character_id(raw: String) -> String:
 	var normalized: String = raw.strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker":
+	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker" and normalized != "gan" and normalized != "veila":
 		normalized = "outrage"
 	return normalized
 

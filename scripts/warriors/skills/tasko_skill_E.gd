@@ -114,24 +114,20 @@ func _spawn_invisibility_vfx(player: NetPlayer, peer_id: int, duration_sec: floa
 	if tree_for_cleanup == null:
 		return
 	var cleanup_timer := tree_for_cleanup.create_timer(duration_sec)
-	cleanup_timer.timeout.connect(func() -> void:
-		if vfx != null and is_instance_valid(vfx):
-			vfx.queue_free()
-	)
+	cleanup_timer.timeout.connect(Callable(self, "_on_invisibility_vfx_cleanup_timeout").bind(vfx.get_instance_id()), CONNECT_ONE_SHOT)
 
 func _schedule_release(player: NetPlayer, peer_id: int, duration_sec: float) -> void:
 	var tree := player.get_tree()
 	if tree == null:
 		return
 	var timer := tree.create_timer(duration_sec)
-	timer.timeout.connect(func() -> void:
-		if player != null and is_instance_valid(player):
-			_set_player_hidden_state(player, false)
-		_set_local_invisible_status(peer_id, false)
+	timer.timeout.connect(
+		Callable(self, "_on_invisibility_release_timeout").bind(player.get_instance_id(), peer_id),
+		CONNECT_ONE_SHOT
 	)
 
 func _should_hide_for_local_viewer(caster_peer_id: int) -> bool:
-	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null else 0
+	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null and multiplayer.multiplayer_peer != null else 0
 	if local_peer_id <= 0:
 		return true
 	if local_peer_id == caster_peer_id:
@@ -146,7 +142,9 @@ func _should_hide_for_local_viewer(caster_peer_id: int) -> bool:
 	return true
 
 func _set_local_invisible_status(caster_peer_id: int, enabled: bool) -> void:
-	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null else 0
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return
+	var local_peer_id := multiplayer.get_unique_id()
 	if local_peer_id != caster_peer_id:
 		return
 	var tree := _scene_tree()
@@ -154,6 +152,17 @@ func _set_local_invisible_status(caster_peer_id: int, enabled: bool) -> void:
 	if root == null or not root.has_method("client_set_status_text"):
 		return
 	root.call("client_set_status_text", STATUS_TEXT if enabled else "")
+
+func _on_invisibility_vfx_cleanup_timeout(vfx_instance_id: int) -> void:
+	var vfx := instance_from_id(vfx_instance_id) as Node
+	if vfx != null and is_instance_valid(vfx):
+		vfx.queue_free()
+
+func _on_invisibility_release_timeout(player_instance_id: int, peer_id: int) -> void:
+	var player := instance_from_id(player_instance_id) as NetPlayer
+	if player != null and is_instance_valid(player):
+		_set_player_hidden_state(player, false)
+	_set_local_invisible_status(peer_id, false)
 
 func _scene_tree() -> SceneTree:
 	var loop := Engine.get_main_loop()

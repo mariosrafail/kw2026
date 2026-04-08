@@ -171,9 +171,6 @@ var logo_node: Node = null
 
 const WARRIORS_BACK_BUTTON_SCREEN_POS := Vector2(16.0, 16.0)
 const WARRIORS_TITLE_SCREEN_Y := 44.0
-const WARRIOR_PREVIEW_ZOOM_STEP := 0.1
-const WARRIOR_PREVIEW_ZOOM_MIN := 0.85
-const WARRIOR_PREVIEW_ZOOM_MAX := 2.4
 
 @onready var warrior_grid: GridContainer = %WarriorGrid
 @onready var warrior_scroll: ScrollContainer = $Screens/ScreenWarriors/WarriorsPanel/Margin/OuterVBox/BodyRow/ListCol/WarriorCenter/WarriorScroll
@@ -185,6 +182,7 @@ const WARRIOR_PREVIEW_ZOOM_MAX := 2.4
 @onready var warrior_shop_preview: Node = %WarriorShopPreview
 @onready var warrior_name_label: Label = %WarriorNameLabel
 @onready var warrior_action_button: Button = %WarriorActionButton
+var warrior_skill_description_label: Label
 
 @onready var weapon_grid: GridContainer = %WeaponGrid
 @onready var weapon_scroll: ScrollContainer = $Screens/ScreenWeapons/WeaponsPanel/Margin/OuterVBox/BodyRow/ListCol/WeaponScroll
@@ -254,7 +252,6 @@ var _play_lobby_fade_base_alpha: Dictionary = {}
 var _main_warrior_preview_base_scale := Vector2.ONE
 var _warrior_shop_preview_base_scale := Vector2.ONE
 var _weapon_shop_preview_base_scale := Vector2.ONE
-var _warrior_preview_zoom_mult := 1.0
 var _confirm_overlay_ui: Control
 
 var _logo_base_pos := Vector2.ZERO
@@ -331,6 +328,8 @@ func _ready() -> void:
 	_weapon_ui.weapons_menu_preview_scale_mult = weapons_menu_preview_scale_mult
 	_weapon_ui.rainbow_skin_cost = rainbow_skin_cost
 	_load_state_or_defaults()
+	_ensure_warrior_skill_description_label()
+	_refresh_warrior_skill_description_label(_pending_warrior_id)
 	_ensure_warrior_username_label()
 	_refresh_warrior_username_label()
 	_weapon_filter_weapon_id = selected_weapon_id
@@ -619,6 +618,9 @@ func _warrior_ui_warrior_display_name(warrior_id: String) -> String:
 
 func _warrior_ui_warrior_skin_label(warrior_id: String, skin_index: int) -> String:
 	return _warrior_ui.warrior_skin_label(warrior_id, skin_index)
+
+func _warrior_ui_skill_description_short(warrior_id: String) -> String:
+	return _warrior_ui.warrior_skill_description_short(warrior_id)
 
 func _weapon_ui_weapon_display_name(weapon_id: String) -> String:
 	return _weapon_ui.weapon_display_name(weapon_id)
@@ -948,7 +950,6 @@ func _open_warriors_menu() -> void:
 	if _transition_tween != null:
 		_transition_tween.kill()
 		_transition_tween = null
-	_warrior_preview_zoom_mult = 1.0
 	_apply_warrior_preview_zoom()
 	_apply_meta_ui_visibility(false)
 	_menu_transition_ctrl.open_warriors_menu()
@@ -972,6 +973,7 @@ func _close_warriors_menu() -> void:
 	_apply_warrior_skin_to_player(warrior_shop_preview, _pending_warrior_id, _pending_warrior_skin)
 	if warrior_name_label != null:
 		warrior_name_label.text = "%s - %s" % [_warrior_ui.warrior_display_name(_pending_warrior_id), _warrior_ui.warrior_skin_label(_pending_warrior_id, _pending_warrior_skin)]
+	_refresh_warrior_skill_description_label(_pending_warrior_id)
 	_build_warrior_skin_grid(_pending_warrior_id)
 	_refresh_warrior_grid_texts()
 	_refresh_warrior_action()
@@ -1098,6 +1100,41 @@ func _build_warrior_shop_grid() -> void:
 
 func _build_warrior_skin_grid(warrior_id: String) -> void:
 	_shop_grid_ctrl.build_warrior_skin_grid(warrior_id)
+
+func _ensure_warrior_skill_description_label() -> void:
+	if warrior_skill_description_label != null and is_instance_valid(warrior_skill_description_label):
+		return
+	if warrior_skin_scroll == null:
+		return
+	var section := warrior_skin_scroll.get_parent()
+	if section == null:
+		return
+	var existing := section.get_node_or_null("WarriorSkillDescriptionLabel") as Label
+	if existing != null:
+		warrior_skill_description_label = existing
+		return
+	var label := Label.new()
+	label.name = "WarriorSkillDescriptionLabel"
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 10)
+	label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.text = ""
+	section.add_child(label)
+	section.move_child(label, warrior_skin_scroll.get_index())
+	warrior_skill_description_label = label
+
+func _refresh_warrior_skill_description_label(warrior_id: String = "") -> void:
+	_ensure_warrior_skill_description_label()
+	if warrior_skill_description_label == null:
+		return
+	var target := warrior_id.strip_edges().to_lower()
+	if target.is_empty():
+		target = str(_pending_warrior_id).strip_edges().to_lower()
+	if target.is_empty():
+		target = str(selected_warrior_id).strip_edges().to_lower()
+	warrior_skill_description_label.text = _warrior_ui.warrior_skill_description_short(target)
 
 func _on_warrior_select_button_pressed(warrior_id: String) -> void:
 	_shop_grid_ctrl.on_warrior_select_button_pressed(warrior_id)

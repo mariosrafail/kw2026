@@ -145,8 +145,8 @@ def _init_schema() -> None:
                                 create table if not exists account_loadouts (
                                     account_id uuid primary key references accounts(id) on delete cascade,
                                     owned_warriors jsonb not null default '["outrage"]'::jsonb,
-                                    owned_warrior_skins_by_warrior jsonb not null default '{"outrage":[0],"erebus":[0],"tasko":[0]}'::jsonb,
-                                    equipped_warrior_skin_by_warrior jsonb not null default '{"outrage":0,"erebus":0,"tasko":0}'::jsonb,
+                                    owned_warrior_skins_by_warrior jsonb not null default '{"outrage":[0],"erebus":[0],"tasko":[0],"juice":[0],"madam":[0],"celler":[0],"kotro":[0],"nova":[0],"hindi":[0],"loker":[0],"gan":[0],"veila":[0]}'::jsonb,
+                                    equipped_warrior_skin_by_warrior jsonb not null default '{"outrage":0,"erebus":0,"tasko":0,"juice":0,"madam":0,"celler":0,"kotro":0,"nova":0,"hindi":0,"loker":0,"gan":0,"veila":0}'::jsonb,
                                     selected_warrior_id text not null default 'outrage',
                                     selected_warrior_skin integer not null default 0,
                                     equipped_weapon_skin_by_weapon jsonb not null default '{"uzi":0,"ak47":0,"shotgun":0,"grenade":0}'::jsonb,
@@ -154,6 +154,20 @@ def _init_schema() -> None:
                                     selected_weapon_skin integer not null default 0,
                                     updated_at timestamptz not null default now()
                                 );
+                                """
+                        )
+                        cur.execute(
+                                """
+                                alter table account_loadouts
+                                alter column owned_warrior_skins_by_warrior set default
+                                '{"outrage":[0],"erebus":[0],"tasko":[0],"juice":[0],"madam":[0],"celler":[0],"kotro":[0],"nova":[0],"hindi":[0],"loker":[0],"gan":[0],"veila":[0]}'::jsonb;
+                                """
+                        )
+                        cur.execute(
+                                """
+                                alter table account_loadouts
+                                alter column equipped_warrior_skin_by_warrior set default
+                                '{"outrage":0,"erebus":0,"tasko":0,"juice":0,"madam":0,"celler":0,"kotro":0,"nova":0,"hindi":0,"loker":0,"gan":0,"veila":0}'::jsonb;
                                 """
                         )
                         cur.execute("create index if not exists account_loadouts_updated_at_idx on account_loadouts(updated_at);")
@@ -234,7 +248,20 @@ class WalletUpdateRequest(BaseModel):
 
 
 DEFAULT_WARRIOR_ID = "outrage"
-ALLOWED_WARRIORS = ("outrage", "erebus", "tasko")
+ALLOWED_WARRIORS = (
+    "outrage",
+    "erebus",
+    "tasko",
+    "juice",
+    "madam",
+    "celler",
+    "kotro",
+    "nova",
+    "hindi",
+    "loker",
+    "gan",
+    "veila",
+)
 
 
 def _normalize_username(raw: str) -> str:
@@ -980,11 +1007,28 @@ def wallet_update(req: WalletUpdateRequest, authorization: Optional[str] = Heade
             next_equipped_warrior_skin_by_warrior = _normalize_equipped_warrior_skins(
                 req.equipped_warrior_skin_by_warrior if req.equipped_warrior_skin_by_warrior is not None else existing_loadout.get("equipped_warrior_skin_by_warrior", {}),
             )
+            requested_selected_warrior_id = req.selected_warrior_id if req.selected_warrior_id is not None else str(existing_loadout.get("selected_warrior_id", DEFAULT_WARRIOR_ID))
             next_selected_warrior_id = _normalize_warrior_id(
-                req.selected_warrior_id if req.selected_warrior_id is not None else str(existing_loadout.get("selected_warrior_id", DEFAULT_WARRIOR_ID))
+                requested_selected_warrior_id
             )
+            requested_selected_warrior_id = str(requested_selected_warrior_id or "").strip().lower()
             if next_selected_warrior_id not in next_owned_warriors:
+                log.info(
+                    "wallet_update selected_warrior ownership fallback: user=%s requested=%s normalized=%s owned=%s",
+                    username,
+                    requested_selected_warrior_id,
+                    next_selected_warrior_id,
+                    ",".join(next_owned_warriors),
+                )
                 next_selected_warrior_id = DEFAULT_WARRIOR_ID
+            elif requested_selected_warrior_id and requested_selected_warrior_id != next_selected_warrior_id:
+                log.info(
+                    "wallet_update selected_warrior normalized: user=%s requested=%s stored=%s allowed=%s",
+                    username,
+                    requested_selected_warrior_id,
+                    next_selected_warrior_id,
+                    ",".join(ALLOWED_WARRIORS),
+                )
             next_selected_warrior_skin = max(
                 0,
                 int(req.selected_warrior_skin if req.selected_warrior_skin is not None else int(existing_loadout.get("selected_warrior_skin", 0))),

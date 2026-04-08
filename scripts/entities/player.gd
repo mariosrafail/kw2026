@@ -490,6 +490,10 @@ func set_external_status_movement_speed_multiplier(value: float) -> void:
 	if combat_state_component != null:
 		combat_state_component.set_external_status_movement_speed_multiplier(value)
 
+func set_external_status_jump_velocity_multiplier(value: float) -> void:
+	if combat_state_component != null:
+		combat_state_component.set_external_status_jump_velocity_multiplier(value)
+
 func set_external_fire_rate_multiplier(value: float) -> void:
 	if combat_state_component != null:
 		combat_state_component.set_external_fire_rate_multiplier(value)
@@ -506,6 +510,15 @@ func set_external_reload_speed_multiplier(value: float) -> void:
 func get_external_reload_speed_multiplier() -> float:
 	if combat_state_component != null:
 		return combat_state_component.get_external_reload_speed_multiplier()
+	return 1.0
+
+func set_reload_animation_speed_multiplier(value: float) -> void:
+	if combat_state_component != null:
+		combat_state_component.set_reload_animation_speed_multiplier(value)
+
+func get_reload_animation_speed_multiplier() -> float:
+	if combat_state_component != null:
+		return combat_state_component.get_reload_animation_speed_multiplier()
 	return 1.0
 
 func _play_damage_visual_feedback(push_direction := Vector2.ZERO) -> void:

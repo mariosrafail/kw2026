@@ -9,6 +9,7 @@ const RELOAD_SPEED_MULTIPLIER := 1.8
 var character_id_for_peer_cb: Callable = Callable()
 var _buff_remaining_by_peer: Dictionary = {}
 var _affected_peers_last_tick: Dictionary = {}
+var _client_visual_nonce_by_peer: Dictionary = {}
 
 func _init() -> void:
 	super._init("loker_overclock", "Overclock", 0.0, "Gain increased fire rate and reload speed for 5 seconds")
@@ -37,8 +38,21 @@ func _execute_cast(caster_peer_id: int, _target_world: Vector2) -> void:
 func _execute_client_visual(caster_peer_id: int, target_world: Vector2) -> void:
 	var duration_sec := maxf(0.05, target_world.x if absf(target_world.x) > 0.0001 else BUFF_DURATION_SEC)
 	var player := players.get(caster_peer_id, null) as NetPlayer
-	if player != null and player.has_method("start_ulti_duration_bar"):
+	if player == null:
+		return
+	if player.has_method("start_ulti_duration_bar"):
 		player.call("start_ulti_duration_bar", duration_sec, STATUS_TEXT)
+	if player.has_method("set_reload_animation_speed_multiplier"):
+		player.call("set_reload_animation_speed_multiplier", RELOAD_SPEED_MULTIPLIER)
+	var nonce := int(_client_visual_nonce_by_peer.get(caster_peer_id, 0)) + 1
+	_client_visual_nonce_by_peer[caster_peer_id] = nonce
+	var tree := player.get_tree()
+	if tree == null:
+		return
+	var timer := tree.create_timer(duration_sec)
+	if timer == null:
+		return
+	timer.timeout.connect(Callable(self, "_on_client_buff_visual_timeout").bind(caster_peer_id, nonce))
 
 func server_tick(delta: float) -> void:
 	if not multiplayer.is_server():
@@ -80,6 +94,8 @@ func server_tick(delta: float) -> void:
 			player.call("set_external_fire_rate_multiplier", float(fire_multiplier_by_peer.get(peer_id, 1.0)))
 		if player.has_method("set_external_reload_speed_multiplier"):
 			player.call("set_external_reload_speed_multiplier", float(reload_multiplier_by_peer.get(peer_id, 1.0)))
+		if player.has_method("set_reload_animation_speed_multiplier"):
+			player.call("set_reload_animation_speed_multiplier", float(reload_multiplier_by_peer.get(peer_id, 1.0)))
 
 	_affected_peers_last_tick = touched_peers
 
@@ -87,3 +103,12 @@ func _character_id_for_peer(peer_id: int) -> String:
 	if character_id_for_peer_cb.is_valid():
 		return str(character_id_for_peer_cb.call(peer_id)).strip_edges().to_lower()
 	return CHARACTER_ID_LOKER
+
+func _on_client_buff_visual_timeout(peer_id: int, nonce: int) -> void:
+	if int(_client_visual_nonce_by_peer.get(peer_id, 0)) != nonce:
+		return
+	var player := players.get(peer_id, null) as NetPlayer
+	if player == null:
+		return
+	if player.has_method("set_reload_animation_speed_multiplier"):
+		player.call("set_reload_animation_speed_multiplier", 1.0)

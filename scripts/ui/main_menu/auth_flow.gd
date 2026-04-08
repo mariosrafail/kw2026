@@ -879,15 +879,20 @@ func auth_apply_profile(host: Control, profile: Dictionary) -> void:
 	host.set("owned_warrior_skins", incoming_warrior_skins.get(str(host.call("_default_warrior_id")), PackedInt32Array([0])) as PackedInt32Array)
 	if profile.has("equipped_warrior_skin_by_warrior"):
 		host.set("equipped_warrior_skin_by_warrior", host.call("_normalize_equipped_warrior_skins_dict", (profile.get("equipped_warrior_skin_by_warrior", {}) as Dictionary).duplicate(true)))
-	var next_selected_warrior_id := str(host.get("selected_warrior_id"))
+	var next_selected_warrior_id := str(host.get("selected_warrior_id")).strip_edges().to_lower()
+	var profile_selected_warrior_id := ""
 	if profile.has("selected_warrior_id"):
-		next_selected_warrior_id = str(profile.get("selected_warrior_id", host.get("selected_warrior_id"))).strip_edges().to_lower()
+		profile_selected_warrior_id = str(profile.get("selected_warrior_id", "")).strip_edges().to_lower()
+	if not profile_selected_warrior_id.is_empty():
+		next_selected_warrior_id = profile_selected_warrior_id
+	elif next_selected_warrior_id.is_empty():
+		next_selected_warrior_id = profile_selected_warrior_id
 	host.set("selected_warrior_id", next_selected_warrior_id)
 	var owned_warriors_after := host.get("owned_warriors") as PackedStringArray
 	if not owned_warriors_after.has(str(host.get("selected_warrior_id"))):
 		host.set("selected_warrior_id", str(host.call("_default_warrior_id")))
 	var next_selected_warrior_skin := int(host.get("selected_warrior_skin"))
-	if profile.has("selected_warrior_skin"):
+	if profile.has("selected_warrior_skin") and next_selected_warrior_skin <= 0:
 		next_selected_warrior_skin = maxi(0, int(profile.get("selected_warrior_skin", host.get("selected_warrior_skin"))))
 	elif profile.has("equipped_warrior_skin_by_warrior"):
 		next_selected_warrior_skin = int(host.call("_equipped_warrior_skin", str(host.get("selected_warrior_id"))))
@@ -965,6 +970,8 @@ func auth_apply_profile(host: Control, profile: Dictionary) -> void:
 			str(host.call("_warrior_ui_warrior_display_name", str(host.get("_pending_warrior_id")))),
 			str(host.call("_warrior_ui_warrior_skin_label", str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin"))))
 		]
+	if host.has_method("_refresh_warrior_skill_description_label"):
+		host.call("_refresh_warrior_skill_description_label", str(host.get("_pending_warrior_id")))
 	var weapon_name_label := host.get("weapon_name_label") as Label
 	if weapon_name_label != null:
 		weapon_name_label.text = "%s - %s" % [
@@ -1326,6 +1333,14 @@ func auth_restore_wallet_sync_snapshot(host: Control) -> void:
 	host.set("_pending_weapon_skin", int(host.get("selected_weapon_skin")))
 	host.call("_apply_warrior_skin_to_player", host.get("main_warrior_preview"), str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
 	host.call("_apply_warrior_skin_to_player", host.get("warrior_shop_preview"), str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin")))
+	var warrior_name_label := host.get("warrior_name_label") as Label
+	if warrior_name_label != null:
+		warrior_name_label.text = "%s - %s" % [
+			str(host.call("_warrior_ui_warrior_display_name", str(host.get("_pending_warrior_id")))),
+			str(host.call("_warrior_ui_warrior_skin_label", str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin"))))
+		]
+	if host.has_method("_refresh_warrior_skill_description_label"):
+		host.call("_refresh_warrior_skill_description_label", str(host.get("_pending_warrior_id")))
 	host.call("_set_weapon_icon_sprite", host.get("main_weapon_icon"), str(host.get("selected_weapon_id")), 1.0, int(host.get("selected_weapon_skin")))
 	host.call("_apply_weapon_skin_visual", host.get("main_weapon_icon"), str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))
 	host.call("_set_weapon_icon_sprite", host.get("weapon_shop_preview"), str(host.get("_pending_weapon_id")), 1.0, int(host.get("_pending_weapon_skin")))

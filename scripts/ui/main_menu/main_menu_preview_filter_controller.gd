@@ -10,9 +10,6 @@ const WEAPON_GRENADE := DATA.WEAPON_GRENADE
 const WEAPON_AK47 := DATA.WEAPON_AK47
 const WEAPON_KAR := DATA.WEAPON_KAR
 const WEAPON_SHOTGUN := DATA.WEAPON_SHOTGUN
-const WARRIOR_PREVIEW_ZOOM_STEP := 0.1
-const WARRIOR_PREVIEW_ZOOM_MIN := 0.85
-const WARRIOR_PREVIEW_ZOOM_MAX := 2.4
 
 var _host: Control
 
@@ -38,37 +35,11 @@ func prepare_player_preview(player: Node) -> void:
 			label.visible = false
 
 func handle_warrior_preview_zoom_input(event: InputEvent) -> bool:
-	var current_screen := _host.get("_current_screen") as Control
-	var screen_warriors := _host.get("screen_warriors") as Control
-	if current_screen != screen_warriors:
+	# Manual zoom is intentionally disabled to preserve stable preview movement/placement.
+	# Keep the function for API compatibility with main_menu.gd.
+	if event == null:
 		return false
-	var warrior_preview_col := _host.get("warrior_preview_col") as Control
-	var warrior_shop_preview := _host.get("warrior_shop_preview") as Node
-	if warrior_preview_col == null or warrior_shop_preview == null:
-		return false
-	if not (warrior_shop_preview is Node2D):
-		return false
-	if not (event is InputEventMouseButton):
-		return false
-	var mouse_button := event as InputEventMouseButton
-	if not mouse_button.pressed:
-		return false
-	var zoom_delta: float = 0.0
-	if mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP:
-		zoom_delta = WARRIOR_PREVIEW_ZOOM_STEP
-	elif mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-		zoom_delta = -WARRIOR_PREVIEW_ZOOM_STEP
-	else:
-		return false
-	if not warrior_preview_col.get_global_rect().has_point(mouse_button.position):
-		return false
-	var current_zoom := float(_host.get("_warrior_preview_zoom_mult"))
-	_host.set("_warrior_preview_zoom_mult", clampf(current_zoom + zoom_delta, WARRIOR_PREVIEW_ZOOM_MIN, WARRIOR_PREVIEW_ZOOM_MAX))
-	apply_warrior_preview_zoom()
-	var viewport := _host.get_viewport()
-	if viewport != null:
-		viewport.set_input_as_handled()
-	return true
+	return false
 
 func apply_warrior_preview_zoom() -> void:
 	var warrior_shop_preview: Variant = _host.get("warrior_shop_preview")
@@ -77,8 +48,7 @@ func apply_warrior_preview_zoom() -> void:
 	var preview := warrior_shop_preview as Node2D
 	var base_zoom := clampf(float(_host.get("warriors_menu_preview_scale_mult")), 0.01, 3.0)
 	var base_scale: Vector2 = _host.get("_warrior_shop_preview_base_scale")
-	var zoom_mult := float(_host.get("_warrior_preview_zoom_mult"))
-	preview.scale = base_scale * base_zoom * zoom_mult
+	preview.scale = base_scale * base_zoom
 
 func apply_warrior_skin_to_player(player: Node, warrior_id: String, skin_index: int) -> void:
 	var warrior_ui: Variant = _host.get("_warrior_ui")

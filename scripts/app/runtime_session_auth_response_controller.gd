@@ -8,6 +8,7 @@ func on_auth_request_completed(host: Node, result: int, response_code: int, body
 	host.set("_auth_inflight", false)
 	host.set("_auth_pending_action", "")
 	host.call("_set_loading", false)
+	host.call_deferred("_flush_queued_selected_loadout_sync")
 
 	var text: String = body.get_string_from_utf8()
 	var trimmed_text: String = text.strip_edges()
@@ -71,6 +72,9 @@ func on_auth_request_completed(host: Node, result: int, response_code: int, body
 			if purchase_buy_button != null:
 				purchase_buy_button.disabled = false
 			return
+		if action == "wallet_update_selection":
+			host.call("_append_log", "[AUTH][wallet_update_selection] failed code=%d detail=%s" % [response_code, detail])
+			return
 		host.call("_show_auth_panel", true)
 		host.call("_set_auth_status", "Auth failed: %s" % detail)
 		host.call("_set_auth_buttons_enabled", true)
@@ -110,6 +114,39 @@ func on_auth_request_completed(host: Node, result: int, response_code: int, body
 		host.set("_purchase_pending_character_id", "")
 		host.set("_purchase_pending_skin_index", 0)
 		host.set("_purchase_pending_skin_name", "")
+		return
+
+	if action == "wallet_update_selection":
+		if payload is Dictionary and not payload.is_empty():
+			var requested_warrior_id: String = str(host.call("_normalize_character_id", str(host.get("selected_character_id"))))
+			var requested_warrior_skin: int = 0
+			var lobby_service: Object = host.get("lobby_service") as Object
+			if lobby_service != null:
+				requested_warrior_skin = maxi(0, int(lobby_service.call("get_local_selected_skin", requested_warrior_id, 0)))
+			var requested_weapon_id: String = str(host.get("selected_weapon_id")).strip_edges().to_lower()
+			var requested_weapon_skin: int = maxi(0, int(host.get("selected_weapon_skin")))
+			var server_warrior_id: String = str(payload.get("selected_warrior_id", "")).strip_edges().to_lower()
+			var server_warrior_skin: int = maxi(0, int(payload.get("selected_warrior_skin", -1)))
+			var server_weapon_id: String = str(payload.get("selected_weapon_id", "")).strip_edges().to_lower()
+			var server_weapon_skin: int = maxi(0, int(payload.get("selected_weapon_skin", -1)))
+			host.call("_append_log", "[AUTH][wallet_update_selection] ok requested warrior=%s skin=%d weapon=%s skin=%d | server warrior=%s skin=%d weapon=%s skin=%d" % [
+				requested_warrior_id,
+				requested_warrior_skin,
+				requested_weapon_id,
+				requested_weapon_skin,
+				server_warrior_id,
+				server_warrior_skin,
+				server_weapon_id,
+				server_weapon_skin
+			])
+			if not server_warrior_id.is_empty() and server_warrior_id != requested_warrior_id:
+				host.call("_append_log", "[AUTH][wallet_update_selection] server normalized warrior %s -> %s (check auth API allowed warriors)." % [
+					requested_warrior_id,
+					server_warrior_id
+				])
+			host.call("_apply_profile_payload", payload)
+		else:
+			host.call("_append_log", "[AUTH][wallet_update_selection] ok but empty payload")
 		return
 
 	if action == "me":
