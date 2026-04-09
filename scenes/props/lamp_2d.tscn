@@ -1,0 +1,39 @@
+[gd_scene load_steps=5 format=4]
+
+[ext_resource type="Script" path="res://scripts/effects/lamp_2d.gd" id="1_0asl8"]
+[ext_resource type="Texture2D" path="res://assets/light.png" id="2_t6iv5"]
+
+[sub_resource type="Gradient" id="Gradient_6d0sr"]
+offsets = PackedFloat32Array(0, 0.7, 1)
+colors = PackedColorArray(1, 0.82, 0.55, 1, 1, 0.72, 0.35, 0.4, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_yyf4e"]
+gradient = SubResource("Gradient_6d0sr")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+width = 256
+height = 256
+
+[sub_resource type="OccluderPolygon2D" id="OccluderPolygon2D_lamp_box"]
+polygon = PackedVector2Array(-4, -4, 4, -4, 4, 4, -4, 4)
+
+[node name="Lamp2D" type="Node2D"]
+script = ExtResource("1_0asl8")
+
+[node name="LampSprite" type="Sprite2D" parent="."]
+visible = false
+texture = ExtResource("2_t6iv5")
+scale = Vector2(0.13, 0.13)
+
+[node name="LampBox" type="Polygon2D" parent="."]
+z_index = 1
+color = Color(1, 0.82, 0.55, 1)
+polygon = PackedVector2Array(-4, -4, 4, -4, 4, 4, -4, 4)
+
+[node name="PointLight2D" type="PointLight2D" parent="."]
+color = Color(1, 0.82, 0.55, 1)
+energy = 1.35
+texture = SubResource("GradientTexture2D_yyf4e")
+texture_scale = 2.0
+shadow_enabled = true

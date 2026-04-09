@@ -106,6 +106,7 @@ tile_map_data = PackedByteArray("AAAQAEAAAAAAAAAAAAARAEAAAAAAAAAAAAASAEAAAAAAAAA
 tile_set = ExtResource("9_1norg")
 script = ExtResource("10_dyrq8")
 source_sprite_path = NodePath("")
+generate_light_occluders = true
 
 [node name="MainCamera" type="Camera2D" parent="World" unique_id=1297512947]
 unique_name_in_owner = true

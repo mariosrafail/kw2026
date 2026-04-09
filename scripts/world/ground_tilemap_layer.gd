@@ -1,3 +1,4 @@
+@tool
 extends TileMapLayer
 
 const COLLISION_ROOT_NAME := "_GroundCollision"
@@ -264,6 +265,13 @@ func _build_collision_signature() -> String:
 	var cells := get_used_cells()
 	cells.sort()
 	var parts := PackedStringArray()
+	parts.append("cfg:%s:%d:%.3f:%.3f:%s" % [
+		str(generate_light_occluders),
+		occluder_light_mask,
+		alpha_threshold,
+		min_solid_ratio,
+		str(ignore_atlas_zero_tile_for_collision),
+	])
 	for cell in cells:
 		var source_id := get_cell_source_id(cell)
 		var atlas := get_cell_atlas_coords(cell)

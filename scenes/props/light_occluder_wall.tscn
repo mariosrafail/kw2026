@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=4]
+
+[ext_resource type="Script" path="res://scripts/effects/light_occluder_wall.gd" id="1_u7x4k"]
+
+[sub_resource type="OccluderPolygon2D" id="OccluderPolygon2D_4830a"]
+polygon = PackedVector2Array(-130, -28, 130, -28, 130, 28, -130, 28)
+
+[node name="LightOccluderWall" type="Node2D"]
+script = ExtResource("1_u7x4k")
+
+[node name="WallVisual" type="Polygon2D" parent="."]
+color = Color(0.17, 0.2, 0.28, 1)
+polygon = PackedVector2Array(-130, -28, 130, -28, 130, 28, -130, 28)
+
+[node name="LightOccluder2D" type="LightOccluder2D" parent="."]
+occluder = SubResource("OccluderPolygon2D_4830a")
