@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-ALLOWED_WEAPONS = ("uzi", "ak47", "shotgun", "grenade")
+ALLOWED_WEAPONS = ("uzi", "ak47", "kar", "shotgun", "grenade")
 DEFAULT_WEAPON_ID = "uzi"
 
 
@@ -261,6 +261,10 @@ ALLOWED_WARRIORS = (
     "loker",
     "gan",
     "veila",
+    "krog",
+    "aevilok",
+    "franky",
+    "varn",
 )
 
 

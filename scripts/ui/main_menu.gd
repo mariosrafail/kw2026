@@ -35,7 +35,10 @@ const TOXIC_CHAT_MARGIN_X := 5
 const TOXIC_CHAT_MARGIN_Y := 4
 const TOXIC_CHAT_ROW_SEPARATION := 1
 const AUTH_API_BASE_URL_DEFAULT := "http://updates.outrage.ink:8081/auth"
-const ENABLE_MENU_LOADING_OVERLAY := false
+const ONLINE_AUTH_API_BASE_URL := "http://updates.outrage.ink:8081/auth"
+const ONLINE_DEFAULT_HOST := "play.outrage.ink"
+const DEFAULT_SERVER_PORT := 8080
+const ENABLE_MENU_LOADING_OVERLAY := true
 var MENU_CLR_BASE := MENU_PALETTE.base()
 var MENU_CLR_ACCENT := MENU_PALETTE.accent()
 var MENU_CLR_HOT := MENU_PALETTE.hot()
@@ -287,6 +290,7 @@ var _auth_wallet_retry_timer: Timer
 var _auth_request_watchdog_timer: Timer
 var _auth_http: HTTPRequest
 var _auth_overlay: Control
+var _network_mode_overlay: Control
 var _auth_status_label: Label
 var _auth_user_input: LineEdit
 var _auth_pass_input: LineEdit
@@ -483,7 +487,7 @@ func _ready() -> void:
 	_refresh_selection_context_visuals()
 
 	_connect_signals()
-	_setup_auth_gate()
+	_show_network_mode_selector()
 	_play_intro_animation_safe()
 	_apply_uniform_button_outlines(self, 0)
 	_apply_main_category_button_brightness()
@@ -537,6 +541,123 @@ func _auth_request_login_with_current_candidate() -> int:
 
 func _setup_auth_gate() -> void:
 	_auth_flow.setup_auth_gate(self, AUTH_API_BASE_URL_DEFAULT)
+
+func _show_network_mode_selector() -> void:
+	if _network_mode_overlay != null and is_instance_valid(_network_mode_overlay):
+		return
+	var overlay := Control.new()
+	overlay.name = "NetworkModeOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.z_index = 2100
+	add_child(overlay)
+	_network_mode_overlay = overlay
+
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = MENU_PALETTE.accent(0.36)
+	overlay.add_child(bg)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(460, 230)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-230, -115)
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = MENU_PALETTE.accent(0.98)
+	panel_style.border_width_left = 3
+	panel_style.border_width_top = 3
+	panel_style.border_width_right = 3
+	panel_style.border_width_bottom = 3
+	panel_style.border_color = MENU_PALETTE.highlight(0.95)
+	panel_style.corner_radius_top_left = 0
+	panel_style.corner_radius_top_right = 0
+	panel_style.corner_radius_bottom_left = 0
+	panel_style.corner_radius_bottom_right = 0
+	panel.add_theme_stylebox_override("panel", panel_style)
+	overlay.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_bottom", 14)
+	panel.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.add_theme_constant_override("separation", 10)
+	margin.add_child(box)
+
+	var title := Label.new()
+	title.text = "CONNECTION MODE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", MENU_PALETTE.highlight(1.0))
+	box.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "Choose endpoint profile before login."
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle.add_theme_font_size_override("font_size", 11)
+	subtitle.add_theme_color_override("font_color", MENU_PALETTE.text_primary(0.9))
+	box.add_child(subtitle)
+
+	var online_btn := Button.new()
+	online_btn.text = "ONLINE (Public Server)"
+	online_btn.custom_minimum_size = Vector2(0, 42)
+	box.add_child(online_btn)
+	_add_hover_pop(online_btn)
+	online_btn.pressed.connect(func() -> void:
+		_apply_selected_network_mode(false)
+	)
+
+	var lan_btn := Button.new()
+	lan_btn.text = "LAN (Local Network)"
+	lan_btn.custom_minimum_size = Vector2(0, 42)
+	box.add_child(lan_btn)
+	_add_hover_pop(lan_btn)
+	lan_btn.pressed.connect(func() -> void:
+		_apply_selected_network_mode(true)
+	)
+
+func _apply_selected_network_mode(use_lan: bool) -> void:
+	var auth_base := ONLINE_AUTH_API_BASE_URL
+	var server_host := ONLINE_DEFAULT_HOST
+	if use_lan:
+		server_host = _detect_best_lan_host()
+		auth_base = "http://%s:8081/auth" % server_host
+	ProjectSettings.set_setting("kw/auth_api_base_url", auth_base)
+	ProjectSettings.set_setting("kw/default_server_host", server_host)
+	ProjectSettings.set_setting("kw/default_server_port", DEFAULT_SERVER_PORT)
+	set_meta("kw_force_auth_api_base_url", auth_base)
+	set_meta("kw_network_mode", "lan" if use_lan else "online")
+	if _network_mode_overlay != null and is_instance_valid(_network_mode_overlay):
+		_network_mode_overlay.queue_free()
+	_network_mode_overlay = null
+	_setup_auth_gate()
+
+func _detect_best_lan_host() -> String:
+	var fallback := "127.0.0.1"
+	for address_value in IP.get_local_addresses():
+		var address := str(address_value).strip_edges()
+		if address.is_empty():
+			continue
+		if not address.contains("."):
+			continue
+		if address.begins_with("127.") or address.begins_with("169.254."):
+			continue
+		if address.begins_with("10.") or address.begins_with("192.168."):
+			return address
+		var parts := address.split(".")
+		if parts.size() == 4 and parts[0] == "172":
+			var second := int(parts[1])
+			if second >= 16 and second <= 31:
+				return address
+		if fallback == "127.0.0.1":
+			fallback = address
+	return fallback
 
 func _auth_set_ui_locked(locked: bool) -> void:
 	_auth_flow.auth_set_ui_locked(self, locked)

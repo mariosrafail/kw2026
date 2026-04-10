@@ -64,6 +64,12 @@ func resolve_server_host_port() -> Dictionary:
 			host = config_host
 		if config_port >= 1 and config_port <= 65535:
 			port = config_port
+	var runtime_host := str(ProjectSettings.get_setting("kw/default_server_host", "")).strip_edges()
+	if not runtime_host.is_empty():
+		host = runtime_host
+	var runtime_port := int(ProjectSettings.get_setting("kw/default_server_port", 0))
+	if runtime_port >= 1 and runtime_port <= 65535:
+		port = runtime_port
 	var resolved := resolve_server_host_port_from_args(host, port)
 	if _host != null and _host.has_method("_log"):
 		_host.call("_log", "resolved primary server endpoint=%s:%d config_found=%s" % [

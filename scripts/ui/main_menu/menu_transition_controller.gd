@@ -21,6 +21,61 @@ var _open_menu_tween: Tween
 var _warrior_open_transition: Node2D
 var _weapon_open_transition: Node2D
 
+func _collect_sprite_bounds_in_visual(visual: Node2D, node: Node, min_v: Vector2, max_v: Vector2, found: bool) -> Dictionary:
+	if node is Sprite2D:
+		var spr := node as Sprite2D
+		var tex := spr.texture
+		if tex != null:
+			var size := tex.get_size()
+			if spr.region_enabled:
+				size = spr.region_rect.size
+			if size.x > 0.0 and size.y > 0.0:
+				var origin := spr.offset
+				if spr.centered:
+					origin -= size * 0.5
+				var local_rect := Rect2(origin, size)
+				var to_visual := visual.get_global_transform().affine_inverse() * spr.get_global_transform()
+				var p0 := to_visual * local_rect.position
+				var p1 := to_visual * Vector2(local_rect.position.x + local_rect.size.x, local_rect.position.y)
+				var p2 := to_visual * Vector2(local_rect.position.x + local_rect.size.x, local_rect.position.y + local_rect.size.y)
+				var p3 := to_visual * Vector2(local_rect.position.x, local_rect.position.y + local_rect.size.y)
+				if not found:
+					min_v = p0
+					max_v = p0
+					found = true
+				for p in [p0, p1, p2, p3]:
+					min_v.x = minf(min_v.x, p.x)
+					min_v.y = minf(min_v.y, p.y)
+					max_v.x = maxf(max_v.x, p.x)
+					max_v.y = maxf(max_v.y, p.y)
+	for child in node.get_children():
+		var result: Dictionary = _collect_sprite_bounds_in_visual(visual, child, min_v, max_v, found)
+		var next_min: Variant = result.get("min", min_v)
+		var next_max: Variant = result.get("max", max_v)
+		if next_min is Vector2:
+			min_v = next_min
+		if next_max is Vector2:
+			max_v = next_max
+		found = bool(result.get("found", found))
+	return {"min": min_v, "max": max_v, "found": found}
+
+func _visual_center_local(visual: Node2D) -> Vector2:
+	if visual == null:
+		return Vector2.ZERO
+	var result: Dictionary = _collect_sprite_bounds_in_visual(visual, visual, Vector2.ZERO, Vector2.ZERO, false)
+	var found: bool = bool(result.get("found", false))
+	if not found:
+		return Vector2.ZERO
+	var min_v: Vector2 = Vector2.ZERO
+	var max_v: Vector2 = Vector2.ZERO
+	var result_min: Variant = result.get("min", Vector2.ZERO)
+	var result_max: Variant = result.get("max", Vector2.ZERO)
+	if result_min is Vector2:
+		min_v = result_min
+	if result_max is Vector2:
+		max_v = result_max
+	return (min_v + max_v) * 0.5
+
 func configure(refs: Dictionary, callbacks: Dictionary) -> void:
 	_host = refs.get("host", null)
 	_screen_main = refs.get("screen_main", null)
@@ -92,27 +147,35 @@ func open_warriors_menu_stage2(warriors_menu_preview_scale_mult: float, warrior_
 		)
 		return
 
-	var start_pos := src_preview.global_position
-	var target_pos := dst_preview.global_position
-	var start_scale := src_preview.scale
-	var target_scale := dst_preview.scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
-
 	var src_visual := src_preview.get_node_or_null("VisualRoot") as Node2D
-	if src_visual == null:
+	var dst_visual := dst_preview.get_node_or_null("VisualRoot") as Node2D
+	if src_visual == null or dst_visual == null:
 		return
+	var start_center_local := _visual_center_local(src_visual)
+	var target_center_local := _visual_center_local(dst_visual)
+	var start_pos := src_visual.to_global(start_center_local)
+	var target_pos := dst_visual.to_global(target_center_local)
+	var start_scale := src_visual.global_scale
+	var target_scale := dst_visual.global_scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
+
 	_warrior_open_transition = Node2D.new()
 	_warrior_open_transition.global_position = start_pos
-	_warrior_open_transition.scale = start_scale
+	_warrior_open_transition.global_rotation = src_visual.global_rotation
+	_warrior_open_transition.global_scale = start_scale
 	_warrior_open_transition.z_index = 1200
-	_warrior_open_transition.add_child(src_visual.duplicate())
+	var warrior_visual := src_visual.duplicate() as Node2D
+	if warrior_visual == null:
+		return
+	warrior_visual.position = -start_center_local
+	_warrior_open_transition.add_child(warrior_visual)
 	_fx_layer.add_child(_warrior_open_transition)
 
 	src_preview.visible = false
 
 	_open_menu_tween = _host.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_position", target_pos, 0.18)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "scale", start_scale * 1.35, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(_warrior_open_transition, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_scale", start_scale * 1.35, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.tween_property(_warrior_open_transition, "global_scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_open_menu_tween.tween_property(_screen_warriors, "modulate:a", 1.0, 0.18)
 
 	_open_menu_tween.tween_callback(func() -> void:
@@ -154,19 +217,27 @@ func close_warriors_menu_stage2(warrior_shop_preview_base_scale: Vector2) -> voi
 		return
 
 	var src_visual := src_preview.get_node_or_null("VisualRoot") as Node2D
-	if src_visual == null:
+	var dst_visual := dst_preview.get_node_or_null("VisualRoot") as Node2D
+	if src_visual == null or dst_visual == null:
 		return
 
-	var start_pos := src_preview.global_position
-	var target_pos := dst_preview.global_position
-	var start_scale := src_preview.scale
-	var target_scale := dst_preview.scale
+	var start_center_local := _visual_center_local(src_visual)
+	var target_center_local := _visual_center_local(dst_visual)
+	var start_pos := src_visual.to_global(start_center_local)
+	var target_pos := dst_visual.to_global(target_center_local)
+	var start_scale := src_visual.global_scale
+	var target_scale := dst_visual.global_scale
 
 	_warrior_open_transition = Node2D.new()
 	_warrior_open_transition.global_position = start_pos
-	_warrior_open_transition.scale = start_scale
+	_warrior_open_transition.global_rotation = src_visual.global_rotation
+	_warrior_open_transition.global_scale = start_scale
 	_warrior_open_transition.z_index = 1200
-	_warrior_open_transition.add_child(src_visual.duplicate())
+	var warrior_visual := src_visual.duplicate() as Node2D
+	if warrior_visual == null:
+		return
+	warrior_visual.position = -start_center_local
+	_warrior_open_transition.add_child(warrior_visual)
 	_fx_layer.add_child(_warrior_open_transition)
 
 	src_preview.visible = false
@@ -179,8 +250,8 @@ func close_warriors_menu_stage2(warrior_shop_preview_base_scale: Vector2) -> voi
 	_open_menu_tween = _host.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	_open_menu_tween.parallel().tween_property(_screen_warriors, "modulate:a", 0.0, 0.14)
 	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_position", target_pos, 0.18)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "scale", target_scale * 1.15, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(_warrior_open_transition, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_scale", target_scale * 1.15, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.tween_property(_warrior_open_transition, "global_scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_open_menu_tween.tween_callback(func() -> void:
 		_screen_warriors.visible = false
 		_screen_warriors.modulate = Color(1, 1, 1, 1)

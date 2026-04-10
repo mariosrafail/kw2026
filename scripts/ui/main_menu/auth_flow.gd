@@ -22,6 +22,9 @@ static var _runtime_session_api_base_url := ""
 func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	resolve_auth_profile(host)
 	host.set("_auth_api_base_url", _normalize_api_base_url(str(ProjectSettings.get_setting("kw/auth_api_base_url", api_base_url_default)).strip_edges()))
+	var forced_api_base := _forced_api_base_url(host)
+	if not forced_api_base.is_empty():
+		host.set("_auth_api_base_url", forced_api_base)
 	if str(host.get("_auth_api_base_url")).is_empty():
 		host.set("_auth_api_base_url", _normalize_api_base_url(api_base_url_default))
 	if str(host.get("_auth_api_base_url")).ends_with("/"):
@@ -291,8 +294,6 @@ func auth_sync_wallet(host: Control) -> void:
 	var endpoint := str(endpoint_candidates[endpoint_index])
 	print("[AUTH][WALLET_SYNC] request user=%s url=%s coins=%d clk=%d" % [str(host.get("player_username")), auth_url(host, endpoint), int(host.get("wallet_coins")), int(host.get("wallet_clk"))])
 	host.set("_auth_pending_action", "wallet_sync")
-	if host.has_method("_show_menu_loading_overlay"):
-		host.call("_show_menu_loading_overlay", "SYNCING...")
 	var err := auth_http.request(
 		auth_url(host, endpoint),
 		PackedStringArray([
@@ -306,10 +307,10 @@ func auth_sync_wallet(host: Control) -> void:
 		print("[AUTH][WALLET_SYNC] request failed err=%s" % str(err))
 		host.set("_auth_pending_action", "")
 		auth_stop_request_watchdog(host)
-		host.set("_auth_wallet_sync_queued", true)
-		auth_schedule_wallet_retry(host)
-		if host.has_method("_hide_menu_loading_overlay"):
-			host.call("_hide_menu_loading_overlay")
+		host.set("_auth_wallet_sync_queued", false)
+		var auth_status_label := host.get("_auth_status_label") as Label
+		if auth_status_label != null:
+			auth_status_label.text = "Sync paused (network). Retry from next change."
 		return
 	auth_start_request_watchdog(host)
 
@@ -569,8 +570,9 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 			host.set("_auth_pending_action", "")
 			return
 		host.set("_auth_pending_action", "")
-		host.set("_auth_wallet_sync_queued", true)
-		auth_schedule_wallet_retry(host)
+		host.set("_auth_wallet_sync_queued", false)
+		if auth_status_label != null:
+			auth_status_label.text = "Sync failed (%d). Changes stay local for now." % response_code
 		return
 
 	if action == "purchase_skin":
@@ -1095,6 +1097,9 @@ func auth_restore_runtime_session(host: Control) -> bool:
 		if auth_user_input != null and auth_user_input.text.strip_edges().is_empty():
 			auth_user_input.text = username
 	var api_base := str(_runtime_session_api_base_url).strip_edges()
+	var forced_api_base := _forced_api_base_url(host)
+	if not forced_api_base.is_empty():
+		api_base = forced_api_base
 	if not api_base.is_empty():
 		host.set("_auth_api_base_url", _normalize_api_base_url(api_base))
 		auth_rebuild_login_base_candidates(host)
@@ -1180,13 +1185,14 @@ func _normalize_api_base_url(raw: String) -> String:
 	var api_base := raw.strip_edges().trim_suffix("/")
 	if api_base.is_empty():
 		return api_base
-	if api_base == "http://85.75.243.92:8081/auth" or api_base == "http://85.75.243.92:8081":
-		return "http://updates.outrage.ink:8081/auth"
-	if api_base == "http://127.0.0.1:8081/auth" or api_base == "http://127.0.0.1:8081":
-		return "http://updates.outrage.ink:8081/auth"
-	if api_base == "http://localhost:8081/auth" or api_base == "http://localhost:8081":
-		return "http://updates.outrage.ink:8081/auth"
 	return api_base
+
+func _forced_api_base_url(host: Control) -> String:
+	if host == null:
+		return ""
+	if not host.has_meta("kw_force_auth_api_base_url"):
+		return ""
+	return _normalize_api_base_url(str(host.get_meta("kw_force_auth_api_base_url")).strip_edges())
 
 func _append_login_base_candidate(candidates: PackedStringArray, candidate: String) -> void:
 	var normalized := candidate.strip_edges().trim_suffix("/")
