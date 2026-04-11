@@ -2,6 +2,7 @@ extends Node
 
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
+const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 signal connected_to_lobby_server
 signal lobby_connection_failed
 signal lobby_server_disconnected
@@ -15,6 +16,7 @@ var _last_host := "127.0.0.1"
 var _last_port := 8080
 var _map_catalog = MAP_CATALOG_SCRIPT.new()
 var _map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
+var _lobby_service = LOBBY_SERVICE_SCRIPT.new()
 var _active_lobby_id := 0
 var _pending_mode_id := "deathmatch"
 var _lobby_mode_by_id: Dictionary = {}
@@ -110,7 +112,7 @@ func create_lobby(lobby_name: String, weapon_id: String, character_id: String, m
 	if normalized_weapon.is_empty():
 		normalized_weapon = "ak47"
 	var normalized_character := character_id.strip_edges().to_lower()
-	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn":
+	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn" and normalized_character != "lalou" and normalized_character != "m4" and normalized_character != "rp":
 		normalized_character = "outrage"
 	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
 	var normalized_map := map_id.strip_edges().to_lower()
@@ -171,7 +173,7 @@ func join_lobby(lobby_id: int, weapon_id: String, character_id: String) -> bool:
 	if normalized_weapon.is_empty():
 		normalized_weapon = "ak47"
 	var normalized_character := character_id.strip_edges().to_lower()
-	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn":
+	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn" and normalized_character != "lalou" and normalized_character != "m4" and normalized_character != "rp":
 		normalized_character = "outrage"
 	_pending_mode_id = str(_lobby_mode_by_id.get(lobby_id, "deathmatch"))
 	_rpc_lobby_join.rpc_id(1, lobby_id, normalized_weapon, normalized_character)
@@ -282,7 +284,7 @@ func set_character(character_id: String) -> bool:
 		_log("set_character blocked can_send=false")
 		return false
 	var normalized := character_id.strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker" and normalized != "gan" and normalized != "veila" and normalized != "krog" and normalized != "aevilok" and normalized != "franky" and normalized != "varn":
+	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker" and normalized != "gan" and normalized != "veila" and normalized != "krog" and normalized != "aevilok" and normalized != "franky" and normalized != "varn" and normalized != "lalou" and normalized != "m4" and normalized != "rp":
 		normalized = "outrage"
 	_log("set_character rpc_id(1) character_id=%s" % normalized)
 	_rpc_lobby_set_character.rpc_id(1, normalized)
@@ -584,6 +586,14 @@ func _rpc_scene_switch_to_map(_map_id: String) -> void:
 		scene_path = _map_catalog.scene_path_for_id(default_map_id)
 	var mode_id := _map_flow_service.normalize_mode_id(str(_lobby_mode_by_id.get(_active_lobby_id, _pending_mode_id)))
 	ProjectSettings.set_setting("kw/pending_game_mode", mode_id)
+	var selected_weapon_id := _lobby_service.get_local_selected_weapon("ak47")
+	var selected_character_id := _lobby_service.get_local_selected_character("outrage")
+	var selected_weapon_skin := _lobby_service.get_local_selected_weapon_skin(selected_weapon_id, 0)
+	var selected_character_skin := _lobby_service.get_local_selected_skin(selected_character_id, 0)
+	ProjectSettings.set_setting("kw/pending_selected_weapon_id", selected_weapon_id)
+	ProjectSettings.set_setting("kw/pending_selected_weapon_skin", selected_weapon_skin)
+	ProjectSettings.set_setting("kw/pending_selected_character_id", selected_character_id)
+	ProjectSettings.set_setting("kw/pending_selected_character_skin", selected_character_skin)
 	var skull_ruleset := str(_last_room_state.get("skull_ruleset", _last_active_skull_ruleset)).strip_edges().to_lower()
 	var skull_target_score := int(_last_room_state.get("skull_target_score", _last_active_skull_target_score))
 	var skull_time_limit_sec := int(_last_room_state.get("skull_time_limit_sec", _last_active_skull_time_limit_sec))
@@ -673,6 +683,10 @@ func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> vo
 	pass
 
 @rpc("authority", "reliable")
+func _rpc_apply_debuff_visual(_target_peer_id: int, _debuff_id: String, _duration_sec: float) -> void:
+	pass
+
+@rpc("authority", "reliable")
 func _rpc_skull_match_intro(_participant_peer_ids: Array, _duration_sec: float) -> void:
 	pass
 
@@ -703,3 +717,4 @@ func _complete_rpc_root_handoff() -> void:
 		tree.process_frame.connect(Callable(self, "_complete_rpc_root_handoff"), CONNECT_ONE_SHOT)
 		return
 	queue_free()
+

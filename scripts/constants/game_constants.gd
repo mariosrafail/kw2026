@@ -109,6 +109,9 @@ const CHARACTER_ID_KROG := "krog"
 const CHARACTER_ID_AEVILOK := "aevilok"
 const CHARACTER_ID_FRANKY := "franky"
 const CHARACTER_ID_VARN := "varn"
+const CHARACTER_ID_LALOU := "lalou"
+const CHARACTER_ID_M4 := "m4"
+const CHARACTER_ID_RP := "rp"
 
 const CHARACTERS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -190,6 +193,21 @@ const CHARACTERS := {
 		"name": "Varn",
 		"ability": "Fly Swarm",
 		"description": "Summons disruptive flies that swarm enemies and scramble aiming control"
+	},
+	CHARACTER_ID_LALOU: {
+		"name": "Lalou",
+		"ability": "Heart Storm",
+		"description": "Sprays random hearts for 5 seconds that stun nearby enemies on hit"
+	},
+	CHARACTER_ID_M4: {
+		"name": "M4",
+		"ability": "Shock Field",
+		"description": "Channels a 5-second electric field that chains to nearby enemies and applies burn"
+	},
+	CHARACTER_ID_RP: {
+		"name": "Raining Pleasure",
+		"ability": "Rainfall",
+		"description": "Makes it rain for 5 seconds and applies vulnerable to enemies globally"
 	}
 }
 

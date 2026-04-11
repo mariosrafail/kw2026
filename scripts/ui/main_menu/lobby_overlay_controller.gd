@@ -304,7 +304,7 @@ func _selected_warrior_id() -> String:
 	var selected_character_id := "outrage"
 	if _host != null:
 		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro" and selected_character_id != "nova" and selected_character_id != "hindi" and selected_character_id != "loker" and selected_character_id != "gan" and selected_character_id != "veila" and selected_character_id != "krog" and selected_character_id != "aevilok" and selected_character_id != "franky" and selected_character_id != "varn":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro" and selected_character_id != "nova" and selected_character_id != "hindi" and selected_character_id != "loker" and selected_character_id != "gan" and selected_character_id != "veila" and selected_character_id != "krog" and selected_character_id != "aevilok" and selected_character_id != "franky" and selected_character_id != "varn" and selected_character_id != "lalou" and selected_character_id != "m4" and selected_character_id != "rp":
 		selected_character_id = "outrage"
 	return selected_character_id
 

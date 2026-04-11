@@ -1550,6 +1550,18 @@ func _tween_scale(ci: CanvasItem, target_scale: Vector2, duration: float) -> voi
 func _pop(ci: CanvasItem) -> void:
 	_ui_anim.pop(self, ci)
 
+func _pop_warrior_preview(preview: Node) -> void:
+	if not (preview is Node2D):
+		return
+	var node := preview as Node2D
+	var rest_scale := node.scale
+	if preview == main_warrior_preview:
+		rest_scale = _main_warrior_preview_base_scale
+	elif preview == warrior_shop_preview:
+		rest_scale = _warrior_shop_preview_base_scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
+	node.set_meta("kw_pop_rest_scale", rest_scale)
+	_pop(node)
+
 func _shake(ci: CanvasItem) -> void:
 	_ui_anim.shake(self, ci)
 

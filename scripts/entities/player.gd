@@ -359,6 +359,22 @@ func clear_juice_shrink_visual(animate: bool = true) -> void:
 	if presentation_facade_component != null:
 		presentation_facade_component.clear_juice_shrink_visual(animate)
 
+func set_petrified_visual(duration_sec: float) -> void:
+	if presentation_facade_component != null:
+		presentation_facade_component.set_petrified_visual(duration_sec)
+
+func clear_petrified_visual() -> void:
+	if presentation_facade_component != null:
+		presentation_facade_component.clear_petrified_visual()
+
+func set_public_debuff_visual(debuff_id: String, duration_sec: float) -> void:
+	if presentation_facade_component != null:
+		presentation_facade_component.set_public_debuff_visual(debuff_id, duration_sec)
+
+func clear_public_debuff_visual(debuff_id: String = "") -> void:
+	if presentation_facade_component != null:
+		presentation_facade_component.clear_public_debuff_visual(debuff_id)
+
 func configure(new_peer_id: int, color: Color) -> void:
 	peer_id = new_peer_id
 	if body == null:

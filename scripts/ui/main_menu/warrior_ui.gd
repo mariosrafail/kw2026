@@ -19,6 +19,9 @@ const WARRIOR_MANIFEST_PATHS := {
 	"aevilok": "res://assets/warriors/aevilok/skin_manifest.json",
 	"franky": "res://assets/warriors/franky/skin_manifest.json",
 	"varn": "res://assets/warriors/varn/skin_manifest.json",
+	"lalou": "res://assets/warriors/lalou/skin_manifest.json",
+	"m4": "res://assets/warriors/m4/skin_manifest.json",
+	"rp": "res://assets/warriors/rp/skin_manifest.json",
 }
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const GAN_HAIR_WIND_SHADER := preload("res://assets/shaders/gan_hair_wind.gdshader")
@@ -39,6 +42,9 @@ const SKILL_SUMMARY_BY_WARRIOR := {
 	"aevilok": "Ulti: warmup cast then sprays a flamethrower in head direction.",
 	"franky": "Ulti: deploys a healing zone that restores him and allies.",
 	"varn": "Ulti: sends fly swarms to enemies and scrambles their aim control.",
+	"lalou": "Ulti: sprays heart pixels for 5s that repeatedly stun nearby enemies.",
+	"m4": "Ulti: electric shock field chains lightning to nearby enemies and applies burn.",
+	"rp": "Ulti: makes it rain for 5s and applies vulnerable across the map.",
 }
 
 var _manifest_cache: Dictionary = {}

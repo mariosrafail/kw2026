@@ -182,6 +182,12 @@ func _send_spawn_erebus_shield_rpc(target_peer_id: int, caster_peer_id: int, dur
 		return
 	_rpc_spawn_erebus_shield.rpc_id(target_peer_id, caster_peer_id, duration_sec)
 
+func _send_apply_debuff_visual_rpc(target_peer_id: int, affected_peer_id: int, debuff_id: String, duration_sec: float) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		_rpc_apply_debuff_visual(affected_peer_id, debuff_id, duration_sec)
+		return
+	_rpc_apply_debuff_visual.rpc_id(target_peer_id, affected_peer_id, debuff_id, duration_sec)
+
 func _send_skill_cast_rpc(target_peer_id: int, skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
 	var target_is_local_server := multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id()
 	var warrior_id = _warrior_id_for_peer(caster_peer_id)
@@ -331,6 +337,33 @@ func _send_skill_cast_rpc(target_peer_id: int, skill_number: int, caster_peer_id
 				else:
 					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
 		"varn":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"lalou":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"m4":
+			if skill_number == 2:
+				if target_is_local_server:
+					if combat_flow_service != null:
+						combat_flow_service.client_receive_skill_cast(2, caster_peer_id, target_world)
+					if has_method("_push_ultimate_notification"):
+						call("_push_ultimate_notification", caster_peer_id, _warrior_id_for_peer(caster_peer_id))
+				else:
+					_rpc_spawn_tasko_mine.rpc_id(target_peer_id, caster_peer_id, target_world)
+		"rp":
 			if skill_number == 2:
 				if target_is_local_server:
 					if combat_flow_service != null:

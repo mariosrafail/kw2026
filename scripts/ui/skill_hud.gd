@@ -43,6 +43,9 @@ const CHARACTER_E_ICON_COLUMNS := {
 	"nova": 9,
 	"hindi": 9,
 	"loker": 9,
+	"lalou": 9,
+	"m4": 9,
+	"rp": 9,
 }
 
 var _e_slot: Control

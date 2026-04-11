@@ -937,6 +937,13 @@ func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> vo
 	combat_flow_service.client_receive_skill_cast(2, _caster_peer_id, _world_position)
 	_push_ultimate_notification(_caster_peer_id, _warrior_id_for_peer(_caster_peer_id))
 
+func _rpc_apply_debuff_visual(_target_peer_id: int, _debuff_id: String, _duration_sec: float) -> void:
+	if multiplayer.is_server():
+		return
+	if combat_flow_service == null:
+		return
+	combat_flow_service.client_receive_debuff_visual(_target_peer_id, _debuff_id, _duration_sec)
+
 
 func _server_broadcast_match_message(lobby_id: int, text: String) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:

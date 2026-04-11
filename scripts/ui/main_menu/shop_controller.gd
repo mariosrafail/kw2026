@@ -3,6 +3,8 @@ extends RefCounted
 class_name MainMenuShopController
 
 func select_warrior_skin(host: Control, warrior_id: String, skin_index: int, silent: bool) -> void:
+	var previous_pending_warrior_id := str(host.get("_pending_warrior_id")).strip_edges().to_lower()
+	var normalized_warrior_id := warrior_id.strip_edges().to_lower()
 	host.set("_pending_warrior_id", warrior_id.strip_edges().to_lower())
 	host.set("_pending_warrior_skin", maxi(0, skin_index))
 	host.call("_apply_warrior_skin_to_player", host.get("warrior_shop_preview"), str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin")))
@@ -12,7 +14,8 @@ func select_warrior_skin(host: Control, warrior_id: String, skin_index: int, sil
 		warrior_name_label.text = "%s - %s" % [warrior_ui.warrior_display_name(str(host.get("_pending_warrior_id"))), warrior_ui.warrior_skin_label(str(host.get("_pending_warrior_id")), int(host.get("_pending_warrior_skin")))]
 	if host != null and host.has_method("_refresh_warrior_skill_description_label"):
 		host.call("_refresh_warrior_skill_description_label", str(host.get("_pending_warrior_id")))
-	if host != null and host.has_method("_build_warrior_skin_grid"):
+	var should_rebuild_skin_grid := previous_pending_warrior_id != normalized_warrior_id
+	if should_rebuild_skin_grid and host != null and host.has_method("_build_warrior_skin_grid"):
 		host.call("_build_warrior_skin_grid", str(host.get("_pending_warrior_id")))
 	host.call("_refresh_warrior_filter_button_state")
 	refresh_warrior_grid_texts(host)
@@ -21,6 +24,8 @@ func select_warrior_skin(host: Control, warrior_id: String, skin_index: int, sil
 		host.call("_refresh_selection_context_visuals")
 
 func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> void:
+	var previous_pending_warrior_id := str(host.get("_pending_warrior_id")).strip_edges().to_lower()
+	var normalized_warrior_id := warrior_id.strip_edges().to_lower()
 	host.set("selected_warrior_id", warrior_id.strip_edges().to_lower())
 	host.set("selected_warrior_skin", maxi(0, skin_index))
 	host.set("_pending_warrior_id", str(host.get("selected_warrior_id")))
@@ -37,7 +42,8 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 		warrior_name_label.text = "%s - %s" % [warrior_ui.warrior_display_name(str(host.get("selected_warrior_id"))), warrior_ui.warrior_skin_label(str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))]
 	if host != null and host.has_method("_refresh_warrior_skill_description_label"):
 		host.call("_refresh_warrior_skill_description_label", str(host.get("selected_warrior_id")))
-	if host != null and host.has_method("_build_warrior_skin_grid"):
+	var should_rebuild_skin_grid := previous_pending_warrior_id != normalized_warrior_id
+	if should_rebuild_skin_grid and host != null and host.has_method("_build_warrior_skin_grid"):
 		host.call("_build_warrior_skin_grid", str(host.get("selected_warrior_id")))
 	host.call("_save_state")
 	host.call("_auth_sync_wallet")
@@ -48,6 +54,9 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 	refresh_warrior_action(host)
 	if host != null and host.has_method("_refresh_selection_context_visuals"):
 		host.call("_refresh_selection_context_visuals")
+	if host != null and host.has_method("_pop_warrior_preview"):
+		host.call("_pop_warrior_preview", host.get("main_warrior_preview"))
+		host.call("_pop_warrior_preview", host.get("warrior_shop_preview"))
 
 func buy_warrior_if_needed(host: Control, warrior_id: String) -> bool:
 	var normalized = warrior_id.strip_edges().to_lower()
@@ -139,7 +148,7 @@ func confirm_buy_warrior_then_maybe_skin(host: Control, warrior_id: String, skin
 func on_warrior_item_button_pressed(host: Control, warrior_id: String, skin_index: int) -> void:
 	var normalized = warrior_id.strip_edges().to_lower()
 	var idx = maxi(0, skin_index)
-	select_warrior_skin(host, normalized, idx, false)
+	select_warrior_skin(host, normalized, idx, true)
 	var warrior_ui = host.get("_warrior_ui")
 	if not bool(host.call("_warrior_is_owned", normalized)):
 		var warrior_cost = int(host.call("_warrior_cost", normalized))

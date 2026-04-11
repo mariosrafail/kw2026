@@ -1,0 +1,28 @@
+{
+  "warrior_id": "lalou",
+  "display_name": "Lalou",
+  "warrior_cost": 3500,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/lalou/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/lalou/head.png",
+    "torso": "res://assets/warriors/lalou/torso.png",
+    "legs": "res://assets/warriors/lalou/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Default",
+      "unlock_type": "free",
+      "cost": 0
+    },
+    {
+      "id": "skin_01",
+      "index": 1,
+      "name": "Pink Crush",
+      "unlock_type": "shop",
+      "cost": 520
+    }
+  ]
+}

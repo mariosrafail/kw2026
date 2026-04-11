@@ -20,6 +20,9 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"aevilok": Color(0.62, 0.18, 0.09, 1.0),
 	"franky": Color(0.18, 0.78, 0.44, 1.0),
 	"varn": Color(0.56, 0.61, 0.12, 1.0),
+	"lalou": Color(0.68, 0.27, 0.55, 1.0),
+	"m4": Color(0.22, 0.55, 0.72, 1.0),
+	"rp": Color(0.18, 0.45, 0.76, 1.0),
 }
 
 var players: Dictionary = {}
@@ -42,6 +45,7 @@ var send_spawn_blood_particles_cb: Callable = Callable()
 var can_damage_peer_cb: Callable = Callable()
 var character_id_for_peer_cb: Callable = Callable()
 var authoritative_blood_color_for_peer_cb: Callable = Callable()
+var incoming_damage_multiplier_for_peer_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -63,6 +67,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	can_damage_peer_cb = callbacks.get("can_damage_peer", Callable()) as Callable
 	character_id_for_peer_cb = callbacks.get("character_id_for_peer", Callable()) as Callable
 	authoritative_blood_color_for_peer_cb = callbacks.get("authoritative_blood_color_for_peer", Callable()) as Callable
+	incoming_damage_multiplier_for_peer_cb = callbacks.get("incoming_damage_multiplier_for_peer", Callable()) as Callable
 
 	player_history_ms = int(config.get("player_history_ms", player_history_ms))
 
@@ -205,6 +210,8 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 		shot_damage = int(get_projectile_damage_cb.call(projectile_id, base_damage))
 	if is_headshot:
 		shot_damage *= HEADSHOT_DAMAGE_MULTIPLIER
+	var incoming_multiplier := _incoming_damage_multiplier(target_peer_id)
+	shot_damage = maxi(1, int(round(float(shot_damage) * incoming_multiplier)))
 
 	var remaining_health := target_player.apply_damage(shot_damage, incoming_velocity)
 	var target_lobby_id := _peer_lobby(target_peer_id)
@@ -264,6 +271,9 @@ func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, targ
 	if can_damage_peer_cb.is_valid() and not bool(can_damage_peer_cb.call(attacker_peer_id, target_peer_id)):
 		return target_player.get_health()
 	var applied_damage := maxi(0, damage)
+	if applied_damage > 0:
+		var incoming_multiplier := _incoming_damage_multiplier(target_peer_id)
+		applied_damage = maxi(1, int(round(float(applied_damage) * incoming_multiplier)))
 	var resolved_incoming_velocity := incoming_velocity
 	if resolved_incoming_velocity.length_squared() <= 0.0001 and attacker_peer_id > 0:
 		var attacker_player := players.get(attacker_peer_id, null) as NetPlayer
@@ -337,3 +347,8 @@ func _target_blood_color(target_peer_id: int, target_player: NetPlayer) -> Color
 		if color_value is Color:
 			return color_value as Color
 	return Color(0.98, 0.02, 0.07, 1.0)
+
+func _incoming_damage_multiplier(target_peer_id: int) -> float:
+	if incoming_damage_multiplier_for_peer_cb.is_valid():
+		return maxf(0.01, float(incoming_damage_multiplier_for_peer_cb.call(target_peer_id)))
+	return 1.0

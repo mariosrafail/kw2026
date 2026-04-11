@@ -60,6 +60,26 @@ func clear_juice_shrink_visual(animate: bool) -> void:
 	if status_visuals_component != null:
 		status_visuals_component.clear_juice_shrink_visual(animate)
 
+func set_petrified_visual(duration_sec: float) -> void:
+	var status_visuals_component: Variant = _status_visuals_component()
+	if status_visuals_component != null:
+		status_visuals_component.set_petrified_visual(duration_sec)
+
+func clear_petrified_visual() -> void:
+	var status_visuals_component: Variant = _status_visuals_component()
+	if status_visuals_component != null:
+		status_visuals_component.clear_petrified_visual()
+
+func set_public_debuff_visual(debuff_id: String, duration_sec: float) -> void:
+	var status_visuals_component: Variant = _status_visuals_component()
+	if status_visuals_component != null:
+		status_visuals_component.set_public_debuff_visual(debuff_id, duration_sec)
+
+func clear_public_debuff_visual(debuff_id: String = "") -> void:
+	var status_visuals_component: Variant = _status_visuals_component()
+	if status_visuals_component != null:
+		status_visuals_component.clear_public_debuff_visual(debuff_id)
+
 func set_display_name(display_name: String) -> void:
 	if _name_label == null:
 		return

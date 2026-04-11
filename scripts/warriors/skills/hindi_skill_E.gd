@@ -11,9 +11,7 @@ const MAGIC_HEAD_ALPHA := 0.98
 
 var character_id_for_peer_cb: Callable = Callable()
 var skill_color_for_peer_cb: Callable = Callable()
-var send_match_message_to_peer_cb: Callable = Callable()
 var _magic_until_msec_by_peer: Dictionary = {}
-var _stunned_until_msec_by_peer: Dictionary = {}
 var _magic_projectiles: Dictionary = {}
 
 func _init() -> void:
@@ -23,7 +21,6 @@ func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	super.configure(state_refs, callbacks)
 	character_id_for_peer_cb = callbacks.get("character_id_for_peer", Callable()) as Callable
 	skill_color_for_peer_cb = callbacks.get("skill_color_for_peer", Callable()) as Callable
-	send_match_message_to_peer_cb = callbacks.get("send_match_message_to_peer", Callable()) as Callable
 
 func _execute_cast(caster_peer_id: int, _target_world: Vector2) -> void:
 	if _character_id_for_peer(caster_peer_id) != CHARACTER_ID_HINDI:
@@ -49,7 +46,6 @@ func _execute_client_visual(caster_peer_id: int, target_world: Vector2) -> void:
 func server_tick(_delta: float) -> void:
 	var now_msec := Time.get_ticks_msec()
 	_prune_expired(_magic_until_msec_by_peer, now_msec)
-	_prune_expired(_stunned_until_msec_by_peer, now_msec)
 
 func register_fired_projectiles(caster_peer_id: int, weapon_id: String, projectile_ids: Array[int]) -> void:
 	if not _is_magic_weapon_active(caster_peer_id, weapon_id):
@@ -66,26 +62,12 @@ func on_projectile_player_hit(projectile_id: int, attacker_peer_id: int, target_
 	if target == null or target.get_health() <= 0:
 		_magic_projectiles.erase(projectile_id)
 		return
-	_stunned_until_msec_by_peer[target_peer_id] = Time.get_ticks_msec() + int(STUN_DURATION_SEC * 1000.0)
-	if send_match_message_to_peer_cb.is_valid() and target_peer_id > 0:
-		send_match_message_to_peer_cb.call(target_peer_id, STUN_TEXT)
+	if debuff_service != null and debuff_service.has_method("apply_debuff"):
+		debuff_service.call("apply_debuff", target_peer_id, "stun", STUN_DURATION_SEC, attacker_peer_id)
 	_magic_projectiles.erase(projectile_id)
 
 func on_projectile_despawn(projectile_id: int) -> void:
 	_magic_projectiles.erase(projectile_id)
-
-func override_input_state_for_peer(peer_id: int, base_state: Dictionary) -> Dictionary:
-	if not _is_peer_stunned(peer_id):
-		return base_state
-	var overridden := base_state.duplicate(true)
-	overridden["axis"] = 0.0
-	overridden["jump_pressed"] = false
-	overridden["jump_held"] = false
-	overridden["shoot_held"] = false
-	return overridden
-
-func is_action_locked_for_peer(peer_id: int) -> bool:
-	return _is_peer_stunned(peer_id)
 
 func projectile_color_for_peer(peer_id: int, weapon_id: String, base_color: Color) -> Color:
 	if not _is_magic_weapon_active(peer_id, weapon_id):
@@ -100,16 +82,6 @@ func projectile_visual_config_for_peer(peer_id: int, weapon_id: String, base_vis
 	visual["trail_alpha"] = maxf(MAGIC_TRAIL_ALPHA, float(base_visual_config.get("trail_alpha", 0.0)))
 	visual["head_alpha"] = MAGIC_HEAD_ALPHA
 	return visual
-
-func _is_peer_stunned(peer_id: int) -> bool:
-	var until_msec := int(_stunned_until_msec_by_peer.get(peer_id, 0))
-	if until_msec <= 0:
-		return false
-	if Time.get_ticks_msec() > until_msec:
-		_stunned_until_msec_by_peer.erase(peer_id)
-		return false
-	var player := players.get(peer_id, null) as NetPlayer
-	return player != null and player.get_health() > 0
 
 func _is_magic_weapon_active(peer_id: int, weapon_id: String) -> bool:
 	if _character_id_for_peer(peer_id) != CHARACTER_ID_HINDI:

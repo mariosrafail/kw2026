@@ -74,14 +74,26 @@ func tween_scale(ci: CanvasItem, target_scale: Vector2, duration: float) -> void
 func pop(host: Node, ci: CanvasItem) -> void:
 	if host == null or ci == null:
 		return
-	var start_scale: Vector2 = Vector2.ONE
+	var existing: Variant = ci.get_meta("kw_pop_tween") if ci.has_meta("kw_pop_tween") else null
+	if existing is Tween:
+		(existing as Tween).kill()
+	var rest_scale := Vector2.ONE
+	if ci.has_meta("kw_pop_rest_scale") and ci.get_meta("kw_pop_rest_scale") is Vector2:
+		rest_scale = ci.get_meta("kw_pop_rest_scale") as Vector2
+	else:
+		if ci is Node2D:
+			rest_scale = (ci as Node2D).scale
+		elif ci is Control:
+			rest_scale = (ci as Control).scale
+		ci.set_meta("kw_pop_rest_scale", rest_scale)
 	if ci is Node2D:
-		start_scale = (ci as Node2D).scale
+		(ci as Node2D).scale = rest_scale
 	elif ci is Control:
-		start_scale = (ci as Control).scale
+		(ci as Control).scale = rest_scale
 	var t := host.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	t.tween_property(ci, "scale", start_scale * 1.08, 0.12)
-	t.tween_property(ci, "scale", start_scale, 0.16)
+	t.tween_property(ci, "scale", rest_scale * 1.08, 0.12)
+	t.tween_property(ci, "scale", rest_scale, 0.16)
+	ci.set_meta("kw_pop_tween", t)
 
 func shake(host: Node, ci: CanvasItem) -> void:
 	if host == null or ci == null:
@@ -152,4 +164,3 @@ func _tween_hover_fill(btn: Button, hovered: bool) -> void:
 	var dur := 0.16 if hovered else 0.12
 	t.tween_property(fill, "size:x", target_w, dur)
 	btn.set_meta(HOVER_FILL_TWEEN_META, t)
-

@@ -19,6 +19,7 @@ var multiplayer: MultiplayerAPI
 var projectile_system: ProjectileSystem
 var hit_damage_resolver: HitDamageResolver
 var camera_shake: CameraShake
+var debuff_service: Variant = null
 
 ## Callbacks for networking
 var get_peer_lobby_cb: Callable = Callable()
@@ -42,6 +43,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	projectile_system = state_refs.get("projectile_system", null)
 	hit_damage_resolver = state_refs.get("hit_damage_resolver", null)
 	camera_shake = state_refs.get("camera_shake", null)
+	debuff_service = state_refs.get("debuff_service", null)
 	
 	get_peer_lobby_cb = callbacks.get("get_peer_lobby", Callable())
 	get_lobby_members_cb = callbacks.get("get_lobby_members", Callable())

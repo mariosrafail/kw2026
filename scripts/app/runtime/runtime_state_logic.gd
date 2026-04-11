@@ -20,6 +20,9 @@ const DEFAULT_BLOOD_COLOR_BY_CHARACTER := {
 	"aevilok": Color(0.62, 0.18, 0.09, 1.0),
 	"franky": Color(0.18, 0.78, 0.44, 1.0),
 	"varn": Color(0.56, 0.61, 0.12, 1.0),
+	"lalou": Color(0.68, 0.27, 0.55, 1.0),
+	"m4": Color(0.22, 0.55, 0.72, 1.0),
+	"rp": Color(0.18, 0.45, 0.76, 1.0),
 }
 const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
@@ -38,6 +41,9 @@ const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"aevilok": Color(1.0, 0.47, 0.16, 1.0),
 	"franky": Color(0.32, 0.92, 0.55, 1.0),
 	"varn": Color(0.78, 0.88, 0.22, 1.0),
+	"lalou": Color(1.0, 0.41, 0.68, 1.0),
+	"m4": Color(0.40, 0.92, 1.0, 1.0),
+	"rp": Color(0.32, 0.68, 1.0, 1.0),
 }
 
 var server_skin_blood_color_config: Dictionary = {}
@@ -325,6 +331,12 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		return CHARACTER_ID_FRANKY
 	if normalized == CHARACTER_ID_VARN:
 		return CHARACTER_ID_VARN
+	if normalized == CHARACTER_ID_LALOU:
+		return CHARACTER_ID_LALOU
+	if normalized == CHARACTER_ID_M4:
+		return CHARACTER_ID_M4
+	if normalized == CHARACTER_ID_RP:
+		return CHARACTER_ID_RP
 	if lobby_service != null:
 		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
 		if persisted == CHARACTER_ID_EREBUS:
@@ -375,6 +387,15 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		if persisted == CHARACTER_ID_VARN:
 			peer_character_ids[peer_id] = CHARACTER_ID_VARN
 			return CHARACTER_ID_VARN
+		if persisted == CHARACTER_ID_LALOU:
+			peer_character_ids[peer_id] = CHARACTER_ID_LALOU
+			return CHARACTER_ID_LALOU
+		if persisted == CHARACTER_ID_M4:
+			peer_character_ids[peer_id] = CHARACTER_ID_M4
+			return CHARACTER_ID_M4
+		if persisted == CHARACTER_ID_RP:
+			peer_character_ids[peer_id] = CHARACTER_ID_RP
+			return CHARACTER_ID_RP
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
 		if local_normalized == CHARACTER_ID_EREBUS:
@@ -407,6 +428,12 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 			return CHARACTER_ID_FRANKY
 		if local_normalized == CHARACTER_ID_VARN:
 			return CHARACTER_ID_VARN
+		if local_normalized == CHARACTER_ID_LALOU:
+			return CHARACTER_ID_LALOU
+		if local_normalized == CHARACTER_ID_M4:
+			return CHARACTER_ID_M4
+		if local_normalized == CHARACTER_ID_RP:
+			return CHARACTER_ID_RP
 		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
 

@@ -59,17 +59,41 @@ func _init_weapons() -> void:
 	}
 	var startup_weapon_id := default_selected_weapon_id
 	var startup_character_id := default_selected_character_id
+	var pending_weapon_id := str(ProjectSettings.get_setting("kw/pending_selected_weapon_id", "")).strip_edges().to_lower()
+	var pending_character_id := str(ProjectSettings.get_setting("kw/pending_selected_character_id", "")).strip_edges().to_lower()
+	var pending_weapon_skin := int(ProjectSettings.get_setting("kw/pending_selected_weapon_skin", -1))
+	var pending_character_skin := int(ProjectSettings.get_setting("kw/pending_selected_character_skin", -1))
+	if not pending_weapon_id.is_empty():
+		startup_weapon_id = pending_weapon_id
+	if not pending_character_id.is_empty():
+		startup_character_id = pending_character_id
 	if lobby_service != null:
 		startup_weapon_id = lobby_service.get_local_selected_weapon(default_selected_weapon_id)
 		startup_character_id = lobby_service.get_local_selected_character(default_selected_character_id)
+		if not pending_weapon_id.is_empty():
+			startup_weapon_id = pending_weapon_id
+		if not pending_character_id.is_empty():
+			startup_character_id = pending_character_id
 	selected_weapon_id = _normalize_weapon_id(startup_weapon_id)
 	if lobby_service != null:
 		selected_weapon_skin = int(lobby_service.get_local_selected_weapon_skin(selected_weapon_id, 0))
+	if pending_weapon_skin >= 0:
+		selected_weapon_skin = maxi(0, pending_weapon_skin)
 	selected_character_id = _normalize_character_id(startup_character_id)
 	if lobby_service != null:
 		lobby_service.set_local_selected_weapon(selected_weapon_id)
 		lobby_service.set_local_selected_weapon_skin(selected_weapon_id, selected_weapon_skin)
 		lobby_service.set_local_selected_character(selected_character_id)
+		if pending_character_skin >= 0:
+			lobby_service.set_local_selected_skin(selected_character_id, pending_character_skin)
+	if pending_character_skin >= 0:
+		ProjectSettings.set_setting("kw/pending_selected_character_skin", -1)
+	if pending_weapon_skin >= 0:
+		ProjectSettings.set_setting("kw/pending_selected_weapon_skin", -1)
+	if not pending_weapon_id.is_empty():
+		ProjectSettings.set_setting("kw/pending_selected_weapon_id", "")
+	if not pending_character_id.is_empty():
+		ProjectSettings.set_setting("kw/pending_selected_character_id", "")
 
 func _init_scene_map_context() -> void:
 	if map_front_sprite != null:
@@ -222,7 +246,8 @@ func _configure_services() -> void:
 			"send_spawn_blood_particles": Callable(self, "_send_spawn_blood_particles_rpc"),
 			"can_damage_peer": Callable(self, "_can_damage_peer"),
 			"character_id_for_peer": Callable(self, "_warrior_id_for_peer"),
-			"authoritative_blood_color_for_peer": Callable(self, "_authoritative_blood_color_for_peer")
+			"authoritative_blood_color_for_peer": Callable(self, "_authoritative_blood_color_for_peer"),
+			"incoming_damage_multiplier_for_peer": Callable(combat_flow_service, "incoming_damage_multiplier_for_peer")
 		},
 		{
 			"player_history_ms": PLAYER_HISTORY_MS
@@ -328,6 +353,7 @@ func _configure_services() -> void:
 			"send_despawn_projectile": Callable(self, "_send_despawn_projectile_rpc"),
 			"broadcast_player_state": Callable(self, "_server_broadcast_player_state"),
 			"send_skill_charge": Callable(self, "_send_sync_skill_charge_rpc"),
+			"send_debuff_visual": Callable(self, "_send_apply_debuff_visual_rpc"),
 			"send_skill_cast": Callable(self, "_send_skill_cast_rpc"),
 			"warrior_id_for_peer": Callable(self, "_warrior_id_for_peer"),
 			"skin_index_for_peer": Callable(self, "_skin_index_for_peer"),

@@ -2,6 +2,7 @@ extends RefCounted
 class_name CombatFlowService
 
 const WARRIOR_FACTORY_SCRIPT := preload("res://scripts/warriors/warrior_factory.gd")
+const PLAYER_DEBUFF_SERVICE_SCRIPT := preload("res://scripts/combat/player_debuff_service.gd")
 const BLOOD_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
 	"erebus": Color(0.72, 0.78, 1.0, 1.0),
@@ -19,6 +20,9 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"aevilok": Color(0.62, 0.18, 0.09, 1.0),
 	"franky": Color(0.18, 0.78, 0.44, 1.0),
 	"varn": Color(0.56, 0.61, 0.12, 1.0),
+	"lalou": Color(0.68, 0.27, 0.55, 1.0),
+	"m4": Color(0.22, 0.55, 0.72, 1.0),
+	"rp": Color(0.18, 0.45, 0.76, 1.0),
 }
 
 var players: Dictionary = {}
@@ -37,6 +41,7 @@ var combat_effects: CombatEffects
 var camera_shake: CameraShake
 var hit_damage_resolver: HitDamageResolver
 var player_replication: PlayerReplication
+var player_debuff_service: Variant = null
 
 var send_skill_cast_cb: Callable = Callable()  # Generic skill callback
 var warrior_id_for_peer_cb: Callable = Callable()
@@ -65,6 +70,7 @@ var send_projectile_impact_cb: Callable = Callable()
 var send_despawn_projectile_cb: Callable = Callable()
 var broadcast_player_state_cb: Callable = Callable()
 var send_skill_charge_cb: Callable = Callable()
+var send_debuff_visual_cb: Callable = Callable()
 
 var max_reported_rtt_ms := 300
 var snapshot_rate := 30.0
@@ -106,6 +112,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_despawn_projectile_cb = callbacks.get("send_despawn_projectile", Callable()) as Callable
 	broadcast_player_state_cb = callbacks.get("broadcast_player_state", Callable()) as Callable
 	send_skill_charge_cb = callbacks.get("send_skill_charge", Callable()) as Callable
+	send_debuff_visual_cb = callbacks.get("send_debuff_visual", Callable()) as Callable
 	send_skill_cast_cb = callbacks.get("send_skill_cast", Callable()) as Callable
 	warrior_id_for_peer_cb = callbacks.get("warrior_id_for_peer", Callable()) as Callable
 	skin_index_for_peer_cb = callbacks.get("skin_index_for_peer", Callable()) as Callable
@@ -118,13 +125,27 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	snapshot_rate = float(config.get("snapshot_rate", snapshot_rate))
 	weapon_id_ak47 = str(config.get("weapon_id_ak47", weapon_id_ak47))
 	max_input_stale_ms = int(config.get("max_input_stale_ms", max_input_stale_ms))
+
+	player_debuff_service = PLAYER_DEBUFF_SERVICE_SCRIPT.new()
+	player_debuff_service.configure(
+		{
+			"players": players,
+			"multiplayer": multiplayer,
+			"hit_damage_resolver": hit_damage_resolver
+		},
+		{
+			"get_peer_lobby": get_peer_lobby_cb,
+			"get_lobby_members": get_lobby_members_cb,
+			"send_debuff_visual": send_debuff_visual_cb
+		}
+	)
 	
 	_init_warriors()
 
 func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vector2) -> void:
 	if _is_gameplay_locked():
 		return
-	if is_player_action_locked(caster_peer_id):
+	if not _can_cast_skill_actions(caster_peer_id):
 		return
 	if skill_number == 1:
 		return
@@ -141,7 +162,7 @@ func server_cast_skill(skill_number: int, caster_peer_id: int, target_world: Vec
 		print("[SKILL ERROR] Warrior not found for id=%s (peer_id=%d)" % [warrior_id, caster_peer_id])
 
 func can_cast_skill_for_peer(peer_id: int, skill_number: int) -> bool:
-	if is_player_action_locked(peer_id):
+	if not _can_cast_skill_actions(peer_id):
 		return false
 	if skill_number == 1:
 		return false
@@ -152,6 +173,11 @@ func can_cast_skill_for_peer(peer_id: int, skill_number: int) -> bool:
 	if skill_number == 2 and not _has_full_skill_charge(peer_id):
 		return false
 	return warrior.can_cast_skill(skill_number, peer_id)
+
+func incoming_damage_multiplier_for_peer(peer_id: int) -> float:
+	if player_debuff_service != null and player_debuff_service.has_method("incoming_damage_multiplier"):
+		return maxf(0.01, float(player_debuff_service.call("incoming_damage_multiplier", peer_id)))
+	return 1.0
 
 func skill_cooldown_remaining_for_peer(peer_id: int, skill_number: int) -> float:
 	if skill_number == 1 or skill_number == 2:
@@ -467,8 +493,13 @@ func _apply_explosive_projectile_impact(projectile_id: int, impact_position: Vec
 				send_spawn_blood_particles_cb.call(int(member_value), target_blood_position, blood_velocity, blood_color, 1.0)
 
 func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
+	clear_all_debuffs_for_peer(peer_id, true)
 	if player_replication != null:
 		player_replication.server_respawn_player(peer_id, player)
+
+func clear_all_debuffs_for_peer(peer_id: int, broadcast_clear_visual: bool = true) -> void:
+	if player_debuff_service != null and player_debuff_service.has_method("clear_all_debuffs_for_peer"):
+		player_debuff_service.call("clear_all_debuffs_for_peer", peer_id, broadcast_clear_visual)
 	var weapon_profile := _weapon_profile_for_peer(peer_id)
 	var ammo := weapon_profile.magazine_size() if weapon_profile != null else 0
 	ammo_by_peer[peer_id] = ammo
@@ -476,7 +507,9 @@ func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	pending_reload_delay_by_peer[peer_id] = 0.0
 	if clear_reload_mag_spawn_cb.is_valid():
 		clear_reload_mag_spawn_cb.call(peer_id)
-	player.set_ammo(ammo, false)
+	var player := players.get(peer_id, null) as NetPlayer
+	if player != null:
+		player.set_ammo(ammo, false)
 	server_sync_player_ammo(peer_id)
 	server_sync_skill_charge(peer_id)
 
@@ -505,6 +538,8 @@ func server_spawn_peer_if_needed(peer_id: int, lobby_id: int) -> void:
 
 func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 	var gameplay_locked := _is_gameplay_locked()
+	if player_debuff_service != null:
+		player_debuff_service.server_tick()
 	for key in players.keys():
 		var peer_id := int(key)
 		if _peer_lobby(peer_id) <= 0:
@@ -558,7 +593,10 @@ func server_simulate(delta: float, snapshot_accumulator: float) -> float:
 				ammo_by_peer[peer_id] = ammo
 				server_sync_player_ammo(peer_id)
 
-		if not gameplay_locked and bool(state.get("shoot_held", false)) and cooldown <= 0.0 and reload_remaining <= 0.0:
+		var can_shoot := true
+		if player_debuff_service != null:
+			can_shoot = player_debuff_service.can_shoot(peer_id)
+		if not gameplay_locked and can_shoot and bool(state.get("shoot_held", false)) and cooldown <= 0.0 and reload_remaining <= 0.0:
 			if ammo > 0:
 				server_fire_projectile(peer_id, player, weapon_profile)
 				ammo -= 1
@@ -688,7 +726,8 @@ func _init_warriors() -> void:
 					"multiplayer": multiplayer,
 					"projectile_system": projectile_system,
 					"hit_damage_resolver": hit_damage_resolver,
-					"camera_shake": camera_shake
+					"camera_shake": camera_shake,
+					"debuff_service": player_debuff_service
 				},
 				{
 					"get_peer_lobby": get_peer_lobby_cb,
@@ -774,6 +813,8 @@ func _has_full_skill_charge(peer_id: int) -> bool:
 	return required > 0 and skill_charge_points_for_peer(peer_id, 2) >= required
 
 func is_player_action_locked(peer_id: int) -> bool:
+	if player_debuff_service != null and player_debuff_service.is_hard_action_locked(peer_id):
+		return true
 	var warrior_id := _warrior_id_for_peer(peer_id)
 	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior != null and warrior.skill2 != null and warrior.skill2.has_method("is_action_locked"):
@@ -845,6 +886,8 @@ func override_local_input_state(peer_id: int, base_state: Dictionary) -> Diction
 
 func _apply_input_overrides_for_peer(peer_id: int, base_state: Dictionary) -> Dictionary:
 	var resolved := base_state
+	if player_debuff_service != null:
+		resolved = player_debuff_service.override_input_state(peer_id, resolved)
 	var warrior_id := _warrior_id_for_peer(peer_id)
 	var warrior := warriors_by_id.get(warrior_id) as WarriorProfile
 	if warrior != null and warrior.skill2 != null and warrior.skill2.has_method("override_input_state"):
@@ -861,6 +904,19 @@ func _apply_input_overrides_for_peer(peer_id: int, base_state: Dictionary) -> Di
 		if override_value is Dictionary:
 			resolved = override_value as Dictionary
 	return resolved
+
+func apply_debuff_to_peer(target_peer_id: int, debuff_id: String, duration_sec: float, source_peer_id: int = 0, params: Dictionary = {}) -> void:
+	if player_debuff_service != null:
+		player_debuff_service.apply_debuff(target_peer_id, debuff_id, duration_sec, source_peer_id, params)
+
+func client_receive_debuff_visual(target_peer_id: int, debuff_id: String, duration_sec: float) -> void:
+	if player_debuff_service != null:
+		player_debuff_service.client_receive_visual(target_peer_id, debuff_id, duration_sec)
+
+func _can_cast_skill_actions(peer_id: int) -> bool:
+	if player_debuff_service != null and not player_debuff_service.can_cast_skill(peer_id):
+		return false
+	return not is_player_action_locked(peer_id)
 
 func ensure_peer_visual_state(peer_id: int) -> void:
 	var warrior_id := _warrior_id_for_peer(peer_id)

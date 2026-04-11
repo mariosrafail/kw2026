@@ -160,13 +160,12 @@ func open_warriors_menu_stage2(warriors_menu_preview_scale_mult: float, warrior_
 
 	_warrior_open_transition = Node2D.new()
 	_warrior_open_transition.global_position = start_pos
-	_warrior_open_transition.global_rotation = src_visual.global_rotation
-	_warrior_open_transition.global_scale = start_scale
 	_warrior_open_transition.z_index = 1200
 	var warrior_visual := src_visual.duplicate() as Node2D
 	if warrior_visual == null:
 		return
 	warrior_visual.position = -start_center_local
+	warrior_visual.scale = start_scale
 	_warrior_open_transition.add_child(warrior_visual)
 	_fx_layer.add_child(_warrior_open_transition)
 
@@ -174,8 +173,8 @@ func open_warriors_menu_stage2(warriors_menu_preview_scale_mult: float, warrior_
 
 	_open_menu_tween = _host.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_position", target_pos, 0.18)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_scale", start_scale * 1.35, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(_warrior_open_transition, "global_scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.parallel().tween_property(warrior_visual, "scale", start_scale * 1.35, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.tween_property(warrior_visual, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_open_menu_tween.tween_property(_screen_warriors, "modulate:a", 1.0, 0.18)
 
 	_open_menu_tween.tween_callback(func() -> void:
@@ -230,13 +229,12 @@ func close_warriors_menu_stage2(warrior_shop_preview_base_scale: Vector2) -> voi
 
 	_warrior_open_transition = Node2D.new()
 	_warrior_open_transition.global_position = start_pos
-	_warrior_open_transition.global_rotation = src_visual.global_rotation
-	_warrior_open_transition.global_scale = start_scale
 	_warrior_open_transition.z_index = 1200
 	var warrior_visual := src_visual.duplicate() as Node2D
 	if warrior_visual == null:
 		return
 	warrior_visual.position = -start_center_local
+	warrior_visual.scale = start_scale
 	_warrior_open_transition.add_child(warrior_visual)
 	_fx_layer.add_child(_warrior_open_transition)
 
@@ -250,8 +248,8 @@ func close_warriors_menu_stage2(warrior_shop_preview_base_scale: Vector2) -> voi
 	_open_menu_tween = _host.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	_open_menu_tween.parallel().tween_property(_screen_warriors, "modulate:a", 0.0, 0.14)
 	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_position", target_pos, 0.18)
-	_open_menu_tween.parallel().tween_property(_warrior_open_transition, "global_scale", target_scale * 1.15, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_open_menu_tween.tween_property(_warrior_open_transition, "global_scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.parallel().tween_property(warrior_visual, "scale", target_scale * 1.15, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_open_menu_tween.tween_property(warrior_visual, "scale", target_scale, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_open_menu_tween.tween_callback(func() -> void:
 		_screen_warriors.visible = false
 		_screen_warriors.modulate = Color(1, 1, 1, 1)

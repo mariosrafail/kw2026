@@ -23,6 +23,9 @@ const KROG_WARRIOR := preload("res://scripts/warriors/krog_warrior.gd")
 const AEVILOK_WARRIOR := preload("res://scripts/warriors/aevilok_warrior.gd")
 const FRANKY_WARRIOR := preload("res://scripts/warriors/franky_warrior.gd")
 const VARN_WARRIOR := preload("res://scripts/warriors/varn_warrior.gd")
+const LALOU_WARRIOR := preload("res://scripts/warriors/lalou_warrior.gd")
+const M4_WARRIOR := preload("res://scripts/warriors/m4_warrior.gd")
+const RP_WARRIOR := preload("res://scripts/warriors/rp_warrior.gd")
 
 static func create_warrior(warrior_id: String) -> WarriorProfile:
 	match warrior_id.to_lower():
@@ -58,15 +61,21 @@ static func create_warrior(warrior_id: String) -> WarriorProfile:
 			return FRANKY_WARRIOR.new()
 		"varn":
 			return VARN_WARRIOR.new()
+		"lalou":
+			return LALOU_WARRIOR.new()
+		"m4":
+			return M4_WARRIOR.new()
+		"rp":
+			return RP_WARRIOR.new()
 		_:
 			push_error("Unknown warrior: %s" % warrior_id)
 			return null
 
 static func is_valid_warrior(warrior_id: String) -> bool:
-	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn"]
+	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp"]
 
 static func get_all_warrior_ids() -> Array[String]:
-	return ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn"]
+	return ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp"]
 
 static func get_warrior_name(warrior_id: String) -> String:
 	match warrior_id.to_lower():
@@ -102,5 +111,11 @@ static func get_warrior_name(warrior_id: String) -> String:
 			return "Franky"
 		"varn":
 			return "Varn"
+		"lalou":
+			return "Lalou"
+		"m4":
+			return "M4"
+		"rp":
+			return "Raining Pleasure"
 		_:
 			return "Unknown"

@@ -6,7 +6,9 @@ const CHARACTER_ID_MADAM := "madam"
 const AURA_DURATION_SEC := 5.0
 const AURA_RADIUS_PX := 178.0
 const MOVE_SPEED_MULTIPLIER := 0.28
+const JUMP_MULTIPLIER := 0.72
 const FIRE_RATE_MULTIPLIER := 0.33
+const SLOW_REFRESH_SEC := 0.28
 const STATUS_TEXT := "Dread Aura"
 const VFX_COLOR := Color(0.86, 0.48, 0.42, 0.88)
 
@@ -50,7 +52,6 @@ func server_tick(delta: float) -> void:
 	if not multiplayer.is_server():
 		return
 
-	var move_multiplier_by_peer: Dictionary = {}
 	var fire_multiplier_by_peer: Dictionary = {}
 	var touched_peers: Dictionary = {}
 	var expired_casters: Array = []
@@ -86,10 +87,20 @@ func server_tick(delta: float) -> void:
 				continue
 			if target.global_position.distance_to(caster.global_position) > AURA_RADIUS_PX:
 				continue
-			var existing_move := float(move_multiplier_by_peer.get(target_peer_id, 1.0))
 			var existing_fire := float(fire_multiplier_by_peer.get(target_peer_id, 1.0))
-			move_multiplier_by_peer[target_peer_id] = minf(existing_move, MOVE_SPEED_MULTIPLIER)
 			fire_multiplier_by_peer[target_peer_id] = minf(existing_fire, FIRE_RATE_MULTIPLIER)
+			if debuff_service != null and debuff_service.has_method("apply_debuff"):
+				debuff_service.call(
+					"apply_debuff",
+					target_peer_id,
+					"slow",
+					SLOW_REFRESH_SEC,
+					caster_peer_id,
+					{
+						"move_multiplier": MOVE_SPEED_MULTIPLIER,
+						"jump_multiplier": JUMP_MULTIPLIER,
+					}
+				)
 
 	for caster_peer_id in expired_casters:
 		_auras_by_peer.erase(caster_peer_id)
@@ -103,8 +114,6 @@ func server_tick(delta: float) -> void:
 		var player := players.get(peer_id, null) as NetPlayer
 		if player == null:
 			continue
-		if player.has_method("set_external_status_movement_speed_multiplier"):
-			player.call("set_external_status_movement_speed_multiplier", float(move_multiplier_by_peer.get(peer_id, 1.0)))
 		if player.has_method("set_external_fire_rate_multiplier"):
 			player.call("set_external_fire_rate_multiplier", float(fire_multiplier_by_peer.get(peer_id, 1.0)))
 

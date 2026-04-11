@@ -786,6 +786,12 @@ func _normalize_character_id(character_id: String, fallback: String = "outrage")
 		return "franky"
 	if normalized == "varn":
 		return "varn"
+	if normalized == "lalou":
+		return "lalou"
+	if normalized == "m4":
+		return "m4"
+	if normalized == "rp":
+		return "rp"
 	var fallback_normalized := str(fallback).strip_edges().to_lower()
 	if fallback_normalized != normalized:
 		return _normalize_character_id(fallback_normalized, "outrage")
@@ -815,3 +821,4 @@ func _sanitize_skull_target_score(value: int) -> int:
 
 func _sanitize_skull_time_limit_sec(value: int) -> int:
 	return clampi(value, 30, 3600)
+

@@ -1109,6 +1109,8 @@ func _server_tick_skull_respawns() -> void:
 		if _is_target_dummy_peer(peer_id):
 			var bot_controller := _bot_controller_for_peer(peer_id)
 			if bot_controller != null:
+				if combat_flow_service != null and combat_flow_service.has_method("clear_all_debuffs_for_peer"):
+					combat_flow_service.call("clear_all_debuffs_for_peer", peer_id, true)
 				bot_controller.respawn_player(player)
 		else:
 			combat_flow_service.server_respawn_player(peer_id, player)
@@ -1221,6 +1223,8 @@ func _server_tick_skull_round_restart() -> void:
 		if _is_target_dummy_peer(peer_id):
 			var bot_controller := _bot_controller_for_peer(peer_id)
 			if bot_controller != null:
+				if combat_flow_service != null and combat_flow_service.has_method("clear_all_debuffs_for_peer"):
+					combat_flow_service.call("clear_all_debuffs_for_peer", peer_id, true)
 				bot_controller.respawn_player(player)
 		else:
 			combat_flow_service.server_respawn_player(peer_id, player)

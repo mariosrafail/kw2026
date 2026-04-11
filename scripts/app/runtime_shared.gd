@@ -42,6 +42,9 @@ const CHARACTER_ID_KROG := "krog"
 const CHARACTER_ID_AEVILOK := "aevilok"
 const CHARACTER_ID_FRANKY := "franky"
 const CHARACTER_ID_VARN := "varn"
+const CHARACTER_ID_LALOU := "lalou"
+const CHARACTER_ID_M4 := "m4"
+const CHARACTER_ID_RP := "rp"
 const GAME_MODE_DEATHMATCH := "deathmatch"
 const GAME_MODE_BATTLE_ROYALE := "battle_royale"
 const GAME_MODE_CTF := "ctf"
@@ -516,4 +519,8 @@ func _rpc_spawn_tasko_invis_field(_caster_peer_id: int, _world_position: Vector2
 
 @rpc("authority", "reliable")
 func _rpc_spawn_tasko_mine(_caster_peer_id: int, _world_position: Vector2) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func _rpc_apply_debuff_visual(_target_peer_id: int, _debuff_id: String, _duration_sec: float) -> void:
 	pass

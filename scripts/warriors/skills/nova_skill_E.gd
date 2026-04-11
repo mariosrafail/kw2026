@@ -7,11 +7,11 @@ const CHARACTER_ID_NOVA := "nova"
 const RADAR_DURATION_SEC := 5.0
 const RADAR_RADIUS_PX := 248.0
 const STATUS_TEXT := "Echo Inversion"
+const INVERT_REFRESH_SEC := 0.28
 
 var character_id_for_peer_cb: Callable = Callable()
 var skin_index_for_peer_cb: Callable = Callable()
 var _active_fields_by_caster: Dictionary = {}
-var _affected_peers_last_tick: Dictionary = {}
 
 func _init() -> void:
 	super._init("nova_echo_field", "Echo Field", 0.0, "Deploy a radar field that inverts horizontal movement inside its radius")
@@ -59,10 +59,8 @@ func server_tick(delta: float) -> void:
 	if not multiplayer.is_server():
 		return
 	if _active_fields_by_caster.is_empty():
-		_affected_peers_last_tick.clear()
 		return
 
-	var affected_peers: Dictionary = {}
 	var expired_casters: Array[int] = []
 	for peer_value in _active_fields_by_caster.keys():
 		var caster_peer_id := int(peer_value)
@@ -91,10 +89,9 @@ func server_tick(delta: float) -> void:
 				continue
 			if target.global_position.distance_to(center) > radius_px:
 				continue
-			affected_peers[target_peer_id] = true
+			_refresh_inverted_debuff(target_peer_id, caster_peer_id)
 	for caster_peer_id in expired_casters:
 		_active_fields_by_caster.erase(caster_peer_id)
-	_affected_peers_last_tick = affected_peers
 
 func ensure_companion_visual(peer_id: int) -> void:
 	if _character_id_for_peer(peer_id) != CHARACTER_ID_NOVA:
@@ -117,44 +114,21 @@ func ensure_companion_visual(peer_id: int) -> void:
 	companion.skin_index = _skin_index_for_peer(peer_id)
 	projectile_system.projectiles_root.add_child(companion)
 
-func override_input_state_for_peer(peer_id: int, base_state: Dictionary) -> Dictionary:
-	if not _is_peer_inverted(peer_id):
-		return base_state
-	var overridden := base_state.duplicate(true)
-	overridden["axis"] = -float(base_state.get("axis", 0.0))
-	return overridden
-
-func _is_peer_inverted(peer_id: int) -> bool:
-	if _affected_peers_last_tick.has(peer_id):
-		return true
-	var player := players.get(peer_id, null) as NetPlayer
-	if player == null or player.get_health() <= 0:
-		return false
-	for peer_value in _active_fields_by_caster.keys():
-		var caster_peer_id := int(peer_value)
-		if caster_peer_id == peer_id:
-			continue
-		var center := _field_center_for_peer(caster_peer_id)
-		if center == Vector2.ZERO:
-			continue
-		var field_data := _active_fields_by_caster.get(caster_peer_id, {}) as Dictionary
-		var active := false
-		if field_data.has("remaining"):
-			active = float(field_data.get("remaining", 0.0)) > 0.0
-		elif field_data.has("until_msec"):
-			active = Time.get_ticks_msec() <= int(field_data.get("until_msec", 0))
-		if not active:
-			continue
-		var radius_px := maxf(48.0, float(field_data.get("radius", RADAR_RADIUS_PX)))
-		if player.global_position.distance_to(center) <= radius_px:
-			return true
-	return false
-
 func _field_center_for_peer(peer_id: int) -> Vector2:
 	var player := players.get(peer_id, null) as NetPlayer
 	if player == null:
 		return Vector2.ZERO
 	return player.global_position + Vector2(-18.0, -26.0)
+
+func _refresh_inverted_debuff(target_peer_id: int, caster_peer_id: int) -> void:
+	if debuff_service == null:
+		return
+	if debuff_service.has_method("debuff_remaining_sec"):
+		var remaining_sec := float(debuff_service.call("debuff_remaining_sec", target_peer_id, "inverted"))
+		if remaining_sec > 0.16:
+			return
+	if debuff_service.has_method("apply_debuff"):
+		debuff_service.call("apply_debuff", target_peer_id, "inverted", INVERT_REFRESH_SEC, caster_peer_id)
 
 func _companion_for_peer(peer_id: int) -> Node2D:
 	if projectile_system == null or projectile_system.projectiles_root == null:
