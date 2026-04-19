@@ -5,6 +5,7 @@ class_name PlayerStatusVisuals
 const OUTRAGE_BOOST_FIRE_SHADER := preload("res://assets/shaders/outrage_boost_fire.gdshader")
 const EREBUS_IMMUNE_SHIMMER_SHADER := preload("res://assets/shaders/erebus_immune_shimmer.gdshader")
 const MONO_TINT_SHADER := preload("res://assets/shaders/mono_tint.gdshader")
+const CRASHOUT_BELLY_INFLATE_SHADER := preload("res://assets/shaders/crashout_belly_inflate.gdshader")
 const JUICE_SHRINK_DEFAULT_SCALE := 0.46
 const JUICE_SHRINK_ENTER_POP_SCALE := 1.08
 const JUICE_SHRINK_EXIT_POP_SCALE := 1.1
@@ -29,6 +30,16 @@ const EREBUS_IMMUNE_HEAD_Y_OFFSET := -3.5
 const EREBUS_IMMUNE_TORSO_Y_OFFSET := -2.0
 const EREBUS_IMMUNE_SPEED_MULTIPLIER := 0.72
 const EREBUS_IMMUNE_JUMP_MULTIPLIER := 0.74
+const CRASHOUT_BELLY_HITBOX_SCALE := 1.34
+const CRASHOUT_TORSO_SCALE_X := 1.44
+const CRASHOUT_TORSO_SCALE_Y := 1.24
+const CRASHOUT_TORSO_OFFSET_Y := 1.5
+const CRASHOUT_HEAD_OFFSET := Vector2(0.0, -8.0)
+const CRASHOUT_LEG_OFFSET_Y := 5.0
+const CRASHOUT_LEG_OFFSET_X := 3.4
+const CRASHOUT_GUN_OFFSET_DISTANCE := 5.0
+const CRASHOUT_PULSE_SPEED := 6.6
+const CRASHOUT_PULSE_STRENGTH := 0.08
 const PETRIFIED_STONE_COLOR := Color(0.72, 0.74, 0.78, 1.0)
 const PETRIFIED_STONE_SHADOW := 0.34
 const VISUAL_CORRECTION_DECAY := 9.0
@@ -56,6 +67,7 @@ var _head_sprite: Sprite2D
 var _torso_sprite: Sprite2D
 var _leg1_sprite: Sprite2D
 var _leg2_sprite: Sprite2D
+var _gun_pivot: Node2D
 var _skill_label: Label
 var _skill_duration_bar_bg: Sprite2D
 var _skill_duration_bar: Sprite2D
@@ -92,6 +104,17 @@ var petrified_remaining_sec := 0.0
 var petrified_materials: Dictionary = {}
 var vulnerable_remaining_sec := 0.0
 var vulnerable_materials: Dictionary = {}
+var crashout_belly_remaining_sec := 0.0
+var crashout_belly_material: ShaderMaterial
+var _crashout_base_collision_scale := Vector2.ONE
+var _crashout_base_collision_position := Vector2.ZERO
+var _crashout_base_torso_scale := Vector2.ONE
+var _crashout_base_torso_offset := Vector2.ZERO
+var _crashout_base_head_offset := Vector2.ZERO
+var _crashout_base_leg1_offset := Vector2.ZERO
+var _crashout_base_leg2_offset := Vector2.ZERO
+var _crashout_base_gun_pivot_position := Vector2.ZERO
+var _crashout_base_captured := false
 var outrage_boost_screen_fire_layer: CanvasLayer
 var outrage_boost_screen_fire_root: Control
 var outrage_boost_screen_fire_nodes: Array = []
@@ -120,6 +143,7 @@ func configure(
 	torso_sprite: Sprite2D,
 	leg1_sprite: Sprite2D,
 	leg2_sprite: Sprite2D,
+	gun_pivot: Node2D,
 	skill_label: Label,
 	skill_duration_bar_bg: Sprite2D,
 	skill_duration_bar: Sprite2D,
@@ -135,6 +159,7 @@ func configure(
 	_torso_sprite = torso_sprite
 	_leg1_sprite = leg1_sprite
 	_leg2_sprite = leg2_sprite
+	_gun_pivot = gun_pivot
 	_skill_label = skill_label
 	_skill_duration_bar_bg = skill_duration_bar_bg
 	_skill_duration_bar = skill_duration_bar
@@ -146,6 +171,7 @@ func configure(
 func initialize() -> void:
 	_capture_erebus_immune_base_size()
 	_capture_juice_shrink_base_size()
+	_capture_crashout_belly_base_size()
 	_refresh_visual_root_offset()
 	_init_outrage_boost_overlays()
 	_ensure_ulti_duration_bar()
@@ -173,6 +199,11 @@ func tick(delta: float) -> void:
 		juice_shrink_remaining_sec = maxf(0.0, juice_shrink_remaining_sec - delta)
 		if juice_shrink_remaining_sec <= 0.0:
 			clear_juice_shrink_visual()
+	if crashout_belly_remaining_sec > 0.0:
+		crashout_belly_remaining_sec = maxf(0.0, crashout_belly_remaining_sec - delta)
+		_apply_crashout_belly_size()
+		if crashout_belly_remaining_sec <= 0.0:
+			clear_crashout_belly_visual()
 	if petrified_remaining_sec > 0.0:
 		petrified_remaining_sec = maxf(0.0, petrified_remaining_sec - delta)
 		if petrified_remaining_sec <= 0.0:
@@ -194,11 +225,13 @@ func reset_for_respawn() -> void:
 	erebus_immune_visual_remaining_sec = 0.0
 	juice_shrink_remaining_sec = 0.0
 	juice_shrink_scale = JUICE_SHRINK_DEFAULT_SCALE
+	crashout_belly_remaining_sec = 0.0
 	petrified_remaining_sec = 0.0
 	vulnerable_remaining_sec = 0.0
 	clear_ulti_duration_bar()
 	clear_erebus_immune_visual()
 	clear_juice_shrink_visual(false)
+	clear_crashout_belly_visual()
 	clear_petrified_visual()
 	clear_vulnerable_visual()
 	clear_public_debuff_visual()
@@ -208,6 +241,9 @@ func reset_for_respawn() -> void:
 func get_part_base_material(sprite: Sprite2D) -> Material:
 	if sprite == null:
 		return null
+	if crashout_belly_remaining_sec > 0.0 and sprite == _torso_sprite:
+		_ensure_crashout_belly_material()
+		return crashout_belly_material
 	if petrified_remaining_sec > 0.0:
 		return petrified_materials.get(sprite, null) as Material
 	if vulnerable_remaining_sec > 0.0:
@@ -234,6 +270,8 @@ func get_hit_radius(base_radius: float) -> float:
 		radius *= EREBUS_IMMUNE_HITBOX_SCALE
 	if juice_shrink_remaining_sec > 0.0:
 		radius *= clampf(juice_shrink_scale, 0.2, 1.0)
+	if crashout_belly_remaining_sec > 0.0:
+		radius *= CRASHOUT_BELLY_HITBOX_SCALE
 	return radius
 
 func get_hit_height(base_height: float) -> float:
@@ -242,6 +280,8 @@ func get_hit_height(base_height: float) -> float:
 		height *= EREBUS_IMMUNE_HITBOX_SCALE
 	if juice_shrink_remaining_sec > 0.0:
 		height *= clampf(juice_shrink_scale, 0.2, 1.0)
+	if crashout_belly_remaining_sec > 0.0:
+		height *= CRASHOUT_BELLY_HITBOX_SCALE
 	return height
 
 func set_outrage_boost_visual(duration_sec: float) -> void:
@@ -283,6 +323,8 @@ func set_erebus_immune_visual(duration_sec: float) -> void:
 func clear_erebus_immune_visual() -> void:
 	erebus_immune_visual_remaining_sec = 0.0
 	_restore_erebus_immune_size()
+	if crashout_belly_remaining_sec > 0.0:
+		_apply_crashout_belly_size()
 	_apply_part_base_materials()
 
 func set_juice_shrink_visual(duration_sec: float, scale_factor: float = JUICE_SHRINK_DEFAULT_SCALE) -> void:
@@ -296,6 +338,8 @@ func set_juice_shrink_visual(duration_sec: float, scale_factor: float = JUICE_SH
 		_animate_juice_shrink_enter()
 	else:
 		_apply_juice_shrink_size()
+	if crashout_belly_remaining_sec > 0.0:
+		_apply_crashout_belly_size()
 
 func clear_juice_shrink_visual(animate: bool = true) -> void:
 	juice_shrink_remaining_sec = 0.0
@@ -305,6 +349,26 @@ func clear_juice_shrink_visual(animate: bool = true) -> void:
 	else:
 		_kill_juice_shrink_tween()
 		_restore_juice_shrink_size()
+		if crashout_belly_remaining_sec > 0.0:
+			_apply_crashout_belly_size()
+
+func set_crashout_belly_visual(duration_sec: float) -> void:
+	crashout_belly_remaining_sec = maxf(crashout_belly_remaining_sec, maxf(0.0, duration_sec))
+	if crashout_belly_remaining_sec <= 0.0:
+		clear_crashout_belly_visual()
+		return
+	_ensure_crashout_belly_material()
+	_apply_crashout_belly_size()
+	_apply_part_base_materials()
+
+func clear_crashout_belly_visual() -> void:
+	crashout_belly_remaining_sec = 0.0
+	_restore_crashout_belly_size()
+	if erebus_immune_visual_remaining_sec > 0.0:
+		_apply_erebus_immune_size()
+	if juice_shrink_remaining_sec > 0.0:
+		_apply_juice_shrink_size()
+	_apply_part_base_materials()
 
 func set_petrified_visual(duration_sec: float) -> void:
 	petrified_remaining_sec = maxf(petrified_remaining_sec, maxf(0.0, duration_sec))
@@ -444,6 +508,94 @@ func _capture_juice_shrink_base_size() -> void:
 	_juice_shrink_current_visual_scale = 1.0
 	_juice_shrink_visual_offset = Vector2.ZERO
 	_juice_shrink_base_captured = true
+
+func _capture_crashout_belly_base_size() -> void:
+	if _crashout_base_captured:
+		return
+	if _body_collision_shape != null:
+		_crashout_base_collision_scale = _body_collision_shape.scale
+		_crashout_base_collision_position = _body_collision_shape.position
+	if _torso_sprite != null:
+		_crashout_base_torso_scale = _torso_sprite.scale
+		_crashout_base_torso_offset = _torso_sprite.offset
+	if _head_sprite != null:
+		_crashout_base_head_offset = _head_sprite.offset
+	if _leg1_sprite != null:
+		_crashout_base_leg1_offset = _leg1_sprite.offset
+	if _leg2_sprite != null:
+		_crashout_base_leg2_offset = _leg2_sprite.offset
+	if _gun_pivot != null:
+		_crashout_base_gun_pivot_position = _gun_pivot.position
+	_crashout_base_captured = true
+
+func _crashout_pulse_ratio() -> float:
+	if crashout_belly_remaining_sec <= 0.0:
+		return 0.0
+	var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) / 1000.0 * CRASHOUT_PULSE_SPEED)
+	return 1.0 + pulse * CRASHOUT_PULSE_STRENGTH
+
+func _apply_crashout_belly_size() -> void:
+	_capture_crashout_belly_base_size()
+	var pulse_ratio := _crashout_pulse_ratio()
+	if _body_collision_shape != null:
+		_body_collision_shape.scale = Vector2(
+			_crashout_base_collision_scale.x * CRASHOUT_BELLY_HITBOX_SCALE,
+			_crashout_base_collision_scale.y * CRASHOUT_BELLY_HITBOX_SCALE
+		)
+		var hitbox_growth := HIT_HEIGHT * (CRASHOUT_BELLY_HITBOX_SCALE - 1.0)
+		_body_collision_shape.position = _crashout_base_collision_position + Vector2(0.0, -hitbox_growth * 0.48)
+	if _torso_sprite != null:
+		_torso_sprite.scale = Vector2(
+			_crashout_base_torso_scale.x * CRASHOUT_TORSO_SCALE_X * pulse_ratio,
+			_crashout_base_torso_scale.y * CRASHOUT_TORSO_SCALE_Y
+		)
+		_torso_sprite.offset = _crashout_base_torso_offset + Vector2(0.0, CRASHOUT_TORSO_OFFSET_Y * pulse_ratio)
+	if _head_sprite != null:
+		_head_sprite.offset = _crashout_base_head_offset + CRASHOUT_HEAD_OFFSET * pulse_ratio
+	if _leg1_sprite != null:
+		_leg1_sprite.offset = _crashout_base_leg1_offset + Vector2(-CRASHOUT_LEG_OFFSET_X, CRASHOUT_LEG_OFFSET_Y) * pulse_ratio
+	if _leg2_sprite != null:
+		_leg2_sprite.offset = _crashout_base_leg2_offset + Vector2(CRASHOUT_LEG_OFFSET_X, CRASHOUT_LEG_OFFSET_Y) * pulse_ratio
+	if _gun_pivot != null:
+		var gun_offset := Vector2.RIGHT
+		if _crashout_base_gun_pivot_position.length_squared() > 0.001:
+			gun_offset = _crashout_base_gun_pivot_position.normalized()
+		_gun_pivot.position = _crashout_base_gun_pivot_position + gun_offset * CRASHOUT_GUN_OFFSET_DISTANCE * pulse_ratio
+	_ensure_crashout_belly_material()
+	if crashout_belly_material != null:
+		crashout_belly_material.set_shader_parameter("inflate_amount", clampf((pulse_ratio - 1.0) / CRASHOUT_PULSE_STRENGTH + 0.82, 0.0, 1.0))
+		crashout_belly_material.set_shader_parameter("time_sec", float(Time.get_ticks_msec()) / 1000.0)
+		crashout_belly_material.set_shader_parameter("accent_color", _skill_or_torso_color())
+
+func _restore_crashout_belly_size() -> void:
+	if not _crashout_base_captured:
+		return
+	if _body_collision_shape != null:
+		_body_collision_shape.scale = _crashout_base_collision_scale
+		_body_collision_shape.position = _crashout_base_collision_position
+	if _torso_sprite != null:
+		_torso_sprite.scale = _crashout_base_torso_scale
+		_torso_sprite.offset = _crashout_base_torso_offset
+	if _head_sprite != null:
+		_head_sprite.offset = _crashout_base_head_offset
+	if _leg1_sprite != null:
+		_leg1_sprite.offset = _crashout_base_leg1_offset
+	if _leg2_sprite != null:
+		_leg2_sprite.offset = _crashout_base_leg2_offset
+	if _gun_pivot != null:
+		_gun_pivot.position = _crashout_base_gun_pivot_position
+
+func _ensure_crashout_belly_material() -> void:
+	if crashout_belly_material != null:
+		return
+	crashout_belly_material = ShaderMaterial.new()
+	crashout_belly_material.shader = CRASHOUT_BELLY_INFLATE_SHADER
+	crashout_belly_material.set_shader_parameter("inflate_amount", 0.85)
+	crashout_belly_material.set_shader_parameter("time_sec", 0.0)
+	crashout_belly_material.set_shader_parameter("accent_color", _skill_or_torso_color())
+
+func _skill_or_torso_color() -> Color:
+	return _torso_ui_color()
 
 func _kill_juice_shrink_tween() -> void:
 	if _juice_shrink_tween != null:

@@ -9,6 +9,7 @@ const LOBBY_CONNECTION_CONFIG_CTRL_SCRIPT := preload("res://scripts/ui/main_menu
 const LOBBY_CONNECTION_LIFECYCLE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/lobby_connection_lifecycle_controller.gd")
 const LOBBY_ROOM_ACTIONS_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/lobby_room_actions_controller.gd")
 const LOBBY_ROOM_STATE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/lobby_room_state_controller.gd")
+const LOBBY_OVERLAY_UI_STYLE_SCRIPT := preload("res://scripts/ui/main_menu/lobby_overlay_ui_style.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const CONNECT_WATCHDOG_CHECK_INTERVAL_SEC := 1.0
 const CONNECT_WATCHDOG_MAX_WAIT_SEC := 35.0
@@ -108,6 +109,7 @@ var _connection_config_ctrl = LOBBY_CONNECTION_CONFIG_CTRL_SCRIPT.new()
 var _connection_lifecycle_ctrl = LOBBY_CONNECTION_LIFECYCLE_CTRL_SCRIPT.new()
 var _room_actions_ctrl = LOBBY_ROOM_ACTIONS_CTRL_SCRIPT.new()
 var _room_state_ctrl = LOBBY_ROOM_STATE_CTRL_SCRIPT.new()
+var _ui_style = LOBBY_OVERLAY_UI_STYLE_SCRIPT.new()
 
 func _log(message: String) -> void:
 	print("[lobby_overlay] %s" % message)
@@ -304,7 +306,7 @@ func _selected_warrior_id() -> String:
 	var selected_character_id := "outrage"
 	if _host != null:
 		selected_character_id = str(_host.get("selected_warrior_id")).strip_edges().to_lower()
-	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro" and selected_character_id != "nova" and selected_character_id != "hindi" and selected_character_id != "loker" and selected_character_id != "gan" and selected_character_id != "veila" and selected_character_id != "krog" and selected_character_id != "aevilok" and selected_character_id != "franky" and selected_character_id != "varn" and selected_character_id != "lalou" and selected_character_id != "m4" and selected_character_id != "rp":
+	if selected_character_id != "erebus" and selected_character_id != "tasko" and selected_character_id != "juice" and selected_character_id != "madam" and selected_character_id != "celler" and selected_character_id != "kotro" and selected_character_id != "nova" and selected_character_id != "hindi" and selected_character_id != "loker" and selected_character_id != "gan" and selected_character_id != "veila" and selected_character_id != "krog" and selected_character_id != "aevilok" and selected_character_id != "franky" and selected_character_id != "varn" and selected_character_id != "lalou" and selected_character_id != "m4" and selected_character_id != "rp" and selected_character_id != "agelikoula" and selected_character_id != "crashout" and selected_character_id != "ctrlalt" and selected_character_id != "sink" and selected_character_id != "woman":
 		selected_character_id = "outrage"
 	return selected_character_id
 
@@ -1638,20 +1640,10 @@ func _team_text(title: String, members: Array) -> String:
 	return _room_state_ctrl.team_text(title, members)
 
 func _position_option_popup_below(option: OptionButton, popup: PopupMenu) -> void:
-	if option == null or popup == null:
-		return
-	var origin := option.get_screen_position()
-	var popup_x := int(round(origin.x))
-	var popup_y := int(round(origin.y + option.size.y + 2.0))
-	popup.position = Vector2i(popup_x, popup_y)
+	_ui_style.position_option_popup_below(option, popup)
 
 func _remove_popup_left_markers(popup: PopupMenu) -> void:
-	if popup == null:
-		return
-	for i in range(popup.get_item_count()):
-		popup.set_item_as_checkable(i, false)
-		popup.set_item_as_radio_checkable(i, false)
-		popup.set_item_icon(i, null)
+	_ui_style.remove_popup_left_markers(popup)
 
 func _release_menu_cursor_click_state() -> void:
 	if _host == null:
@@ -1675,180 +1667,32 @@ func _select_option_by_metadata(option: OptionButton, metadata: Variant) -> void
 			return
 
 func _apply_compact_option_style(option: OptionButton) -> void:
-	if option == null:
-		return
-	option.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	option.add_theme_constant_override("arrow_margin", 4)
-	option.add_theme_constant_override("h_separation", 4)
-	option.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
-	option.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
-	option.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_primary(1.0))
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = MENU_PALETTE.accent(1.0)
-	normal.border_width_left = 2
-	normal.border_width_top = 2
-	normal.border_width_right = 2
-	normal.border_width_bottom = 2
-	normal.border_color = MENU_PALETTE.accent(1.0)
-	normal.content_margin_left = 6
-	normal.content_margin_right = 6
-	normal.content_margin_top = 3
-	normal.content_margin_bottom = 3
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.border_color = MENU_PALETTE.highlight(1.0)
-	option.add_theme_stylebox_override("normal", normal)
-	option.add_theme_stylebox_override("hover", hover)
-	option.add_theme_stylebox_override("pressed", normal)
-	option.add_theme_stylebox_override("focus", normal)
-	option.add_theme_icon_override("arrow", _make_pixel_dropdown_arrow())
-	var popup := option.get_popup()
-	var panel := StyleBoxFlat.new()
-	panel.bg_color = MENU_PALETTE.accent(1.0)
-	panel.border_width_left = 2
-	panel.border_width_top = 2
-	panel.border_width_right = 2
-	panel.border_width_bottom = 2
-	panel.border_color = MENU_PALETTE.accent(1.0)
-	var hover_popup := StyleBoxFlat.new()
-	hover_popup.bg_color = MENU_PALETTE.hot(1.0)
-	hover_popup.border_width_left = 1
-	hover_popup.border_width_top = 1
-	hover_popup.border_width_right = 1
-	hover_popup.border_width_bottom = 1
-	hover_popup.border_color = MENU_PALETTE.highlight(1.0)
-	var selected_popup := StyleBoxFlat.new()
-	selected_popup.bg_color = MENU_PALETTE.accent(1.0)
-	selected_popup.border_width_left = 1
-	selected_popup.border_width_top = 1
-	selected_popup.border_width_right = 1
-	selected_popup.border_width_bottom = 1
-	selected_popup.border_color = MENU_PALETTE.accent(1.0)
-	popup.add_theme_stylebox_override("panel", panel)
-	popup.add_theme_stylebox_override("hover", hover_popup)
-	popup.add_theme_stylebox_override("hover_pressed", hover_popup)
-	popup.add_theme_stylebox_override("selected", selected_popup)
-	popup.add_theme_stylebox_override("focus", selected_popup)
-	popup.add_theme_stylebox_override("item_hover", hover_popup)
-	popup.add_theme_constant_override("v_separation", 2)
-	popup.add_theme_constant_override("h_separation", 6)
-	popup.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
-	popup.add_theme_color_override("font_hover_color", MENU_PALETTE.text_primary(1.0))
-	popup.add_theme_color_override("font_selected_color", MENU_PALETTE.text_primary(1.0))
-	popup.add_theme_font_size_override("font_size", 8)
+	_ui_style.apply_compact_option_style(option, _make_pixel_dropdown_arrow())
 
 func _make_pixel_dropdown_arrow() -> Texture2D:
-	var img := Image.create(9, 9, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	var color := MENU_PALETTE.highlight(1.0)
-	# Down-facing chunky pixel arrow.
-	var rows := {
-		2: PackedInt32Array([2, 3, 4, 5, 6]),
-		3: PackedInt32Array([3, 4, 5]),
-		4: PackedInt32Array([3, 4, 5]),
-		5: PackedInt32Array([4]),
-	}
-	for y in rows.keys():
-		var xs := rows[y] as PackedInt32Array
-		for x in xs:
-			img.set_pixel(x, y, color)
-	return ImageTexture.create_from_image(img)
+	return _ui_style.make_pixel_dropdown_arrow()
 
 func _make_pixel_checkbox_icon(checked: bool) -> Texture2D:
-	var img := Image.create(11, 11, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	var border := MENU_PALETTE.highlight(1.0)
-	var fill := MENU_PALETTE.hot(1.0)
-	for y in range(11):
-		for x in range(11):
-			var on_border := x == 0 or x == 10 or y == 0 or y == 10
-			img.set_pixel(x, y, border if on_border else fill)
-	if checked:
-		var accent := MENU_PALETTE.highlight(1.0)
-		for y in range(2, 9):
-			for x in range(2, 9):
-				img.set_pixel(x, y, accent)
-	return ImageTexture.create_from_image(img)
+	return _ui_style.make_pixel_checkbox_icon(checked)
 
 func _apply_pixel_checkbox_style(check: CheckBox) -> void:
-	if check == null:
-		return
-	check.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	check.add_theme_constant_override("h_separation", 6)
-	check.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
-	check.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
-	check.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
-	check.add_theme_color_override("font_disabled_color", MENU_PALETTE.text_dark(0.74))
-	var unchecked := _make_pixel_checkbox_icon(false)
-	var checked := _make_pixel_checkbox_icon(true)
-	check.add_theme_icon_override("unchecked", unchecked)
-	check.add_theme_icon_override("checked", checked)
-	check.add_theme_icon_override("unchecked_disabled", unchecked)
-	check.add_theme_icon_override("checked_disabled", checked)
-	check.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-
-func _tinted_color(color: Color, amount: float) -> Color:
-	return Color(
-		clampf(color.r + amount, 0.0, 1.0),
-		clampf(color.g + amount, 0.0, 1.0),
-		clampf(color.b + amount, 0.0, 1.0),
-		color.a
-	)
+	_ui_style.apply_pixel_checkbox_style(check)
 
 func _apply_button_palette(btn: Button, normal_bg: Color, border: Color) -> void:
-	if btn == null:
-		return
-	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var sb := btn.get_theme_stylebox(sb_name)
-		var flat := StyleBoxFlat.new()
-		if sb is StyleBoxFlat:
-			flat = (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
-		flat.border_width_left = maxi(1, flat.border_width_left)
-		flat.border_width_top = maxi(1, flat.border_width_top)
-		flat.border_width_right = maxi(1, flat.border_width_right)
-		flat.border_width_bottom = maxi(1, flat.border_width_bottom)
-		flat.corner_radius_top_left = 0
-		flat.corner_radius_top_right = 0
-		flat.corner_radius_bottom_right = 0
-		flat.corner_radius_bottom_left = 0
-		if sb_name == "hover":
-			flat.bg_color = _tinted_color(normal_bg, 0.06)
-		elif sb_name == "pressed":
-			flat.bg_color = _tinted_color(normal_bg, -0.07)
-		elif sb_name == "disabled":
-			flat.bg_color = Color(normal_bg.r, normal_bg.g, normal_bg.b, 0.42)
-		else:
-			flat.bg_color = normal_bg
-		flat.border_color = Color(border.r, border.g, border.b, 0.48) if sb_name == "disabled" else border
-		btn.add_theme_stylebox_override(sb_name, flat)
-	btn.add_theme_color_override("font_color", MENU_PALETTE.text_dark(1.0))
-	btn.add_theme_color_override("font_hover_color", MENU_PALETTE.text_dark(1.0))
-	btn.add_theme_color_override("font_pressed_color", MENU_PALETTE.text_dark(1.0))
-	btn.add_theme_color_override("font_disabled_color", MENU_PALETTE.text_dark(0.9))
+	_ui_style.apply_button_palette(btn, normal_bg, border)
 
 func _apply_ready_button_state_style(btn: Button, is_ready: bool) -> void:
-	if btn == null:
-		return
-	if is_ready:
-		_apply_button_palette(btn, BTN_GREEN_BG, BTN_GREEN_BORDER)
-	else:
-		_apply_button_palette(btn, BTN_YELLOW_BG, BTN_YELLOW_BORDER)
+	_ui_style.apply_ready_button_state_style(
+		btn,
+		is_ready,
+		BTN_GREEN_BG,
+		BTN_GREEN_BORDER,
+		BTN_YELLOW_BG,
+		BTN_YELLOW_BORDER
+	)
 
 func _remove_button_outlines(btn: Button) -> void:
-	if btn == null:
-		return
-	for sb_name in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var sb := btn.get_theme_stylebox(sb_name)
-		if not (sb is StyleBoxFlat):
-			continue
-		var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
-		flat.border_width_left = 0
-		flat.border_width_top = 0
-		flat.border_width_right = 0
-		flat.border_width_bottom = 0
-		btn.add_theme_stylebox_override(sb_name, flat)
+	_ui_style.remove_button_outlines(btn)
 
 func _set_rooms_list_visible(visible: bool) -> void:
-	if _rooms_box != null:
-		_rooms_box.visible = visible
-	if _rooms_list_panel != null:
-		_rooms_list_panel.visible = visible
+	_ui_style.set_rooms_list_visible(_rooms_box, _rooms_list_panel, visible)

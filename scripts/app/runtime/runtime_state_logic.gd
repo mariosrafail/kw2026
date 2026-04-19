@@ -23,6 +23,11 @@ const DEFAULT_BLOOD_COLOR_BY_CHARACTER := {
 	"lalou": Color(0.68, 0.27, 0.55, 1.0),
 	"m4": Color(0.22, 0.55, 0.72, 1.0),
 	"rp": Color(0.18, 0.45, 0.76, 1.0),
+	"agelikoula": Color(0.73, 0.56, 0.4, 1.0),
+	"crashout": Color(0.88, 0.16, 0.22, 1.0),
+	"ctrlalt": Color(0.26, 0.82, 0.33, 1.0),
+	"sink": Color(0.18, 0.74, 0.24, 1.0),
+	"woman": Color(0.96, 0.32, 0.48, 1.0),
 }
 const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"outrage": Color(0.98, 0.02, 0.07, 1.0),
@@ -44,6 +49,11 @@ const DEFAULT_SKILL_COLOR_BY_CHARACTER := {
 	"lalou": Color(1.0, 0.41, 0.68, 1.0),
 	"m4": Color(0.40, 0.92, 1.0, 1.0),
 	"rp": Color(0.32, 0.68, 1.0, 1.0),
+	"agelikoula": Color(0.95, 0.74, 0.33, 1.0),
+	"crashout": Color(0.33, 0.93, 1.0, 1.0),
+	"ctrlalt": Color(0.48, 0.95, 0.62, 1.0),
+	"sink": Color(0.41, 1.0, 0.38, 1.0),
+	"woman": Color(1.0, 0.31, 0.73, 1.0),
 }
 
 var server_skin_blood_color_config: Dictionary = {}
@@ -57,6 +67,7 @@ func _reset_runtime_state() -> void:
 	for controller in bot_controllers:
 		if controller != null:
 			controller.reset()
+	temporary_bot_controllers.clear()
 	if ctf_match_controller != null:
 		ctf_match_controller.reset()
 	_clear_players()
@@ -337,6 +348,16 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		return CHARACTER_ID_M4
 	if normalized == CHARACTER_ID_RP:
 		return CHARACTER_ID_RP
+	if normalized == CHARACTER_ID_AGELIKOULA:
+		return CHARACTER_ID_AGELIKOULA
+	if normalized == CHARACTER_ID_CRASHOUT:
+		return CHARACTER_ID_CRASHOUT
+	if normalized == CHARACTER_ID_CTRLALT:
+		return CHARACTER_ID_CTRLALT
+	if normalized == CHARACTER_ID_SINK:
+		return CHARACTER_ID_SINK
+	if normalized == CHARACTER_ID_WOMAN:
+		return CHARACTER_ID_WOMAN
 	if lobby_service != null:
 		var persisted := str(lobby_service.get_peer_character(peer_id, "")).strip_edges().to_lower()
 		if persisted == CHARACTER_ID_EREBUS:
@@ -396,6 +417,21 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 		if persisted == CHARACTER_ID_RP:
 			peer_character_ids[peer_id] = CHARACTER_ID_RP
 			return CHARACTER_ID_RP
+		if persisted == CHARACTER_ID_AGELIKOULA:
+			peer_character_ids[peer_id] = CHARACTER_ID_AGELIKOULA
+			return CHARACTER_ID_AGELIKOULA
+		if persisted == CHARACTER_ID_CRASHOUT:
+			peer_character_ids[peer_id] = CHARACTER_ID_CRASHOUT
+			return CHARACTER_ID_CRASHOUT
+		if persisted == CHARACTER_ID_CTRLALT:
+			peer_character_ids[peer_id] = CHARACTER_ID_CTRLALT
+			return CHARACTER_ID_CTRLALT
+		if persisted == CHARACTER_ID_SINK:
+			peer_character_ids[peer_id] = CHARACTER_ID_SINK
+			return CHARACTER_ID_SINK
+		if persisted == CHARACTER_ID_WOMAN:
+			peer_character_ids[peer_id] = CHARACTER_ID_WOMAN
+			return CHARACTER_ID_WOMAN
 	if multiplayer != null and multiplayer.multiplayer_peer != null and peer_id == multiplayer.get_unique_id():
 		var local_normalized := str(selected_character_id).strip_edges().to_lower()
 		if local_normalized == CHARACTER_ID_EREBUS:
@@ -434,6 +470,16 @@ func _warrior_id_for_peer(peer_id: int) -> String:
 			return CHARACTER_ID_M4
 		if local_normalized == CHARACTER_ID_RP:
 			return CHARACTER_ID_RP
+		if local_normalized == CHARACTER_ID_AGELIKOULA:
+			return CHARACTER_ID_AGELIKOULA
+		if local_normalized == CHARACTER_ID_CRASHOUT:
+			return CHARACTER_ID_CRASHOUT
+		if local_normalized == CHARACTER_ID_CTRLALT:
+			return CHARACTER_ID_CTRLALT
+		if local_normalized == CHARACTER_ID_SINK:
+			return CHARACTER_ID_SINK
+		if local_normalized == CHARACTER_ID_WOMAN:
+			return CHARACTER_ID_WOMAN
 		return CHARACTER_ID_OUTRAGE
 	return CHARACTER_ID_OUTRAGE
 

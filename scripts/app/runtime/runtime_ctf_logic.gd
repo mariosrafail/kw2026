@@ -256,13 +256,23 @@ func _bot_movement_goal_position(peer_id: int) -> Vector2:
 func _is_enemy_target(attacker_peer_id: int, target_peer_id: int) -> bool:
 	if attacker_peer_id == target_peer_id:
 		return false
+	var resolved_attacker_peer_id := _damage_relation_peer_id(attacker_peer_id)
+	var resolved_target_peer_id := _damage_relation_peer_id(target_peer_id)
+	if resolved_attacker_peer_id == resolved_target_peer_id:
+		return false
 	if not _ctf_enabled():
 		return true
 	if ctf_match_controller != null:
-		return ctf_match_controller.is_enemy_target(attacker_peer_id, target_peer_id)
-	return _team_for_peer(attacker_peer_id) != _team_for_peer(target_peer_id)
+		return ctf_match_controller.is_enemy_target(resolved_attacker_peer_id, resolved_target_peer_id)
+	return _team_for_peer(resolved_attacker_peer_id) != _team_for_peer(resolved_target_peer_id)
 
 func _can_damage_peer(attacker_peer_id: int, target_peer_id: int) -> bool:
+	var attacker_owner_peer_id := _temporary_bot_owner_peer_id(attacker_peer_id)
+	if attacker_owner_peer_id != 0 and attacker_owner_peer_id == target_peer_id:
+		return false
+	var target_owner_peer_id := _temporary_bot_owner_peer_id(target_peer_id)
+	if target_owner_peer_id != 0 and target_owner_peer_id == attacker_peer_id:
+		return false
 	return _is_enemy_target(attacker_peer_id, target_peer_id)
 
 func _player_world_position_or_flag(peer_id: int) -> Vector2:

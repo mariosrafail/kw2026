@@ -45,6 +45,11 @@ const CHARACTER_ID_VARN := "varn"
 const CHARACTER_ID_LALOU := "lalou"
 const CHARACTER_ID_M4 := "m4"
 const CHARACTER_ID_RP := "rp"
+const CHARACTER_ID_AGELIKOULA := "agelikoula"
+const CHARACTER_ID_CRASHOUT := "crashout"
+const CHARACTER_ID_CTRLALT := "ctrlalt"
+const CHARACTER_ID_SINK := "sink"
+const CHARACTER_ID_WOMAN := "woman"
 const GAME_MODE_DEATHMATCH := "deathmatch"
 const GAME_MODE_BATTLE_ROYALE := "battle_royale"
 const GAME_MODE_CTF := "ctf"
@@ -254,8 +259,18 @@ var camera_shake: CameraShake
 var dropped_mag_service: DroppedMagService
 var target_dummy_bot_controller: TargetDummyBotController
 var bot_controllers: Array[TargetDummyBotController] = []
+var temporary_bot_controllers: Dictionary = {}
 var ctf_match_controller: TeamMatchController
 var weapon_ui: RefCounted
+
+func _temporary_bot_owner_peer_id(_peer_id: int) -> int:
+	return 0
+
+func _damage_relation_peer_id(peer_id: int) -> int:
+	var owner_peer_id := _temporary_bot_owner_peer_id(peer_id)
+	if owner_peer_id != 0:
+		return owner_peer_id
+	return peer_id
 
 var ctf_flag_carrier_peer_id := 0
 var ctf_flag_world_position := Vector2.ZERO

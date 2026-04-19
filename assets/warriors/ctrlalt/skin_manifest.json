@@ -1,0 +1,21 @@
+{
+  "warrior_id": "ctrlalt",
+  "display_name": "Ctrlalt",
+  "warrior_cost": 3600,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/ctrlalt/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/ctrlalt/head.png",
+    "torso": "res://assets/warriors/ctrlalt/torso.png",
+    "legs": "res://assets/warriors/ctrlalt/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Default",
+      "unlock_type": "free",
+      "cost": 0
+    }
+  ]
+}

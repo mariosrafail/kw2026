@@ -34,6 +34,9 @@ func _server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	if _is_target_dummy_peer(peer_id):
 		var bot_controller := _bot_controller_for_peer(peer_id)
 		if bot_controller != null:
+			if bot_controller.has_method("should_respawn_on_death") and bot_controller.call("should_respawn_on_death") == false:
+				_despawn_temporary_bot(peer_id)
+				return
 			if combat_flow_service != null and combat_flow_service.has_method("clear_all_debuffs_for_peer"):
 				combat_flow_service.call("clear_all_debuffs_for_peer", peer_id, true)
 			bot_controller.respawn_player(player)
@@ -45,13 +48,27 @@ func _is_target_dummy_peer(peer_id: int) -> bool:
 	for controller in bot_controllers:
 		if controller != null and controller.is_bot_peer(peer_id):
 			return true
+	for controller_value in temporary_bot_controllers.values():
+		var temp_controller := controller_value as TargetDummyBotController
+		if temp_controller != null and temp_controller.is_bot_peer(peer_id):
+			return true
 	return false
 
 func _bot_controller_for_peer(peer_id: int) -> TargetDummyBotController:
 	for controller in bot_controllers:
 		if controller != null and controller.is_bot_peer(peer_id):
 			return controller
+	for controller_value in temporary_bot_controllers.values():
+		var temp_controller := controller_value as TargetDummyBotController
+		if temp_controller != null and temp_controller.is_bot_peer(peer_id):
+			return temp_controller
 	return null
+
+func _temporary_bot_owner_peer_id(peer_id: int) -> int:
+	var controller := temporary_bot_controllers.get(peer_id, null) as TargetDummyBotController
+	if controller == null:
+		return 0
+	return int(controller.get("owner_peer_id"))
 
 func _broadcast_target_dummy_spawn(bot_peer_id: int, bot_name: String, spawn_position: Vector2) -> void:
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
@@ -175,6 +192,12 @@ func _server_tick_target_dummy_bot(delta: float) -> void:
 			continue
 		if players.has(controller.peer_id()):
 			controller.tick(delta)
+	for controller_value in temporary_bot_controllers.values():
+		var temp_controller := controller_value as TargetDummyBotController
+		if temp_controller == null:
+			continue
+		if players.has(temp_controller.peer_id()):
+			temp_controller.tick(delta)
 	if ctf_match_controller != null:
 		ctf_match_controller.server_tick(_ctf_objective_enabled(), delta)
 		if _ctf_objective_enabled():
@@ -184,6 +207,10 @@ func _target_dummy_lobby_id() -> int:
 	for controller in bot_controllers:
 		if controller != null and controller.get_lobby_id() > 0:
 			return controller.get_lobby_id()
+	for controller_value in temporary_bot_controllers.values():
+		var temp_controller := controller_value as TargetDummyBotController
+		if temp_controller != null and temp_controller.get_lobby_id() > 0:
+			return temp_controller.get_lobby_id()
 	if lobby_service != null:
 		for peer_value in players.keys():
 			var candidate_peer_id := int(peer_value)
@@ -219,6 +246,75 @@ func _lobby_members(_lobby_id: int) -> Array:
 
 func _append_log(_message: String) -> void:
 	pass
+
+func _spawn_temporary_bot(config: Dictionary) -> bool:
+	if role != Role.SERVER:
+		return false
+	var peer_id := int(config.get("bot_peer_id", 0))
+	if peer_id == 0 or players.has(peer_id) or temporary_bot_controllers.has(peer_id):
+		return false
+	var script_value: Variant = config.get("controller_script", null)
+	if not (script_value is GDScript):
+		return false
+	var controller := (script_value as GDScript).new() as TargetDummyBotController
+	if controller == null:
+		return false
+	controller.configure(
+		{
+			"players": players,
+			"input_states": input_states,
+			"peer_weapon_ids": peer_weapon_ids,
+			"peer_weapon_skin_indices_by_peer": peer_weapon_skin_indices_by_peer,
+			"players_root": players_root,
+			"multiplayer": multiplayer,
+			"spawn_flow_service": spawn_flow_service
+		},
+		{
+			"get_world_2d": Callable(self, "_get_world_2d_ref"),
+			"random_spawn_position": Callable(self, "_random_spawn_position"),
+			"weapon_visual_for_peer": Callable(self, "_weapon_visual_for_peer"),
+			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
+			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
+			"broadcast_spawn": Callable(self, "_broadcast_target_dummy_spawn"),
+			"record_player_history": Callable(combat_flow_service, "record_player_history"),
+			"get_peer_lobby": Callable(self, "_peer_lobby"),
+			"default_input_state": Callable(self, "_default_input_state"),
+			"server_cast_skill": Callable(combat_flow_service, "server_cast_skill"),
+			"can_cast_skill": Callable(combat_flow_service, "can_cast_skill_for_peer"),
+			"get_play_bounds": Callable(self, "_play_bounds_rect"),
+			"get_ground_tiles": Callable(self, "_ground_tiles_ref"),
+			"is_enemy_target": Callable(self, "_is_enemy_target"),
+			"movement_goal_position": Callable(self, "_bot_movement_goal_position")
+		},
+		{
+			"spawn_points": spawn_points,
+			"bot_peer_id": peer_id,
+			"bot_name": str(config.get("bot_name", "CLONE")),
+			"bot_color": config.get("bot_color", Color(0.48, 0.95, 0.62, 1.0)) as Color,
+			"spawn_point_index": 0,
+			"think_rate_hz": maxf(1.0, float(config.get("think_rate_hz", 14.0))),
+			"owner_peer_id": int(config.get("owner_peer_id", 0))
+		}
+	)
+	var spawn_position := config.get("spawn_position", Vector2.ZERO) as Vector2
+	var lobby_id := maxi(0, int(config.get("lobby_id", 0)))
+	controller.set_lobby_id(lobby_id)
+	controller.set_spawn_position(spawn_position)
+	temporary_bot_controllers[peer_id] = controller
+	peer_character_ids[peer_id] = str(config.get("character_id", "outrage")).strip_edges().to_lower()
+	peer_skin_indices_by_peer[peer_id] = maxi(0, int(config.get("skin_index", 0)))
+	player_display_names[peer_id] = controller.display_name()
+	if player_replication != null:
+		player_replication.ensure_player_stats(peer_id)
+	controller.ensure_spawned(PLAYER_SCENE, spawn_position)
+	return players.has(peer_id)
+
+func _despawn_temporary_bot(peer_id: int) -> void:
+	if not temporary_bot_controllers.has(peer_id):
+		return
+	if players.has(peer_id):
+		_server_remove_player(peer_id, [])
+	temporary_bot_controllers.erase(peer_id)
 
 func _spawn_position_for_peer(_peer_id: int) -> Vector2:
 	return Vector2.ZERO

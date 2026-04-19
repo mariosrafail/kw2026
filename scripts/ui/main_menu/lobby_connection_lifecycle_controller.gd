@@ -239,8 +239,13 @@ func on_rpc_disconnected() -> void:
 	_host.set("_lobby_list_ready", false)
 	_host.set("_joined_lobby_id", 0)
 	_host.set("_joined_room_name", "")
-	if bool(_host.get("_action_inflight")):
-		_host.call("_log", "rpc disconnected while action inflight; keeping pending request")
+	var rpc_bridge: Variant = _host.get("_rpc_bridge")
+	var pending_create_exists := not (_host.get("_pending_create_request") as Dictionary).is_empty()
+	var reconnect_in_progress := false
+	if rpc_bridge != null:
+		reconnect_in_progress = bool(rpc_bridge.call("is_connecting_to_server"))
+	if bool(_host.get("_action_inflight")) or pending_create_exists or reconnect_in_progress:
+		_host.call("_log", "rpc disconnected while reconnect/pending action; keeping pending request")
 	else:
 		_host.set("_pending_create_request", {})
 	_host.set("_action_inflight", false)

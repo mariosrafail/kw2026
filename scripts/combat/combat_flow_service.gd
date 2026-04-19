@@ -23,6 +23,9 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"lalou": Color(0.68, 0.27, 0.55, 1.0),
 	"m4": Color(0.22, 0.55, 0.72, 1.0),
 	"rp": Color(0.18, 0.45, 0.76, 1.0),
+	"crashout": Color(0.88, 0.16, 0.22, 1.0),
+	"ctrlalt": Color(0.26, 0.82, 0.33, 1.0),
+	"woman": Color(0.96, 0.32, 0.48, 1.0),
 }
 
 var players: Dictionary = {}
@@ -50,6 +53,8 @@ var skill_color_for_peer_cb: Callable = Callable()
 var authoritative_blood_color_for_peer_cb: Callable = Callable()
 var is_gameplay_locked_cb: Callable = Callable()
 var send_match_message_to_peer_cb: Callable = Callable()
+var spawn_temporary_bot_cb: Callable = Callable()
+var despawn_temporary_bot_cb: Callable = Callable()
 
 var get_world_2d_cb: Callable = Callable()
 var get_peer_lobby_cb: Callable = Callable()
@@ -120,6 +125,8 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	authoritative_blood_color_for_peer_cb = callbacks.get("authoritative_blood_color_for_peer", Callable()) as Callable
 	is_gameplay_locked_cb = callbacks.get("is_gameplay_locked", Callable()) as Callable
 	send_match_message_to_peer_cb = callbacks.get("send_match_message_to_peer", Callable()) as Callable
+	spawn_temporary_bot_cb = callbacks.get("spawn_temporary_bot", Callable()) as Callable
+	despawn_temporary_bot_cb = callbacks.get("despawn_temporary_bot", Callable()) as Callable
 
 	max_reported_rtt_ms = int(config.get("max_reported_rtt_ms", max_reported_rtt_ms))
 	snapshot_rate = float(config.get("snapshot_rate", snapshot_rate))
@@ -736,7 +743,10 @@ func _init_warriors() -> void:
 					"character_id_for_peer": warrior_id_for_peer_cb,
 					"skin_index_for_peer": skin_index_for_peer_cb,
 					"skill_color_for_peer": skill_color_for_peer_cb,
-					"send_match_message_to_peer": send_match_message_to_peer_cb
+					"send_match_message_to_peer": send_match_message_to_peer_cb,
+					"reflect_projectile": Callable(self, "_reflect_projectile_for_skill"),
+					"spawn_temporary_bot": spawn_temporary_bot_cb,
+					"despawn_temporary_bot": despawn_temporary_bot_cb
 				}
 			)
 			warriors_by_id[warrior_id] = warrior
@@ -879,6 +889,53 @@ func _notify_projectile_despawn(projectile_id: int) -> void:
 			continue
 		if iter_warrior.skill2.has_method("on_projectile_despawn"):
 			iter_warrior.skill2.call("on_projectile_despawn", projectile_id)
+
+func _reflect_projectile_for_skill(
+	projectile_id: int,
+	new_owner_peer_id: int,
+	new_position: Vector2,
+	new_velocity: Vector2,
+	new_trail_origin: Vector2
+) -> bool:
+	if projectile_system == null:
+		return false
+	var projectile := projectile_system.get_projectile(projectile_id)
+	if projectile == null:
+		return false
+	var lobby_id := projectile_system.get_projectile_lobby(projectile_id, _peer_lobby(new_owner_peer_id))
+	if lobby_id <= 0:
+		lobby_id = _peer_lobby(new_owner_peer_id)
+	if lobby_id <= 0:
+		return false
+	var weapon_id := projectile_system.get_projectile_weapon_id(projectile_id, "")
+	var weapon_profile := _weapon_profile_for_id(weapon_id)
+	var reconfigured := projectile_system.reconfigure_projectile(
+		projectile_id,
+		new_owner_peer_id,
+		new_position,
+		new_velocity,
+		projectile.lag_comp_ms,
+		new_trail_origin,
+		weapon_profile
+	)
+	if not reconfigured:
+		return false
+	for member_value in _lobby_members(lobby_id):
+		var member_id := int(member_value)
+		if send_despawn_projectile_cb.is_valid():
+			send_despawn_projectile_cb.call(member_id, projectile_id)
+		if send_spawn_projectile_cb.is_valid():
+			send_spawn_projectile_cb.call(
+				member_id,
+				projectile_id,
+				new_owner_peer_id,
+				new_position,
+				new_velocity,
+				projectile.lag_comp_ms,
+				new_trail_origin,
+				weapon_id
+			)
+	return true
 
 func override_local_input_state(peer_id: int, base_state: Dictionary) -> Dictionary:
 	var resolved := _apply_input_overrides_for_peer(peer_id, base_state)

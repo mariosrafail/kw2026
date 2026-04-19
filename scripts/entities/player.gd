@@ -177,6 +177,7 @@ func _init_status_visuals_component() -> void:
 		torso_sprite,
 		leg1_sprite,
 		leg2_sprite,
+		gun_pivot,
 		skill_label,
 		skill_duration_bar_bg,
 		skill_duration_bar,
@@ -358,6 +359,14 @@ func set_juice_shrink_visual(duration_sec: float, scale_factor: float = JUICE_SH
 func clear_juice_shrink_visual(animate: bool = true) -> void:
 	if presentation_facade_component != null:
 		presentation_facade_component.clear_juice_shrink_visual(animate)
+
+func set_crashout_belly_visual(duration_sec: float) -> void:
+	if presentation_facade_component != null:
+		presentation_facade_component.set_crashout_belly_visual(duration_sec)
+
+func clear_crashout_belly_visual() -> void:
+	if presentation_facade_component != null:
+		presentation_facade_component.clear_crashout_belly_visual()
 
 func set_petrified_visual(duration_sec: float) -> void:
 	if presentation_facade_component != null:

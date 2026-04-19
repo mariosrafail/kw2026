@@ -417,6 +417,71 @@ skin_index = 1
 blood_color = Color(0.43, 0.31, 0.9, 1)
 skill_color = Color(0.58, 0.46, 1, 1)
 
+[sub_resource type="Resource" id="Resource_agelikoula_default"]
+script = ExtResource("2_b2")
+character_id = "agelikoula"
+blood_color = Color(0.73, 0.56, 0.4, 1)
+skill_color = Color(0.95, 0.74, 0.33, 1)
+
+[sub_resource type="Resource" id="Resource_agelikoula_0"]
+script = ExtResource("2_b2")
+character_id = "agelikoula"
+skin_index = 0
+blood_color = Color(0.73, 0.56, 0.4, 1)
+skill_color = Color(0.95, 0.74, 0.33, 1)
+
+[sub_resource type="Resource" id="Resource_crashout_default"]
+script = ExtResource("2_b2")
+character_id = "crashout"
+blood_color = Color(0.88, 0.16, 0.22, 1)
+skill_color = Color(0.33, 0.93, 1, 1)
+
+[sub_resource type="Resource" id="Resource_crashout_0"]
+script = ExtResource("2_b2")
+character_id = "crashout"
+skin_index = 0
+blood_color = Color(0.88, 0.16, 0.22, 1)
+skill_color = Color(0.33, 0.93, 1, 1)
+
+[sub_resource type="Resource" id="Resource_ctrlalt_default"]
+script = ExtResource("2_b2")
+character_id = "ctrlalt"
+blood_color = Color(0.26, 0.82, 0.33, 1)
+skill_color = Color(0.48, 0.95, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_ctrlalt_0"]
+script = ExtResource("2_b2")
+character_id = "ctrlalt"
+skin_index = 0
+blood_color = Color(0.26, 0.82, 0.33, 1)
+skill_color = Color(0.48, 0.95, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_sink_default"]
+script = ExtResource("2_b2")
+character_id = "sink"
+blood_color = Color(0.18, 0.74, 0.24, 1)
+skill_color = Color(0.41, 1, 0.38, 1)
+
+[sub_resource type="Resource" id="Resource_sink_0"]
+script = ExtResource("2_b2")
+character_id = "sink"
+skin_index = 0
+blood_color = Color(0.18, 0.74, 0.24, 1)
+skill_color = Color(0.41, 1, 0.38, 1)
+
+[sub_resource type="Resource" id="Resource_woman_default"]
+script = ExtResource("2_b2")
+character_id = "woman"
+blood_color = Color(0.96, 0.32, 0.48, 1)
+skill_color = Color(1, 0.31, 0.73, 1)
+
+[sub_resource type="Resource" id="Resource_woman_0"]
+script = ExtResource("2_b2")
+character_id = "woman"
+skin_index = 0
+blood_color = Color(0.96, 0.32, 0.48, 1)
+skill_color = Color(1, 0.31, 0.73, 1)
+
 [resource]
 script = ExtResource("1_a1")
-entries = Array[Resource]([SubResource("Resource_outrage_default"), SubResource("Resource_erebus_default"), SubResource("Resource_tasko_default"), SubResource("Resource_juice_default"), SubResource("Resource_madam_default"), SubResource("Resource_celler_default"), SubResource("Resource_kotro_default"), SubResource("Resource_nova_default"), SubResource("Resource_hindi_default"), SubResource("Resource_loker_default"), SubResource("Resource_veila_default"), SubResource("Resource_krog_default"), SubResource("Resource_aevilok_default"), SubResource("Resource_franky_default"), SubResource("Resource_lalou_default"), SubResource("Resource_m4_default"), SubResource("Resource_rp_default"), SubResource("Resource_outrage_0"), SubResource("Resource_outrage_1"), SubResource("Resource_outrage_2"), SubResource("Resource_outrage_3"), SubResource("Resource_outrage_4"), SubResource("Resource_outrage_5"), SubResource("Resource_outrage_6"), SubResource("Resource_outrage_7"), SubResource("Resource_outrage_8"), SubResource("Resource_erebus_0"), SubResource("Resource_erebus_1"), SubResource("Resource_erebus_2"), SubResource("Resource_erebus_3"), SubResource("Resource_tasko_0"), SubResource("Resource_tasko_1"), SubResource("Resource_tasko_2"), SubResource("Resource_tasko_3"), SubResource("Resource_juice_0"), SubResource("Resource_juice_1"), SubResource("Resource_juice_2"), SubResource("Resource_juice_3"), SubResource("Resource_madam_0"), SubResource("Resource_celler_0"), SubResource("Resource_kotro_0"), SubResource("Resource_kotro_1"), SubResource("Resource_nova_0"), SubResource("Resource_nova_1"), SubResource("Resource_hindi_0"), SubResource("Resource_loker_0"), SubResource("Resource_loker_1"), SubResource("Resource_loker_2"), SubResource("Resource_loker_3"), SubResource("Resource_veila_0"), SubResource("Resource_krog_0"), SubResource("Resource_krog_1"), SubResource("Resource_krog_2"), SubResource("Resource_krog_3"), SubResource("Resource_aevilok_0"), SubResource("Resource_franky_0"), SubResource("Resource_franky_1"), SubResource("Resource_lalou_0"), SubResource("Resource_lalou_1"), SubResource("Resource_m4_0"), SubResource("Resource_m4_1"), SubResource("Resource_rp_0"), SubResource("Resource_rp_1")])
+entries = Array[Resource]([SubResource("Resource_outrage_default"), SubResource("Resource_erebus_default"), SubResource("Resource_tasko_default"), SubResource("Resource_juice_default"), SubResource("Resource_madam_default"), SubResource("Resource_celler_default"), SubResource("Resource_kotro_default"), SubResource("Resource_nova_default"), SubResource("Resource_hindi_default"), SubResource("Resource_loker_default"), SubResource("Resource_veila_default"), SubResource("Resource_krog_default"), SubResource("Resource_aevilok_default"), SubResource("Resource_franky_default"), SubResource("Resource_lalou_default"), SubResource("Resource_m4_default"), SubResource("Resource_rp_default"), SubResource("Resource_agelikoula_default"), SubResource("Resource_crashout_default"), SubResource("Resource_ctrlalt_default"), SubResource("Resource_sink_default"), SubResource("Resource_woman_default"), SubResource("Resource_outrage_0"), SubResource("Resource_outrage_1"), SubResource("Resource_outrage_2"), SubResource("Resource_outrage_3"), SubResource("Resource_outrage_4"), SubResource("Resource_outrage_5"), SubResource("Resource_outrage_6"), SubResource("Resource_outrage_7"), SubResource("Resource_outrage_8"), SubResource("Resource_erebus_0"), SubResource("Resource_erebus_1"), SubResource("Resource_erebus_2"), SubResource("Resource_erebus_3"), SubResource("Resource_tasko_0"), SubResource("Resource_tasko_1"), SubResource("Resource_tasko_2"), SubResource("Resource_tasko_3"), SubResource("Resource_juice_0"), SubResource("Resource_juice_1"), SubResource("Resource_juice_2"), SubResource("Resource_juice_3"), SubResource("Resource_madam_0"), SubResource("Resource_celler_0"), SubResource("Resource_kotro_0"), SubResource("Resource_kotro_1"), SubResource("Resource_nova_0"), SubResource("Resource_nova_1"), SubResource("Resource_hindi_0"), SubResource("Resource_loker_0"), SubResource("Resource_loker_1"), SubResource("Resource_loker_2"), SubResource("Resource_loker_3"), SubResource("Resource_veila_0"), SubResource("Resource_krog_0"), SubResource("Resource_krog_1"), SubResource("Resource_krog_2"), SubResource("Resource_krog_3"), SubResource("Resource_aevilok_0"), SubResource("Resource_franky_0"), SubResource("Resource_franky_1"), SubResource("Resource_lalou_0"), SubResource("Resource_lalou_1"), SubResource("Resource_m4_0"), SubResource("Resource_m4_1"), SubResource("Resource_rp_0"), SubResource("Resource_rp_1"), SubResource("Resource_agelikoula_0"), SubResource("Resource_crashout_0"), SubResource("Resource_ctrlalt_0"), SubResource("Resource_sink_0"), SubResource("Resource_woman_0")])

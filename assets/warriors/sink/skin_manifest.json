@@ -1,0 +1,21 @@
+{
+  "warrior_id": "sink",
+  "display_name": "Sink",
+  "warrior_cost": 3600,
+  "frame_size": { "x": 64, "y": 64 },
+  "ui_preview": "res://assets/warriors/sink/skins_preview.png",
+  "parts": {
+    "head": "res://assets/warriors/sink/head.png",
+    "torso": "res://assets/warriors/sink/torso.png",
+    "legs": "res://assets/warriors/sink/legs.png"
+  },
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Default",
+      "unlock_type": "free",
+      "cost": 0
+    }
+  ]
+}

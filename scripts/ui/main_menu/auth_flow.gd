@@ -878,9 +878,12 @@ func auth_apply_profile(host: Control, profile: Dictionary) -> void:
 				owned_warriors.append(wid)
 				host.set("owned_warriors", owned_warriors)
 	host.set("owned_warrior_skins_by_warrior", incoming_warrior_skins)
-	host.set("owned_warrior_skins", incoming_warrior_skins.get(str(host.call("_default_warrior_id")), PackedInt32Array([0])) as PackedInt32Array)
+	host.set("owned_warrior_skins", incoming_warrior_skins.get(str(host.get("selected_warrior_id")).strip_edges().to_lower(), PackedInt32Array([0])) as PackedInt32Array)
 	if profile.has("equipped_warrior_skin_by_warrior"):
 		host.set("equipped_warrior_skin_by_warrior", host.call("_normalize_equipped_warrior_skins_dict", (profile.get("equipped_warrior_skin_by_warrior", {}) as Dictionary).duplicate(true)))
+	# Expand dev-owned warriors before selected-warrior validation runs.
+	# Otherwise new warriors can incorrectly fall back to the default warrior.
+	auth_dev_unlock_all_for_mario(host)
 	var next_selected_warrior_id := str(host.get("selected_warrior_id")).strip_edges().to_lower()
 	var profile_selected_warrior_id := ""
 	if profile.has("selected_warrior_id"):
@@ -902,6 +905,7 @@ func auth_apply_profile(host: Control, profile: Dictionary) -> void:
 		next_selected_warrior_skin = 0
 	host.set("selected_warrior_skin", next_selected_warrior_skin)
 	host.call("_set_equipped_warrior_skin", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
+	host.set("owned_warrior_skins", incoming_warrior_skins.get(str(host.get("selected_warrior_id")), PackedInt32Array([0])) as PackedInt32Array)
 
 	if profile.has("owned_weapons"):
 		var allowed := PackedStringArray([WEAPON_UZI, WEAPON_AK47, WEAPON_KAR, WEAPON_SHOTGUN, WEAPON_GRENADE])
@@ -954,7 +958,6 @@ func auth_apply_profile(host: Control, profile: Dictionary) -> void:
 		next_selected_weapon_skin = 0
 	host.set("selected_weapon_skin", next_selected_weapon_skin)
 	host.call("_set_equipped_weapon_skin", str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))
-	auth_dev_unlock_all_for_mario(host)
 	host.set("_pending_warrior_id", str(host.get("selected_warrior_id")))
 	host.set("_pending_warrior_skin", int(host.get("selected_warrior_skin")))
 	host.set("_pending_weapon_id", str(host.get("selected_weapon_id")))

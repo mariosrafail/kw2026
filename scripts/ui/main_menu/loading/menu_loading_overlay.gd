@@ -2,8 +2,13 @@ extends RefCounted
 
 const OUTRAGE_HEAD_TEXTURE := preload("res://assets/warriors/outrage/head.png")
 const HEAD_FRAME_SIZE := Vector2(64, 64)
-const FACE_FILL_MAX_TILES := 420
-const FACE_FILL_DENSITY := 0.0002
+const FACE_FILL_MAX_TILES := 760
+const FACE_FILL_DENSITY := 0.00048
+const FACE_GRID_CELL_PX := 34.0
+const FACE_GRID_BORDER_PX := 36.0
+const FACE_REVEAL_STEP_SEC := 0.018
+const FACE_REVEAL_MAX_DELAY_SEC := 1.35
+const FACE_PULSE_BATCH_SIZE := 14
 
 var _host: Control
 var _overlay: Control
@@ -19,6 +24,7 @@ var _show_count := 0
 var _rng := RandomNumberGenerator.new()
 var _face_textures: Array[Texture2D] = []
 var _face_tiles: Array[Sprite2D] = []
+var _fill_pulse_cursor := 0
 
 func configure(host: Control) -> void:
 	_host = host
@@ -165,20 +171,36 @@ func _prepare_face_fill() -> void:
 	if _face_textures.is_empty():
 		return
 	var vp := _host.get_viewport_rect().size if _host != null else Vector2(1280, 720)
-	var total := mini(FACE_FILL_MAX_TILES, maxi(90, int(vp.x * vp.y * FACE_FILL_DENSITY)))
-	for i in range(total):
+	var cell := maxf(18.0, FACE_GRID_CELL_PX)
+	var min_x := -FACE_GRID_BORDER_PX
+	var min_y := -FACE_GRID_BORDER_PX
+	var max_x := vp.x + FACE_GRID_BORDER_PX
+	var max_y := vp.y + FACE_GRID_BORDER_PX
+	var cols := maxi(1, int(ceil((max_x - min_x) / cell)))
+	var rows := maxi(1, int(ceil((max_y - min_y) / cell)))
+	var grid_positions: Array[Vector2] = []
+	for row in range(rows):
+		for col in range(cols):
+			var x := min_x + (float(col) + 0.5) * cell
+			var y := min_y + (float(row) + 0.5) * cell
+			grid_positions.append(Vector2(x, y))
+	var target_total := mini(FACE_FILL_MAX_TILES, maxi(90, int(vp.x * vp.y * FACE_FILL_DENSITY)))
+	var stride := maxi(1, int(ceil(float(grid_positions.size()) / float(maxi(1, target_total)))))
+	var reveal_index := 0
+	for i in range(0, grid_positions.size(), stride):
+		if _face_tiles.size() >= target_total:
+			break
 		var sprite := Sprite2D.new()
 		sprite.centered = true
 		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		sprite.texture = _face_textures[_rng.randi_range(0, _face_textures.size() - 1)]
 		sprite.modulate = Color(1, 1, 1, 0.0)
-		sprite.position = Vector2(
-			_rng.randf_range(-28.0, vp.x + 28.0),
-			_rng.randf_range(-28.0, vp.y + 28.0)
-		)
-		var tile_scale := _rng.randf_range(0.56, 1.08)
+		sprite.position = grid_positions[i]
+		var tile_scale := _rng.randf_range(1.22, 1.52)
 		sprite.scale = Vector2.ONE * (tile_scale * 0.2)
 		sprite.set_meta("kw_base_scale", tile_scale)
+		sprite.set_meta("kw_reveal_index", reveal_index)
+		reveal_index += 1
 		_faces_layer.add_child(sprite)
 		_face_tiles.append(sprite)
 
@@ -186,18 +208,18 @@ func _start_face_fill_anim() -> void:
 	_stop_face_fill_anim()
 	if _host == null or _face_tiles.is_empty():
 		return
+	_fill_pulse_cursor = 0
 	_fill_reveal_tween = _host.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	var center := (_host.get_viewport_rect().size if _host != null else Vector2(1280, 720)) * 0.5
 	for tile in _face_tiles:
 		if tile == null or not is_instance_valid(tile):
 			continue
 		var base_scale := float(tile.get_meta("kw_base_scale", 0.85))
-		var dist := tile.position.distance_to(center)
-		var delay := clampf(dist / 1800.0, 0.0, 0.45) + _rng.randf_range(0.0, 0.16)
-		var target_alpha := _rng.randf_range(0.22, 0.48)
+		var reveal_index := int(tile.get_meta("kw_reveal_index", 0))
+		var delay := clampf(float(reveal_index) * FACE_REVEAL_STEP_SEC, 0.0, FACE_REVEAL_MAX_DELAY_SEC)
+		var target_alpha := _rng.randf_range(0.28, 0.44)
 		_fill_reveal_tween.parallel().tween_property(tile, "modulate:a", target_alpha, 0.26).set_delay(delay)
 		_fill_reveal_tween.parallel().tween_property(tile, "scale", Vector2.ONE * base_scale, 0.28).set_delay(delay)
-		_fill_reveal_tween.parallel().tween_property(tile, "rotation", _rng.randf_range(-0.16, 0.16), 0.35).set_delay(delay)
+		_fill_reveal_tween.parallel().tween_property(tile, "rotation", _rng.randf_range(-0.07, 0.07), 0.35).set_delay(delay)
 	_fill_loop_tween = _host.create_tween().set_loops()
 	_fill_loop_tween.tween_interval(0.5)
 	_fill_loop_tween.tween_callback(Callable(self, "_face_fill_pulse_step"))
@@ -205,18 +227,19 @@ func _start_face_fill_anim() -> void:
 func _face_fill_pulse_step() -> void:
 	if _host == null or _face_tiles.is_empty():
 		return
-	var pulses := mini(22, _face_tiles.size())
-	for i in range(pulses):
-		var tile := _face_tiles[_rng.randi_range(0, _face_tiles.size() - 1)]
+	var pulses := mini(FACE_PULSE_BATCH_SIZE, _face_tiles.size())
+	for _i in range(pulses):
+		var tile := _face_tiles[_fill_pulse_cursor % _face_tiles.size()]
+		_fill_pulse_cursor += 1
 		if tile == null or not is_instance_valid(tile):
 			continue
-		if _rng.randf() < 0.28:
+		if _rng.randf() < 0.18:
 			tile.texture = _face_textures[_rng.randi_range(0, _face_textures.size() - 1)]
 		var base_scale := float(tile.get_meta("kw_base_scale", 0.85))
 		var tw := _host.create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		tw.tween_property(tile, "scale", Vector2.ONE * (base_scale * _rng.randf_range(1.08, 1.22)), 0.16)
-		tw.parallel().tween_property(tile, "modulate:a", _rng.randf_range(0.42, 0.64), 0.16)
-		tw.parallel().tween_property(tile, "rotation", _rng.randf_range(-0.24, 0.24), 0.16)
+		tw.tween_property(tile, "scale", Vector2.ONE * (base_scale * _rng.randf_range(1.08, 1.18)), 0.16)
+		tw.parallel().tween_property(tile, "modulate:a", _rng.randf_range(0.42, 0.58), 0.16)
+		tw.parallel().tween_property(tile, "rotation", _rng.randf_range(-0.14, 0.14), 0.16)
 		tw.tween_property(tile, "scale", Vector2.ONE * base_scale, 0.22)
 		tw.parallel().tween_property(tile, "modulate:a", _rng.randf_range(0.24, 0.5), 0.22)
 

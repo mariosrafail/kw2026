@@ -247,7 +247,8 @@ func _configure_services() -> void:
 			"can_damage_peer": Callable(self, "_can_damage_peer"),
 			"character_id_for_peer": Callable(self, "_warrior_id_for_peer"),
 			"authoritative_blood_color_for_peer": Callable(self, "_authoritative_blood_color_for_peer"),
-			"incoming_damage_multiplier_for_peer": Callable(combat_flow_service, "incoming_damage_multiplier_for_peer")
+			"incoming_damage_multiplier_for_peer": Callable(combat_flow_service, "incoming_damage_multiplier_for_peer"),
+			"clear_all_debuffs_for_peer": Callable(combat_flow_service, "clear_all_debuffs_for_peer")
 		},
 		{
 			"player_history_ms": PLAYER_HISTORY_MS
@@ -360,7 +361,9 @@ func _configure_services() -> void:
 			"skill_color_for_peer": Callable(self, "_authoritative_skill_color_for_peer"),
 			"authoritative_blood_color_for_peer": Callable(self, "_authoritative_blood_color_for_peer"),
 			"is_gameplay_locked": Callable(self, "_is_gameplay_locked"),
-			"send_match_message_to_peer": Callable(self, "_server_send_match_message_to_peer")
+			"send_match_message_to_peer": Callable(self, "_server_send_match_message_to_peer"),
+			"spawn_temporary_bot": Callable(self, "_spawn_temporary_bot"),
+			"despawn_temporary_bot": Callable(self, "_despawn_temporary_bot")
 		},
 		{
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,
@@ -385,6 +388,7 @@ func _configure_services() -> void:
 			"weapon_shot_sfx": Callable(self, "_weapon_shot_sfx"),
 			"weapon_reload_sfx": Callable(self, "_weapon_reload_sfx"),
 			"weapon_impact_sfx": Callable(self, "_weapon_impact_sfx"),
+			"weapon_id_for_peer": Callable(self, "_weapon_id_for_peer"),
 			"weapon_visual_for_id": Callable(self, "_weapon_visual_for_id"),
 			"weapon_visual_for_peer": Callable(self, "_weapon_visual_for_peer")
 		}

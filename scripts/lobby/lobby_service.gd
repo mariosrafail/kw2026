@@ -792,6 +792,16 @@ func _normalize_character_id(character_id: String, fallback: String = "outrage")
 		return "m4"
 	if normalized == "rp":
 		return "rp"
+	if normalized == "agelikoula":
+		return "agelikoula"
+	if normalized == "crashout":
+		return "crashout"
+	if normalized == "ctrlalt":
+		return "ctrlalt"
+	if normalized == "sink":
+		return "sink"
+	if normalized == "woman":
+		return "woman"
 	var fallback_normalized := str(fallback).strip_edges().to_lower()
 	if fallback_normalized != normalized:
 		return _normalize_character_id(fallback_normalized, "outrage")

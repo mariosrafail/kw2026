@@ -21,6 +21,11 @@ const CHARACTER_ID_VARN := "varn"
 const CHARACTER_ID_LALOU := "lalou"
 const CHARACTER_ID_M4 := "m4"
 const CHARACTER_ID_RP := "rp"
+const CHARACTER_ID_AGELIKOULA := "agelikoula"
+const CHARACTER_ID_CRASHOUT := "crashout"
+const CHARACTER_ID_CTRLALT := "ctrlalt"
+const CHARACTER_ID_SINK := "sink"
+const CHARACTER_ID_WOMAN := "woman"
 const GAN_HAIR_WIND_SHADER := preload("res://assets/shaders/gan_hair_wind.gdshader")
 
 const LEGS_FRAME_SIZE := Vector2i(64, 64)
@@ -138,6 +143,31 @@ const PART_TEXTURE_PATHS := {
 		"head": "res://assets/warriors/rp/head.png",
 		"torso": "res://assets/warriors/rp/torso.png",
 		"legs": "res://assets/warriors/rp/legs.png",
+	},
+	CHARACTER_ID_AGELIKOULA: {
+		"head": "res://assets/warriors/agelikoula/head.png",
+		"torso": "res://assets/warriors/agelikoula/torso.png",
+		"legs": "res://assets/warriors/agelikoula/legs.png",
+	},
+	CHARACTER_ID_CRASHOUT: {
+		"head": "res://assets/warriors/crashout/head.png",
+		"torso": "res://assets/warriors/crashout/torso.png",
+		"legs": "res://assets/warriors/crashout/legs.png",
+	},
+	CHARACTER_ID_CTRLALT: {
+		"head": "res://assets/warriors/ctrlalt/head.png",
+		"torso": "res://assets/warriors/ctrlalt/torso.png",
+		"legs": "res://assets/warriors/ctrlalt/legs.png",
+	},
+	CHARACTER_ID_SINK: {
+		"head": "res://assets/warriors/sink/head.png",
+		"torso": "res://assets/warriors/sink/torso.png",
+		"legs": "res://assets/warriors/sink/legs.png",
+	},
+	CHARACTER_ID_WOMAN: {
+		"head": "res://assets/warriors/woman/head.png",
+		"torso": "res://assets/warriors/woman/torso.png",
+		"legs": "res://assets/warriors/woman/legs.png",
 	},
 }
 
@@ -552,7 +582,7 @@ func _head_aim_offset_x() -> float:
 
 func set_character_visual(new_character_id: String) -> void:
 	var normalized := new_character_id.strip_edges().to_lower()
-	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO and normalized != CHARACTER_ID_NOVA and normalized != CHARACTER_ID_HINDI and normalized != CHARACTER_ID_LOKER and normalized != CHARACTER_ID_GAN and normalized != CHARACTER_ID_VEILA and normalized != CHARACTER_ID_KROG and normalized != CHARACTER_ID_AEVILOK and normalized != CHARACTER_ID_FRANKY and normalized != CHARACTER_ID_VARN and normalized != CHARACTER_ID_LALOU and normalized != CHARACTER_ID_M4 and normalized != CHARACTER_ID_RP:
+	if normalized != CHARACTER_ID_EREBUS and normalized != CHARACTER_ID_TASKO and normalized != CHARACTER_ID_JUICE and normalized != CHARACTER_ID_MADAM and normalized != CHARACTER_ID_CELLER and normalized != CHARACTER_ID_KOTRO and normalized != CHARACTER_ID_NOVA and normalized != CHARACTER_ID_HINDI and normalized != CHARACTER_ID_LOKER and normalized != CHARACTER_ID_GAN and normalized != CHARACTER_ID_VEILA and normalized != CHARACTER_ID_KROG and normalized != CHARACTER_ID_AEVILOK and normalized != CHARACTER_ID_FRANKY and normalized != CHARACTER_ID_VARN and normalized != CHARACTER_ID_LALOU and normalized != CHARACTER_ID_M4 and normalized != CHARACTER_ID_RP and normalized != CHARACTER_ID_AGELIKOULA and normalized != CHARACTER_ID_CRASHOUT and normalized != CHARACTER_ID_CTRLALT and normalized != CHARACTER_ID_SINK and normalized != CHARACTER_ID_WOMAN:
 		normalized = CHARACTER_ID_OUTRAGE
 	character_id = normalized
 	if normalized == CHARACTER_ID_EREBUS:
@@ -588,6 +618,16 @@ func set_character_visual(new_character_id: String) -> void:
 	elif normalized == CHARACTER_ID_M4:
 		warrior_column_index = KOTRO_WARRIOR_COLUMN
 	elif normalized == CHARACTER_ID_RP:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_AGELIKOULA:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_CRASHOUT:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_CTRLALT:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_SINK:
+		warrior_column_index = KOTRO_WARRIOR_COLUMN
+	elif normalized == CHARACTER_ID_WOMAN:
 		warrior_column_index = KOTRO_WARRIOR_COLUMN
 	else:
 		warrior_column_index = OUTRAGE_WARRIOR_COLUMN
@@ -657,6 +697,16 @@ func _apply_modular_character_visuals() -> void:
 	elif character_id == CHARACTER_ID_M4:
 		tint = Color(1, 1, 1, 1)
 	elif character_id == CHARACTER_ID_RP:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_AGELIKOULA:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_CRASHOUT:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_CTRLALT:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_SINK:
+		tint = Color(1, 1, 1, 1)
+	elif character_id == CHARACTER_ID_WOMAN:
 		tint = Color(1, 1, 1, 1)
 	if _legs_sprite != null:
 		_legs_sprite.modulate = tint

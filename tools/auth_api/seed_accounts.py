@@ -13,7 +13,7 @@ ENV_PATH = ROOT / ".env"
 ACCOUNT_USERNAMES = ["Markos", "Giannis", "Erebus", "Kostas"]
 ACCOUNT_PASSWORD = "1234"
 
-ALLOWED_WARRIORS = ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila"]
+ALLOWED_WARRIORS = ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp", "agelikoula", "crashout", "ctrlalt", "sink", "woman"]
 ALLOWED_WEAPONS = ["uzi", "ak47", "shotgun", "grenade"]
 
 

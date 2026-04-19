@@ -254,6 +254,8 @@ var _play_lobby_fade_targets: Array[CanvasItem] = []
 var _play_lobby_fade_base_alpha: Dictionary = {}
 var _main_warrior_preview_base_scale := Vector2.ONE
 var _warrior_shop_preview_base_scale := Vector2.ONE
+var _main_warrior_visual_base_scale := Vector2.ONE
+var _warrior_shop_visual_base_scale := Vector2.ONE
 var _weapon_shop_preview_base_scale := Vector2.ONE
 var _confirm_overlay_ui: Control
 
@@ -465,6 +467,12 @@ func _ready() -> void:
 		_main_warrior_preview_base_scale = (main_warrior_preview as Node2D).scale
 	if warrior_shop_preview is Node2D:
 		_warrior_shop_preview_base_scale = (warrior_shop_preview as Node2D).scale
+	var main_visual_root := main_warrior_preview.get_node_or_null("VisualRoot") as Node2D if main_warrior_preview != null else null
+	if main_visual_root != null:
+		_main_warrior_visual_base_scale = main_visual_root.scale
+	var shop_visual_root := warrior_shop_preview.get_node_or_null("VisualRoot") as Node2D if warrior_shop_preview != null else null
+	if shop_visual_root != null:
+		_warrior_shop_visual_base_scale = shop_visual_root.scale
 	if weapon_shop_preview != null:
 		_weapon_shop_preview_base_scale = weapon_shop_preview.scale
 
@@ -1551,14 +1559,18 @@ func _pop(ci: CanvasItem) -> void:
 	_ui_anim.pop(self, ci)
 
 func _pop_warrior_preview(preview: Node) -> void:
-	if not (preview is Node2D):
+	if preview == null:
 		return
-	var node := preview as Node2D
+	var node := preview.get_node_or_null("VisualRoot") as Node2D
+	if node == null and preview is Node2D:
+		node = preview as Node2D
+	if node == null:
+		return
 	var rest_scale := node.scale
 	if preview == main_warrior_preview:
-		rest_scale = _main_warrior_preview_base_scale
+		rest_scale = _main_warrior_visual_base_scale if node.name == "VisualRoot" else _main_warrior_preview_base_scale
 	elif preview == warrior_shop_preview:
-		rest_scale = _warrior_shop_preview_base_scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
+		rest_scale = _warrior_shop_visual_base_scale if node.name == "VisualRoot" else _warrior_shop_preview_base_scale * clampf(warriors_menu_preview_scale_mult, 0.01, 3.0)
 	node.set_meta("kw_pop_rest_scale", rest_scale)
 	_pop(node)
 

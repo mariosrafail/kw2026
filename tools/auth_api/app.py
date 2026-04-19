@@ -265,6 +265,14 @@ ALLOWED_WARRIORS = (
     "aevilok",
     "franky",
     "varn",
+    "lalou",
+    "m4",
+    "rp",
+    "agelikoula",
+    "crashout",
+    "ctrlalt",
+    "sink",
+    "woman",
 )
 
 

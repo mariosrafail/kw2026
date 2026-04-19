@@ -33,9 +33,8 @@ func equip_warrior_item(host: Control, warrior_id: String, skin_index: int) -> v
 	host.call("_set_equipped_warrior_skin", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
 	host.call("_apply_warrior_skin_to_player", host.get("main_warrior_preview"), str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
 	host.call("_apply_warrior_skin_to_player", host.get("warrior_shop_preview"), str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
-	var default_warrior_id = str(host.call("_default_warrior_id"))
 	var owned_warrior_skins_by_warrior = host.get("owned_warrior_skins_by_warrior") as Dictionary
-	host.set("owned_warrior_skins", owned_warrior_skins_by_warrior.get(default_warrior_id, PackedInt32Array([0])) as PackedInt32Array)
+	host.set("owned_warrior_skins", owned_warrior_skins_by_warrior.get(str(host.get("selected_warrior_id")), PackedInt32Array([0])) as PackedInt32Array)
 	var warrior_ui = host.get("_warrior_ui")
 	var warrior_name_label = host.get("warrior_name_label") as Label
 	if warrior_name_label != null:
@@ -111,8 +110,7 @@ func buy_warrior_skin_if_needed(host: Control, warrior_id: String, skin_index: i
 		arr.sort()
 	owned_warrior_skins_by_warrior[normalized] = arr
 	host.set("owned_warrior_skins_by_warrior", owned_warrior_skins_by_warrior)
-	var default_warrior_id = str(host.call("_default_warrior_id"))
-	host.set("owned_warrior_skins", owned_warrior_skins_by_warrior.get(default_warrior_id, PackedInt32Array([0])) as PackedInt32Array)
+	host.set("owned_warrior_skins", owned_warrior_skins_by_warrior.get(normalized, PackedInt32Array([0])) as PackedInt32Array)
 	host.call("_update_wallet_labels", false)
 	host.call("_save_state")
 	host.call("_auth_sync_wallet")

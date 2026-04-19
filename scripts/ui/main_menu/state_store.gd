@@ -236,6 +236,7 @@ func apply_menu_state(host: Control, path: String) -> void:
 	if not bool(host.call("_warrior_skin_is_owned", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))):
 		host.set("selected_warrior_skin", 0)
 	host.call("_set_equipped_warrior_skin", str(host.get("selected_warrior_id")), int(host.get("selected_warrior_skin")))
+	host.set("owned_warrior_skins", (host.get("owned_warrior_skins_by_warrior") as Dictionary).get(str(host.get("selected_warrior_id")), PackedInt32Array([0])) as PackedInt32Array)
 	host.set("_pending_warrior_id", str(host.get("selected_warrior_id")))
 	host.set("_pending_warrior_skin", int(host.get("selected_warrior_skin")))
 	if not bool(host.call("_weapon_is_owned", str(host.get("selected_weapon_id")))):

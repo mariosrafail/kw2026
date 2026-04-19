@@ -112,6 +112,11 @@ const CHARACTER_ID_VARN := "varn"
 const CHARACTER_ID_LALOU := "lalou"
 const CHARACTER_ID_M4 := "m4"
 const CHARACTER_ID_RP := "rp"
+const CHARACTER_ID_AGELIKOULA := "agelikoula"
+const CHARACTER_ID_CRASHOUT := "crashout"
+const CHARACTER_ID_CTRLALT := "ctrlalt"
+const CHARACTER_ID_SINK := "sink"
+const CHARACTER_ID_WOMAN := "woman"
 
 const CHARACTERS := {
 	CHARACTER_ID_OUTRAGE: {
@@ -208,6 +213,31 @@ const CHARACTERS := {
 		"name": "Raining Pleasure",
 		"ability": "Rainfall",
 		"description": "Makes it rain for 5 seconds and applies vulnerable to enemies globally"
+	},
+	CHARACTER_ID_AGELIKOULA: {
+		"name": "Agelikoula",
+		"ability": "Block Burst",
+		"description": "Launches pixel blocks in all directions for 5 seconds, dealing damage and short stun on hit"
+	},
+	CHARACTER_ID_CRASHOUT: {
+		"name": "CrashOut",
+		"ability": "Bounce Bubble",
+		"description": "Creates a stationary bubble that reflects bullets back as his own"
+	},
+	CHARACTER_ID_CTRLALT: {
+		"name": "Ctrlalt",
+		"ability": "Fork Parade",
+		"description": "Summons temporary clone bots that roam and spray light random fire"
+	},
+	CHARACTER_ID_SINK: {
+		"name": "Sink",
+		"ability": "Toxic Wake",
+		"description": "Leaves behind toxic gas clouds that burn enemies who chase through them"
+	},
+	CHARACTER_ID_WOMAN: {
+		"name": "Woman",
+		"ability": "Heel Halo",
+		"description": "Summons an orbiting heel for 5 seconds that stuns and damages enemies on contact"
 	}
 }
 

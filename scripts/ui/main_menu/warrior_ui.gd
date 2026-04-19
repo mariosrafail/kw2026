@@ -22,6 +22,11 @@ const WARRIOR_MANIFEST_PATHS := {
 	"lalou": "res://assets/warriors/lalou/skin_manifest.json",
 	"m4": "res://assets/warriors/m4/skin_manifest.json",
 	"rp": "res://assets/warriors/rp/skin_manifest.json",
+	"agelikoula": "res://assets/warriors/agelikoula/skin_manifest.json",
+	"crashout": "res://assets/warriors/crashout/skin_manifest.json",
+	"ctrlalt": "res://assets/warriors/ctrlalt/skin_manifest.json",
+	"sink": "res://assets/warriors/sink/skin_manifest.json",
+	"woman": "res://assets/warriors/woman/skin_manifest.json",
 }
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const GAN_HAIR_WIND_SHADER := preload("res://assets/shaders/gan_hair_wind.gdshader")
@@ -45,6 +50,11 @@ const SKILL_SUMMARY_BY_WARRIOR := {
 	"lalou": "Ulti: sprays heart pixels for 5s that repeatedly stun nearby enemies.",
 	"m4": "Ulti: electric shock field chains lightning to nearby enemies and applies burn.",
 	"rp": "Ulti: makes it rain for 5s and applies vulnerable across the map.",
+	"agelikoula": "Ulti: throws pixel blocks in all directions for 5s, dealing damage and short stun on hit.",
+	"crashout": "Ulti: creates a bubble on him that flips bullets back and makes them his own.",
+	"ctrlalt": "Ulti: summons temporary clone bots that move like enemies and deal light random fire.",
+	"sink": "Ulti: leaves behind toxic gas while moving, burning enemies that chase through the trail.",
+	"woman": "Ulti: sends her heel into orbit for 5s, stunning and damaging enemies it touches.",
 }
 
 var _manifest_cache: Dictionary = {}

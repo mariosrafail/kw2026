@@ -148,6 +148,45 @@ func spawn_projectile(
 		projectile_weapon_id_by_id[projectile_id] = weapon.weapon_id()
 	return projectile
 
+func reconfigure_projectile(
+	projectile_id: int,
+	owner_peer_id: int,
+	spawn_position: Vector2,
+	velocity: Vector2,
+	lag_comp_ms: int,
+	trail_origin: Vector2,
+	weapon: WeaponProfile = null
+) -> bool:
+	var projectile := get_projectile(projectile_id)
+	if projectile == null:
+		return false
+	projectile.global_position = spawn_position
+	var visual_config := {}
+	var hit_radius := projectile.get_hit_radius()
+	var life_time := maxf(0.15, projectile.life_remaining)
+	if weapon != null:
+		visual_config = weapon.projectile_visual_config()
+		hit_radius = weapon.projectile_hit_radius()
+		if resolve_visual_config_override.is_valid():
+			var override_value: Variant = resolve_visual_config_override.call(owner_peer_id, weapon.weapon_id(), visual_config)
+			if override_value is Dictionary:
+				visual_config = override_value as Dictionary
+	projectile.configure(
+		_owner_color(owner_peer_id, weapon),
+		velocity,
+		projectile_id,
+		owner_peer_id,
+		lag_comp_ms,
+		trail_origin,
+		visual_config,
+		hit_radius,
+		life_time
+	)
+	if weapon != null:
+		projectile_weapon_name_by_id[projectile_id] = weapon.weapon_name()
+		projectile_weapon_id_by_id[projectile_id] = weapon.weapon_id()
+	return true
+
 func get_projectile(projectile_id: int) -> NetProjectile:
 	return projectiles.get(projectile_id, null) as NetProjectile
 

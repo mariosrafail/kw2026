@@ -196,7 +196,7 @@ func _prune_expired(state: Dictionary, now_msec: int) -> void:
 		state.erase(key)
 
 func _apply_client_stun_visual(caster_peer_id: int, payload: Vector2) -> void:
-	var target_peer_id := int(round(payload.y))
+	var target_peer_id := _resolve_target_peer_id_from_payload(payload.y)
 	var duration_sec := STUN_DURATION_SEC
 	var player := players.get(target_peer_id, null) as NetPlayer
 	var caster := players.get(caster_peer_id, null) as NetPlayer
@@ -210,6 +210,16 @@ func _apply_client_stun_visual(caster_peer_id: int, payload: Vector2) -> void:
 		vfx.spawn_targeted_heart(player, duration_sec)
 	elif player.has_method("set_petrified_visual"):
 		player.call("set_petrified_visual", duration_sec)
+
+func _resolve_target_peer_id_from_payload(encoded_peer_value: float) -> int:
+	var rounded_peer_id := int(round(encoded_peer_value))
+	if players.has(rounded_peer_id):
+		return rounded_peer_id
+	for peer_value in players.keys():
+		var peer_id := int(peer_value)
+		if is_equal_approx(float(peer_id), encoded_peer_value):
+			return peer_id
+	return rounded_peer_id
 
 func _queue_pending_stun(target_peer_id: int, caster_peer_id: int, travel_sec: float) -> void:
 	var apply_at_msec := Time.get_ticks_msec() + int(travel_sec * 1000.0)

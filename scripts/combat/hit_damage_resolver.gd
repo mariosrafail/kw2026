@@ -23,6 +23,9 @@ const BLOOD_COLOR_BY_CHARACTER := {
 	"lalou": Color(0.68, 0.27, 0.55, 1.0),
 	"m4": Color(0.22, 0.55, 0.72, 1.0),
 	"rp": Color(0.18, 0.45, 0.76, 1.0),
+	"crashout": Color(0.88, 0.16, 0.22, 1.0),
+	"ctrlalt": Color(0.26, 0.82, 0.33, 1.0),
+	"woman": Color(0.96, 0.32, 0.48, 1.0),
 }
 
 var players: Dictionary = {}
@@ -46,6 +49,7 @@ var can_damage_peer_cb: Callable = Callable()
 var character_id_for_peer_cb: Callable = Callable()
 var authoritative_blood_color_for_peer_cb: Callable = Callable()
 var incoming_damage_multiplier_for_peer_cb: Callable = Callable()
+var clear_all_debuffs_for_peer_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -68,6 +72,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	character_id_for_peer_cb = callbacks.get("character_id_for_peer", Callable()) as Callable
 	authoritative_blood_color_for_peer_cb = callbacks.get("authoritative_blood_color_for_peer", Callable()) as Callable
 	incoming_damage_multiplier_for_peer_cb = callbacks.get("incoming_damage_multiplier_for_peer", Callable()) as Callable
+	clear_all_debuffs_for_peer_cb = callbacks.get("clear_all_debuffs_for_peer", Callable()) as Callable
 
 	player_history_ms = int(config.get("player_history_ms", player_history_ms))
 
@@ -218,6 +223,7 @@ func server_apply_projectile_damage(projectile_id: int, target_peer_id: int, tar
 	if remaining_health <= 0:
 		if register_kill_death_cb.is_valid():
 			register_kill_death_cb.call(attacker_peer_id, target_peer_id)
+		_clear_debuffs_for_dead_peer(target_peer_id)
 		var death_position := target_player.global_position
 		var death_blood_color := _target_blood_color(target_peer_id, target_player)
 		var death_blood_velocity := incoming_velocity
@@ -284,6 +290,7 @@ func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, targ
 	if remaining_health <= 0:
 		if register_kill_death_cb.is_valid():
 			register_kill_death_cb.call(attacker_peer_id, target_peer_id)
+		_clear_debuffs_for_dead_peer(target_peer_id)
 		var death_position := target_player.global_position
 		var death_blood_color := _target_blood_color(target_peer_id, target_player)
 		var death_blood_velocity := resolved_incoming_velocity
@@ -352,3 +359,9 @@ func _incoming_damage_multiplier(target_peer_id: int) -> float:
 	if incoming_damage_multiplier_for_peer_cb.is_valid():
 		return maxf(0.01, float(incoming_damage_multiplier_for_peer_cb.call(target_peer_id)))
 	return 1.0
+
+func _clear_debuffs_for_dead_peer(target_peer_id: int) -> void:
+	if target_peer_id == 0:
+		return
+	if clear_all_debuffs_for_peer_cb.is_valid():
+		clear_all_debuffs_for_peer_cb.call(target_peer_id, true)

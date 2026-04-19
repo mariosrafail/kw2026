@@ -46,6 +46,11 @@ const CHARACTER_E_ICON_COLUMNS := {
 	"lalou": 9,
 	"m4": 9,
 	"rp": 9,
+	"agelikoula": 9,
+	"crashout": 9,
+	"ctrlalt": 9,
+	"sink": 9,
+	"woman": 9,
 }
 
 var _e_slot: Control

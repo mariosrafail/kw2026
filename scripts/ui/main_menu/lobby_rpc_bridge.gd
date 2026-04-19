@@ -112,7 +112,7 @@ func create_lobby(lobby_name: String, weapon_id: String, character_id: String, m
 	if normalized_weapon.is_empty():
 		normalized_weapon = "ak47"
 	var normalized_character := character_id.strip_edges().to_lower()
-	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn" and normalized_character != "lalou" and normalized_character != "m4" and normalized_character != "rp":
+	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn" and normalized_character != "lalou" and normalized_character != "m4" and normalized_character != "rp" and normalized_character != "agelikoula" and normalized_character != "crashout" and normalized_character != "ctrlalt" and normalized_character != "sink" and normalized_character != "woman":
 		normalized_character = "outrage"
 	var default_map_id := _map_flow_service.normalize_map_id(_map_catalog, _map_catalog.default_map_id())
 	var normalized_map := map_id.strip_edges().to_lower()
@@ -173,7 +173,7 @@ func join_lobby(lobby_id: int, weapon_id: String, character_id: String) -> bool:
 	if normalized_weapon.is_empty():
 		normalized_weapon = "ak47"
 	var normalized_character := character_id.strip_edges().to_lower()
-	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn" and normalized_character != "lalou" and normalized_character != "m4" and normalized_character != "rp":
+	if normalized_character != "erebus" and normalized_character != "tasko" and normalized_character != "juice" and normalized_character != "madam" and normalized_character != "celler" and normalized_character != "kotro" and normalized_character != "nova" and normalized_character != "hindi" and normalized_character != "loker" and normalized_character != "gan" and normalized_character != "veila" and normalized_character != "krog" and normalized_character != "aevilok" and normalized_character != "franky" and normalized_character != "varn" and normalized_character != "lalou" and normalized_character != "m4" and normalized_character != "rp" and normalized_character != "agelikoula" and normalized_character != "crashout" and normalized_character != "ctrlalt" and normalized_character != "sink" and normalized_character != "woman":
 		normalized_character = "outrage"
 	_pending_mode_id = str(_lobby_mode_by_id.get(lobby_id, "deathmatch"))
 	_rpc_lobby_join.rpc_id(1, lobby_id, normalized_weapon, normalized_character)
@@ -284,7 +284,7 @@ func set_character(character_id: String) -> bool:
 		_log("set_character blocked can_send=false")
 		return false
 	var normalized := character_id.strip_edges().to_lower()
-	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker" and normalized != "gan" and normalized != "veila" and normalized != "krog" and normalized != "aevilok" and normalized != "franky" and normalized != "varn" and normalized != "lalou" and normalized != "m4" and normalized != "rp":
+	if normalized != "erebus" and normalized != "tasko" and normalized != "juice" and normalized != "madam" and normalized != "celler" and normalized != "kotro" and normalized != "nova" and normalized != "hindi" and normalized != "loker" and normalized != "gan" and normalized != "veila" and normalized != "krog" and normalized != "aevilok" and normalized != "franky" and normalized != "varn" and normalized != "lalou" and normalized != "m4" and normalized != "rp" and normalized != "agelikoula" and normalized != "crashout" and normalized != "ctrlalt" and normalized != "sink" and normalized != "woman":
 		normalized = "outrage"
 	_log("set_character rpc_id(1) character_id=%s" % normalized)
 	_rpc_lobby_set_character.rpc_id(1, normalized)

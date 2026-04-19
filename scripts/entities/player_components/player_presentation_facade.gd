@@ -60,6 +60,16 @@ func clear_juice_shrink_visual(animate: bool) -> void:
 	if status_visuals_component != null:
 		status_visuals_component.clear_juice_shrink_visual(animate)
 
+func set_crashout_belly_visual(duration_sec: float) -> void:
+	var status_visuals_component: Variant = _status_visuals_component()
+	if status_visuals_component != null:
+		status_visuals_component.set_crashout_belly_visual(duration_sec)
+
+func clear_crashout_belly_visual() -> void:
+	var status_visuals_component: Variant = _status_visuals_component()
+	if status_visuals_component != null:
+		status_visuals_component.clear_crashout_belly_visual()
+
 func set_petrified_visual(duration_sec: float) -> void:
 	var status_visuals_component: Variant = _status_visuals_component()
 	if status_visuals_component != null:

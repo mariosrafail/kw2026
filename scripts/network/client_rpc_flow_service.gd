@@ -16,6 +16,7 @@ var weapon_reload_sfx_cb: Callable = Callable()
 var weapon_visual_for_id_cb: Callable = Callable()
 var weapon_visual_for_peer_cb: Callable = Callable()
 var weapon_impact_sfx_cb: Callable = Callable()
+var weapon_id_for_peer_cb: Callable = Callable()
 
 func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -32,6 +33,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary) -> void:
 	weapon_visual_for_id_cb = callbacks.get("weapon_visual_for_id", Callable()) as Callable
 	weapon_visual_for_peer_cb = callbacks.get("weapon_visual_for_peer", Callable()) as Callable
 	weapon_impact_sfx_cb = callbacks.get("weapon_impact_sfx", Callable()) as Callable
+	weapon_id_for_peer_cb = callbacks.get("weapon_id_for_peer", Callable()) as Callable
 
 func rpc_play_death_sfx(target_peer_id: int, impact_position: Vector2, incoming_velocity: Vector2 = Vector2.ZERO) -> void:
 	if combat_effects == null:
@@ -87,6 +89,8 @@ func rpc_spawn_projectile(
 	if projectile == null:
 		return
 	var owner_player := players.get(owner_peer_id, null) as NetPlayer
+	var equipped_weapon_id := _weapon_id_for_peer(owner_peer_id)
+	var matches_equipped_weapon := equipped_weapon_id.is_empty() or equipped_weapon_id == weapon_id
 	var should_play_owner_feedback := true
 	if weapon_id == "shotgun":
 		var now_msec := Time.get_ticks_msec()
@@ -99,9 +103,9 @@ func rpc_spawn_projectile(
 		var current_visual_id := ""
 		if owner_player.has_method("get_current_weapon_visual_id"):
 			current_visual_id = str(owner_player.call("get_current_weapon_visual_id")).strip_edges().to_lower()
-		if current_visual_id != weapon_id:
+		if matches_equipped_weapon and current_visual_id != weapon_id:
 			owner_player.set_weapon_visual(_weapon_visual_for_peer(owner_peer_id, weapon_id))
-		if should_play_owner_feedback:
+		if should_play_owner_feedback and matches_equipped_weapon:
 			owner_player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
 			owner_player.set_reload_audio_stream(_weapon_reload_sfx(weapon_id))
 			owner_player.play_shot_recoil()
@@ -112,7 +116,7 @@ func rpc_spawn_projectile(
 		lag_comp_ms,
 		owner_peer_id == local_peer_id
 	)
-	if should_play_owner_feedback and owner_peer_id == local_peer_id and camera_shake != null:
+	if should_play_owner_feedback and matches_equipped_weapon and owner_peer_id == local_peer_id and camera_shake != null:
 		camera_shake.add_shake(projectile_weapon.camera_shake_per_shot())
 	if local_visual_advance_ms > 0:
 		projectile.step(float(local_visual_advance_ms) / 1000.0)
@@ -174,6 +178,11 @@ func _weapon_visual_for_peer(peer_id: int, weapon_id: String) -> Dictionary:
 	if weapon_visual_for_peer_cb.is_valid():
 		return weapon_visual_for_peer_cb.call(peer_id, weapon_id) as Dictionary
 	return _weapon_visual_for_id(weapon_id)
+
+func _weapon_id_for_peer(peer_id: int) -> String:
+	if weapon_id_for_peer_cb.is_valid():
+		return str(weapon_id_for_peer_cb.call(peer_id)).strip_edges().to_lower()
+	return ""
 
 func _weapon_impact_sfx(weapon_id: String) -> AudioStream:
 	if weapon_impact_sfx_cb.is_valid():

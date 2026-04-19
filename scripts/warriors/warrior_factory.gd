@@ -26,6 +26,11 @@ const VARN_WARRIOR := preload("res://scripts/warriors/varn_warrior.gd")
 const LALOU_WARRIOR := preload("res://scripts/warriors/lalou_warrior.gd")
 const M4_WARRIOR := preload("res://scripts/warriors/m4_warrior.gd")
 const RP_WARRIOR := preload("res://scripts/warriors/rp_warrior.gd")
+const AGELIKOULA_WARRIOR := preload("res://scripts/warriors/agelikoula_warrior.gd")
+const CRASHOUT_WARRIOR := preload("res://scripts/warriors/crashout_warrior.gd")
+const CTRLALT_WARRIOR := preload("res://scripts/warriors/ctrlalt_warrior.gd")
+const SINK_WARRIOR := preload("res://scripts/warriors/sink_warrior.gd")
+const WOMAN_WARRIOR := preload("res://scripts/warriors/woman_warrior.gd")
 
 static func create_warrior(warrior_id: String) -> WarriorProfile:
 	match warrior_id.to_lower():
@@ -67,15 +72,25 @@ static func create_warrior(warrior_id: String) -> WarriorProfile:
 			return M4_WARRIOR.new()
 		"rp":
 			return RP_WARRIOR.new()
+		"agelikoula":
+			return AGELIKOULA_WARRIOR.new()
+		"crashout":
+			return CRASHOUT_WARRIOR.new()
+		"ctrlalt":
+			return CTRLALT_WARRIOR.new()
+		"sink":
+			return SINK_WARRIOR.new()
+		"woman":
+			return WOMAN_WARRIOR.new()
 		_:
 			push_error("Unknown warrior: %s" % warrior_id)
 			return null
 
 static func is_valid_warrior(warrior_id: String) -> bool:
-	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp"]
+	return warrior_id.to_lower() in ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp", "agelikoula", "crashout", "ctrlalt", "sink", "woman"]
 
 static func get_all_warrior_ids() -> Array[String]:
-	return ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp"]
+	return ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp", "agelikoula", "crashout", "ctrlalt", "sink", "woman"]
 
 static func get_warrior_name(warrior_id: String) -> String:
 	match warrior_id.to_lower():
@@ -117,5 +132,15 @@ static func get_warrior_name(warrior_id: String) -> String:
 			return "M4"
 		"rp":
 			return "Raining Pleasure"
+		"agelikoula":
+			return "Agelikoula"
+		"crashout":
+			return "CrashOut"
+		"ctrlalt":
+			return "Ctrlalt"
+		"sink":
+			return "Sink"
+		"woman":
+			return "Woman"
 		_:
 			return "Unknown"
