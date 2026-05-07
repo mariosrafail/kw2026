@@ -47,6 +47,7 @@ services:
     container_name: kw_public_proxy
     depends_on:
       - kw_server
+      - kw_auth_api
       - kw_updates_http
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

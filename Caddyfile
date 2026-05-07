@@ -5,6 +5,14 @@ play.outrage.ink, updates.outrage.ink {
 		reverse_proxy kw_server:8080
 	}
 
+	handle /auth {
+		redir /auth/ 308
+	}
+
+	handle_path /auth/* {
+		reverse_proxy kw_auth_api:8090
+	}
+
 	handle {
 		reverse_proxy kw_updates_http:80
 	}
