@@ -1,0 +1,11 @@
+play.outrage.ink, updates.outrage.ink {
+	encode gzip
+
+	handle /ws* {
+		reverse_proxy kw_server:8080
+	}
+
+	handle {
+		reverse_proxy kw_updates_http:80
+	}
+}

@@ -31,7 +31,10 @@ window/stretch/aspect="expand"
 
 [kw]
 
-auth_api_base_url="http://192.168.2.11:8081/auth"
+auth_api_base_url="https://play.outrage.ink/auth"
+default_server_host="wss://play.outrage.ink/ws"
+default_server_port=8080
+network_transport="websocket"
 
 [rendering]
 

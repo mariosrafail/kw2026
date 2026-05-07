@@ -1,6 +1,8 @@
 extends RefCounted
 class_name SessionController
 
+const MULTIPLAYER_PEER_FACTORY := preload("res://scripts/network/multiplayer_peer_factory.gd")
+
 var multiplayer: MultiplayerAPI
 var status_label: Label
 var host_input: LineEdit
@@ -147,7 +149,7 @@ func start_server(port: int) -> void:
 		port = 8080
 
 	var target_port := port
-	var peer := ENetMultiplayerPeer.new()
+	var peer: MultiplayerPeer = null
 	var err := FAILED
 	var attempted_ports: Dictionary = {}
 	for step in range(0, 24):
@@ -155,8 +157,9 @@ func start_server(port: int) -> void:
 		if candidate_port < 1 or candidate_port > 65535:
 			continue
 		attempted_ports[candidate_port] = true
-		var candidate_peer := ENetMultiplayerPeer.new()
-		err = candidate_peer.create_server(candidate_port, max_clients)
+		var result := MULTIPLAYER_PEER_FACTORY.create_server_peer(candidate_port, max_clients)
+		var candidate_peer := result.get("peer", null) as MultiplayerPeer
+		err = int(result.get("error", FAILED))
 		if err == OK:
 			peer = candidate_peer
 			target_port = candidate_port
@@ -166,8 +169,9 @@ func start_server(port: int) -> void:
 			var candidate_port := int(fallback_port)
 			if attempted_ports.has(candidate_port):
 				continue
-			var candidate_peer := ENetMultiplayerPeer.new()
-			err = candidate_peer.create_server(candidate_port, max_clients)
+			var result := MULTIPLAYER_PEER_FACTORY.create_server_peer(candidate_port, max_clients)
+			var candidate_peer := result.get("peer", null) as MultiplayerPeer
+			err = int(result.get("error", FAILED))
 			if err == OK:
 				peer = candidate_peer
 				target_port = candidate_port
@@ -186,7 +190,7 @@ func start_server(port: int) -> void:
 	_reset_runtime_state()
 	if status_label != null:
 		status_label.text = "Status: Server running on port %d" % target_port
-	_append_log("Server started on port %d." % target_port)
+	_append_log("Server started on port %d using %s." % [target_port, MULTIPLAYER_PEER_FACTORY.transport()])
 	_refresh_ui()
 
 func start_client(host: String, port: int, reset_attempt_chain: bool = true, lobby_scene_mode: bool = false) -> void:
@@ -203,8 +207,9 @@ func start_client(host: String, port: int, reset_attempt_chain: bool = true, lob
 			connect_retry.set_current_host(host)
 		connect_retry.reset_timer()
 
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(host, port)
+	var result := MULTIPLAYER_PEER_FACTORY.create_client_peer(host, port)
+	var peer := result.get("peer", null) as MultiplayerPeer
+	var err := int(result.get("error", FAILED))
 	if err != OK:
 		_append_log("Client error: %s" % error_string(err))
 		return
@@ -216,7 +221,7 @@ func start_client(host: String, port: int, reset_attempt_chain: bool = true, lob
 		_set_lobby_status("Connecting to server...")
 	if status_label != null:
 		status_label.text = "Status: Connecting to %s:%d..." % [host, port]
-	_append_log("Connecting to %s:%d ..." % [host, port])
+	_append_log("Connecting to %s using %s ..." % [str(result.get("endpoint", "%s:%d" % [host, port])), str(result.get("transport", ""))])
 	_refresh_ui()
 
 func stop_server() -> void:

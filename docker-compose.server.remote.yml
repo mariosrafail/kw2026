@@ -6,6 +6,8 @@ services:
     container_name: kw_server
     environment:
       KW_GAME_PORT: ${KW_GAME_PORT:-8080}
+      KW_NETWORK_TRANSPORT: "websocket"
     ports:
       - "${KW_GAME_PORT:-8080}:${KW_GAME_PORT:-8080}/udp"
+      - "${KW_GAME_PORT:-8080}:${KW_GAME_PORT:-8080}/tcp"
     restart: unless-stopped

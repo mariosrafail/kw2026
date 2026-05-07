@@ -3,6 +3,7 @@ extends Node
 const MAP_CATALOG_SCRIPT := preload("res://scripts/world/map_catalog.gd")
 const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.gd")
 const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
+const MULTIPLAYER_PEER_FACTORY := preload("res://scripts/network/multiplayer_peer_factory.gd")
 signal connected_to_lobby_server
 signal lobby_connection_failed
 signal lobby_server_disconnected
@@ -68,15 +69,16 @@ func connect_to_server(host: String = "127.0.0.1", port: int = 8080) -> void:
 		mp.multiplayer_peer.close()
 		mp.multiplayer_peer = null
 
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(_last_host, _last_port)
+	var result := MULTIPLAYER_PEER_FACTORY.create_client_peer(_last_host, _last_port)
+	var peer := result.get("peer", null) as MultiplayerPeer
+	var err := int(result.get("error", FAILED))
 	_log("create_client err=%d" % err)
 	if err != OK:
 		_log("create_client failed immediately")
 		lobby_connection_failed.emit()
 		return
 	mp.multiplayer_peer = peer
-	_log("multiplayer peer assigned")
+	_log("multiplayer peer assigned transport=%s endpoint=%s" % [str(result.get("transport", "")), str(result.get("endpoint", ""))])
 
 func disconnect_from_server() -> void:
 	var mp := multiplayer
@@ -147,11 +149,14 @@ func host_local_match(map_id: String = "", mode_id: String = "deathmatch") -> bo
 		mp.multiplayer_peer.close()
 		mp.multiplayer_peer = null
 
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(_last_port, 8)
+	var result := MULTIPLAYER_PEER_FACTORY.create_server_peer(_last_port, 8)
+	var peer := result.get("peer", null) as MultiplayerPeer
+	var err := int(result.get("error", FAILED))
 	_log("host_local_match path=LOCAL_FALLBACK create_server err=%d port=%d map=%s mode=%s" % [err, _last_port, normalized_map, normalized_mode])
 	if err != OK:
-		err = peer.create_server(7777, 8)
+		result = MULTIPLAYER_PEER_FACTORY.create_server_peer(7777, 8)
+		peer = result.get("peer", null) as MultiplayerPeer
+		err = int(result.get("error", FAILED))
 		_log("host_local_match fallback create_server err=%d port=%d" % [err, 7777])
 	if err != OK:
 		return false

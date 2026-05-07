@@ -11,8 +11,11 @@ services:
       if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; else godot --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; fi"
     volumes:
       - ./:/game
+    environment:
+      KW_NETWORK_TRANSPORT: "websocket"
     ports:
       - "8080:8080/udp"
+      - "8080:8080/tcp"
     restart: unless-stopped
 
   kw_auth_api:
@@ -38,3 +41,22 @@ services:
     ports:
       - "8081:80"
     restart: unless-stopped
+
+  kw_public_proxy:
+    image: caddy:2-alpine
+    container_name: kw_public_proxy
+    depends_on:
+      - kw_server
+      - kw_updates_http
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - kw_caddy_data:/data
+      - kw_caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
+volumes:
+  kw_caddy_data:
+  kw_caddy_config:

@@ -80,7 +80,7 @@ func resolve_server_host_port() -> Dictionary:
 	return resolved
 
 func resolve_auth_api_host_port() -> Dictionary:
-	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://updates.outrage.ink:8081/auth")).strip_edges()
+	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "https://play.outrage.ink/auth")).strip_edges()
 	if configured.is_empty():
 		return {"host": "", "port": 8080}
 	var scheme_idx := configured.find("://")
