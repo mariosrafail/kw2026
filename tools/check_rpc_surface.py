@@ -9,6 +9,7 @@ RUNTIME_PATH = ROOT / "scripts" / "app" / "runtime_rpc_logic.gd"
 RUNTIME_CONTROLLER_PATH = ROOT / "scripts" / "app" / "runtime_controller.gd"
 BRIDGE_PATH = ROOT / "scripts" / "ui" / "main_menu" / "lobby_rpc_bridge.gd"
 MAIN_PATH = ROOT / "scripts" / "main.gd"
+SERVER_BOOT_PATH = ROOT / "scripts" / "server" / "server_boot.gd"
 
 
 FUNC_RE = re.compile(r"^\s*func\s+(_rpc_[A-Za-z0-9_]+)\s*\((.*)\)\s*->\s*([A-Za-z0-9_]+)\s*:\s*$")
@@ -114,6 +115,7 @@ def main() -> int:
     runtime = parse_rpc_methods(RUNTIME_PATH)
     runtime_controller = parse_rpc_methods(RUNTIME_CONTROLLER_PATH)
     bridge = parse_rpc_methods(BRIDGE_PATH)
+    server_boot = parse_rpc_methods(SERVER_BOOT_PATH)
     gameplay_root = dict(canonical)
     gameplay_root.update(runtime_controller)
 
@@ -125,6 +127,13 @@ def main() -> int:
         "lobby_rpc_bridge.gd",
         [CANONICAL_PATH, RUNTIME_CONTROLLER_PATH],
         [BRIDGE_PATH],
+    ))
+    errors.extend(compare_signature_sets("server_boot.gd", gameplay_root, server_boot))
+    errors.extend(compare_rpc_annotations("server_boot.gd", gameplay_root, server_boot))
+    errors.extend(compare_rpc_order(
+        "server_boot.gd",
+        [CANONICAL_PATH, RUNTIME_CONTROLLER_PATH],
+        [SERVER_BOOT_PATH],
     ))
     errors.extend(check_main_is_thin(MAIN_PATH))
 

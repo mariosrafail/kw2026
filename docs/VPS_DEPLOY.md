@@ -123,4 +123,4 @@ The production launcher config should use:
 
 ## Notes
 
-The dedicated server starts from `res://scenes/server_bootstrap.tscn`, not the UI lobby scene. This keeps the headless server from depending on UI-only resources such as fonts while still using the same runtime networking stack.
+The dedicated server starts from `res://scenes/server_boot.tscn`, not the UI lobby scene. This keeps the headless server from depending on UI-only resources such as fonts while still using the same runtime networking stack.
