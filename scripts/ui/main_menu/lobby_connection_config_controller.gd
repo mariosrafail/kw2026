@@ -102,6 +102,26 @@ func resolve_auth_api_host_port() -> Dictionary:
 func build_connect_candidates() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var seen := {}
+
+	# Temporary ONLINE web mode: keep a single public websocket target only.
+	# Avoid localhost/127/private and auth-site port 8081 candidates.
+	if OS.has_feature("web") and _host != null:
+		var owner := _host.get("_host") as Control
+		var network_mode := ""
+		if owner != null and owner.has_meta("kw_network_mode"):
+			network_mode = str(owner.get_meta("kw_network_mode")).strip_edges().to_lower()
+		if network_mode == "online":
+			var forced_host := str(ProjectSettings.get_setting("kw/default_server_host", "stinis.ddns.net")).strip_edges()
+			var forced_port := int(ProjectSettings.get_setting("kw/default_server_port", 8080))
+			if forced_host.is_empty():
+				forced_host = "stinis.ddns.net"
+			if forced_port < 1 or forced_port > 65535:
+				forced_port = 8080
+			out.append({"host": forced_host, "port": forced_port})
+			if _host.has_method("_log"):
+				_host.call("_log", "connect candidates forced ONLINE web=%s" % str(out))
+			return out
+
 	var resolved_primary := resolve_server_host_port()
 	var from_args := resolve_server_host_port_from_args(
 		str(resolved_primary.get("host", "")).strip_edges(),

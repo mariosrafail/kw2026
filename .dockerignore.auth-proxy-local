@@ -1,0 +1,13 @@
+.git
+assets
+build
+updates_site
+launcher/bin
+launcher/obj
+exports
+*.aseprite
+*.png
+*.wav
+*.mp3
+*.pck
+*.exe

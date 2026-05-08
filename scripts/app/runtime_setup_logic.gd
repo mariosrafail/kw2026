@@ -404,7 +404,7 @@ func _configure_services() -> void:
 		{
 			"submit_input": Callable(self, "_send_input_rpc"),
 			"is_gameplay_locked": Callable(self, "_is_gameplay_locked"),
-			"override_input_state": Callable(combat_flow_service, "override_local_input_state"),
+			"override_input_state": Callable(self, "_override_local_input_state"),
 			"camera_focus_state": Callable(combat_flow_service, "camera_focus_state_for_peer"),
 			"weapon_id_for_peer": Callable(self, "_weapon_id_for_peer")
 		},

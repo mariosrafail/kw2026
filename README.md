@@ -301,6 +301,18 @@ Auth base URL options:
 - Direct auth API: `http://<server-ip>:8090` (works without nginx / updates site)
 - Nginx proxy (optional profile): `http://<server-ip>:${KW_UPDATES_PORT:-8081}/auth`
 
+For host nginx in front of the remote stack, route `/auth/*` to FastAPI on `127.0.0.1:8090` and strip `/auth`:
+
+```nginx
+location /auth/ {
+    proxy_pass http://127.0.0.1:8090/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
 ---
 
 ## Known Issues & Tech Debt

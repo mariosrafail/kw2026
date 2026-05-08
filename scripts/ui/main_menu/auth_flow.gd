@@ -9,6 +9,8 @@ const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
+const WEB_ONLINE_AUTH_API_BASE_URL := "http://stinis.ddns.net:8081/auth"
+const WEB_PRODUCTION_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
 const WEAPON_AK47 := DATA.WEAPON_AK47
@@ -21,6 +23,22 @@ static var _runtime_session_api_base_url := ""
 
 func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	resolve_auth_profile(host)
+	if OS.has_feature("web"):
+		# In web, prefer same-origin auth base: window.location.origin + "/auth".
+		var web_origin := _web_browser_origin()
+		var web_auth_base := _web_online_auth_api_base_url()
+		var is_secure_context := bool(JavaScriptBridge.eval("window.isSecureContext === true"))
+		var web_protocol := str(JavaScriptBridge.eval("window.location.protocol")).strip_edges()
+		var web_audio_enabled := bool(JavaScriptBridge.eval("window.KW_WEB_AUDIO_ENABLED === true"))
+		print("[WEB] secure context = %s" % str(is_secure_context))
+		print("[WEB] protocol = %s" % web_protocol)
+		print("[WEB] audio enabled = %s" % str(web_audio_enabled))
+		print("[AUTH] browser origin = %s" % web_origin)
+		host.set("_auth_profile", "default")
+		ProjectSettings.set_setting(AUTH_PROFILE_SETTING, "default")
+		host.set_meta("kw_force_auth_api_base_url", web_auth_base)
+		ProjectSettings.set_setting("kw/auth_api_base_url", web_auth_base)
+		auth_clear_persisted_session(host)
 	host.set("_auth_api_base_url", _normalize_api_base_url(str(ProjectSettings.get_setting("kw/auth_api_base_url", api_base_url_default)).strip_edges()))
 	var forced_api_base := _forced_api_base_url(host)
 	if not forced_api_base.is_empty():
@@ -31,6 +49,9 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 		var trimmed := str(host.get("_auth_api_base_url"))
 		host.set("_auth_api_base_url", trimmed.substr(0, trimmed.length() - 1))
 	auth_rebuild_login_base_candidates(host)
+	print("[AUTH] normalized auth base url = %s" % str(host.get("_auth_api_base_url")))
+	print("[AUTH] final auth base url = %s" % str(host.get("_auth_api_base_url")))
+	print("[AUTH] login url = %s/login" % auth_login_current_base_url(host))
 
 	auth_recreate_http_request(host)
 
@@ -130,6 +151,7 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	var pass_input := LineEdit.new()
 	pass_input.placeholder_text = "Password"
 	pass_input.secret = true
+	pass_input.secret_character = "*"
 	pass_input.text = DEFAULT_AUTH_PASSWORD
 	pass_input.custom_minimum_size = Vector2(0, 34)
 	pass_input.add_theme_stylebox_override("normal", field_style)
@@ -220,7 +242,7 @@ func auth_submit_login(host: Control) -> void:
 		host.set("_auth_pending_action", "")
 		auth_stop_request_watchdog(host)
 		if auth_status_label != null:
-			auth_status_label.text = "Login request failed (%s)" % str(err)
+			auth_status_label.text = "Login request failed (%s) url=%s/login" % [str(err), auth_login_current_base_url(host)]
 		if auth_login_button != null:
 			auth_login_button.disabled = false
 
@@ -437,6 +459,11 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 	if not action.is_empty() and host.has_method("_hide_menu_loading_overlay"):
 		host.call("_hide_menu_loading_overlay")
 	var text := body.get_string_from_utf8()
+	var login_url := "%s/login" % auth_login_current_base_url(host)
+	print("[AUTH] final auth base url = %s" % str(host.get("_auth_api_base_url")))
+	print("[AUTH] final login url = %s" % login_url)
+	print("[AUTH] response code = %d action=%s" % [response_code, action])
+	print("[AUTH] response body = %s" % text)
 	var parsed: Variant = null
 	var trimmed := text.strip_edges()
 	if not trimmed.is_empty() and (trimmed.begins_with("{") or trimmed.begins_with("[")):
@@ -447,9 +474,10 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 	var auth_login_button := host.get("_auth_login_button") as Button
 
 	if action == "login":
+		var is_web := OS.has_feature("web")
 		var login_base_candidates := host.get("_auth_login_base_url_candidates") as PackedStringArray
 		var login_base_index := int(host.get("_auth_login_base_url_index"))
-		if (response_code == 404 or response_code == 0) and login_base_index < login_base_candidates.size() - 1:
+		if (response_code == 404 or (response_code == 0 and not is_web)) and login_base_index < login_base_candidates.size() - 1:
 			host.set("_auth_login_base_url_index", login_base_index + 1)
 			print("[AUTH][LOGIN] code=%d on login endpoint, retry with %s" % [response_code, auth_login_current_base_url(host)])
 			host.set("_auth_pending_action", "login")
@@ -458,13 +486,13 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 				return
 			host.set("_auth_pending_action", "")
 			if auth_status_label != null:
-				auth_status_label.text = "Login request failed (%s)" % str(retry_err)
+				auth_status_label.text = "Login request failed (%s) url=%s/login" % [str(retry_err), auth_login_current_base_url(host)]
 			if auth_login_button != null:
 				auth_login_button.disabled = false
 			return
 		if response_code < 200 or response_code >= 300 or not (parsed is Dictionary):
 			if auth_status_label != null:
-				auth_status_label.text = "Login failed (%d)" % response_code
+				auth_status_label.text = "Login failed (%d) url=%s/login" % [response_code, auth_login_current_base_url(host)]
 			if auth_login_button != null:
 				auth_login_button.disabled = false
 			host.set("_auth_timeout_retry_attempts", 0)
@@ -629,7 +657,11 @@ func auth_on_logout_pressed(host: Control) -> void:
 		host.call("_hide_menu_loading_overlay")
 
 func auth_url(host: Control, path: String) -> String:
-	return "%s%s" % [str(host.get("_auth_api_base_url")), path]
+	var base := str(host.get("_auth_api_base_url")).strip_edges().trim_suffix("/")
+	var clean_path := path.strip_edges()
+	if not clean_path.begins_with("/"):
+		clean_path = "/" + clean_path
+	return base + clean_path
 
 func auth_login_current_base_url(host: Control) -> String:
 	var candidates := host.get("_auth_login_base_url_candidates") as PackedStringArray
@@ -666,23 +698,17 @@ func auth_trim_suffix(url: String, suffix: String) -> String:
 
 func auth_rebuild_login_base_candidates(host: Control) -> void:
 	var result := PackedStringArray()
+	var is_web := OS.has_feature("web")
 	var normalized := str(host.get("_auth_api_base_url")).strip_edges()
 	if not normalized.is_empty():
 		_append_login_base_candidate(result, normalized)
-		var parts := _split_base_url(normalized)
-		var scheme := str(parts.get("scheme", "http"))
-		var hostname := str(parts.get("hostname", ""))
-		var suffix := str(parts.get("suffix", ""))
-		var has_explicit_port := bool(parts.get("has_explicit_port", false))
-		var port := int(parts.get("port", -1))
-		if not hostname.is_empty():
-			if suffix == "/auth":
-				_append_login_base_candidate(result, _compose_base_url(scheme, hostname, -1, suffix, false))
-				_append_login_base_candidate(result, _compose_base_url("http", hostname, 8090, "", true))
-				if has_explicit_port and port == 8081:
-					_append_login_base_candidate(result, _compose_base_url(scheme, hostname, 8080, suffix, true))
-			elif suffix.is_empty():
-				_append_login_base_candidate(result, _compose_base_url(scheme, hostname, port, "/auth", has_explicit_port))
+		# Keep web base strict to avoid malformed fallback URLs (e.g. http:///host...).
+		# Desktop mode may still include direct internal auth fallback candidates.
+		if not is_web:
+			var parts := _split_base_url(normalized)
+			var hostname := str(parts.get("hostname", ""))
+			var suffix := str(parts.get("suffix", ""))
+			if not hostname.is_empty() and suffix == "/auth":
 				_append_login_base_candidate(result, _compose_base_url("http", hostname, 8090, "", true))
 	host.set("_auth_login_base_url_candidates", result)
 	host.set("_auth_login_base_url_index", 0)
@@ -695,6 +721,18 @@ func auth_request_login_with_current_candidate(host: Control) -> int:
 		host.call("_show_menu_loading_overlay", "LOGGING IN...")
 	var auth_user_input := host.get("_auth_user_input") as LineEdit
 	var url := "%s/login" % auth_login_current_base_url(host)
+	if _is_malformed_absolute_url(url):
+		print("[AUTH][ERROR] malformed login url = %s" % url)
+		var auth_status_label := host.get("_auth_status_label") as Label
+		var auth_login_button := host.get("_auth_login_button") as Button
+		if auth_status_label != null:
+			auth_status_label.text = "Invalid auth URL: %s" % url
+		if auth_login_button != null:
+			auth_login_button.disabled = false
+		if host.has_method("_hide_menu_loading_overlay"):
+			host.call("_hide_menu_loading_overlay")
+		return ERR_INVALID_PARAMETER
+	print("[AUTH] login url = %s" % url)
 	print("[AUTH][LOGIN] request url=%s user=%s" % [url, (auth_user_input.text.strip_edges() if auth_user_input != null else "")])
 	var err := auth_http.request(
 		url,
@@ -776,15 +814,16 @@ func auth_on_request_watchdog_timeout(host: Control) -> void:
 	var auth_login_button := host.get("_auth_login_button") as Button
 	var auth_status_label := host.get("_auth_status_label") as Label
 	if action == "login":
+		var is_web := OS.has_feature("web")
 		var login_base_candidates := host.get("_auth_login_base_url_candidates") as PackedStringArray
 		var login_base_index := int(host.get("_auth_login_base_url_index"))
-		if login_base_index < login_base_candidates.size() - 1:
+		if not is_web and login_base_index < login_base_candidates.size() - 1:
 			var failed_base := auth_login_current_base_url(host)
 			host.set("_auth_login_base_url_index", login_base_index + 1)
 			host.set("_auth_timeout_retry_attempts", 0)
 			host.set("_auth_pending_action", "login")
 			if auth_status_label != null:
-				auth_status_label.text = "Login timeout on %s, trying %s..." % [failed_base, auth_login_current_base_url(host)]
+				auth_status_label.text = "Login timeout url=%s/login, trying %s/login..." % [failed_base, auth_login_current_base_url(host)]
 			print("[AUTH][LOGIN] timeout on %s, retry with fallback %s" % [failed_base, auth_login_current_base_url(host)])
 			var fallback_err := auth_request_login_with_current_candidate(host)
 			if fallback_err == OK:
@@ -797,7 +836,7 @@ func auth_on_request_watchdog_timeout(host: Control) -> void:
 			return
 		var retries := int(host.get("_auth_timeout_retry_attempts"))
 		var retry_limit := maxi(0, int(host.get("_auth_timeout_retry_limit")))
-		if retries < retry_limit:
+		if not is_web and retries < retry_limit:
 			host.set("_auth_timeout_retry_attempts", retries + 1)
 			host.set("_auth_pending_action", "login")
 			if auth_status_label != null:
@@ -817,7 +856,8 @@ func auth_on_request_watchdog_timeout(host: Control) -> void:
 	if auth_login_button != null:
 		auth_login_button.disabled = false
 	if auth_status_label != null:
-		auth_status_label.text = "%s timeout (%s). Check server/IP and try again." % [action.capitalize(), auth_login_current_base_url(host)]
+		var timeout_url := auth_login_current_base_url(host) + "/login" if action == "login" else str(host.get("_auth_api_base_url"))
+		auth_status_label.text = "%s timeout (url=%s). Check server/IP and try again." % [action.capitalize(), timeout_url]
 	host.set("_auth_timeout_retry_attempts", 0)
 	if action == "profile" and not auth_token.is_empty():
 		host.call("_auth_finalize_without_remote_profile", "Profile timeout. Logged in with local profile only.")
@@ -1088,6 +1128,8 @@ func auth_dev_unlock_all_for_mario(host: Control) -> void:
 	host.call("_set_equipped_weapon_skin", str(host.get("selected_weapon_id")), int(host.get("selected_weapon_skin")))
 
 func auth_restore_runtime_session(host: Control) -> bool:
+	if OS.has_feature("web"):
+		return false
 	var token := str(_runtime_session_token).strip_edges()
 	if token.is_empty():
 		return false
@@ -1114,6 +1156,9 @@ func auth_save_runtime_session(host: Control) -> void:
 	_runtime_session_api_base_url = str(host.get("_auth_api_base_url")).strip_edges()
 
 func resolve_auth_profile(host: Control) -> void:
+	if OS.has_feature("web"):
+		host.set("_auth_profile", "default")
+		return
 	var configured := str(ProjectSettings.get_setting(AUTH_PROFILE_SETTING, "default")).strip_edges()
 	if not configured.is_empty():
 		host.set("_auth_profile", configured)
@@ -1135,6 +1180,8 @@ func session_path(host: Control) -> String:
 	return "user://main_menu_auth_session_%s.json" % str(host.get("_auth_profile")).strip_edges()
 
 func auth_restore_persisted_session(host: Control) -> bool:
+	if OS.has_feature("web"):
+		return false
 	if auth_restore_runtime_session(host):
 		return true
 	var path := session_path(host)
@@ -1186,9 +1233,20 @@ func auth_clear_persisted_session(host: Control) -> void:
 
 func _normalize_api_base_url(raw: String) -> String:
 	var api_base := raw.strip_edges().trim_suffix("/")
+	api_base = api_base.replace("http:///", "http://")
+	api_base = api_base.replace("https:///", "https://")
 	if api_base.is_empty():
 		return api_base
+	var parts := _split_base_url(api_base)
+	var scheme := str(parts.get("scheme", "")).to_lower()
+	var hostname := str(parts.get("hostname", "")).strip_edges()
+	if (scheme == "http" or scheme == "https") and hostname.is_empty():
+		return ""
 	return api_base
+
+func _is_malformed_absolute_url(url: String) -> bool:
+	var trimmed := url.strip_edges().to_lower()
+	return trimmed.begins_with("http:///") or trimmed.begins_with("https:///")
 
 func _forced_api_base_url(host: Control) -> String:
 	if host == null:
@@ -1196,6 +1254,25 @@ func _forced_api_base_url(host: Control) -> String:
 	if not host.has_meta("kw_force_auth_api_base_url"):
 		return ""
 	return _normalize_api_base_url(str(host.get_meta("kw_force_auth_api_base_url")).strip_edges())
+
+func _web_browser_origin() -> String:
+	if not OS.has_feature("web"):
+		return ""
+	var origin := ""
+	origin = str(JavaScriptBridge.eval("window.location.origin")).strip_edges()
+	if origin.begins_with("http://") or origin.begins_with("https://"):
+		return origin
+	return ""
+
+func _web_online_auth_api_base_url() -> String:
+	if not OS.has_feature("web"):
+		return WEB_ONLINE_AUTH_API_BASE_URL
+	var protocol := str(JavaScriptBridge.eval("window.location.protocol")).strip_edges().to_lower()
+	# Netlify/HTTPS production: force the public HTTPS auth endpoint.
+	if protocol == "https:":
+		return _normalize_api_base_url(WEB_PRODUCTION_AUTH_API_BASE_URL)
+	# Temporary HTTP deployment: keep local 8081 auth endpoint.
+	return _normalize_api_base_url(WEB_ONLINE_AUTH_API_BASE_URL)
 
 func _append_login_base_candidate(candidates: PackedStringArray, candidate: String) -> void:
 	var normalized := candidate.strip_edges().trim_suffix("/")

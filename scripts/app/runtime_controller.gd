@@ -4,6 +4,7 @@ const CURSOR_MANAGER_SCRIPT_PATH := "res://scripts/ui/cursor_manager.gd"
 const MINIMAP_HUD_SCRIPT_PATH := "res://scripts/ui/minimap/minimap_hud.gd"
 const SKILL_HUD_SCRIPT_PATH := "res://scripts/ui/skill_hud.gd"
 const SKULL_FFA_INTRO_CONTROLLER_SCRIPT_PATH := "res://scripts/world/skull_ffa_match_intro_controller.gd"
+const MOBILE_TOUCH_CONTROLS_SCENE := preload("res://scenes/ui/mobile_touch_controls.tscn")
 const CURSOR_MANAGER_NAME := "CursorManager"
 const FIGHT_SOUNDTRACK_PATH := "res://assets/sounds/soundtrack/fight_soundtrack.MP3"
 const FIGHT_SOUNDTRACK_FALLBACK := preload("res://assets/sounds/soundtrack/fight_soundtrack.MP3")
@@ -99,6 +100,8 @@ var _rt_round_transition_message := ""
 var _rt_skull_mode_rounds = SKULL_MODE_RUNTIME_ROUNDS_SCRIPT.new()
 var _rt_skull_mode_br = SKULL_MODE_RUNTIME_BR_SCRIPT.new()
 var _rt_skull_mode_deathmatch = SKULL_MODE_RUNTIME_DEATHMATCH_SCRIPT.new()
+var _rt_mobile_touch_controls: MobileTouchControls = null
+var _rt_mobile_last_aim_dir := Vector2.RIGHT
 
 const RPC_ROOT_NODE_NAME := "GameRoot"
 
@@ -135,6 +138,7 @@ func _ready() -> void:
 	_apply_screen_shake_pref_from_menu_state()
 	_connect_local_signals()
 	_setup_ui_defaults()
+	_ensure_mobile_touch_controls()
 	if ui_controller != null and ui_controller.has_method("set_ping_visible"):
 		ui_controller.call("set_ping_visible", _rt_ping_visible)
 	_ensure_skill_hud()
@@ -324,7 +328,101 @@ func _physics_process(delta: float) -> void:
 	_tick_dead_player_visibility()
 	_tick_local_dead_visibility()
 	_tick_minimap_visibility()
+	_tick_mobile_touch_controls()
 	_tick_skull_runtime_hud(delta)
+
+func _ensure_mobile_touch_controls() -> void:
+	if client_hud_layer == null:
+		return
+	if _rt_mobile_touch_controls != null and is_instance_valid(_rt_mobile_touch_controls):
+		return
+	var node := MOBILE_TOUCH_CONTROLS_SCENE.instantiate() as MobileTouchControls
+	if node == null:
+		return
+	node.name = "MobileTouchControls"
+	client_hud_layer.add_child(node)
+	_rt_mobile_touch_controls = node
+
+func _tick_mobile_touch_controls() -> void:
+	if _rt_mobile_touch_controls == null or not is_instance_valid(_rt_mobile_touch_controls):
+		return
+	var orientation_overlay_visible := _is_mobile_orientation_overlay_visible()
+	var in_match := _is_local_player_spawned() and not _local_player_is_dead_or_waiting_respawn()
+	var blocked_by_ui := false
+	if esc_overlay != null and esc_overlay.visible:
+		blocked_by_ui = true
+	if purchase_overlay != null and purchase_overlay.visible:
+		blocked_by_ui = true
+	if loading_overlay != null and loading_overlay.visible:
+		blocked_by_ui = true
+	var should_show := role == Role.CLIENT and in_match and not blocked_by_ui and not orientation_overlay_visible
+	if should_show:
+		_rt_mobile_touch_controls.show_controls()
+	else:
+		_rt_mobile_touch_controls.hide_controls()
+
+	if not should_show:
+		return
+	if _rt_mobile_touch_controls.consume_ultimate_pressed():
+		_try_cast_skill2()
+	if _rt_mobile_touch_controls.consume_reload_pressed():
+		_try_reload()
+
+func _is_mobile_orientation_overlay_visible() -> bool:
+	var tree := get_tree()
+	if tree == null:
+		return false
+	var root := tree.get_root()
+	if root == null:
+		return false
+	var candidates := root.find_children("MobileOrientationOverlay", "", true, false)
+	for candidate_value in candidates:
+		var candidate := candidate_value as CanvasItem
+		if candidate != null and candidate.visible:
+			return true
+	return false
+
+func _override_local_input_state(peer_id: int, base_state: Dictionary) -> Dictionary:
+	var resolved := base_state
+	if combat_flow_service != null and combat_flow_service.has_method("override_local_input_state"):
+		resolved = combat_flow_service.override_local_input_state(peer_id, resolved)
+	if _rt_mobile_touch_controls == null or not is_instance_valid(_rt_mobile_touch_controls):
+		return resolved
+	if not _rt_mobile_touch_controls.is_mobile_runtime() or not _rt_mobile_touch_controls.visible:
+		return resolved
+	if multiplayer == null or peer_id != multiplayer.get_unique_id():
+		return resolved
+
+	var movement := _rt_mobile_touch_controls.get_movement_vector()
+	var aim_vec := _rt_mobile_touch_controls.get_aim_vector()
+	var shoot_held := _rt_mobile_touch_controls.is_shoot_held()
+	var jump_held := _rt_mobile_touch_controls.is_jump_held()
+	var jump_pressed := _rt_mobile_touch_controls.consume_jump_pressed()
+
+	var axis := clampf(movement.x, -1.0, 1.0)
+	if absf(axis) < 0.1:
+		axis = 0.0
+
+	if aim_vec.length() >= 0.22:
+		_rt_mobile_last_aim_dir = aim_vec.normalized()
+	elif shoot_held and _rt_mobile_last_aim_dir.length_squared() <= 0.0001:
+		_rt_mobile_last_aim_dir = Vector2.RIGHT
+
+	var local_peer_id := multiplayer.get_unique_id()
+	var local_player := players.get(local_peer_id, null) as NetPlayer
+	var base_aim_world := resolved.get("aim_world", Vector2.ZERO) as Vector2
+	if local_player != null:
+		var aim_dir := _rt_mobile_last_aim_dir
+		if aim_dir.length_squared() <= 0.0001:
+			aim_dir = Vector2.RIGHT
+		base_aim_world = local_player.global_position + aim_dir.normalized() * 260.0
+
+	resolved["axis"] = axis
+	resolved["jump_pressed"] = bool(resolved.get("jump_pressed", false)) or jump_pressed
+	resolved["jump_held"] = jump_held
+	resolved["shoot_held"] = shoot_held
+	resolved["aim_world"] = base_aim_world
+	return resolved
 
 func _ensure_skill_hud() -> void:
 	if cooldown_label != null:

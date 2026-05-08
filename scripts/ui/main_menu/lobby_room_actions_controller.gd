@@ -215,8 +215,10 @@ func create_lobby_room() -> void:
 			_host.call("_request_lobby_list_from_server")
 		_host.call("_refresh_lobby_buttons_state")
 		return
-	_host.call("_log", "create_lobby clicked request=%s can_send=%s" % [str(request), str(bool(rpc_bridge.call("can_send_lobby_rpc")))])
-	if not bool(rpc_bridge.call("can_send_lobby_rpc")):
+	var can_send := bool(rpc_bridge.call("can_send_lobby_rpc"))
+	_host.call("_log", "create_lobby clicked request=%s can_send=%s" % [str(request), str(can_send)])
+	_host.call("_log", "[LOBBY] can_send=%s" % str(can_send))
+	if not can_send:
 		_host.set("_pending_create_request", request.duplicate(true))
 		var status_label := _host.get("_status_label") as Label
 		if status_label != null:
@@ -339,8 +341,9 @@ func send_create_lobby_request(request: Dictionary) -> void:
 		_host.call("_log", "create_lobby result=RPC_SENT awaiting server confirmation")
 	var status_label := _host.get("_status_label") as Label
 	if status_label != null:
-		status_label.text = "Creating lobby..." if sent_create else "Still connecting..."
+		status_label.text = "Creating lobby..." if sent_create else "Connecting to server..."
 	if not sent_create:
+		_host.call("_log", "[LOBBY] create lobby request blocked: no connection")
 		_host.set("_action_inflight", false)
 		_host.set("_pending_create_request", request.duplicate(true))
 		_host.call("_request_lobby_list_from_server")

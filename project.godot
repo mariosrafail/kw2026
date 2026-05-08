@@ -31,8 +31,8 @@ window/stretch/aspect="expand"
 
 [kw]
 
-auth_api_base_url="https://play.outrage.ink/auth"
-default_server_host="wss://play.outrage.ink/ws"
+auth_api_base_url="http://stinis.ddns.net:8081/auth"
+default_server_host="stinis.ddns.net"
 default_server_port=8080
 network_transport="websocket"
 

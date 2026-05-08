@@ -1,0 +1,23 @@
+{
+    auto_https off
+}
+
+:80 {
+    encode gzip
+
+    handle /auth {
+        redir /auth/ 308
+    }
+
+    handle_path /auth/* {
+        reverse_proxy kw_auth_api:8090
+    }
+
+    handle /ws* {
+        reverse_proxy kw_server:8080
+    }
+
+    handle {
+        respond "KW backend online through Cloudflare Tunnel" 200
+    }
+}

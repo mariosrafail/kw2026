@@ -1,0 +1,49 @@
+services:
+  kw_server:
+    image: barichello/godot-ci:4.6.1
+    container_name: kw_server
+    working_dir: /game
+    command: >
+      bash -lc "apt-get update &&
+      apt-get install -y --no-install-recommends libfontconfig1 python3-minimal &&
+      rm -rf /var/lib/apt/lists/* &&
+      python3 /game/tools/check_rpc_surface.py &&
+      if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; else godot --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; fi"
+    volumes:
+      - ./:/game
+    environment:
+      KW_NETWORK_TRANSPORT: "websocket"
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  kw_auth_api:
+    build:
+      context: ./tools/auth_api
+    container_name: kw_auth_api
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_API_HOST: "0.0.0.0"
+      AUTH_API_PORT: "8090"
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  kw_public_https_proxy:
+    image: caddy:2-alpine
+    container_name: kw_public_https_proxy
+    depends_on:
+      - kw_server
+      - kw_auth_api
+    volumes:
+      - ./Caddyfile.online-backend:/etc/caddy/Caddyfile:ro
+      - kw_caddy_data:/data
+      - kw_caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
+volumes:
+  kw_caddy_data:
+  kw_caddy_config:

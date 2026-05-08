@@ -1,0 +1,24 @@
+services:
+  kw_auth_api:
+    build:
+      context: ./tools/auth_api
+    container_name: kw_auth_api
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_API_HOST: "0.0.0.0"
+      AUTH_API_PORT: "8090"
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  kw_8081_proxy:
+    image: caddy:2-alpine
+    container_name: kw_8081_proxy
+    depends_on:
+      - kw_auth_api
+    volumes:
+      - ./Caddyfile.auth-proxy.local:/etc/caddy/Caddyfile:ro
+      - ./build/web:/srv/web:ro
+    ports:
+      - "8081:80"
+    restart: unless-stopped

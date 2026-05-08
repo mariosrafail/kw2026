@@ -29,6 +29,8 @@ static func create_client_peer(host: String, port: int) -> Dictionary:
 	if uses_websocket():
 		var ws_peer := WebSocketMultiplayerPeer.new()
 		var url := websocket_url(host, port)
+		print("[NET] transport = websocket")
+		print("[NET] websocket url = %s" % url)
 		return {
 			"peer": ws_peer,
 			"error": ws_peer.create_client(url),
@@ -47,6 +49,8 @@ static func create_client_peer(host: String, port: int) -> Dictionary:
 static func create_server_peer(port: int, max_clients: int = 8) -> Dictionary:
 	if uses_websocket():
 		var ws_peer := WebSocketMultiplayerPeer.new()
+		print("[NET] transport = websocket")
+		print("[NET] websocket url = ws://0.0.0.0:%d" % port)
 		return {
 			"peer": ws_peer,
 			"error": ws_peer.create_server(port, "*"),
@@ -65,9 +69,24 @@ static func create_server_peer(port: int, max_clients: int = 8) -> Dictionary:
 static func websocket_url(host: String, port: int) -> String:
 	var trimmed := host.strip_edges()
 	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
+		print("[NET] final websocket url = %s" % trimmed)
 		return trimmed
 
 	var scheme := "ws"
+	var scheme_override := str(ProjectSettings.get_setting("kw/network_ws_scheme", "")).strip_edges().to_lower()
+	if scheme_override == "ws" or scheme_override == "wss":
+		scheme = scheme_override
+	elif OS.has_feature("web"):
+		var href := str(JavaScriptBridge.eval("window.location.href")).strip_edges()
+		var origin := str(JavaScriptBridge.eval("window.location.origin")).strip_edges()
+		var protocol := str(JavaScriptBridge.eval("window.location.protocol")).strip_edges().to_lower()
+		print("[BROWSER] href = %s" % href)
+		print("[BROWSER] origin = %s" % origin)
+		print("[BROWSER] protocol = %s" % protocol)
+		if protocol == "https:":
+			scheme = "wss"
 	if port == 443:
 		scheme = "wss"
-	return "%s://%s:%d" % [scheme, trimmed, port]
+	var final_url := "%s://%s:%d" % [scheme, trimmed, port]
+	print("[NET] final websocket url = %s" % final_url)
+	return final_url

@@ -61,7 +61,11 @@ app.add_middleware(
 
 
 def _db():
-    return psycopg.connect(SETTINGS.database_url, autocommit=True)
+    return psycopg.connect(SETTINGS.database_url, autocommit=True, connect_timeout=5)
+
+
+def _db_tx():
+    return psycopg.connect(SETTINGS.database_url, autocommit=False, connect_timeout=5)
 
 
 def _init_schema() -> None:
@@ -776,6 +780,7 @@ def register(req: AuthRequest):
 
 @app.post("/login", response_model=AuthResponse)
 def login(req: AuthRequest):
+    log.info("login request received")
     username = _normalize_username(req.username)
     email = _normalize_email(req.email)
     _validate_password(req.password)
@@ -794,32 +799,61 @@ def login(req: AuthRequest):
     else:
         _validate_username(username)
 
-    with _db() as conn:
-        with conn.cursor() as cur:
-            if lookup_is_email:
-                cur.execute(
-                    "select id::text, username, coalesce(email, ''), password_hash from accounts where lower(email) = lower(%s)",
-                    (lookup_value,),
-                )
-            else:
-                cur.execute(
-                    "select id::text, username, coalesce(email, ''), password_hash from accounts where username = %s",
-                    (lookup_value,),
-                )
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=401, detail="invalid credentials")
-            account_id, resolved_username, resolved_email, pw_hash = str(row[0]), str(row[1]), str(row[2] or ""), str(row[3])
+    log.info(
+        "login normalized identity mode=%s value=%s",
+        "email" if lookup_is_email else "username",
+        lookup_value,
+    )
+    log.info("login before database connect")
+    try:
+        with _db() as conn:
+            log.info("login after database connect")
+            with conn.cursor() as cur:
+                if lookup_is_email:
+                    cur.execute(
+                        "select id::text, username, coalesce(email, ''), password_hash from accounts where lower(email) = lower(%s)",
+                        (lookup_value,),
+                    )
+                else:
+                    cur.execute(
+                        "select id::text, username, coalesce(email, ''), password_hash from accounts where username = %s",
+                        (lookup_value,),
+                    )
+                row = cur.fetchone()
+                log.info("login after account query found=%s", bool(row))
+                if not row:
+                    raise HTTPException(status_code=401, detail="invalid credentials")
+                account_id, resolved_username, resolved_email, pw_hash = str(row[0]), str(row[1]), str(row[2] or ""), str(row[3])
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("login database failure")
+        raise HTTPException(status_code=500, detail="database unavailable")
 
+    log.info("login before password verify")
     if not _verify_password(req.password, pw_hash):
+        log.info("login after password verify valid=false")
         raise HTTPException(status_code=401, detail="invalid credentials")
+    log.info("login after password verify valid=true")
 
     if bool(req.force):
-        with _db() as conn:
-            with conn.cursor() as cur:
-                cur.execute("delete from sessions where account_id = %s", (uuid.UUID(account_id),))
+        log.info("login force=true before session cleanup")
+        try:
+            with _db() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("delete from sessions where account_id = %s", (uuid.UUID(account_id),))
+        except Exception:
+            log.exception("login force session cleanup failure")
+            raise HTTPException(status_code=500, detail="database unavailable")
 
-    token = _create_session(account_id)
+    log.info("login before session create")
+    try:
+        token = _create_session(account_id)
+    except Exception:
+        log.exception("login session create failure")
+        raise HTTPException(status_code=500, detail="database unavailable")
+    log.info("login after session create")
+    log.info("login response returned")
     return AuthResponse(token=token, username=resolved_username, email=resolved_email)
 
 
@@ -865,7 +899,7 @@ def purchase_skin(req: PurchaseSkinRequest, authorization: Optional[str] = Heade
         return _profile_for_account(account_uuid, username, email)
 
     # Transaction: check wallet + ownership then deduct + insert.
-    with psycopg.connect(SETTINGS.database_url, autocommit=False) as conn:
+    with _db_tx() as conn:
         with conn.cursor() as cur:
             cur.execute("delete from sessions where expires_at <= now()")
             cur.execute(
@@ -965,7 +999,7 @@ def wallet_update(req: WalletUpdateRequest, authorization: Optional[str] = Heade
 
     account_id, username, email = account
     account_uuid = uuid.UUID(account_id)
-    with psycopg.connect(SETTINGS.database_url, autocommit=False) as conn:
+    with _db_tx() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """

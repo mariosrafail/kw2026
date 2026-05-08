@@ -50,6 +50,7 @@ func connect_to_server(host: String = "127.0.0.1", port: int = 8080) -> void:
 		_last_host = "127.0.0.1"
 	_last_port = clampi(port, 1, 65535)
 	_log("connect_to_server host=%s port=%d" % [_last_host, _last_port])
+	_log("[NET] connecting...")
 
 	var mp := multiplayer
 	if mp == null:
@@ -102,6 +103,7 @@ func request_lobby_list() -> bool:
 	if not _can_send_server_rpc():
 		_log("request_lobby_list blocked can_send=false")
 		return false
+	_log("[LOBBY] lobby list request sent")
 	_log("request_lobby_list rpc_id(1)")
 	_rpc_request_lobby_list.rpc_id(1)
 	return true
@@ -110,6 +112,7 @@ func create_lobby(lobby_name: String, weapon_id: String, character_id: String, m
 	if not _can_send_server_rpc():
 		_log("create_lobby blocked can_send=false")
 		return false
+	_log("[LOBBY] create request sent")
 	var normalized_weapon := weapon_id.strip_edges().to_lower()
 	if normalized_weapon.is_empty():
 		normalized_weapon = "ak47"
@@ -356,16 +359,26 @@ func _bind_multiplayer_signals() -> void:
 func _on_connected_to_server() -> void:
 	_is_connected = true
 	_log("signal connected_to_server local_peer_id=%d host=%s port=%d" % [multiplayer.get_unique_id(), _last_host, _last_port])
+	_log("[NET] connected")
+	_log("[NET] connected = true")
+	_log("[NET] peer status = %d" % MultiplayerPeer.CONNECTION_CONNECTED)
+	_log("[LOBBY] connected = true")
 	connected_to_lobby_server.emit()
 
 func _on_connection_failed() -> void:
 	_is_connected = false
 	_log("signal connection_failed host=%s port=%d" % [_last_host, _last_port])
+	_log("[NET] connection failed")
+	_log("[NET] connected = false")
+	_log("[NET] peer status = %d" % MultiplayerPeer.CONNECTION_DISCONNECTED)
 	lobby_connection_failed.emit()
 
 func _on_server_disconnected() -> void:
 	_is_connected = false
 	_log("signal server_disconnected host=%s port=%d" % [_last_host, _last_port])
+	_log("[NET] disconnected")
+	_log("[NET] connected = false")
+	_log("[NET] peer status = %d" % MultiplayerPeer.CONNECTION_DISCONNECTED)
 	lobby_server_disconnected.emit()
 
 @rpc("any_peer", "reliable")
@@ -531,6 +544,7 @@ func _rpc_lobby_chat_send(_message: String) -> void:
 @rpc("authority", "reliable")
 func _rpc_lobby_list(_entries: Array, _active_lobby_id: int) -> void:
 	_log("rpc lobby_list entries=%d active_lobby_id=%d" % [_entries.size(), _active_lobby_id])
+	_log("[LOBBY] lobby list received count = %d" % _entries.size())
 	self._active_lobby_id = _active_lobby_id
 	_lobby_mode_by_id.clear()
 	_last_active_skull_ruleset = ""

@@ -28,16 +28,19 @@ const MENU_LAYOUT_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_l
 const MENU_LOADOUT_STATE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_loadout_state_controller.gd")
 const MENU_DIALOG_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_dialog_controller.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
+const MOBILE_ORIENTATION_GUARD_SCRIPT := preload("res://scripts/ui/mobile_orientation_guard.gd")
 const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
 const PIXEL_FONT_CHAT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
 const TOXIC_CHAT_BOX_SIZE := Vector2(196.0, 82.0)
 const TOXIC_CHAT_MARGIN_X := 5
 const TOXIC_CHAT_MARGIN_Y := 4
 const TOXIC_CHAT_ROW_SEPARATION := 1
-const AUTH_API_BASE_URL_DEFAULT := "https://play.outrage.ink/auth"
-const ONLINE_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
-const ONLINE_DEFAULT_HOST := "wss://play.outrage.ink/ws"
+const AUTH_API_BASE_URL_DEFAULT := "http://stinis.ddns.net:8081/auth"
+const ONLINE_AUTH_API_BASE_URL := "http://stinis.ddns.net:8081/auth"
+const ONLINE_DEFAULT_HOST := "stinis.ddns.net"
 const DEFAULT_SERVER_PORT := 8080
+const ONLINE_PRODUCTION_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
+const ONLINE_PRODUCTION_WS_URL := "wss://play.outrage.ink/ws"
 const ENABLE_MENU_LOADING_OVERLAY := true
 var MENU_CLR_BASE := MENU_PALETTE.base()
 var MENU_CLR_ACCENT := MENU_PALETTE.accent()
@@ -128,6 +131,7 @@ var _lobby_flow_ctrl := MENU_LOBBY_FLOW_CTRL_SCRIPT.new()
 var _layout_ctrl := MENU_LAYOUT_CTRL_SCRIPT.new()
 var _loadout_state_ctrl := MENU_LOADOUT_STATE_CTRL_SCRIPT.new()
 var _dialog_ctrl := MENU_DIALOG_CTRL_SCRIPT.new()
+var _mobile_orientation_guard = MOBILE_ORIENTATION_GUARD_SCRIPT.new()
 
 @onready var coins_label: Label = %CoinsLabel
 @onready var clk_label: Label = %ClkLabel
@@ -495,6 +499,7 @@ func _ready() -> void:
 	_refresh_selection_context_visuals()
 
 	_connect_signals()
+	_mobile_orientation_guard.configure(self)
 	_show_network_mode_selector()
 	_play_intro_animation_safe()
 	_apply_uniform_button_outlines(self, 0)
@@ -502,6 +507,14 @@ func _ready() -> void:
 	_apply_runtime_palette()
 	if _auth_logged_in:
 		_start_idle_loop()
+
+func _kw_log_mobile_orientation_lock_result() -> void:
+	if not OS.has_feature("web"):
+		return
+	var lock_state := str(JavaScriptBridge.eval("window.KW_ORIENTATION_LOCK_RESULT || ''")).strip_edges()
+	if lock_state.is_empty():
+		lock_state = "unknown"
+	print("[MOBILE] orientation lock result = %s" % lock_state)
 
 func _auth_url(path: String) -> String:
 	return _auth_flow.auth_url(self, path)
@@ -633,14 +646,46 @@ func _show_network_mode_selector() -> void:
 func _apply_selected_network_mode(use_lan: bool) -> void:
 	var auth_base := ONLINE_AUTH_API_BASE_URL
 	var server_host := ONLINE_DEFAULT_HOST
+	var server_port := DEFAULT_SERVER_PORT
+	var ws_scheme_override := "ws"
 	if use_lan:
 		server_host = _detect_best_lan_host()
 		auth_base = "http://%s:8081/auth" % server_host
+	else:
+		# Web production on HTTPS (e.g. Netlify): force HTTPS auth + WSS game endpoint.
+		if OS.has_feature("web"):
+			var web_protocol := str(JavaScriptBridge.eval("window.location.protocol")).strip_edges().to_lower()
+			if web_protocol == "https:":
+				auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
+				server_host = ONLINE_PRODUCTION_WS_URL
+				server_port = 443
+				ws_scheme_override = "wss"
+			else:
+				auth_base = ONLINE_AUTH_API_BASE_URL
+				server_host = ONLINE_DEFAULT_HOST
+				server_port = DEFAULT_SERVER_PORT
+				ws_scheme_override = "ws"
+		else:
+			auth_base = ONLINE_AUTH_API_BASE_URL
 	ProjectSettings.set_setting("kw/auth_api_base_url", auth_base)
 	ProjectSettings.set_setting("kw/default_server_host", server_host)
-	ProjectSettings.set_setting("kw/default_server_port", DEFAULT_SERVER_PORT)
+	ProjectSettings.set_setting("kw/default_server_port", server_port)
+	ProjectSettings.set_setting("kw/network_ws_scheme", ws_scheme_override)
 	set_meta("kw_force_auth_api_base_url", auth_base)
 	set_meta("kw_network_mode", "lan" if use_lan else "online")
+	print("[AUTH] selected network mode = %s" % ("LAN" if use_lan else "ONLINE"))
+	print("[AUTH] selected auth base url = %s" % auth_base)
+	print("[AUTH] selected game host = %s" % server_host)
+	print("[AUTH] selected game port = %d" % server_port)
+	print("[NET] selected mode = %s" % ("LAN" if use_lan else "ONLINE"))
+	print("[NET] game host = %s" % server_host)
+	print("[NET] game port = %d" % server_port)
+	print("[NET] transport = %s" % ("websocket" if OS.has_feature("web") else "enet"))
+	if OS.has_feature("web"):
+		if server_host.begins_with("ws://") or server_host.begins_with("wss://"):
+			print("[NET] websocket url = %s" % server_host)
+		else:
+			print("[NET] websocket url = %s://%s:%d" % [ws_scheme_override, server_host, server_port])
 	if _network_mode_overlay != null and is_instance_valid(_network_mode_overlay):
 		_network_mode_overlay.queue_free()
 	_network_mode_overlay = null
