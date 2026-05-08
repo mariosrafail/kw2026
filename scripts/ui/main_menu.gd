@@ -34,12 +34,17 @@ const TOXIC_CHAT_BOX_SIZE := Vector2(196.0, 82.0)
 const TOXIC_CHAT_MARGIN_X := 5
 const TOXIC_CHAT_MARGIN_Y := 4
 const TOXIC_CHAT_ROW_SEPARATION := 1
-const AUTH_API_BASE_URL_DEFAULT := "http://stinis.ddns.net:8081/auth"
-const ONLINE_AUTH_API_BASE_URL := "http://stinis.ddns.net:8081/auth"
-const ONLINE_DEFAULT_HOST := "stinis.ddns.net"
+const AUTH_API_BASE_URL_DEFAULT := "https://play.outrage.ink/auth"
+const ONLINE_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
+const ONLINE_DEFAULT_HOST := "wss://play.outrage.ink/ws"
 const DEFAULT_SERVER_PORT := 8080
+const ONLINE_PRODUCTION_PORT := 443
 const ONLINE_PRODUCTION_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
 const ONLINE_PRODUCTION_WS_URL := "wss://play.outrage.ink/ws"
+const DIRECT_VPS_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
+const DIRECT_VPS_WS_URL := "ws://64.225.102.179/ws"
+const ENABLE_LAN_MODE_PICKER := false
+const ARG_ENABLE_LAN_PICKER := "--enable-lan-picker"
 const ENABLE_MENU_LOADING_OVERLAY := true
 var MENU_CLR_BASE := MENU_PALETTE.base()
 var MENU_CLR_ACCENT := MENU_PALETTE.accent()
@@ -500,7 +505,7 @@ func _ready() -> void:
 	_refresh_selection_context_visuals()
 
 	_connect_signals()
-	_show_network_mode_selector()
+	_start_default_network_mode()
 	_play_intro_animation_safe()
 	_apply_uniform_button_outlines(self, 0)
 	_apply_main_category_button_brightness()
@@ -562,6 +567,40 @@ func _auth_request_login_with_current_candidate() -> int:
 
 func _setup_auth_gate() -> void:
 	_auth_flow.setup_auth_gate(self, AUTH_API_BASE_URL_DEFAULT)
+
+func _lan_mode_picker_enabled() -> bool:
+	if ENABLE_LAN_MODE_PICKER:
+		return true
+	if bool(ProjectSettings.get_setting("kw/enable_network_mode_picker", false)):
+		return true
+	for raw_arg in OS.get_cmdline_user_args():
+		if str(raw_arg).strip_edges() == ARG_ENABLE_LAN_PICKER:
+			return true
+	return false
+
+func _start_default_network_mode() -> void:
+	if _lan_mode_picker_enabled():
+		_show_network_mode_selector()
+		return
+	# Temporarily disabled: LAN selection is kept for future local testing.
+	# Production currently always starts in ONLINE mode.
+	_show_menu_loading_overlay("Loading online services...")
+	_apply_selected_network_mode(false)
+	call_deferred("_hide_startup_loading_if_auth_idle")
+
+func _hide_startup_loading_if_auth_idle() -> void:
+	if not str(_auth_pending_action).strip_edges().is_empty():
+		return
+	_hide_menu_loading_overlay()
+
+func _format_websocket_endpoint(host: String, port: int, scheme: String) -> String:
+	var trimmed := host.strip_edges()
+	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
+		return trimmed
+	var resolved_scheme := scheme.strip_edges().to_lower()
+	if resolved_scheme != "ws" and resolved_scheme != "wss":
+		resolved_scheme = "ws"
+	return "%s://%s:%d" % [resolved_scheme, trimmed, port]
 
 func _show_network_mode_selector() -> void:
 	if _network_mode_overlay != null and is_instance_valid(_network_mode_overlay):
@@ -646,7 +685,7 @@ func _show_network_mode_selector() -> void:
 func _apply_selected_network_mode(use_lan: bool) -> void:
 	var auth_base := ONLINE_AUTH_API_BASE_URL
 	var server_host := ONLINE_DEFAULT_HOST
-	var server_port := DEFAULT_SERVER_PORT
+	var server_port := ONLINE_PRODUCTION_PORT
 	var ws_scheme_override := "wss"
 	var transport_override := "websocket"
 	var lan_usable := true
@@ -675,7 +714,7 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 		else:
 			auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
 			server_host = ONLINE_PRODUCTION_WS_URL
-			server_port = 443
+			server_port = ONLINE_PRODUCTION_PORT
 			ws_scheme_override = "wss"
 			transport_override = "websocket"
 			print("[NET] LAN mode cannot run from HTTPS public host because browser blocks HTTP LAN requests.")
@@ -684,9 +723,10 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 	else:
 		auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
 		server_host = ONLINE_PRODUCTION_WS_URL
-		server_port = 443
+		server_port = ONLINE_PRODUCTION_PORT
 		ws_scheme_override = "wss"
 		transport_override = "websocket"
+		lan_usable = false
 	ProjectSettings.set_setting("kw/auth_api_base_url", auth_base)
 	ProjectSettings.set_setting("kw/default_server_host", server_host)
 	ProjectSettings.set_setting("kw/default_server_port", server_port)
@@ -712,20 +752,14 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 			print("[NET] LAN blocked reason = %s" % lan_block_reason)
 	print("[NET] selected transport = %s" % transport_override)
 	print("[NET] auth endpoint = %s" % auth_base)
-	print("[NET] game endpoint = %s:%d" % [server_host, server_port])
+	var websocket_endpoint := _format_websocket_endpoint(server_host, server_port, ws_scheme_override)
 	if not use_lan:
-		var ws_endpoint := server_host
-		if not ws_endpoint.begins_with("ws://") and not ws_endpoint.begins_with("wss://"):
-			ws_endpoint = "%s://%s:%d" % [ws_scheme_override, server_host, server_port]
 		print("[NET] mode = ONLINE")
-		print("[NET] auth endpoint = https://play.outrage.ink/auth")
-		print("[NET] websocket endpoint = %s" % ws_endpoint)
+		print("[NET] auth endpoint = %s" % auth_base)
+		print("[NET] websocket endpoint = %s" % websocket_endpoint)
 		print("[NET] route = VPS dedicated server")
-	if OS.has_feature("web"):
-		if server_host.begins_with("ws://") or server_host.begins_with("wss://"):
-			print("[NET] websocket url = %s" % server_host)
-		else:
-			print("[NET] websocket url = %s://%s:%d" % [ws_scheme_override, server_host, server_port])
+	if OS.has_feature("web") and use_lan:
+		print("[NET] websocket endpoint = %s" % websocket_endpoint)
 	if _network_mode_overlay != null and is_instance_valid(_network_mode_overlay):
 		_network_mode_overlay.queue_free()
 	_network_mode_overlay = null

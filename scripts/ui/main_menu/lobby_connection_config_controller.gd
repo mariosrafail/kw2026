@@ -4,6 +4,8 @@ class_name LobbyConnectionConfigController
 
 const CONNECT_FALLBACK_PORTS := [8081]
 const ALLOW_LOCALHOST_LOBBY_CONNECT := false
+const ONLINE_PRODUCTION_HOST := "wss://play.outrage.ink/ws"
+const ONLINE_PRODUCTION_PORT := 443
 
 var _host: Object
 var _browser_hostname_checked := false
@@ -52,7 +54,8 @@ func read_launcher_config_defaults() -> Dictionary:
 		return {
 			"found": true,
 			"host": str(payload.get("default_host", "")).strip_edges(),
-			"port": int(payload.get("default_port", 8080))
+			"port": int(payload.get("default_port", 8080)),
+			"auth_api_base_url": str(payload.get("auth_api_base_url", "")).strip_edges()
 		}
 
 	return {"found": false}
@@ -76,12 +79,48 @@ func resolve_server_host_port() -> Dictionary:
 		port = runtime_port
 	var resolved := resolve_server_host_port_from_args(host, port)
 	if _host != null and _host.has_method("_log"):
-		_host.call("_log", "resolved primary server endpoint=%s:%d config_found=%s" % [
-			str(resolved.get("host", "")),
-			int(resolved.get("port", 0)),
+		_host.call("_log", "resolved primary server endpoint=%s config_found=%s" % [
+			_format_endpoint(str(resolved.get("host", "")), int(resolved.get("port", 0))),
 			str(bool(config.get("found", false)))
 		])
 	return resolved
+
+func _format_endpoint(host: String, port: int) -> String:
+	var trimmed := host.strip_edges()
+	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
+		return trimmed
+	return "%s:%d" % [trimmed, port]
+
+func _endpoint_hostname(host: String) -> String:
+	var trimmed := host.strip_edges().to_lower()
+	var scheme_idx := trimmed.find("://")
+	if scheme_idx >= 0:
+		trimmed = trimmed.substr(scheme_idx + 3)
+	var slash_idx := trimmed.find("/")
+	if slash_idx >= 0:
+		trimmed = trimmed.substr(0, slash_idx)
+	if trimmed.begins_with("["):
+		var bracket_idx := trimmed.find("]")
+		if bracket_idx >= 0:
+			return trimmed.substr(1, bracket_idx - 1)
+	var colon_idx := trimmed.rfind(":")
+	if colon_idx > 0:
+		trimmed = trimmed.substr(0, colon_idx)
+	return trimmed
+
+func _is_private_or_local_endpoint(host: String) -> bool:
+	var hostname := _endpoint_hostname(host)
+	if hostname.is_empty():
+		return false
+	if hostname == "localhost" or hostname == "::1":
+		return true
+	if hostname.begins_with("127."):
+		return true
+	if hostname.begins_with("192.168.") or hostname.begins_with("10."):
+		return true
+	if _is_private_172_host(hostname):
+		return true
+	return false
 
 func resolve_auth_api_host_port() -> Dictionary:
 	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "https://play.outrage.ink/auth")).strip_edges()
@@ -109,15 +148,19 @@ func build_connect_candidates() -> Array[Dictionary]:
 	var lan_usable := _is_lan_usable_from_owner()
 	var lan_block_reason := _lan_block_reason_from_owner()
 	if network_mode == "online":
-		out.append({"host": "wss://play.outrage.ink/ws", "port": 443})
+		if _is_private_or_local_endpoint(str(ProjectSettings.get_setting("kw/default_server_host", ""))):
+			_log("ONLINE ignored private/local configured endpoint and forced production websocket")
+		var online_host := ONLINE_PRODUCTION_HOST
+		var online_port := ONLINE_PRODUCTION_PORT
+		out.append({"host": online_host, "port": online_port})
 		_log("connect candidates forced ONLINE web=%s" % str(out))
 		return out
 	if not lan_usable:
 		_log("connect candidates forced LAN web=[] (blocked: %s)" % lan_block_reason)
 		return out
 
-	var resolved := resolve_server_host_port()
-	var lan_host := str(resolved.get("host", "")).strip_edges()
+	var lan_resolved := resolve_server_host_port()
+	var lan_host := str(lan_resolved.get("host", "")).strip_edges()
 	var lan_skip := _candidate_skip_reason(lan_host, true)
 	if lan_host.is_empty() or not lan_skip.is_empty():
 		var local_hosts := local_connect_fallback_hosts(true)
@@ -126,7 +169,7 @@ func build_connect_candidates() -> Array[Dictionary]:
 	if lan_host.is_empty():
 		_log("connect candidates forced LAN web=[] (no usable LAN host)")
 		return out
-	var lan_port := int(resolved.get("port", 8080))
+	var lan_port := int(lan_resolved.get("port", 8080))
 	if lan_port < 1 or lan_port > 65535:
 		lan_port = 8080
 	if lan_host.begins_with("ws://") or lan_host.begins_with("wss://"):

@@ -8,7 +8,7 @@ services:
       apt-get install -y --no-install-recommends libfontconfig1 python3-minimal &&
       rm -rf /var/lib/apt/lists/* &&
       python3 /game/tools/check_rpc_surface.py &&
-      if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; else godot --headless --verbose --path /game res://scenes/lobby.tscn -- --mode=server --port=8080; fi"
+      if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/server_bootstrap.tscn -- --mode=server --port=8080; else godot --headless --verbose --path /game res://scenes/server_bootstrap.tscn -- --mode=server --port=8080; fi"
     volumes:
       - ./:/game
     environment:
@@ -29,12 +29,25 @@ services:
       - "8090"
     restart: unless-stopped
 
+  kw_updates_http:
+    image: nginx:alpine
+    container_name: kw_updates_http
+    depends_on:
+      - kw_auth_api
+    volumes:
+      - ./updates_site:/usr/share/nginx/html:ro
+      - ./updates_site/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+    restart: unless-stopped
+
   kw_public_https_proxy:
     image: caddy:2-alpine
     container_name: kw_public_https_proxy
     depends_on:
       - kw_server
       - kw_auth_api
+      - kw_updates_http
     volumes:
       - ./Caddyfile.online-backend:/etc/caddy/Caddyfile:ro
       - kw_caddy_data:/data

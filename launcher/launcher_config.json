@@ -1,5 +1,6 @@
 ﻿{
-  "update_manifest_url": "http://play.outrage.ink:8081/kw/update_manifest.json",
-  "default_host": "play.outrage.ink",
-  "default_port": 8080
+  "update_manifest_url": "https://play.outrage.ink/kw/update_manifest.json",
+  "auth_api_base_url": "https://play.outrage.ink/auth",
+  "default_host": "wss://play.outrage.ink/ws",
+  "default_port": 443
 }

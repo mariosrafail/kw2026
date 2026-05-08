@@ -23,9 +23,9 @@ services:
       - "8090"
     restart: unless-stopped
 
-  kw_web:
+  kw_updates_http:
     image: nginx:alpine
-    container_name: kw_web
+    container_name: kw_updates_http
     volumes:
       - ./updates_site:/usr/share/nginx/html:ro
       - ./updates_site/nginx/default.vps.conf:/etc/nginx/conf.d/default.conf:ro
@@ -39,7 +39,7 @@ services:
     depends_on:
       - kw_server
       - kw_auth_api
-      - kw_web
+      - kw_updates_http
     volumes:
       - ./Caddyfile.vps:/etc/caddy/Caddyfile:ro
       - kw_caddy_data:/data

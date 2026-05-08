@@ -2,8 +2,9 @@ param(
     [string]$ReleaseDir = "build/launcher_only",
     [Parameter(Mandatory = $true)]
     [string]$ManifestUrl,
-    [string]$DefaultHost = "127.0.0.1",
-    [int]$DefaultPort = 8080
+    [string]$DefaultHost = "wss://play.outrage.ink/ws",
+    [int]$DefaultPort = 443,
+    [string]$AuthApiBaseUrl = "https://play.outrage.ink/auth"
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,6 +32,7 @@ Copy-Item (Join-Path $launcherOutput "KwLauncher.exe") (Join-Path $releasePath "
 
 $cfg = @{
     update_manifest_url = $ManifestUrl
+    auth_api_base_url = $AuthApiBaseUrl
     default_host = $DefaultHost
     default_port = $DefaultPort
 }

@@ -1,103 +1,126 @@
-# VPS Deployment (kw-test-server)
+# VPS Deployment
 
-Scope: server-side deployment only (Docker/Caddy/endpoints/docs).  
+Scope: production online runtime on the dedicated VPS.
+
 Host:
 - Public IPv4: `64.225.102.179`
 - Private IPv4: `10.114.0.2`
 - OS: Ubuntu 24.04 LTS
-- Region: FRA1
 - Repo path on VPS: `/root/kw2026`
+- Compose file: `docker-compose.server.remote.yml`
 
-## Cloudflare DNS (manual changes)
-Set Cloudflare to DNS-only first (no proxy/orange cloud).
+## Architecture
 
-Required:
-- `A` record
-  - Name: `play`
-  - Content: `64.225.102.179`
-  - Proxy status: `DNS only`
+Production traffic goes directly to the VPS:
 
-Optional:
-- `A` record
-  - Name: `updates`
-  - Content: `64.225.102.179`
-  - Proxy status: `DNS only`
+`Client -> play.outrage.ink -> VPS Caddy -> Docker services`
 
-Also remove/disable old Cloudflare Tunnel public hostname routes pointing to local PC for:
-- `play.outrage.ink`
-- `play.outrage.ink/auth`
-- `play.outrage.ink/ws`
-- `updates.outrage.ink`
-- any other hostname still routing to local machine/tunnel.
-
-## Expected architecture
+Services:
 - `kw_public_proxy` (Caddy): public `80/443`
 - `kw_server` (Godot): internal `8080`, `KW_NETWORK_TRANSPORT=websocket`
-- `kw_auth_api` (FastAPI): internal `8090`, reads `DATABASE_URL` from env
-- `kw_updates_http` (nginx): internal `80` static web/export files
+- `kw_auth_api` (FastAPI): internal `8090`
+- `kw_updates_http` (static web export): internal `80`
 
-Public endpoints:
-- `https://play.outrage.ink`
-- `https://play.outrage.ink/auth/health`
-- `wss://play.outrage.ink/ws`
+Routes:
+- `/auth/*` -> `kw_auth_api:8090`, with `/auth` stripped by Caddy
+- `/ws*` -> `kw_server:8080`, with `/ws` stripped by Caddy
+- `/` -> `kw_updates_http:80`
 
-## VPS commands (exact flow)
+Cloudflare may be used as the DNS provider only. Do not use a proxy/orange-cloud setting for `play.outrage.ink`, and do not use a Tunnel route for `play.outrage.ink`, `/auth`, or `/ws`. The DNS `A` record for `play.outrage.ink` should point directly to `64.225.102.179`.
+
+## Public Endpoints
+
+Browser and normal production builds:
+- Auth: `https://play.outrage.ink/auth`
+- WebSocket: `wss://play.outrage.ink/ws`
+
+Native diagnostic direct-IP mode:
+- Auth: `http://64.225.102.179/auth`
+- WebSocket through Caddy: `ws://64.225.102.179/ws`
+- WebSocket direct to Godot, if port `8080` is published: `ws://64.225.102.179:8080`
+
+Browsers served from HTTPS pages must use `wss://`, not `ws://`. Direct-IP HTTP/WS mode is for diagnostics and native builds; browsers can block mixed insecure `http://` or `ws://` requests when the page was loaded over HTTPS.
+
+## Deploy
+
 ```bash
 cd /root/kw2026
 git pull
 docker compose -f docker-compose.server.remote.yml down
-docker system prune -af
-docker builder prune -af
 docker compose -f docker-compose.server.remote.yml up -d --build
-docker ps
-docker logs kw_server --tail 100
-docker logs kw_auth_api --tail 100
-docker logs kw_public_proxy --tail 100
+docker compose -f docker-compose.server.remote.yml ps
 ```
 
-## Environment file
-Use `.env` on VPS (not committed secrets).  
-Reference template in repo: `.env.vps.example`.
-
-Required values:
+Environment is read from the VPS `.env` file. Required values:
 - `DATABASE_URL=...`
 - `KW_NETWORK_TRANSPORT=websocket`
 - `KW_GAME_PORT=8080`
 
-## Route behavior
-Production domain route:
-- `/ws*` -> `kw_server:8080`
-- `/auth/*` -> `kw_auth_api:8090` (prefix stripped by Caddy `handle_path`)
-- `/` -> `kw_updates_http:80`
+## Logs
 
-Raw IP diagnostics:
-- `http://64.225.102.179` is HTTP-only diagnostic routing.
-- Do not use `https://64.225.102.179` as success criteria.
-
-If `http://64.225.102.179` redirects to `https://64.225.102.179`, do not use IP for HTTPS testing.  
-Use domain HTTPS checks after DNS/tunnel cleanup is complete.
-
-## Test commands
 ```bash
-curl -v http://64.225.102.179/auth/health
+docker logs kw_auth_api --tail 100
+docker logs kw_server --tail 100
+docker logs kw_public_proxy --tail 100
+```
+
+Expected `kw_server` startup:
+- `[NET] transport = websocket`
+- `[NET] websocket url = ws://0.0.0.0:8080`
+- `Server started on port 8080 using websocket`
+
+## Verification
+
+Auth health:
+
+```bash
 curl -v https://play.outrage.ink/auth/health
 ```
 
-## Success indicators
-1. Caddy logs show certificate issuance success for `play.outrage.ink` (after DNS is correct).
-2. `curl -v https://play.outrage.ink/auth/health` returns `200`.
-3. Game server logs indicate WebSocket server mode, for example:
-   - `[NET] transport = websocket`
-   - `[NET] websocket url = ws://0.0.0.0:8080`
-   - `Server started on port 8080 using websocket`
-4. Client ONLINE logs show:
-   - `[NET] mode = ONLINE`
-   - `[NET] route = VPS dedicated server`
-   - `[NET] auth endpoint = https://play.outrage.ink/auth`
-   - `[NET] websocket endpoint = wss://play.outrage.ink/ws`
+Expected result: HTTP `200` with `{"ok":true,...}`.
 
-## Notes for 512MB VPS
-Current server image (`barichello/godot-ci`) is heavy.  
-Recommended next step (without gameplay changes):
-- build/export dedicated server binary in CI or local build machine
-- run lightweight runtime container on VPS for lower memory footprint.
+WebSocket handshake:
+
+```bash
+curl -vk \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  -H "Sec-WebSocket-Version: 13" \
+  https://play.outrage.ink/ws
+```
+
+Expected result: HTTP `101 Switching Protocols`.
+
+Client online logs should include:
+- `[AUTH] response code = 200 action=profile`
+- `[NET] websocket endpoint = wss://play.outrage.ink/ws`
+- `[NET] connected = true`
+
+## Native Direct-IP Profile
+
+For native/exe diagnostics, use a launcher config like:
+
+```json
+{
+  "update_manifest_url": "http://64.225.102.179/kw/update_manifest.json",
+  "auth_api_base_url": "http://64.225.102.179/auth",
+  "default_host": "ws://64.225.102.179/ws",
+  "default_port": 80
+}
+```
+
+The production launcher config should use:
+
+```json
+{
+  "update_manifest_url": "https://play.outrage.ink/kw/update_manifest.json",
+  "auth_api_base_url": "https://play.outrage.ink/auth",
+  "default_host": "wss://play.outrage.ink/ws",
+  "default_port": 443
+}
+```
+
+## Notes
+
+The dedicated server starts from `res://scenes/server_bootstrap.tscn`, not the UI lobby scene. This keeps the headless server from depending on UI-only resources such as fonts while still using the same runtime networking stack.

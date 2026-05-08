@@ -1,23 +1,39 @@
-{
-    auto_https off
+play.outrage.ink {
+	encode gzip
+
+	handle_path /ws* {
+		reverse_proxy kw_server:8080
+	}
+
+	handle /auth {
+		redir /auth/ 308
+	}
+
+	handle_path /auth/* {
+		reverse_proxy kw_auth_api:8090
+	}
+
+	handle {
+		reverse_proxy kw_updates_http:80
+	}
 }
 
-:80 {
-    encode gzip
+http://64.225.102.179 {
+	encode gzip
 
-    handle /auth {
-        redir /auth/ 308
-    }
+	handle_path /ws* {
+		reverse_proxy kw_server:8080
+	}
 
-    handle_path /auth/* {
-        reverse_proxy kw_auth_api:8090
-    }
+	handle /auth {
+		redir /auth/ 308
+	}
 
-    handle /ws* {
-        reverse_proxy kw_server:8080
-    }
+	handle_path /auth/* {
+		reverse_proxy kw_auth_api:8090
+	}
 
-    handle {
-        respond "KW backend online through Cloudflare Tunnel" 200
-    }
+	handle {
+		reverse_proxy kw_updates_http:80
+	}
 }

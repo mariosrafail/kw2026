@@ -30,7 +30,7 @@ static func create_client_peer(host: String, port: int) -> Dictionary:
 		var ws_peer := WebSocketMultiplayerPeer.new()
 		var url := websocket_url(host, port)
 		print("[NET] transport = websocket")
-		print("[NET] websocket url = %s" % url)
+		print("[NET] websocket endpoint = %s" % url)
 		return {
 			"peer": ws_peer,
 			"error": ws_peer.create_client(url),
@@ -69,7 +69,7 @@ static func create_server_peer(port: int, max_clients: int = 8) -> Dictionary:
 static func websocket_url(host: String, port: int) -> String:
 	var trimmed := host.strip_edges()
 	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
-		print("[NET] final websocket url = %s" % trimmed)
+		print("[NET] final websocket endpoint = %s" % trimmed)
 		return trimmed
 
 	var scheme := "ws"
@@ -88,5 +88,5 @@ static func websocket_url(host: String, port: int) -> String:
 	if port == 443:
 		scheme = "wss"
 	var final_url := "%s://%s:%d" % [scheme, trimmed, port]
-	print("[NET] final websocket url = %s" % final_url)
+	print("[NET] final websocket endpoint = %s" % final_url)
 	return final_url

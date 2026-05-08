@@ -1,7 +1,7 @@
 play.outrage.ink {
 	encode gzip
 
-	handle /ws* {
+	handle_path /ws* {
 		reverse_proxy kw_server:8080
 	}
 
@@ -23,7 +23,7 @@ play.outrage.ink {
 http://64.225.102.179 {
 	encode gzip
 
-	handle /ws* {
+	handle_path /ws* {
 		reverse_proxy kw_server:8080
 	}
 

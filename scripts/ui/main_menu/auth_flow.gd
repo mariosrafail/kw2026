@@ -270,7 +270,7 @@ func auth_submit_login(host: Control) -> void:
 		host.set("_auth_pending_action", "")
 		auth_stop_request_watchdog(host)
 		if auth_status_label != null:
-			auth_status_label.text = "Login request failed (%s) url=%s/login" % [str(err), auth_login_current_base_url(host)]
+			auth_status_label.text = "Could not connect to online services. Retry."
 		if auth_login_button != null:
 			auth_login_button.disabled = false
 
@@ -514,13 +514,16 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 				return
 			host.set("_auth_pending_action", "")
 			if auth_status_label != null:
-				auth_status_label.text = "Login request failed (%s) url=%s/login" % [str(retry_err), auth_login_current_base_url(host)]
+				auth_status_label.text = "Could not connect to online services. Retry."
 			if auth_login_button != null:
 				auth_login_button.disabled = false
 			return
 		if response_code < 200 or response_code >= 300 or not (parsed is Dictionary):
 			if auth_status_label != null:
-				auth_status_label.text = "Login failed (%d) url=%s/login" % [response_code, auth_login_current_base_url(host)]
+				if response_code <= 0:
+					auth_status_label.text = "Could not connect to online services. Retry."
+				else:
+					auth_status_label.text = "Login failed (%d)" % response_code
 			if auth_login_button != null:
 				auth_login_button.disabled = false
 			host.set("_auth_timeout_retry_attempts", 0)
@@ -591,6 +594,8 @@ func auth_handle_http_completed(host: Control, response_code: int, body: PackedB
 		if auth_login_button != null:
 			auth_login_button.disabled = false
 		host.set("_auth_pending_action", "")
+		if host.has_method("_hide_menu_loading_overlay"):
+			host.call("_hide_menu_loading_overlay")
 		host.call("_start_idle_loop")
 		auth_maybe_flush_wallet_sync(host)
 		return
@@ -732,7 +737,9 @@ func auth_rebuild_login_base_candidates(host: Control) -> void:
 		_append_login_base_candidate(result, normalized)
 		# Keep web base strict to avoid malformed fallback URLs (e.g. http:///host...).
 		# Desktop mode may still include direct internal auth fallback candidates.
-		if not is_web:
+		var allow_direct_port_fallback := bool(ProjectSettings.get_setting("kw/enable_auth_direct_port_fallback", false)) \
+			or str(host.get_meta("kw_network_mode", "online")).strip_edges().to_lower() == "lan"
+		if not is_web and allow_direct_port_fallback:
 			var parts := _split_base_url(normalized)
 			var hostname := str(parts.get("hostname", ""))
 			var suffix := str(parts.get("suffix", ""))
@@ -795,7 +802,7 @@ func auth_request_profile(host: Control) -> void:
 		host.set("_auth_pending_action", "")
 		auth_stop_request_watchdog(host)
 		if auth_status_label != null:
-			auth_status_label.text = "Profile request failed (%s)" % str(err)
+			auth_status_label.text = "Could not connect to online services. Retry."
 		var auth_login_button := host.get("_auth_login_button") as Button
 		if auth_login_button != null:
 			auth_login_button.disabled = false
@@ -884,8 +891,7 @@ func auth_on_request_watchdog_timeout(host: Control) -> void:
 	if auth_login_button != null:
 		auth_login_button.disabled = false
 	if auth_status_label != null:
-		var timeout_url := auth_login_current_base_url(host) + "/login" if action == "login" else str(host.get("_auth_api_base_url"))
-		auth_status_label.text = "%s timeout (url=%s). Check server/IP and try again." % [action.capitalize(), timeout_url]
+		auth_status_label.text = "Could not connect to online services. Retry."
 	host.set("_auth_timeout_retry_attempts", 0)
 	if action == "profile" and not auth_token.is_empty():
 		host.call("_auth_finalize_without_remote_profile", "Profile timeout. Logged in with local profile only.")

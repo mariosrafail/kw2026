@@ -18,6 +18,12 @@ func _owner_control() -> Control:
 		return null
 	return _host.get("_host") as Control
 
+func _format_endpoint(host: String, port: int) -> String:
+	var trimmed := host.strip_edges()
+	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
+		return trimmed
+	return "%s:%d" % [trimmed, port]
+
 func begin_connect_attempt(force_restart: bool, reason: String = "Connecting...", allow_while_connecting: bool = false) -> void:
 	var rpc_bridge: Variant = _host.get("_rpc_bridge")
 	var owner := _owner_control()
@@ -59,7 +65,13 @@ func begin_connect_attempt(force_restart: bool, reason: String = "Connecting..."
 			print("[NET] LAN blocked reason = %s" % lan_block_reason)
 	print("[NET] selected transport = %s" % transport)
 	print("[NET] auth endpoint = %s" % auth_endpoint)
-	print("[NET] game endpoint = %s:%d" % [game_host, game_port])
+	var game_endpoint := game_host
+	if not game_endpoint.begins_with("ws://") and not game_endpoint.begins_with("wss://"):
+		var ws_scheme := str(ProjectSettings.get_setting("kw/network_ws_scheme", "ws")).strip_edges().to_lower()
+		if ws_scheme != "ws" and ws_scheme != "wss":
+			ws_scheme = "ws"
+		game_endpoint = "%s://%s:%d" % [ws_scheme, game_host, game_port]
+	print("[NET] websocket endpoint = %s" % game_endpoint)
 	print("[NET] candidates = %s" % str(connect_candidates))
 	if network_mode == "LAN" and not lan_usable:
 		_host.call("_log", "LAN mode cannot run from HTTPS public host because browser blocks HTTP LAN requests.")
@@ -89,25 +101,24 @@ func begin_connect_attempt(force_restart: bool, reason: String = "Connecting..."
 	var endpoint := connect_candidates[connect_candidate_index] as Dictionary
 	var host_value := str(endpoint.get("host", "127.0.0.1"))
 	var port_value := int(endpoint.get("port", 8080))
+	var endpoint_label := _format_endpoint(host_value, port_value)
 	var connect_attempt_in_candidate := int(_host.get("_connect_attempt_in_candidate")) + 1
 	_host.set("_connect_attempt_in_candidate", connect_attempt_in_candidate)
-	_host.call("_log", "begin_connect_attempt force_restart=%s reason=%s candidate_index=%d target=%s:%d pending_create=%s" % [
+	_host.call("_log", "begin_connect_attempt force_restart=%s reason=%s candidate_index=%d target=%s pending_create=%s" % [
 		str(force_restart),
 		reason,
 		connect_candidate_index,
-		host_value,
-		port_value,
+		endpoint_label,
 		str(not (_host.get("_pending_create_request") as Dictionary).is_empty())
 	])
-	_host.call("_log", "begin_connect_attempt candidate_try=%d/%d for %s:%d" % [
+	_host.call("_log", "begin_connect_attempt candidate_try=%d/%d for %s" % [
 		connect_attempt_in_candidate,
 		CONNECT_ATTEMPTS_PER_CANDIDATE,
-		host_value,
-		port_value
+		endpoint_label
 	])
 	var status_label := _host.get("_status_label") as Label
 	if status_label != null:
-		status_label.text = "%s %s:%d..." % [reason, host_value, port_value]
+		status_label.text = "%s %s..." % [reason, endpoint_label]
 	rpc_bridge.call("disconnect_from_server")
 	rpc_bridge.call("connect_to_server", host_value, port_value)
 	start_connect_watchdog()
@@ -158,13 +169,12 @@ func handle_failed_connect_attempt(source: String) -> void:
 	var endpoint := connect_candidates[connect_candidate_index] as Dictionary
 	var host_value := str(endpoint.get("host", "127.0.0.1"))
 	var port_value := int(endpoint.get("port", 8080))
-	_host.call("_log", "connect attempt failed source=%s candidate_index=%d try=%d/%d target=%s:%d" % [
+	_host.call("_log", "connect attempt failed source=%s candidate_index=%d try=%d/%d target=%s" % [
 		source,
 		connect_candidate_index,
 		int(_host.get("_connect_attempt_in_candidate")),
 		CONNECT_ATTEMPTS_PER_CANDIDATE,
-		host_value,
-		port_value
+		_format_endpoint(host_value, port_value)
 	])
 	if source == "connection_failed":
 		try_next_connect_candidate()
@@ -192,7 +202,7 @@ func try_next_connect_candidate() -> void:
 		_host.call("_log", "all connect candidates exhausted")
 		var status_label := _host.get("_status_label") as Label
 		if status_label != null:
-			status_label.text = "Lobby server unavailable. Online create failed." if had_pending_create else "Connection failed. Try Refresh."
+			status_label.text = "Online server unavailable. Try again."
 		_host.call("_populate_lobby_room_list")
 		_host.call("_refresh_lobby_selection_summary")
 		_host.call("_refresh_lobby_buttons_state")

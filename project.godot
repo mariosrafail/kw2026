@@ -39,6 +39,8 @@ window/stretch/aspect="expand"
 auth_api_base_url="https://play.outrage.ink/auth"
 default_server_host="wss://play.outrage.ink/ws"
 default_server_port=443
+enable_auth_direct_port_fallback=false
+enable_network_mode_picker=false
 network_transport="websocket"
 
 [rendering]

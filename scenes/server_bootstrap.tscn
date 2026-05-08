@@ -1,0 +1,85 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+
+[node name="GameRoot" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+enable_lobby_scene_flow = true
+
+[node name="UiPanel" type="PanelContainer" parent="."]
+visible = false
+
+[node name="PortSpin" type="SpinBox" parent="UiPanel" unique_id=101]
+unique_name_in_owner = true
+value = 8080.0
+
+[node name="HostInput" type="LineEdit" parent="UiPanel" unique_id=102]
+unique_name_in_owner = true
+text = "0.0.0.0"
+
+[node name="StartServerButton" type="Button" parent="UiPanel" unique_id=103]
+unique_name_in_owner = true
+text = "Start"
+
+[node name="StopButton" type="Button" parent="UiPanel" unique_id=104]
+unique_name_in_owner = true
+text = "Stop"
+
+[node name="ConnectButton" type="Button" parent="UiPanel" unique_id=105]
+unique_name_in_owner = true
+text = "Connect"
+
+[node name="DisconnectButton" type="Button" parent="UiPanel" unique_id=106]
+unique_name_in_owner = true
+text = "Disconnect"
+
+[node name="StatusLabel" type="Label" parent="UiPanel" unique_id=107]
+unique_name_in_owner = true
+text = "Status: Idle"
+
+[node name="PeersLabel" type="Label" parent="UiPanel" unique_id=108]
+unique_name_in_owner = true
+text = "Peers: -"
+
+[node name="LogLabel" type="RichTextLabel" parent="UiPanel" unique_id=109]
+unique_name_in_owner = true
+fit_content = true
+
+[node name="LocalIpLabel" type="Label" parent="UiPanel" unique_id=110]
+unique_name_in_owner = true
+text = "IP: -"
+
+[node name="ClientHud" type="CanvasLayer" parent="."]
+
+[node name="KdLabel" type="Label" parent="ClientHud" unique_id=111]
+unique_name_in_owner = true
+text = "K/D : 0/0"
+
+[node name="PingLabel" type="Label" parent="ClientHud" unique_id=112]
+unique_name_in_owner = true
+text = "Ping: -"
+
+[node name="ScoreboardLabel" type="Label" parent="ClientHud" unique_id=113]
+unique_name_in_owner = true
+visible = false
+text = ""
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="MainCamera" type="Camera2D" parent="World" unique_id=114]
+unique_name_in_owner = true
+enabled = true
+
+[node name="Players" type="Node2D" parent="World" unique_id=115]
+unique_name_in_owner = true
+
+[node name="Projectiles" type="Node2D" parent="World" unique_id=116]
+unique_name_in_owner = true
+
+[node name="MapFront" type="Sprite2D" parent="World"]
