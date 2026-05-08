@@ -1,118 +1,103 @@
-# VPS Deployment (DigitalOcean Ubuntu 24.04)
+# VPS Deployment (kw-test-server)
 
-Target server:
-- Public IP: `64.225.102.179`
-- Private IP: `10.114.0.2`
+Scope: server-side deployment only (Docker/Caddy/endpoints/docs).  
+Host:
+- Public IPv4: `64.225.102.179`
+- Private IPv4: `10.114.0.2`
+- OS: Ubuntu 24.04 LTS
 - Region: FRA1
+- Repo path on VPS: `/root/kw2026`
 
-This setup keeps LAN/dev flows untouched and adds a dedicated VPS deployment path.
+## Cloudflare DNS (manual changes)
+Set Cloudflare to DNS-only first (no proxy/orange cloud).
 
-## 1. SSH and base packages
+Required:
+- `A` record
+  - Name: `play`
+  - Content: `64.225.102.179`
+  - Proxy status: `DNS only`
 
+Optional:
+- `A` record
+  - Name: `updates`
+  - Content: `64.225.102.179`
+  - Proxy status: `DNS only`
+
+Also remove/disable old Cloudflare Tunnel public hostname routes pointing to local PC for:
+- `play.outrage.ink`
+- `play.outrage.ink/auth`
+- `play.outrage.ink/ws`
+- `updates.outrage.ink`
+- any other hostname still routing to local machine/tunnel.
+
+## Expected architecture
+- `kw_public_proxy` (Caddy): public `80/443`
+- `kw_server` (Godot): internal `8080`, `KW_NETWORK_TRANSPORT=websocket`
+- `kw_auth_api` (FastAPI): internal `8090`, reads `DATABASE_URL` from env
+- `kw_updates_http` (nginx): internal `80` static web/export files
+
+Public endpoints:
+- `https://play.outrage.ink`
+- `https://play.outrage.ink/auth/health`
+- `wss://play.outrage.ink/ws`
+
+## VPS commands (exact flow)
 ```bash
-ssh root@64.225.102.179
-apt update && apt upgrade -y
-apt install -y git docker.io docker-compose-plugin ufw
-systemctl enable --now docker
-```
-
-## 2. Firewall
-
-```bash
-ufw allow OpenSSH
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw enable
-ufw status
-```
-
-Only ports `80/443` are exposed publicly. Game/auth/web stay internal to Docker.
-Direct public `:8080` is intentionally not exposed.
-
-## 3. Clone repo and configure env
-
-```bash
-git clone <repo-url>
-cd <repo-folder>
-cp .env.example .env
-nano .env
-```
-
-Set at least:
-- `DATABASE_URL=...`
-- `KW_NETWORK_TRANSPORT=websocket`
-- `KW_GAME_PORT=8080`
-
-## 4. Build and run stack
-
-```bash
-docker compose -f docker-compose.vps.yml up -d --build
+cd /root/kw2026
+git pull
+docker compose -f docker-compose.server.remote.yml down
+docker system prune -af
+docker builder prune -af
+docker compose -f docker-compose.server.remote.yml up -d --build
 docker ps
 docker logs kw_server --tail 100
 docker logs kw_auth_api --tail 100
 docker logs kw_public_proxy --tail 100
 ```
 
-## 5. DNS
+## Environment file
+Use `.env` on VPS (not committed secrets).  
+Reference template in repo: `.env.vps.example`.
 
-Point `play.outrage.ink` to VPS:
-- A record: `play` -> `64.225.102.179`
+Required values:
+- `DATABASE_URL=...`
+- `KW_NETWORK_TRANSPORT=websocket`
+- `KW_GAME_PORT=8080`
 
-Cloudflare option:
-- Start as `DNS only` for testing.
-- Later you can enable proxy (orange cloud), but keep WebSocket support enabled.
+## Route behavior
+Production domain route:
+- `/ws*` -> `kw_server:8080`
+- `/auth/*` -> `kw_auth_api:8090` (prefix stripped by Caddy `handle_path`)
+- `/` -> `kw_updates_http:80`
 
-## 6. Verify routes
+Raw IP diagnostics:
+- `http://64.225.102.179` is HTTP-only diagnostic routing.
+- Do not use `https://64.225.102.179` as success criteria.
 
-Before DNS (raw IP test):
+If `http://64.225.102.179` redirects to `https://64.225.102.179`, do not use IP for HTTPS testing.  
+Use domain HTTPS checks after DNS/tunnel cleanup is complete.
 
+## Test commands
 ```bash
-curl http://64.225.102.179
-curl http://64.225.102.179/auth/health
+curl -v http://64.225.102.179/auth/health
+curl -v https://play.outrage.ink/auth/health
 ```
 
-WebSocket test before DNS:
-- `ws://64.225.102.179/ws` (proxied through Caddy on port 80)
+## Success indicators
+1. Caddy logs show certificate issuance success for `play.outrage.ink` (after DNS is correct).
+2. `curl -v https://play.outrage.ink/auth/health` returns `200`.
+3. Game server logs indicate WebSocket server mode, for example:
+   - `[NET] transport = websocket`
+   - `[NET] websocket url = ws://0.0.0.0:8080`
+   - `Server started on port 8080 using websocket`
+4. Client ONLINE logs show:
+   - `[NET] mode = ONLINE`
+   - `[NET] route = VPS dedicated server`
+   - `[NET] auth endpoint = https://play.outrage.ink/auth`
+   - `[NET] websocket endpoint = wss://play.outrage.ink/ws`
 
-After DNS propagation:
-
-```bash
-curl https://play.outrage.ink/auth/health
-```
-
-Expected production endpoints:
-- Auth: `https://play.outrage.ink/auth`
-- WebSocket: `wss://play.outrage.ink/ws`
-
-## 7. Web export/static files
-
-`kw_web` serves files from `updates_site/kw`. Publish your latest web export there before testing browser clients:
-
-```powershell
-.\tools\publish_web_export_to_updates_site.ps1 -SourceDir "<web-export-folder>" -TargetDir "updates_site/kw"
-```
-
-Required files include:
-- `kw.js`
-- `kw.wasm`
-- `kw.pck`
-- `kw.audio.worklet.js`
-- `kw.audio.position.worklet.js`
-
-## 8. Architecture (vps compose)
-
-- `kw_public_proxy` (Caddy): public `80/443`
-- `kw_web` (nginx): internal `80`
-- `kw_auth_api` (FastAPI): internal `8090`
-- `kw_server` (Godot WebSocket): internal `8080`
-
-Routing:
-- `/ws` -> `kw_server:8080`
-- `/auth/*` -> `kw_auth_api:8090` (prefix stripped by `handle_path`)
-- `/` -> `kw_web:80`
-
-## 9. Notes for 512 MB RAM VPS
-
-- Current `Dockerfile.server` is heavy (`barichello/godot-ci`) and can consume significant RAM.
-- Recommended next optimization: pre-export dedicated server binary and run with a lighter runtime image instead of full CI image.
-- Keep only required services running on VPS and avoid opening debug ports.
+## Notes for 512MB VPS
+Current server image (`barichello/godot-ci`) is heavy.  
+Recommended next step (without gameplay changes):
+- build/export dedicated server binary in CI or local build machine
+- run lightweight runtime container on VPS for lower memory footprint.
