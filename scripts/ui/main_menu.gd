@@ -28,7 +28,6 @@ const MENU_LAYOUT_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_l
 const MENU_LOADOUT_STATE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_loadout_state_controller.gd")
 const MENU_DIALOG_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_dialog_controller.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
-const MOBILE_ORIENTATION_GUARD_SCRIPT := preload("res://scripts/ui/mobile_orientation_guard.gd")
 const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
 const PIXEL_FONT_CHAT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
 const TOXIC_CHAT_BOX_SIZE := Vector2(196.0, 82.0)
@@ -131,7 +130,6 @@ var _lobby_flow_ctrl := MENU_LOBBY_FLOW_CTRL_SCRIPT.new()
 var _layout_ctrl := MENU_LAYOUT_CTRL_SCRIPT.new()
 var _loadout_state_ctrl := MENU_LOADOUT_STATE_CTRL_SCRIPT.new()
 var _dialog_ctrl := MENU_DIALOG_CTRL_SCRIPT.new()
-var _mobile_orientation_guard = MOBILE_ORIENTATION_GUARD_SCRIPT.new()
 
 @onready var coins_label: Label = %CoinsLabel
 @onready var clk_label: Label = %ClkLabel
@@ -310,6 +308,8 @@ var particles_enabled := true
 var screen_shake_enabled := true
 
 func _ready() -> void:
+	print("[BUILD] networking config version = 2026-05-08-websocket-default-test")
+	_setup_web_audio_unlock_hooks()
 	_ensure_cursor_manager()
 	_menu_sfx.configure(self)
 	_menu_options.configure(self, _menu_sfx, _intro_fx)
@@ -333,6 +333,7 @@ func _ready() -> void:
 		Callable(self, "_get_warrior_area"),
 		Callable(self, "_get_main_warrior_preview")
 	)
+	_bind_web_audio_unlock_to_menu_buttons()
 	randomize()
 	_weapon_ui.weapon_icon_max_height_ratio = weapon_icon_max_height_ratio
 	_weapon_ui.weapons_menu_preview_scale_mult = weapons_menu_preview_scale_mult
@@ -499,7 +500,6 @@ func _ready() -> void:
 	_refresh_selection_context_visuals()
 
 	_connect_signals()
-	_mobile_orientation_guard.configure(self)
 	_show_network_mode_selector()
 	_play_intro_animation_safe()
 	_apply_uniform_button_outlines(self, 0)
@@ -647,40 +647,80 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 	var auth_base := ONLINE_AUTH_API_BASE_URL
 	var server_host := ONLINE_DEFAULT_HOST
 	var server_port := DEFAULT_SERVER_PORT
-	var ws_scheme_override := "ws"
+	var ws_scheme_override := "wss"
+	var transport_override := "websocket"
+	var lan_usable := true
+	var lan_block_reason := ""
+	var page_protocol := _web_page_protocol()
+	var page_hostname := _web_page_hostname()
 	if use_lan:
-		server_host = _detect_best_lan_host()
-		auth_base = "http://%s:8081/auth" % server_host
-	else:
-		# Web production on HTTPS (e.g. Netlify): force HTTPS auth + WSS game endpoint.
-		if OS.has_feature("web"):
-			var web_protocol := str(JavaScriptBridge.eval("window.location.protocol")).strip_edges().to_lower()
-			if web_protocol == "https:":
-				auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
-				server_host = ONLINE_PRODUCTION_WS_URL
-				server_port = 443
+		var lan_context := _web_lan_context()
+		lan_usable = bool(lan_context.get("usable", true))
+		lan_block_reason = str(lan_context.get("reason", ""))
+		if lan_usable:
+			server_host = _detect_best_lan_host()
+			if OS.has_feature("web") and page_protocol == "https:":
+				var lan_https_host := page_hostname if _is_private_or_localhost_hostname(page_hostname) else server_host
+				auth_base = "https://%s:9000/auth" % lan_https_host
+				server_host = "wss://%s:9000/ws" % lan_https_host
+				server_port = 9000
 				ws_scheme_override = "wss"
+				transport_override = "websocket"
 			else:
-				auth_base = ONLINE_AUTH_API_BASE_URL
-				server_host = ONLINE_DEFAULT_HOST
-				server_port = DEFAULT_SERVER_PORT
+				auth_base = "http://%s:8081/auth" % server_host
 				ws_scheme_override = "ws"
+				transport_override = "websocket"
+			if _is_private_172_host(server_host):
+				print("[NET][WARN] Selected LAN host looks like a virtual adapter. Prefer your real router LAN IP, usually 192.168.x.x.")
 		else:
-			auth_base = ONLINE_AUTH_API_BASE_URL
+			auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
+			server_host = ONLINE_PRODUCTION_WS_URL
+			server_port = 443
+			ws_scheme_override = "wss"
+			transport_override = "websocket"
+			print("[NET] LAN mode cannot run from HTTPS public host because browser blocks HTTP LAN requests.")
+			print("[NET] Open the game from your LAN server instead: http://<LAN_IP>:8081/")
+			print("[NET] Or use ONLINE mode.")
+	else:
+		auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
+		server_host = ONLINE_PRODUCTION_WS_URL
+		server_port = 443
+		ws_scheme_override = "wss"
+		transport_override = "websocket"
 	ProjectSettings.set_setting("kw/auth_api_base_url", auth_base)
 	ProjectSettings.set_setting("kw/default_server_host", server_host)
 	ProjectSettings.set_setting("kw/default_server_port", server_port)
 	ProjectSettings.set_setting("kw/network_ws_scheme", ws_scheme_override)
+	ProjectSettings.set_setting("kw/network_transport", transport_override)
 	set_meta("kw_force_auth_api_base_url", auth_base)
 	set_meta("kw_network_mode", "lan" if use_lan else "online")
+	set_meta("kw_lan_usable", lan_usable)
+	set_meta("kw_lan_blocked_reason", lan_block_reason)
+	var runtime_label := "web" if OS.has_feature("web") else ("editor" if Engine.is_editor_hint() else "native")
 	print("[AUTH] selected network mode = %s" % ("LAN" if use_lan else "ONLINE"))
 	print("[AUTH] selected auth base url = %s" % auth_base)
 	print("[AUTH] selected game host = %s" % server_host)
 	print("[AUTH] selected game port = %d" % server_port)
+	print("[NET] runtime = %s" % runtime_label)
+	if OS.has_feature("web"):
+		print("[NET] page protocol = %s" % page_protocol)
+		print("[NET] page hostname = %s" % page_hostname)
 	print("[NET] selected mode = %s" % ("LAN" if use_lan else "ONLINE"))
-	print("[NET] game host = %s" % server_host)
-	print("[NET] game port = %d" % server_port)
-	print("[NET] transport = %s" % ("websocket" if OS.has_feature("web") else "enet"))
+	if use_lan:
+		print("[NET] LAN usable from this page = %s" % str(lan_usable))
+		if not lan_usable:
+			print("[NET] LAN blocked reason = %s" % lan_block_reason)
+	print("[NET] selected transport = %s" % transport_override)
+	print("[NET] auth endpoint = %s" % auth_base)
+	print("[NET] game endpoint = %s:%d" % [server_host, server_port])
+	if not use_lan:
+		var ws_endpoint := server_host
+		if not ws_endpoint.begins_with("ws://") and not ws_endpoint.begins_with("wss://"):
+			ws_endpoint = "%s://%s:%d" % [ws_scheme_override, server_host, server_port]
+		print("[NET] mode = ONLINE")
+		print("[NET] auth endpoint = https://play.outrage.ink/auth")
+		print("[NET] websocket endpoint = %s" % ws_endpoint)
+		print("[NET] route = VPS dedicated server")
 	if OS.has_feature("web"):
 		if server_host.begins_with("ws://") or server_host.begins_with("wss://"):
 			print("[NET] websocket url = %s" % server_host)
@@ -692,25 +732,107 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 	_setup_auth_gate()
 
 func _detect_best_lan_host() -> String:
-	var fallback := "127.0.0.1"
+	var candidates: Array[String] = []
+	if OS.has_feature("web"):
+		var browser_host := _browser_hostname_candidate()
+		if not browser_host.is_empty():
+			candidates.append(browser_host)
 	for address_value in IP.get_local_addresses():
 		var address := str(address_value).strip_edges()
-		if address.is_empty():
+		var skip_reason := _lan_skip_reason(address, false)
+		if not skip_reason.is_empty():
+			print("[NET] skipped LAN ip %s (%s)" % [address, skip_reason])
 			continue
-		if not address.contains("."):
-			continue
-		if address.begins_with("127.") or address.begins_with("169.254."):
-			continue
-		if address.begins_with("10.") or address.begins_with("192.168."):
-			return address
-		var parts := address.split(".")
-		if parts.size() == 4 and parts[0] == "172":
-			var second := int(parts[1])
-			if second >= 16 and second <= 31:
-				return address
-		if fallback == "127.0.0.1":
-			fallback = address
-	return fallback
+		if not candidates.has(address):
+			candidates.append(address)
+
+	if candidates.is_empty():
+		print("[NET] no usable LAN IPv4 candidates; using localhost fallback")
+		return "127.0.0.1"
+
+	candidates.sort_custom(Callable(self, "_compare_lan_host_priority"))
+	print("[NET] ranked LAN host candidates = %s" % str(candidates))
+	return candidates[0]
+
+func _compare_lan_host_priority(a: String, b: String) -> bool:
+	return _lan_host_priority(a) < _lan_host_priority(b)
+
+func _lan_host_priority(host: String) -> int:
+	var normalized := host.strip_edges().to_lower()
+	if normalized.begins_with("192.168."):
+		return 0
+	if normalized.begins_with("10."):
+		return 1
+	if _is_private_172_host(normalized):
+		return 2
+	return 3
+
+func _lan_skip_reason(address: String, allow_loopback: bool) -> String:
+	var normalized := address.strip_edges().to_lower()
+	if normalized.is_empty():
+		return "empty"
+	if normalized == "localhost":
+		return "localhost"
+	if not normalized.contains("."):
+		return "not IPv4"
+	if normalized.begins_with("127.") and not allow_loopback:
+		return "loopback"
+	if normalized.begins_with("169.254."):
+		return "link-local"
+	return ""
+
+func _browser_hostname_candidate() -> String:
+	if not OS.has_feature("web"):
+		return ""
+	var hostname := str(JavaScriptBridge.eval("window.location.hostname")).strip_edges().to_lower()
+	if not _is_private_or_localhost_hostname(hostname):
+		print("[NET] skipped browser hostname %s (public hostname not valid for LAN)" % hostname)
+		return ""
+	var skip_reason := _lan_skip_reason(hostname, false)
+	if not skip_reason.is_empty():
+		print("[NET] skipped browser hostname %s (%s)" % [hostname, skip_reason])
+		return ""
+	print("[NET] browser hostname LAN candidate = %s" % hostname)
+	return hostname
+
+func _web_page_protocol() -> String:
+	if not OS.has_feature("web"):
+		return ""
+	return str(JavaScriptBridge.eval("window.location.protocol")).strip_edges().to_lower()
+
+func _web_page_hostname() -> String:
+	if not OS.has_feature("web"):
+		return ""
+	return str(JavaScriptBridge.eval("window.location.hostname")).strip_edges().to_lower()
+
+func _is_private_or_localhost_hostname(hostname: String) -> bool:
+	var normalized := hostname.strip_edges().to_lower()
+	if normalized.is_empty():
+		return false
+	if normalized == "localhost":
+		return true
+	if normalized.begins_with("192.168.") or normalized.begins_with("10."):
+		return true
+	return _is_private_172_host(normalized)
+
+func _web_lan_context() -> Dictionary:
+	if not OS.has_feature("web"):
+		return {"usable": true, "reason": ""}
+	var protocol := _web_page_protocol()
+	var hostname := _web_page_hostname()
+	if protocol == "https:" and not _is_private_or_localhost_hostname(hostname):
+		return {"usable": false, "reason": "HTTPS public page cannot call HTTP LAN endpoint"}
+	return {"usable": true, "reason": ""}
+
+func _is_private_172_host(host: String) -> bool:
+	var normalized := host.strip_edges()
+	var parts := normalized.split(".")
+	if parts.size() != 4:
+		return false
+	if parts[0] != "172":
+		return false
+	var second := int(parts[1])
+	return second >= 16 and second <= 31
 
 func _auth_set_ui_locked(locked: bool) -> void:
 	_auth_flow.auth_set_ui_locked(self, locked)
@@ -1662,3 +1784,46 @@ func _get_warrior_area() -> Control:
 
 func _get_main_warrior_preview() -> Node:
 	return main_warrior_preview
+
+func _setup_web_audio_unlock_hooks() -> void:
+	if not OS.has_feature("web"):
+		return
+	if has_node("/root/WebAudioUnlock"):
+		var web_audio_unlock := get_node("/root/WebAudioUnlock")
+		if web_audio_unlock != null:
+			if web_audio_unlock.has_signal("web_audio_unlocked"):
+				var cb := Callable(self, "_on_web_audio_unlocked")
+				if not web_audio_unlock.is_connected("web_audio_unlocked", cb):
+					web_audio_unlock.connect("web_audio_unlocked", cb)
+			if web_audio_unlock.has_method("ensure_web_audio_unlocked"):
+				web_audio_unlock.call("ensure_web_audio_unlocked", "main_menu_ready")
+
+func _bind_web_audio_unlock_to_menu_buttons() -> void:
+	if not OS.has_feature("web"):
+		return
+	var targets: Array = [
+		play_button,
+		options_button,
+		warrior_button,
+		weapon_button,
+		exit_button
+	]
+	for value in targets:
+		var btn := value as BaseButton
+		if btn == null:
+			continue
+		var cb := Callable(self, "_on_web_audio_unlock_button_pressed")
+		if not btn.pressed.is_connected(cb):
+			btn.pressed.connect(cb)
+
+func _on_web_audio_unlock_button_pressed() -> void:
+	if not OS.has_feature("web"):
+		return
+	if has_node("/root/WebAudioUnlock"):
+		var web_audio_unlock := get_node("/root/WebAudioUnlock")
+		if web_audio_unlock != null and web_audio_unlock.has_method("ensure_web_audio_unlocked"):
+			web_audio_unlock.call("ensure_web_audio_unlocked", "menu_button")
+
+func _on_web_audio_unlocked() -> void:
+	if _menu_sfx != null and _menu_sfx.has_method("play_click"):
+		_menu_sfx.call("play_click")

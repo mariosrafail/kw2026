@@ -1,0 +1,54 @@
+services:
+  kw_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: kw_server
+    environment:
+      KW_GAME_PORT: ${KW_GAME_PORT:-8080}
+      KW_NETWORK_TRANSPORT: ${KW_NETWORK_TRANSPORT:-websocket}
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  kw_auth_api:
+    build:
+      context: ./tools/auth_api
+    container_name: kw_auth_api
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_API_HOST: "0.0.0.0"
+      AUTH_API_PORT: "8090"
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  kw_web:
+    image: nginx:alpine
+    container_name: kw_web
+    volumes:
+      - ./updates_site:/usr/share/nginx/html:ro
+      - ./updates_site/nginx/default.vps.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+    restart: unless-stopped
+
+  kw_public_proxy:
+    image: caddy:2-alpine
+    container_name: kw_public_proxy
+    depends_on:
+      - kw_server
+      - kw_auth_api
+      - kw_web
+    volumes:
+      - ./Caddyfile.vps:/etc/caddy/Caddyfile:ro
+      - kw_caddy_data:/data
+      - kw_caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
+volumes:
+  kw_caddy_data:
+  kw_caddy_config:

@@ -1,0 +1,31 @@
+{
+	# Local LAN HTTPS for browser/mobile testing.
+	# Certificates are issued by Caddy's internal CA.
+	local_certs
+}
+
+https://{$KW_LAN_IP}:9000 {
+	encode gzip
+	tls internal
+
+	handle /auth {
+		redir /auth/ 308
+	}
+
+	# Strip /auth prefix so FastAPI receives /login, /register, etc.
+	handle_path /auth/* {
+		reverse_proxy kw_auth_api:8090
+	}
+
+	# Expose websocket under same-origin /ws (wss://LAN_IP:9000/ws).
+	# Strip /ws prefix so upstream sees /.
+	handle_path /ws* {
+		reverse_proxy kw_server:8080
+	}
+
+	handle {
+		root * /srv/web
+		try_files {path} /kw.html /index.html
+		file_server
+	}
+}

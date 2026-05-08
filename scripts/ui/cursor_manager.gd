@@ -58,6 +58,7 @@ var _menu_cursor_text_scaled: Texture2D
 var _menu_cursor_pressed_scaled: Texture2D
 var _menu_hover_blocked := false
 var _menu_click_active := false
+var _game_cursor_hidden := false
 
 func _ready() -> void:
 	# Keep custom cursor above all regular UI/game canvas content.
@@ -153,10 +154,24 @@ func set_cursor_context(context: String) -> void:
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_POINTING_HAND)
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_IBEAM)
-	_hide_system_cursor_if_visible()
+	if _game_cursor_hidden:
+		_show_system_cursor_if_hidden()
+	else:
+		_hide_system_cursor_if_visible()
 	if _root != null:
-		_root.visible = true
+		_root.visible = not _game_cursor_hidden
 	set_process(true)
+
+func set_game_cursor_hidden(hidden: bool) -> void:
+	_game_cursor_hidden = hidden
+	if _cursor_context != "game":
+		return
+	if _root != null:
+		_root.visible = not _game_cursor_hidden
+	if _game_cursor_hidden:
+		_show_system_cursor_if_hidden()
+	else:
+		_hide_system_cursor_if_visible()
 
 func set_menu_hover_blocked(blocked: bool) -> void:
 	_menu_hover_blocked = blocked
@@ -268,6 +283,8 @@ func _process(_delta: float) -> void:
 		if pressed_now != _menu_click_active:
 			_menu_click_active = pressed_now
 			_apply_menu_cursor_shapes()
+		return
+	if _game_cursor_hidden:
 		return
 	if _root == null:
 		return

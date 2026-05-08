@@ -290,6 +290,16 @@ godot --headless -s tools/diag_map_catalog.gd  # Validate maps
 docker-compose -f docker-compose.server.yml up
 ```
 
+### LAN Mobile Browser (HTTPS/WSS, Same-Origin)
+
+Use the dedicated LAN HTTPS stack when testing on phones/tablets:
+- Page: `https://LAN_IP:9000/kw.html`
+- Auth: `https://LAN_IP:9000/auth`
+- WebSocket: `wss://LAN_IP:9000/ws`
+
+See:
+- [docs/LAN_MOBILE_BROWSER_TESTING.md](docs/LAN_MOBILE_BROWSER_TESTING.md)
+
 If you are using a remote Docker engine (e.g. `docker context use stinis-server`), use the remote compose file (no bind mounts):
 
 ```bash

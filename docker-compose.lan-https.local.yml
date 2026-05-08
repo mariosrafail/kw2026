@@ -13,8 +13,8 @@ services:
       - ./:/game
     environment:
       KW_NETWORK_TRANSPORT: "websocket"
-    ports:
-      - "0.0.0.0:8080:8080/tcp"
+    expose:
+      - "8080"
     restart: unless-stopped
 
   kw_auth_api:
@@ -22,8 +22,6 @@ services:
       context: ./tools/auth_api
     container_name: kw_auth_api
     environment:
-      # Set this in your shell before running docker compose:
-      #   DATABASE_URL="postgresql://..."
       DATABASE_URL: ${DATABASE_URL}
       AUTH_API_HOST: "0.0.0.0"
       AUTH_API_PORT: "8090"
@@ -31,34 +29,23 @@ services:
       - "8090"
     restart: unless-stopped
 
-  kw_updates_http:
-    image: nginx:alpine
-    container_name: kw_updates_http
-    depends_on:
-      - kw_auth_api
-    volumes:
-      - ./updates_site:/usr/share/nginx/html:ro
-      - ./updates_site/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
-      - "0.0.0.0:8081:80"
-    restart: unless-stopped
-
-  kw_public_proxy:
+  kw_lan_https_proxy:
     image: caddy:2-alpine
-    container_name: kw_public_proxy
+    container_name: kw_lan_https_proxy
     depends_on:
       - kw_server
       - kw_auth_api
-      - kw_updates_http
+    environment:
+      KW_LAN_IP: ${KW_LAN_IP}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - kw_caddy_data:/data
-      - kw_caddy_config:/config
+      - ./Caddyfile.lan-https.local:/etc/caddy/Caddyfile:ro
+      - ${WEB_EXPORT_DIR:-./build/web}:/srv/web:ro
+      - kw_lan_caddy_data:/data
+      - kw_lan_caddy_config:/config
     ports:
-      - "80:80"
-      - "443:443"
+      - "0.0.0.0:9000:9000"
     restart: unless-stopped
 
 volumes:
-  kw_caddy_data:
-  kw_caddy_config:
+  kw_lan_caddy_data:
+  kw_lan_caddy_config:

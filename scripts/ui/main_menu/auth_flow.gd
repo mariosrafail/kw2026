@@ -9,7 +9,7 @@ const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
-const WEB_ONLINE_AUTH_API_BASE_URL := "http://stinis.ddns.net:8081/auth"
+const WEB_ONLINE_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
 const WEB_PRODUCTION_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
@@ -23,10 +23,13 @@ static var _runtime_session_api_base_url := ""
 
 func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	resolve_auth_profile(host)
+	var network_mode := str(host.get_meta("kw_network_mode", "online")).strip_edges().to_lower()
+	var lan_usable := bool(host.get_meta("kw_lan_usable", true))
+	var lan_block_reason := str(host.get_meta("kw_lan_blocked_reason", "")).strip_edges()
 	if OS.has_feature("web"):
 		# In web, prefer same-origin auth base: window.location.origin + "/auth".
 		var web_origin := _web_browser_origin()
-		var web_auth_base := _web_online_auth_api_base_url()
+		var web_auth_base := _web_online_auth_api_base_url() if network_mode == "online" else _normalize_api_base_url(str(ProjectSettings.get_setting("kw/auth_api_base_url", api_base_url_default)).strip_edges())
 		var is_secure_context := bool(JavaScriptBridge.eval("window.isSecureContext === true"))
 		var web_protocol := str(JavaScriptBridge.eval("window.location.protocol")).strip_edges()
 		var web_audio_enabled := bool(JavaScriptBridge.eval("window.KW_WEB_AUDIO_ENABLED === true"))
@@ -179,6 +182,23 @@ func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	box.add_child(status)
 	host.set("_auth_status_label", status)
 
+	if OS.has_feature("web") and network_mode == "lan" and not lan_usable:
+		status.text = "LAN is blocked on this HTTPS public page. Open http://<LAN_IP>:8081/ or use ONLINE mode."
+		login_btn.disabled = true
+		var auth_user_input := host.get("_auth_user_input") as LineEdit
+		var auth_pass_input := host.get("_auth_pass_input") as LineEdit
+		if auth_user_input != null:
+			auth_user_input.editable = false
+		if auth_pass_input != null:
+			auth_pass_input.editable = false
+		print("[NET] LAN mode cannot run from HTTPS public host because browser blocks HTTP LAN requests.")
+		print("[NET] Open the game from your LAN server instead: http://<LAN_IP>:8081/")
+		print("[NET] Or use ONLINE mode.")
+		if not lan_block_reason.is_empty():
+			print("[NET] LAN blocked reason = %s" % lan_block_reason)
+		auth_set_ui_locked(host, false)
+		return
+
 	auth_set_ui_locked(host, true)
 	if auth_restore_persisted_session(host):
 		auth_set_ui_locked(host, false)
@@ -205,6 +225,14 @@ func auth_set_ui_locked(host: Control, locked: bool) -> void:
 		host.call("_refresh_auth_footer")
 
 func auth_submit_login(host: Control) -> void:
+	if OS.has_feature("web"):
+		var network_mode := str(host.get_meta("kw_network_mode", "online")).strip_edges().to_lower()
+		var lan_usable := bool(host.get_meta("kw_lan_usable", true))
+		if network_mode == "lan" and not lan_usable:
+			var auth_status_label := host.get("_auth_status_label") as Label
+			if auth_status_label != null:
+				auth_status_label.text = "LAN blocked on HTTPS public page. Open http://<LAN_IP>:8081/ or use ONLINE."
+			return
 	var auth_http := host.get("_auth_http") as HTTPRequest
 	if auth_http == null:
 		return
@@ -1267,12 +1295,7 @@ func _web_browser_origin() -> String:
 func _web_online_auth_api_base_url() -> String:
 	if not OS.has_feature("web"):
 		return WEB_ONLINE_AUTH_API_BASE_URL
-	var protocol := str(JavaScriptBridge.eval("window.location.protocol")).strip_edges().to_lower()
-	# Netlify/HTTPS production: force the public HTTPS auth endpoint.
-	if protocol == "https:":
-		return _normalize_api_base_url(WEB_PRODUCTION_AUTH_API_BASE_URL)
-	# Temporary HTTP deployment: keep local 8081 auth endpoint.
-	return _normalize_api_base_url(WEB_ONLINE_AUTH_API_BASE_URL)
+	return _normalize_api_base_url(WEB_PRODUCTION_AUTH_API_BASE_URL)
 
 func _append_login_base_candidate(candidates: PackedStringArray, candidate: String) -> void:
 	var normalized := candidate.strip_edges().trim_suffix("/")

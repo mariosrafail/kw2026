@@ -20,6 +20,22 @@ func _owner_control() -> Control:
 
 func begin_connect_attempt(force_restart: bool, reason: String = "Connecting...", allow_while_connecting: bool = false) -> void:
 	var rpc_bridge: Variant = _host.get("_rpc_bridge")
+	var owner := _owner_control()
+	var runtime_label := "web" if OS.has_feature("web") else ("editor" if Engine.is_editor_hint() else "native")
+	var network_mode := "ONLINE"
+	if owner != null and owner.has_meta("kw_network_mode"):
+		network_mode = "LAN" if str(owner.get_meta("kw_network_mode")).strip_edges().to_lower() == "lan" else "ONLINE"
+	var lan_usable := true
+	var lan_block_reason := ""
+	if owner != null:
+		lan_usable = bool(owner.get_meta("kw_lan_usable", true))
+		lan_block_reason = str(owner.get_meta("kw_lan_blocked_reason", "")).strip_edges()
+	var transport := str(ProjectSettings.get_setting("kw/network_transport", "websocket")).strip_edges().to_lower()
+	if transport.is_empty():
+		transport = "websocket"
+	var auth_endpoint := str(ProjectSettings.get_setting("kw/auth_api_base_url", "")).strip_edges()
+	var game_host := str(ProjectSettings.get_setting("kw/default_server_host", "")).strip_edges()
+	var game_port := int(ProjectSettings.get_setting("kw/default_server_port", 0))
 	if rpc_bridge == null:
 		_host.call("_log", "begin_connect_attempt aborted rpc_bridge=null")
 		return
@@ -35,6 +51,26 @@ func begin_connect_attempt(force_restart: bool, reason: String = "Connecting..."
 		_host.set("_connect_candidate_index", 0)
 		_host.set("_connect_attempt_in_candidate", 0)
 	var connect_candidates := _host.get("_connect_candidates") as Array
+	print("[NET] runtime = %s" % runtime_label)
+	print("[NET] selected mode = %s" % network_mode)
+	if network_mode == "LAN":
+		print("[NET] LAN usable from this page = %s" % str(lan_usable))
+		if not lan_usable:
+			print("[NET] LAN blocked reason = %s" % lan_block_reason)
+	print("[NET] selected transport = %s" % transport)
+	print("[NET] auth endpoint = %s" % auth_endpoint)
+	print("[NET] game endpoint = %s:%d" % [game_host, game_port])
+	print("[NET] candidates = %s" % str(connect_candidates))
+	if network_mode == "LAN" and not lan_usable:
+		_host.call("_log", "LAN mode cannot run from HTTPS public host because browser blocks HTTP LAN requests.")
+		_host.call("_log", "Open the game from your LAN server instead: http://<LAN_IP>:8081/")
+		_host.call("_log", "Or use ONLINE mode.")
+		var status_label_blocked := _host.get("_status_label") as Label
+		if status_label_blocked != null:
+			status_label_blocked.text = "LAN blocked on HTTPS public page. Open http://<LAN_IP>:8081/ or use ONLINE."
+		_host.set("_action_inflight", false)
+		_host.call("_refresh_lobby_buttons_state")
+		return
 	var connect_candidate_index := int(_host.get("_connect_candidate_index"))
 	if connect_candidate_index < 0 or connect_candidate_index >= connect_candidates.size():
 		_host.set("_connect_candidates", _host.call("_build_connect_candidates"))

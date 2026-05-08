@@ -6,9 +6,13 @@ const CONNECT_FALLBACK_PORTS := [8081]
 const ALLOW_LOCALHOST_LOBBY_CONNECT := false
 
 var _host: Object
+var _browser_hostname_checked := false
+var _browser_hostname_cached := ""
 
 func configure(host: Object) -> void:
 	_host = host
+	_browser_hostname_checked = false
+	_browser_hostname_cached = ""
 
 func resolve_server_host_port_from_args(host: String = "127.0.0.1", port: int = 8080) -> Dictionary:
 	var resolved_host := host.strip_edges()
@@ -101,92 +105,170 @@ func resolve_auth_api_host_port() -> Dictionary:
 
 func build_connect_candidates() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var seen := {}
+	var network_mode := _selected_network_mode()
+	var lan_usable := _is_lan_usable_from_owner()
+	var lan_block_reason := _lan_block_reason_from_owner()
+	if network_mode == "online":
+		out.append({"host": "wss://play.outrage.ink/ws", "port": 443})
+		_log("connect candidates forced ONLINE web=%s" % str(out))
+		return out
+	if not lan_usable:
+		_log("connect candidates forced LAN web=[] (blocked: %s)" % lan_block_reason)
+		return out
 
-	# Temporary ONLINE web mode: keep a single public websocket target only.
-	# Avoid localhost/127/private and auth-site port 8081 candidates.
-	if OS.has_feature("web") and _host != null:
-		var owner := _host.get("_host") as Control
-		var network_mode := ""
-		if owner != null and owner.has_meta("kw_network_mode"):
-			network_mode = str(owner.get_meta("kw_network_mode")).strip_edges().to_lower()
-		if network_mode == "online":
-			var forced_host := str(ProjectSettings.get_setting("kw/default_server_host", "stinis.ddns.net")).strip_edges()
-			var forced_port := int(ProjectSettings.get_setting("kw/default_server_port", 8080))
-			if forced_host.is_empty():
-				forced_host = "stinis.ddns.net"
-			if forced_port < 1 or forced_port > 65535:
-				forced_port = 8080
-			out.append({"host": forced_host, "port": forced_port})
-			if _host.has_method("_log"):
-				_host.call("_log", "connect candidates forced ONLINE web=%s" % str(out))
-			return out
-
-	var resolved_primary := resolve_server_host_port()
-	var from_args := resolve_server_host_port_from_args(
-		str(resolved_primary.get("host", "")).strip_edges(),
-		int(resolved_primary.get("port", 8080))
-	)
-	for endpoint in [resolved_primary, from_args]:
-		var host := str(endpoint.get("host", "")).strip_edges()
-		var port := int(endpoint.get("port", 8080))
-		if host.is_empty() or port < 1 or port > 65535:
-			continue
-		var host_lc := host.to_lower()
-		var is_localhost := host_lc == "localhost" or host_lc == "127.0.0.1" or host_lc == "::1"
-		if is_localhost and not ALLOW_LOCALHOST_LOBBY_CONNECT:
-			continue
-		var key := "%s:%d" % [host, port]
-		if seen.has(key):
-			continue
-		seen[key] = true
-		out.append({"host": host, "port": port})
-		for fallback_port_value in CONNECT_FALLBACK_PORTS:
-			var fallback_port := int(fallback_port_value)
-			if fallback_port < 1 or fallback_port > 65535 or fallback_port == port:
-				continue
-			var fallback_key := "%s:%d" % [host, fallback_port]
-			if seen.has(fallback_key):
-				continue
-			seen[fallback_key] = true
-			out.append({"host": host, "port": fallback_port})
-		var local_hosts := local_connect_fallback_hosts()
-		for local_host_value in local_hosts:
-			var local_host := str(local_host_value).strip_edges()
-			if local_host.is_empty():
-				continue
-			var local_key := "%s:%d" % [local_host, port]
-			if not seen.has(local_key):
-				seen[local_key] = true
-				out.append({"host": local_host, "port": port})
-			for fallback_port_value in CONNECT_FALLBACK_PORTS:
-				var local_fallback_port := int(fallback_port_value)
-				if local_fallback_port < 1 or local_fallback_port > 65535 or local_fallback_port == port:
-					continue
-				var local_fallback_key := "%s:%d" % [local_host, local_fallback_port]
-				if seen.has(local_fallback_key):
-					continue
-				seen[local_fallback_key] = true
-				out.append({"host": local_host, "port": local_fallback_port})
-	if _host != null and _host.has_method("_log"):
-		_host.call("_log", "connect candidates=%s" % str(out))
+	var resolved := resolve_server_host_port()
+	var lan_host := str(resolved.get("host", "")).strip_edges()
+	var lan_skip := _candidate_skip_reason(lan_host, true)
+	if lan_host.is_empty() or not lan_skip.is_empty():
+		var local_hosts := local_connect_fallback_hosts(true)
+		if not local_hosts.is_empty():
+			lan_host = str(local_hosts[0]).strip_edges()
+	if lan_host.is_empty():
+		_log("connect candidates forced LAN web=[] (no usable LAN host)")
+		return out
+	var lan_port := int(resolved.get("port", 8080))
+	if lan_port < 1 or lan_port > 65535:
+		lan_port = 8080
+	if lan_host.begins_with("ws://") or lan_host.begins_with("wss://"):
+		out.append({"host": lan_host, "port": lan_port})
+	else:
+		out.append({"host": lan_host, "port": 8080})
+	_log("connect candidates forced LAN web=%s" % str(out))
 	return out
 
-func local_connect_fallback_hosts() -> PackedStringArray:
+func local_connect_fallback_hosts(web_lan_mode: bool = false) -> PackedStringArray:
 	var out := PackedStringArray()
-	out.append("127.0.0.1")
-	out.append("localhost")
+	if web_lan_mode:
+		var browser_host := _browser_hostname_candidate()
+		if not browser_host.is_empty() and not out.has(browser_host):
+			out.append(browser_host)
+	else:
+		out.append("127.0.0.1")
+		out.append("localhost")
 	for address_value in IP.get_local_addresses():
 		var address := str(address_value).strip_edges()
 		if address.is_empty():
 			continue
 		if not address.contains("."):
 			continue
-		if address.begins_with("127."):
-			continue
-		if address.begins_with("169.254."):
+		var skip_reason := _candidate_skip_reason(address, web_lan_mode)
+		if not skip_reason.is_empty():
+			_log("skipped fallback host %s (%s)" % [address, skip_reason])
 			continue
 		if out.has(address):
 			continue
 		out.append(address)
+	if web_lan_mode:
+		var ranked := Array(out)
+		ranked.sort_custom(Callable(self, "_compare_host_priority"))
+		var has_preferred_lan := false
+		for host_value in ranked:
+			var host := str(host_value).strip_edges().to_lower()
+			if host.begins_with("192.168.") or host.begins_with("10."):
+				has_preferred_lan = true
+				break
+		var sorted_out := PackedStringArray()
+		for host_value in ranked:
+			var host := str(host_value).strip_edges()
+			if has_preferred_lan and _is_private_172_host(host.to_lower()):
+				_log("skipped fallback host %s (private 172 deprioritized by preferred LAN IP)" % host)
+				continue
+			sorted_out.append(host)
+		out = sorted_out
 	return out
+
+func _selected_network_mode() -> String:
+	var network_mode := ""
+	if _host == null:
+		return network_mode
+	var owner := _host.get("_host") as Control
+	if owner != null and owner.has_meta("kw_network_mode"):
+		network_mode = str(owner.get_meta("kw_network_mode")).strip_edges().to_lower()
+	return network_mode
+
+func _is_lan_usable_from_owner() -> bool:
+	if _host == null:
+		return true
+	var owner := _host.get("_host") as Control
+	if owner == null:
+		return true
+	return bool(owner.get_meta("kw_lan_usable", true))
+
+func _lan_block_reason_from_owner() -> String:
+	if _host == null:
+		return ""
+	var owner := _host.get("_host") as Control
+	if owner == null:
+		return ""
+	return str(owner.get_meta("kw_lan_blocked_reason", "")).strip_edges()
+
+func _candidate_skip_reason(host: String, web_lan_mode: bool) -> String:
+	var normalized := host.strip_edges().to_lower()
+	if normalized.is_empty():
+		return "empty"
+	if normalized == "localhost":
+		if web_lan_mode:
+			return "localhost disabled in web LAN mode"
+		if ALLOW_LOCALHOST_LOBBY_CONNECT:
+			return ""
+		return "localhost not allowed"
+	if not normalized.contains("."):
+		return ""
+	if normalized.begins_with("127."):
+		if ALLOW_LOCALHOST_LOBBY_CONNECT and not web_lan_mode:
+			return ""
+		return "loopback not allowed"
+	if normalized.begins_with("169.254."):
+		return "link-local"
+	return ""
+
+func _browser_hostname_candidate() -> String:
+	if _browser_hostname_checked:
+		return _browser_hostname_cached
+	_browser_hostname_checked = true
+	if not OS.has_feature("web"):
+		return ""
+	var hostname := str(JavaScriptBridge.eval("window.location.hostname")).strip_edges().to_lower()
+	var skip_reason := _candidate_skip_reason(hostname, true)
+	if not skip_reason.is_empty():
+		_log("skipped browser hostname %s (%s)" % [hostname, skip_reason])
+		return ""
+	_browser_hostname_cached = hostname
+	return _browser_hostname_cached
+
+func _compare_host_priority(a: String, b: String) -> bool:
+	return _host_priority(a) < _host_priority(b)
+
+func _compare_endpoint_priority(a: Dictionary, b: Dictionary) -> bool:
+	var host_a := str(a.get("host", ""))
+	var host_b := str(b.get("host", ""))
+	var port_a := int(a.get("port", 0))
+	var port_b := int(b.get("port", 0))
+	var pri_a := _host_priority(host_a)
+	var pri_b := _host_priority(host_b)
+	if pri_a == pri_b:
+		return port_a < port_b
+	return pri_a < pri_b
+
+func _host_priority(host: String) -> int:
+	var normalized := host.strip_edges().to_lower()
+	if normalized.begins_with("192.168."):
+		return 0
+	if normalized.begins_with("10."):
+		return 1
+	if _is_private_172_host(normalized):
+		return 2
+	return 3
+
+func _is_private_172_host(host: String) -> bool:
+	var parts := host.split(".")
+	if parts.size() != 4:
+		return false
+	if parts[0] != "172":
+		return false
+	var second := int(parts[1])
+	return second >= 16 and second <= 31
+
+func _log(message: String) -> void:
+	if _host != null and _host.has_method("_log"):
+		_host.call("_log", message)

@@ -342,6 +342,7 @@ func _ensure_mobile_touch_controls() -> void:
 	node.name = "MobileTouchControls"
 	client_hud_layer.add_child(node)
 	_rt_mobile_touch_controls = node
+	_apply_runtime_cursor_visibility()
 
 func _tick_mobile_touch_controls() -> void:
 	if _rt_mobile_touch_controls == null or not is_instance_valid(_rt_mobile_touch_controls):
@@ -362,11 +363,12 @@ func _tick_mobile_touch_controls() -> void:
 		_rt_mobile_touch_controls.hide_controls()
 
 	if not should_show:
+		_apply_runtime_cursor_visibility()
 		return
 	if _rt_mobile_touch_controls.consume_ultimate_pressed():
+		print("[MOBILE CONTROLS] triggering action = skill2/ultimate")
 		_try_cast_skill2()
-	if _rt_mobile_touch_controls.consume_reload_pressed():
-		_try_reload()
+	_apply_runtime_cursor_visibility()
 
 func _is_mobile_orientation_overlay_visible() -> bool:
 	var tree := get_tree()
@@ -423,6 +425,21 @@ func _override_local_input_state(peer_id: int, base_state: Dictionary) -> Dictio
 	resolved["shoot_held"] = shoot_held
 	resolved["aim_world"] = base_aim_world
 	return resolved
+
+func _apply_runtime_cursor_visibility() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var root := tree.get_root()
+	if root == null:
+		return
+	var cm := root.get_node_or_null(CURSOR_MANAGER_NAME)
+	if cm == null or not cm.has_method("set_game_cursor_hidden"):
+		return
+	var hide_for_mobile := _rt_mobile_touch_controls != null \
+		and is_instance_valid(_rt_mobile_touch_controls) \
+		and _rt_mobile_touch_controls.is_mobile_runtime()
+	cm.call("set_game_cursor_hidden", hide_for_mobile)
 
 func _ensure_skill_hud() -> void:
 	if cooldown_label != null:

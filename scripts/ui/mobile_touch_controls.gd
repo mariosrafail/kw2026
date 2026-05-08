@@ -8,7 +8,6 @@ signal shoot_released()
 signal jump_pressed()
 signal jump_released()
 signal ultimate_pressed()
-signal reload_pressed()
 
 const ENABLE_MOBILE_DEBUG := false
 const STICK_RADIUS_RATIO := 0.095
@@ -17,6 +16,7 @@ const DEADZONE := 0.22
 const BTN_RADIUS_RATIO := 0.06
 const SAFE_MARGIN_X_RATIO := 0.05
 const SAFE_MARGIN_Y_RATIO := 0.08
+const JUMP_FROM_STICK_UP_THRESHOLD := -0.55
 
 var _is_mobile_runtime := false
 var _controls_enabled := false
@@ -26,13 +26,11 @@ var _shoot_held := false
 var _jump_held := false
 var _jump_pressed_edge := false
 var _ultimate_pressed_edge := false
-var _reload_pressed_edge := false
+var _jump_up_gate_open := true
 
 var _left_touch_id := -1
 var _right_touch_id := -1
-var _jump_touch_id := -1
 var _ultimate_touch_id := -1
-var _reload_touch_id := -1
 
 var _left_center := Vector2.ZERO
 var _right_center := Vector2.ZERO
@@ -43,9 +41,7 @@ var _left_base: ColorRect
 var _left_knob: ColorRect
 var _right_base: ColorRect
 var _right_knob: ColorRect
-var _jump_btn: Button
 var _ultimate_btn: Button
-var _reload_btn: Button
 var _info_label: Label
 
 func _ready() -> void:
@@ -111,11 +107,6 @@ func consume_ultimate_pressed() -> bool:
 	_ultimate_pressed_edge = false
 	return out
 
-func consume_reload_pressed() -> bool:
-	var out := _reload_pressed_edge
-	_reload_pressed_edge = false
-	return out
-
 func _build_ui() -> void:
 	_left_base = _make_circle(Color(0.22, 0.38, 0.8, 0.5))
 	_left_knob = _make_circle(Color(0.58, 0.82, 1.0, 0.75))
@@ -126,20 +117,9 @@ func _build_ui() -> void:
 	add_child(_left_knob)
 	add_child(_right_knob)
 
-	_jump_btn = _make_button("JUMP")
-	_jump_btn.pressed.connect(func() -> void:
-		# Press state for touch comes from _input id tracking.
-		pass
-	)
-	add_child(_jump_btn)
-
 	_ultimate_btn = _make_button("ULT")
 	_ultimate_btn.modulate = Color(1.0, 0.65, 0.35, 0.9)
 	add_child(_ultimate_btn)
-
-	_reload_btn = _make_button("R")
-	_reload_btn.modulate = Color(0.8, 0.95, 1.0, 0.85)
-	add_child(_reload_btn)
 
 	_info_label = Label.new()
 	_info_label.visible = false
@@ -174,12 +154,8 @@ func _update_layout() -> void:
 	_place_circle(_left_knob, _left_center, _left_radius * STICK_KNOB_RATIO)
 	_place_circle(_right_knob, _right_center, _right_radius * STICK_KNOB_RATIO)
 
-	var jump_pos := _left_center + Vector2(_left_radius * 1.45, -_left_radius * 0.18)
-	_place_button(_jump_btn, jump_pos, btn_radius)
-	var ult_pos := _right_center + Vector2(0.0, -_right_radius * 1.35)
+	var ult_pos := _right_center + Vector2(0.0, -_right_radius * 1.55)
 	_place_button(_ultimate_btn, ult_pos, btn_radius * 0.94)
-	var reload_pos := _right_center + Vector2(-_right_radius * 1.25, -_right_radius * 0.6)
-	_place_button(_reload_btn, reload_pos, btn_radius * 0.8)
 
 func _place_circle(node: ColorRect, center: Vector2, radius: float) -> void:
 	var diameter := radius * 2.0
@@ -212,23 +188,12 @@ func _handle_screen_touch(event: InputEventScreenTouch) -> void:
 			_right_touch_id = id
 			_update_right_stick(pos)
 			return
-		if _jump_touch_id == -1 and _is_inside_button(_jump_btn, pos):
-			_jump_touch_id = id
-			_set_jump_held(true)
-			return
 		if _ultimate_touch_id == -1 and _is_inside_button(_ultimate_btn, pos):
 			_ultimate_touch_id = id
 			_ultimate_pressed_edge = true
 			emit_signal("ultimate_pressed")
 			_flash_button(_ultimate_btn)
-			if ENABLE_MOBILE_DEBUG:
-				print("[MOBILE_INPUT] ultimate")
-			return
-		if _reload_touch_id == -1 and _is_inside_button(_reload_btn, pos):
-			_reload_touch_id = id
-			_reload_pressed_edge = true
-			emit_signal("reload_pressed")
-			_flash_button(_reload_btn)
+			print("[MOBILE CONTROLS] ULT pressed")
 			return
 		return
 
@@ -238,13 +203,8 @@ func _handle_screen_touch(event: InputEventScreenTouch) -> void:
 	if id == _right_touch_id:
 		_right_touch_id = -1
 		_stop_right_stick()
-	if id == _jump_touch_id:
-		_jump_touch_id = -1
-		_set_jump_held(false)
 	if id == _ultimate_touch_id:
 		_ultimate_touch_id = -1
-	if id == _reload_touch_id:
-		_reload_touch_id = -1
 
 func _handle_screen_drag(event: InputEventScreenDrag) -> void:
 	var id := event.index
@@ -262,6 +222,14 @@ func _update_left_stick(pos: Vector2) -> void:
 	_movement_vec = norm
 	_left_knob.position = _left_center + norm * (_left_radius * 0.58) - _left_knob.size * 0.5
 	emit_signal("movement_changed", _movement_vec)
+	var up_triggered := _movement_vec.y <= JUMP_FROM_STICK_UP_THRESHOLD
+	if up_triggered and _jump_up_gate_open:
+		_jump_up_gate_open = false
+		_set_jump_held(true)
+		_set_jump_held(false)
+		print("[MOBILE CONTROLS] jump from joystick up")
+	elif not up_triggered:
+		_jump_up_gate_open = true
 	if ENABLE_MOBILE_DEBUG:
 		print("[MOBILE_INPUT] movement = %s" % str(_movement_vec))
 
@@ -313,15 +281,13 @@ func _set_jump_held(value: bool) -> void:
 func _release_all_touches() -> void:
 	_left_touch_id = -1
 	_right_touch_id = -1
-	_jump_touch_id = -1
 	_ultimate_touch_id = -1
-	_reload_touch_id = -1
 	_movement_vec = Vector2.ZERO
 	_aim_vec = Vector2.ZERO
 	_jump_held = false
 	_jump_pressed_edge = false
+	_jump_up_gate_open = true
 	_ultimate_pressed_edge = false
-	_reload_pressed_edge = false
 	if _shoot_held:
 		_shoot_held = false
 		emit_signal("shoot_released")

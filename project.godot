@@ -20,6 +20,11 @@ config/features=PackedStringArray("4.6", "Forward Plus")
 boot_splash/show_image=false
 config/icon="res://icon.svg"
 
+[autoload]
+
+MobileOrientationGuardGlobal="*res://scripts/ui/mobile_orientation_guard_global.gd"
+WebAudioUnlock="*res://scripts/audio/web_audio_unlock.gd"
+
 [display]
 
 window/size/viewport_width=640
@@ -31,9 +36,9 @@ window/stretch/aspect="expand"
 
 [kw]
 
-auth_api_base_url="http://stinis.ddns.net:8081/auth"
-default_server_host="stinis.ddns.net"
-default_server_port=8080
+auth_api_base_url="https://play.outrage.ink/auth"
+default_server_host="wss://play.outrage.ink/ws"
+default_server_port=443
 network_transport="websocket"
 
 [rendering]
