@@ -8,6 +8,6 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends libfontconfig1 python3-minimal \
 	&& rm -rf /var/lib/apt/lists/*
 
-RUN bash -lc "set -e; if command -v godot4 >/dev/null 2>&1; then GODOT_BIN=godot4; else GODOT_BIN=godot; fi; $GODOT_BIN --headless --editor --quit --path /game; test -d /game/.godot/imported"
+RUN bash -lc "set -e; if command -v godot4 >/dev/null 2>&1; then GODOT_BIN=godot4; else GODOT_BIN=godot; fi; $GODOT_BIN --headless --editor --quit-after 20 --path /game; test -d /game/.godot/imported"
 
-CMD bash -lc "set -e; python3 /game/tools/check_rpc_surface.py; if command -v godot4 >/dev/null 2>&1; then GODOT_BIN=godot4; else GODOT_BIN=godot; fi; $GODOT_BIN --headless --editor --quit --path /game; $GODOT_BIN --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}"
+CMD bash -lc "set -e; python3 /game/tools/check_rpc_surface.py; if command -v godot4 >/dev/null 2>&1; then GODOT_BIN=godot4; else GODOT_BIN=godot; fi; $GODOT_BIN --headless --editor --quit-after 20 --path /game; $GODOT_BIN --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}"
