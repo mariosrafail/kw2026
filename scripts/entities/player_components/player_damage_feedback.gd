@@ -11,7 +11,7 @@ const BLOOD_SCREEN_TEXTURES := [
 ]
 const DAMAGE_FLASH_WHITE_SHADER := preload("res://assets/shaders/damage_flash_white.gdshader")
 const DAMAGE_FLASH_MIX_SHADER := preload("res://assets/shaders/damage_flash_mix.gdshader")
-const DAMAGE_NUMBER_FONT := preload("res://assets/fonts/kwfont.ttf")
+const DAMAGE_NUMBER_FONT := preload("res://assets/fonts/kwFont.ttf")
 const DAMAGE_FLASH_DURATION_SEC := 0.38
 const DAMAGE_FLASH_ALPHA := 1.0
 const DAMAGE_FLASH_POP_IN_SEC := 0.015

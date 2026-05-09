@@ -1,7 +1,7 @@
 extends "res://scripts/app/runtime_world_logic.gd"
 
 
-const PIXEL_FONT := preload("res://assets/fonts/kwfont.ttf")
+const PIXEL_FONT := preload("res://assets/fonts/kwFont.ttf")
 const RUNTIME_AUTH_FLOW_SCRIPT := preload("res://scripts/app/runtime_auth_flow.gd")
 const RUNTIME_SESSION_AUTH_UI_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_auth_ui_controller.gd")
 const RUNTIME_SESSION_AUTH_RESPONSE_CONTROLLER_SCRIPT := preload("res://scripts/app/runtime_session_auth_response_controller.gd")

@@ -6,7 +6,7 @@
 [ext_resource type="Texture2D" uid="uid://bb0ywf5oxwlt8" path="res://assets/warriors/tasko/torso.png" id="3_73kkf"]
 [ext_resource type="Texture2D" uid="uid://d2n5fw8sto5k" path="res://assets/warriors/hp_green.png" id="3_n5sgd"]
 [ext_resource type="Texture2D" uid="uid://bu5qjamiys787" path="res://assets/warriors/guns.png" id="3_tfnx5"]
-[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="3_u0ukb"]
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwFont.ttf" id="3_u0ukb"]
 [ext_resource type="Texture2D" uid="uid://blr7dq2185kfm" path="res://assets/warriors/tasko/legs.png" id="4_n5sgd"]
 [ext_resource type="AudioStream" uid="uid://cgpcofbhh12qk" path="res://assets/sounds/sfx/guns/ak47/ak_shoot.wav" id="5_ifk0o"]
 [ext_resource type="AudioStream" uid="uid://bfw70vkoi8g3d" path="res://assets/sounds/sfx/general/death.wav" id="6_6oc35"]

@@ -13,7 +13,7 @@
 [ext_resource type="Texture2D" uid="uid://c4n8ugbmefdnt" path="res://assets/maps/skull_Front.png" id="11_m07p5"]
 [ext_resource type="Shader" uid="uid://be3ul1wrb4xp" path="res://assets/shaders/main_atmosphere_overlay.gdshader" id="12_2qlna"]
 [ext_resource type="Shader" uid="uid://dk7ajln58td30" path="res://assets/shaders/main_vignette_overlay.gdshader" id="13_7grus"]
-[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="14_bfr03"]
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwFont.ttf" id="14_bfr03"]
 [ext_resource type="Script" uid="uid://3lcyx3mfbfob" path="res://scripts/world/ground_audio_zone.gd" id="15_r8tce"]
 [ext_resource type="Script" uid="uid://l4hblhj0vp42" path="res://scripts/world/trampoline_pad.gd" id="16_tramp"]
 [ext_resource type="PackedScene" path="res://scenes/props/lamp_2d.tscn" id="17_lamp2d"]

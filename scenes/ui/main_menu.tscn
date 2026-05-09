@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://dcauxgua7fjfx"]
 
-[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="1_font"]
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwFont.ttf" id="1_font"]
 [ext_resource type="Texture2D" uid="uid://dhiu1fi77ffb3" path="res://assets/textures/textLogo.png" id="2_logo"]
 [ext_resource type="Texture2D" uid="uid://do6fg4jb02puj" path="res://assets/textures/bullet.png" id="3_bullet"]
 [ext_resource type="PackedScene" uid="uid://dmx2f1xqqr411" path="res://scenes/entities/player.tscn" id="4_player"]

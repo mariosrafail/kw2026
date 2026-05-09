@@ -3,12 +3,12 @@
 importer="font_data_dynamic"
 type="FontFile"
 uid="uid://brj43osig8u6e"
-path="res://.godot/imported/kwfont.ttf-3d985a99834752289eb46d5f311fa381.fontdata"
+path="res://.godot/imported/kwFont.ttf-da3a06346e3caa8634fb046846540479.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/kwfont.ttf"
-dest_files=["res://.godot/imported/kwfont.ttf-3d985a99834752289eb46d5f311fa381.fontdata"]
+source_file="res://assets/fonts/kwFont.ttf"
+dest_files=["res://.godot/imported/kwFont.ttf-da3a06346e3caa8634fb046846540479.fontdata"]
 
 [params]
 

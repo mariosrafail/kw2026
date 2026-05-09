@@ -2,7 +2,7 @@ extends Control
 class_name SkillHud
 
 const SKILLS_TEXTURE := preload("res://assets/ui/skills.png")
-const PIXEL_FONT := preload("res://assets/fonts/kwfont.ttf")
+const PIXEL_FONT := preload("res://assets/fonts/kwFont.ttf")
 const RADIAL_SHADER := preload("res://assets/shaders/skill_cooldown_radial.gdshader")
 
 const ICON_SIZE := 16

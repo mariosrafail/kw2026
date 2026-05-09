@@ -1,7 +1,7 @@
 extends RefCounted
 class_name UiController
 
-const KILL_FEED_FONT := preload("res://assets/fonts/kwfont.ttf")
+const KILL_FEED_FONT := preload("res://assets/fonts/kwFont.ttf")
 
 var start_server_button: Button
 var stop_button: Button

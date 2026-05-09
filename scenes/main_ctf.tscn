@@ -13,7 +13,7 @@
 [ext_resource type="Texture2D" uid="uid://lupq0puqxavy" path="res://assets/maps/warriorsriftFRONT.png" id="11_oyhn2"]
 [ext_resource type="Shader" uid="uid://be3ul1wrb4xp" path="res://assets/shaders/main_atmosphere_overlay.gdshader" id="12_lwx6j"]
 [ext_resource type="Shader" uid="uid://dk7ajln58td30" path="res://assets/shaders/main_vignette_overlay.gdshader" id="13_4nb4a"]
-[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="14_j4ilc"]
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwFont.ttf" id="14_j4ilc"]
 [ext_resource type="Script" uid="uid://3lcyx3mfbfob" path="res://scripts/world/ground_audio_zone.gd" id="15_4865p"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]

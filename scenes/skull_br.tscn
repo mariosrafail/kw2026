@@ -13,7 +13,7 @@
 [ext_resource type="Texture2D" uid="uid://c4n8ugbmefdnt" path="res://assets/maps/skull_Front.png" id="11_ylo3b"]
 [ext_resource type="Shader" uid="uid://be3ul1wrb4xp" path="res://assets/shaders/main_atmosphere_overlay.gdshader" id="12_ap21f"]
 [ext_resource type="Shader" uid="uid://dk7ajln58td30" path="res://assets/shaders/main_vignette_overlay.gdshader" id="13_rxj5b"]
-[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwfont.ttf" id="14_p1rgd"]
+[ext_resource type="FontFile" uid="uid://brj43osig8u6e" path="res://assets/fonts/kwFont.ttf" id="14_p1rgd"]
 [ext_resource type="Script" uid="uid://3lcyx3mfbfob" path="res://scripts/world/ground_audio_zone.gd" id="15_5jcdb"]
 [ext_resource type="Script" uid="uid://bd7lmpxc5sfq2" path="res://scripts/world/modes/battle_royale_zone_controller.gd" id="16_brzone"]
 
