@@ -10,4 +10,4 @@ RUN apt-get update \
 
 RUN bash -lc "set -e; if command -v godot4 >/dev/null 2>&1; then GODOT_BIN=godot4; else GODOT_BIN=godot; fi; $GODOT_BIN --headless --editor --quit --path /game; test -d /game/.godot/imported"
 
-CMD bash -lc "python3 /game/tools/check_rpc_surface.py && if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}; else godot --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}; fi"
+CMD bash -lc "set -e; python3 /game/tools/check_rpc_surface.py; if command -v godot4 >/dev/null 2>&1; then GODOT_BIN=godot4; else GODOT_BIN=godot; fi; if [ ! -d /game/.godot/imported ]; then $GODOT_BIN --headless --editor --quit --path /game; fi; $GODOT_BIN --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}"
