@@ -8,4 +8,6 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends libfontconfig1 python3-minimal \
 	&& rm -rf /var/lib/apt/lists/*
 
+RUN bash -lc "if command -v godot4 >/dev/null 2>&1; then godot4 --headless --path /game --import; else godot --headless --path /game --import; fi"
+
 CMD bash -lc "python3 /game/tools/check_rpc_surface.py && if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}; else godot --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=${KW_GAME_PORT:-8080}; fi"
