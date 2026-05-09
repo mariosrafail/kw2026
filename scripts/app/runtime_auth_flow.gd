@@ -107,9 +107,9 @@ func auth_logout_best_effort(host: Node) -> void:
 		host.set("_auth_logout_token", "")
 
 func auth_api_base_url(host: Node) -> String:
-	var configured := str(ProjectSettings.get_setting(AUTH_API_BASE_URL_SETTING, "https://play.outrage.ink/auth")).strip_edges()
+	var configured := str(ProjectSettings.get_setting(AUTH_API_BASE_URL_SETTING, "http://64.225.102.179/auth")).strip_edges()
 	if configured.is_empty():
-		configured = "https://play.outrage.ink/auth"
+		configured = "http://64.225.102.179/auth"
 	return configured.trim_suffix("/")
 
 func load_auth_session(host: Node) -> void:
