@@ -9,8 +9,8 @@ const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
-const WEB_ONLINE_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
-const WEB_PRODUCTION_AUTH_API_BASE_URL := "https://play.outrage.ink/auth"
+const WEB_ONLINE_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
+const WEB_PRODUCTION_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
 const WEAPON_AK47 := DATA.WEAPON_AK47

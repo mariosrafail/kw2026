@@ -1,6 +1,6 @@
 # VPS Deployment
 
-Scope: production online runtime on the dedicated VPS.
+Scope: production online runtime on the DigitalOcean VPS using the public IP directly.
 
 Host:
 - Public IPv4: `64.225.102.179`
@@ -13,10 +13,10 @@ Host:
 
 Production traffic goes directly to the VPS:
 
-`Client -> play.outrage.ink -> VPS Caddy -> Docker services`
+`Client -> 64.225.102.179 -> VPS Caddy -> Docker services`
 
 Services:
-- `kw_public_proxy` (Caddy): public `80/443`
+- `kw_public_proxy` (Caddy): public `80`
 - `kw_server` (Godot): internal `8080`, `KW_NETWORK_TRANSPORT=websocket`
 - `kw_auth_api` (FastAPI): internal `8090`
 - `kw_updates_http` (static web export): internal `80`
@@ -26,20 +26,16 @@ Routes:
 - `/ws*` -> `kw_server:8080`, with `/ws` stripped by Caddy
 - `/` -> `kw_updates_http:80`
 
-Cloudflare may be used as the DNS provider only. Do not use a proxy/orange-cloud setting for `play.outrage.ink`, and do not use a Tunnel route for `play.outrage.ink`, `/auth`, or `/ws`. The DNS `A` record for `play.outrage.ink` should point directly to `64.225.102.179`.
+No domain, Cloudflare, DDNS, or TLS is required for the native launcher profile.
 
 ## Public Endpoints
 
-Browser and normal production builds:
-- Auth: `https://play.outrage.ink/auth`
-- WebSocket: `wss://play.outrage.ink/ws`
-
-Native diagnostic direct-IP mode:
+Native production build:
 - Auth: `http://64.225.102.179/auth`
-- WebSocket through Caddy: `ws://64.225.102.179/ws`
-- WebSocket direct to Godot, if port `8080` is published: `ws://64.225.102.179:8080`
+- WebSocket: `ws://64.225.102.179/ws`
+- Updates: `http://64.225.102.179/kw/update_manifest.json`
 
-Browsers served from HTTPS pages must use `wss://`, not `ws://`. Direct-IP HTTP/WS mode is for diagnostics and native builds; browsers can block mixed insecure `http://` or `ws://` requests when the page was loaded over HTTPS.
+The web build must be served over HTTP when using `ws://` and `http://`. Browsers loaded from an HTTPS page will block these insecure endpoints.
 
 ## Deploy
 
@@ -74,7 +70,7 @@ Expected `kw_server` startup:
 Auth health:
 
 ```bash
-curl -v https://play.outrage.ink/auth/health
+curl -v http://64.225.102.179/auth/health
 ```
 
 Expected result: HTTP `200` with `{"ok":true,...}`.
@@ -82,24 +78,24 @@ Expected result: HTTP `200` with `{"ok":true,...}`.
 WebSocket handshake:
 
 ```bash
-curl -vk \
+curl -v \
   -H "Connection: Upgrade" \
   -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
   -H "Sec-WebSocket-Version: 13" \
-  https://play.outrage.ink/ws
+  http://64.225.102.179/ws
 ```
 
 Expected result: HTTP `101 Switching Protocols`.
 
 Client online logs should include:
 - `[AUTH] response code = 200 action=profile`
-- `[NET] websocket endpoint = wss://play.outrage.ink/ws`
+- `[NET] websocket endpoint = ws://64.225.102.179/ws`
 - `[NET] connected = true`
 
-## Native Direct-IP Profile
+## Launcher Config
 
-For native/exe diagnostics, use a launcher config like:
+Use:
 
 ```json
 {
@@ -107,17 +103,6 @@ For native/exe diagnostics, use a launcher config like:
   "auth_api_base_url": "http://64.225.102.179/auth",
   "default_host": "ws://64.225.102.179/ws",
   "default_port": 80
-}
-```
-
-The production launcher config should use:
-
-```json
-{
-  "update_manifest_url": "https://play.outrage.ink/kw/update_manifest.json",
-  "auth_api_base_url": "https://play.outrage.ink/auth",
-  "default_host": "wss://play.outrage.ink/ws",
-  "default_port": 443
 }
 ```
 

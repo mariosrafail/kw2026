@@ -1,24 +1,4 @@
-play.outrage.ink {
-	encode gzip
-
-	handle_path /ws* {
-		reverse_proxy kw_server:8080
-	}
-
-	handle /auth {
-		redir /auth/ 308
-	}
-
-	handle_path /auth/* {
-		reverse_proxy kw_auth_api:8090
-	}
-
-	handle {
-		reverse_proxy kw_updates_http:80
-	}
-}
-
-http://64.225.102.179 {
+:80 {
 	encode gzip
 
 	handle_path /ws* {
