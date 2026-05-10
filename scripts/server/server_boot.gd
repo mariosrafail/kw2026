@@ -125,7 +125,20 @@ func _broadcast_lobby_chat(lobby_id: int, sender_peer_id: int, display_name: Str
 
 @rpc("any_peer", "reliable")
 func _rpc_request_spawn() -> void:
-	pass
+	var peer_id := multiplayer.get_remote_sender_id()
+	var lobby_id := lobby_service.get_peer_lobby(peer_id)
+	_log("spawn request received in server_boot peer_id=%d lobby_id=%d" % [peer_id, lobby_id])
+	if lobby_id <= 0 or not lobby_service.has_lobby(lobby_id):
+		_log("spawn request ignored in server_boot: missing lobby for peer_id=%d" % peer_id)
+		return
+	if not lobby_service.lobby_started(lobby_id):
+		_log("spawn request ignored in server_boot: lobby not started lobby_id=%d" % lobby_id)
+		return
+	var lobby := lobby_service.get_lobby_data(lobby_id)
+	var map_id := str(lobby.get("map_id", _lobby_map_id(lobby_id))).strip_edges().to_lower()
+	var mode_id := map_flow_service.normalize_mode_id(str(lobby.get("mode_id", "deathmatch")))
+	_rpc_scene_switch_to_map.rpc_id(peer_id, map_id)
+	_switch_server_to_map_scene(map_id, mode_id, lobby)
 
 @rpc("any_peer", "reliable")
 func _rpc_request_reload() -> void:
