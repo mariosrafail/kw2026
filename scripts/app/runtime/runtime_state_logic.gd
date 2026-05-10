@@ -116,6 +116,7 @@ func _reset_ping_state() -> void:
 
 func _reset_spawn_request_state() -> void:
 	spawn_request_sent = false
+	spawn_request_retry_accumulator = 0.0
 
 func _set_client_lobby_id(value: int) -> void:
 	client_lobby_id = maxi(0, value)

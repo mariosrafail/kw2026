@@ -302,6 +302,7 @@ func _physics_process(delta: float) -> void:
 			dropped_mag_service.server_tick(delta)
 
 	if role == Role.CLIENT and multiplayer.multiplayer_peer != null:
+		_client_tick_spawn_request_retry(delta)
 		client_input_controller.client_predict_local_player(delta, damage_boost_enabled)
 		client_input_controller.client_send_input(delta, last_ping_ms, damage_boost_enabled)
 		_client_ping_tick(delta)

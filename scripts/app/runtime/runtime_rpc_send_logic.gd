@@ -15,6 +15,22 @@ func _request_spawn_from_server() -> void:
 	spawn_request_sent = true
 	_rpc_request_spawn.rpc_id(1)
 
+func _client_tick_spawn_request_retry(delta: float) -> void:
+	if role != Role.CLIENT:
+		return
+	if multiplayer.multiplayer_peer == null:
+		return
+	if not _is_client_connected():
+		return
+	if _is_local_player_spawned():
+		spawn_request_retry_accumulator = 0.0
+		return
+	spawn_request_retry_accumulator += delta
+	if not spawn_request_sent or spawn_request_retry_accumulator >= 0.75:
+		spawn_request_retry_accumulator = 0.0
+		spawn_request_sent = false
+		_request_spawn_from_server()
+
 func _set_role(new_role: int) -> void:
 	role = new_role
 	if role == Role.SERVER and multiplayer.is_server() and not _uses_lobby_scene_flow():

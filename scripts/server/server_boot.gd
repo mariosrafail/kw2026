@@ -415,12 +415,30 @@ func _rpc_lobby_start_match() -> void:
 		_send_lobby_action_result(peer_id, false, "Only the room owner can start.", lobby_id, _lobby_map_id(lobby_id))
 		return
 	var map_id := _lobby_map_id(lobby_id)
+	var lobby := lobby_service.get_lobby_data(lobby_id)
+	var mode_id := map_flow_service.normalize_mode_id(str(lobby.get("mode_id", "deathmatch")))
 	lobby_service.set_lobby_started(lobby_id, true)
 	_server_broadcast_lobby_room_state(lobby_id)
 	for member_value in lobby_service.get_lobby_members(lobby_id):
 		var member_id := int(member_value)
 		if member_id > 0:
 			_rpc_scene_switch_to_map.rpc_id(member_id, map_id)
+	_switch_server_to_map_scene(map_id, mode_id, lobby)
+
+func _switch_server_to_map_scene(map_id: String, mode_id: String, lobby: Dictionary) -> void:
+	var normalized_map := map_flow_service.normalize_map_id(map_catalog, map_id)
+	var scene_path := map_catalog.scene_path_for_id(normalized_map)
+	if scene_path.strip_edges().is_empty():
+		_log("start_match failed missing scene for map=%s" % normalized_map)
+		return
+	ProjectSettings.set_setting("kw/pending_game_mode", mode_id)
+	ProjectSettings.set_setting("kw/pending_skull_ruleset", str(lobby.get("skull_ruleset", "")).strip_edges().to_lower())
+	ProjectSettings.set_setting("kw/pending_skull_target_score", int(lobby.get("skull_target_score", -1)))
+	ProjectSettings.set_setting("kw/pending_skull_time_limit_sec", int(lobby.get("skull_time_limit_sec", -1)))
+	_log("server scene_switch map=%s mode=%s scene=%s" % [normalized_map, mode_id, scene_path])
+	var tree := get_tree()
+	if tree != null:
+		tree.call_deferred("change_scene_to_file", scene_path)
 
 @rpc("any_peer", "reliable")
 func _rpc_cast_skill1(_target_world: Vector2) -> void:
