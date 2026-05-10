@@ -8,6 +8,6 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends libfontconfig1 python3-minimal \
 	&& rm -rf /var/lib/apt/lists/*
 
-RUN bash -lc "set -e; if command -v godot4 >/dev/null 2>&1; then godot4 --headless --editor --quit-after 20 --path /game; else godot --headless --editor --quit-after 20 --path /game; fi; test -d /game/.godot/imported"
+RUN bash -lc "set -e; if command -v godot4 >/dev/null 2>&1; then godot4 --headless --editor --quit-after 120 --path /game; else godot --headless --editor --quit-after 120 --path /game; fi; test -d /game/.godot/imported"
 
-CMD bash -lc "set -e; python3 /game/tools/check_rpc_surface.py; if command -v godot4 >/dev/null 2>&1; then godot4 --headless --editor --quit-after 20 --path /game; godot4 --headless --verbose --path /game res://scenes/server_boot.tscn -- --port=${KW_GAME_PORT:-8080}; else godot --headless --editor --quit-after 20 --path /game; godot --headless --verbose --path /game res://scenes/server_boot.tscn -- --port=${KW_GAME_PORT:-8080}; fi"
+CMD bash -lc "set -e; python3 /game/tools/check_rpc_surface.py; if command -v godot4 >/dev/null 2>&1; then godot4 --headless --editor --quit-after 120 --path /game; godot4 --headless --verbose --path /game res://scenes/server_boot.tscn -- --port=${KW_GAME_PORT:-8080}; else godot --headless --editor --quit-after 120 --path /game; godot --headless --verbose --path /game res://scenes/server_boot.tscn -- --port=${KW_GAME_PORT:-8080}; fi"
