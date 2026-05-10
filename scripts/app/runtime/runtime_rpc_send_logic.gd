@@ -13,6 +13,7 @@ func _request_spawn_from_server() -> void:
 	if spawn_request_sent:
 		return
 	spawn_request_sent = true
+	_append_log("Spawn request sent to server. local_peer_id=%d" % multiplayer.get_unique_id())
 	_rpc_request_spawn.rpc_id(1)
 
 func _client_tick_spawn_request_retry(delta: float) -> void:
@@ -29,6 +30,7 @@ func _client_tick_spawn_request_retry(delta: float) -> void:
 	if not spawn_request_sent or spawn_request_retry_accumulator >= 0.75:
 		spawn_request_retry_accumulator = 0.0
 		spawn_request_sent = false
+		_append_log("Spawn request retry: no local player yet.")
 		_request_spawn_from_server()
 
 func _set_role(new_role: int) -> void:

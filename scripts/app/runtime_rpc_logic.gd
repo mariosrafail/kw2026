@@ -7,8 +7,15 @@ func _rpc_request_spawn() -> void:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	var peer_lobby_id := _peer_lobby(peer_id)
+	_append_log("Spawn request received peer_id=%d lobby_id=%d lobby_scene=%s scene=%s" % [
+		peer_id,
+		peer_lobby_id,
+		str(_uses_lobby_scene_flow()),
+		scene_file_path
+	])
 	if _uses_lobby_scene_flow():
 		if peer_lobby_id <= 0:
+			_append_log("Spawn request ignored in lobby scene: missing lobby for peer_id=%d" % peer_id)
 			return
 	_server_spawn_peer_if_needed(peer_id, peer_lobby_id)
 
