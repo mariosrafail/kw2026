@@ -121,6 +121,11 @@ def main() -> int:
 
     errors: list[str] = []
     errors.extend(compare_signature_sets("runtime_rpc_logic.gd", canonical, runtime))
+    errors.extend(compare_rpc_order(
+        "runtime_rpc_logic.gd",
+        [CANONICAL_PATH],
+        [RUNTIME_PATH],
+    ))
     errors.extend(compare_signature_sets("lobby_rpc_bridge.gd", gameplay_root, bridge))
     errors.extend(compare_rpc_annotations("lobby_rpc_bridge.gd", gameplay_root, bridge))
     errors.extend(compare_rpc_order(
