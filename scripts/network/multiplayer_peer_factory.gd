@@ -4,7 +4,7 @@ class_name MultiplayerPeerFactory
 const TRANSPORT_SETTING := "kw/network_transport"
 const TRANSPORT_ENET := "enet"
 const TRANSPORT_WEBSOCKET := "websocket"
-const PRODUCTION_WS_ENDPOINT := "wss://play.outrage.ink/ws"
+const PRODUCTION_WS_ENDPOINT := "ws://64.225.102.179/ws"
 
 static func transport() -> String:
 	if OS.has_feature("web"):
@@ -81,7 +81,7 @@ static func websocket_url(host: String, port: int) -> String:
 		return PRODUCTION_WS_ENDPOINT
 	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
 		return trimmed
-	if OS.has_feature("web") and (trimmed == "64.225.102.179" or trimmed == "play.outrage.ink"):
+	if OS.has_feature("web") and trimmed == "64.225.102.179":
 		return PRODUCTION_WS_ENDPOINT
 
 	var scheme := "ws"

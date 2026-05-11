@@ -1,4 +1,4 @@
-(kw_routes) {
+:80 {
 	encode gzip
 
 	handle_path /ws* {
@@ -16,12 +16,4 @@
 	handle {
 		reverse_proxy kw_updates_http:80
 	}
-}
-
-play.outrage.ink {
-	import kw_routes
-}
-
-:80 {
-	import kw_routes
 }

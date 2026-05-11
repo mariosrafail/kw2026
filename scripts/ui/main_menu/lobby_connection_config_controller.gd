@@ -5,9 +5,9 @@ class_name LobbyConnectionConfigController
 const CONNECT_FALLBACK_PORTS := [8081]
 const ALLOW_LOCALHOST_LOBBY_CONNECT := false
 const ONLINE_PRODUCTION_HOST := "64.225.102.179"
-const ONLINE_PRODUCTION_WS_HOST := "wss://play.outrage.ink/ws"
+const ONLINE_PRODUCTION_WS_HOST := "ws://64.225.102.179/ws"
 const ONLINE_PRODUCTION_ENET_PORT := 8080
-const ONLINE_PRODUCTION_WS_PORT := 443
+const ONLINE_PRODUCTION_WS_PORT := 80
 
 var _host: Object
 var _browser_hostname_checked := false
@@ -125,7 +125,7 @@ func _is_private_or_local_endpoint(host: String) -> bool:
 	return false
 
 func resolve_auth_api_host_port() -> Dictionary:
-	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "https://play.outrage.ink/auth")).strip_edges()
+	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://64.225.102.179/auth")).strip_edges()
 	if configured.is_empty():
 		return {"host": "", "port": 8080}
 	var scheme_idx := configured.find("://")

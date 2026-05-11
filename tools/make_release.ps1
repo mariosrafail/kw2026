@@ -1,9 +1,9 @@
 param(
     [string]$ReleaseDir = "build/release",
     [string]$ManifestUrl = "",
-    [string]$DefaultHost = "wss://play.outrage.ink/ws",
-    [int]$DefaultPort = 443,
-    [string]$AuthApiBaseUrl = "https://play.outrage.ink/auth"
+    [string]$DefaultHost = "ws://64.225.102.179/ws",
+    [int]$DefaultPort = 80,
+    [string]$AuthApiBaseUrl = "http://64.225.102.179/auth"
 )
 
 $ErrorActionPreference = "Stop"
