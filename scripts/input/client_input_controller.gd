@@ -20,6 +20,9 @@ var _local_last_non_zero_move_axis := 1.0
 var _last_sent_axis := 0.0
 var _last_sent_jump_held := false
 var _last_sent_shoot_held := false
+var _last_sent_boost_damage := false
+var _input_packets_sent := 0
+var _input_packets_throttled := 0
 var _camera_follow_position := Vector2.ZERO
 var _camera_mouse_look_offset := Vector2.ZERO
 var _base_camera_zoom := Vector2.ONE
@@ -59,6 +62,9 @@ func reset() -> void:
 	_last_sent_axis = 0.0
 	_last_sent_jump_held = false
 	_last_sent_shoot_held = false
+	_last_sent_boost_damage = false
+	_input_packets_sent = 0
+	_input_packets_throttled = 0
 	_camera_follow_position = Vector2.ZERO
 	_camera_mouse_look_offset = Vector2.ZERO
 	if main_camera != null:
@@ -77,20 +83,24 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 	var jump_pressed := bool(state.get("jump_pressed", false))
 	var jump_held := bool(state.get("jump_held", false))
 	var shoot_held := bool(state.get("shoot_held", false))
+	var boost_damage := bool(state.get("boost_damage", false))
 	var changed := (
 		absf(axis - _last_sent_axis) > 0.001
 		or jump_pressed
 		or jump_held != _last_sent_jump_held
 		or shoot_held != _last_sent_shoot_held
+		or boost_damage != _last_sent_boost_damage
 	)
 	var local_player := players[local_id] as NetPlayer
 	if local_player != null:
 		local_player.set_aim_world(state.get("aim_world", local_player.global_position + Vector2.RIGHT * 120.0) as Vector2)
 
 	_input_send_accumulator += delta
-	var send_rate := input_send_rate if changed else idle_input_send_rate
+	var active_input := absf(axis) > 0.001 or jump_held or shoot_held or boost_damage
+	var send_rate := input_send_rate if active_input else idle_input_send_rate
 	send_rate = maxf(1.0, send_rate)
-	if _input_send_accumulator < 1.0 / send_rate:
+	if not changed and _input_send_accumulator < 1.0 / send_rate:
+		_input_packets_throttled += 1
 		return
 	_input_send_accumulator = 0.0
 	if not submit_input_cb.is_valid():
@@ -102,12 +112,23 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 		jump_held,
 		state.get("aim_world", Vector2.ZERO) as Vector2,
 		shoot_held,
-		bool(state.get("boost_damage", false)),
+		boost_damage,
 		last_ping_ms
 	)
+	_input_packets_sent += 1
 	_last_sent_axis = axis
 	_last_sent_jump_held = jump_held
 	_last_sent_shoot_held = shoot_held
+	_last_sent_boost_damage = boost_damage
+
+func consume_debug_counters() -> Dictionary:
+	var out := {
+		"sent": _input_packets_sent,
+		"throttled": _input_packets_throttled
+	}
+	_input_packets_sent = 0
+	_input_packets_throttled = 0
+	return out
 
 func client_predict_local_player(delta: float, damage_boost_enabled: bool) -> void:
 	if multiplayer == null:

@@ -572,6 +572,7 @@ func _on_disconnect_pressed() -> void:
 
 func _on_connected_to_server() -> void:
 	session_controller.on_connected_to_server()
+	_print_net_diag_summary("connected")
 	if _uses_lobby_scene_flow() and not auth_username.strip_edges().is_empty():
 		_rpc_lobby_set_display_name.rpc_id(1, auth_username)
 	if not _uses_lobby_scene_flow():

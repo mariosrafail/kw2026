@@ -16,8 +16,13 @@ var map_flow_service: MapFlowService
 var lobby_service: LobbyService
 var lobby_flow_controller: LobbyFlowController
 var _server_map_scene_switch_pending := false
+var _diag_accumulator := 0.0
+var _physics_delta_sum := 0.0
+var _physics_delta_max := 0.0
+var _physics_delta_samples := 0
 
 func _ready() -> void:
+	Engine.physics_ticks_per_second = 60
 	name = "GameRoot"
 	map_catalog = MAP_CATALOG_SCRIPT.new()
 	map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
@@ -57,6 +62,36 @@ func _start_server(port: int) -> void:
 		return
 	multiplayer.multiplayer_peer = peer
 	print("Server started on port %d using %s" % [target_port, MULTIPLAYER_PEER_FACTORY.transport()])
+	print("[NET DIAG]")
+	print("runtime = server")
+	print("transport = %s" % MULTIPLAYER_PEER_FACTORY.transport())
+	print("auth = lobby-boot")
+	print("game endpoint = %s" % str(result.get("endpoint", "")))
+	print("project setting transport = %s" % str(ProjectSettings.get_setting("kw/network_transport", "")))
+	print("env transport = %s" % OS.get_environment("KW_NETWORK_TRANSPORT"))
+	print("browser protocol = ")
+	print("server peer status = %d" % peer.get_connection_status())
+
+func _physics_process(delta: float) -> void:
+	_physics_delta_sum += delta
+	_physics_delta_max = maxf(_physics_delta_max, delta)
+	_physics_delta_samples += 1
+	_diag_accumulator += delta
+	if _diag_accumulator < 1.0:
+		return
+	var avg_delta := _physics_delta_sum / maxf(1.0, float(_physics_delta_samples))
+	print("[NET] peer connection status = %d fps=%d physics_fps=%.1f physics_delta_avg=%.4f max=%.4f peers=%d" % [
+		multiplayer.multiplayer_peer.get_connection_status() if multiplayer.multiplayer_peer != null else -1,
+		Engine.get_frames_per_second(),
+		1.0 / avg_delta if avg_delta > 0.0 else 0.0,
+		avg_delta,
+		_physics_delta_max,
+		multiplayer.get_peers().size() if multiplayer.multiplayer_peer != null else 0
+	])
+	_diag_accumulator = 0.0
+	_physics_delta_sum = 0.0
+	_physics_delta_max = 0.0
+	_physics_delta_samples = 0
 
 func _server_port_from_args() -> int:
 	var env_port := int(OS.get_environment("KW_GAME_PORT"))

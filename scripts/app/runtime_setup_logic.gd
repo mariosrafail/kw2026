@@ -8,6 +8,7 @@ func _init_services() -> void:
 	lobby_flow_controller = LOBBY_FLOW_CONTROLLER_SCRIPT.new()
 	session_controller = SESSION_CONTROLLER_SCRIPT.new()
 	connect_retry = CONNECT_RETRY_SCRIPT.new()
+	network_diagnostics = NETWORK_DIAGNOSTICS_SCRIPT.new()
 	ui_controller = UI_CONTROLLER_SCRIPT.new()
 	spawn_identity = SPAWN_IDENTITY_SCRIPT.new()
 	player_replication = PLAYER_REPLICATION_SCRIPT.new()

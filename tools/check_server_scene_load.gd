@@ -1,8 +1,14 @@
 extends SceneTree
 
 const REQUIRED_RESOURCES := [
+	"res://scripts/app/runtime_shared.gd",
+	"res://scripts/app/runtime_setup_logic.gd",
+	"res://scripts/app/runtime_session_logic.gd",
+	"res://scripts/app/runtime_rpc_logic.gd",
 	"res://scripts/app/runtime_controller.gd",
+	"res://scripts/ui/main_menu/lobby_rpc_bridge.gd",
 	"res://scenes/server_boot.tscn",
+	"res://scenes/ui/main_menu.tscn",
 	"res://scenes/skull_ffa.tscn",
 ]
 

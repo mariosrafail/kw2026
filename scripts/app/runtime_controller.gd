@@ -122,6 +122,7 @@ func _has_cmdline_network_boot_override() -> bool:
 	return false
 
 func _ready() -> void:
+	Engine.physics_ticks_per_second = 60
 	_ensure_rpc_root_node_name()
 	_ensure_cursor_manager()
 	if scene_file_path != _lobby_scene_path():
@@ -207,6 +208,7 @@ func _ready() -> void:
 	session_controller.set_idle_state()
 	_append_log("Ready.")
 	_append_log("Boot config: mode=%s host=%s port=%d" % [_role_name(startup_mode), host_input.text, int(port_spin.value)])
+	_print_net_diag_summary("boot")
 	if _allows_scene_network_bootstrap():
 		session_controller.auto_boot_from_environment()
 	else:
@@ -270,6 +272,7 @@ func _ensure_rpc_root_node_name() -> void:
 	print("[RPC ROOT] Renamed scene root %s -> %s (self_path=%s root_children=%s)" % [before, name, str(get_path()), str(child_names)])
 
 func _physics_process(delta: float) -> void:
+	_tick_network_diagnostics(delta)
 	var tab_scoreboard_active := Input.is_action_pressed("show_scoreboard") \
 		or Input.is_key_pressed(KEY_TAB) \
 		or Input.is_physical_key_pressed(KEY_TAB)

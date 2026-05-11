@@ -159,7 +159,7 @@ func _rpc_ping_request(_client_sent_msec: int) -> void:
 func _rpc_ping_response(_client_sent_msec: int) -> void:
 	if multiplayer.is_server():
 		return
-	last_ping_ms = int(max(0, Time.get_ticks_msec() - _client_sent_msec))
+	_record_ping_sample(int(max(0, Time.get_ticks_msec() - _client_sent_msec)))
 	_update_ping_label()
 	_update_peer_labels()
 

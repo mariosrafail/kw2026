@@ -114,6 +114,8 @@ func _clear_players() -> void:
 func _reset_ping_state() -> void:
 	ping_accumulator = 0.0
 	last_ping_ms = -1
+	if network_diagnostics != null:
+		network_diagnostics.reset()
 
 func _reset_spawn_request_state() -> void:
 	spawn_request_sent = false
@@ -193,11 +195,11 @@ func _update_peer_labels() -> void:
 		local_peer_id,
 		net_peers,
 		spawned_ids,
-		ui_controller.local_ping_text(role == Role.SERVER, role == Role.CLIENT, last_ping_ms)
+		_network_debug_text()
 	)
 
 func _update_ping_label() -> void:
-	ui_controller.update_ping_label(ui_controller.local_ping_text(role == Role.SERVER, role == Role.CLIENT, last_ping_ms))
+	ui_controller.update_ping_label(_network_debug_text())
 
 func _update_ui_visibility() -> void:
 	var auth_blocking := auth_panel != null and auth_panel.visible
@@ -294,6 +296,36 @@ func _append_log(message: String) -> void:
 	log_label.append_text("%s\n" % message)
 	log_label.scroll_to_line(max(log_label.get_line_count() - 1, 0))
 
+func _print_net_diag_summary(reason: String) -> void:
+	if network_diagnostics == null:
+		return
+	var runtime_label := "web" if OS.has_feature("web") else ("editor" if Engine.is_editor_hint() else "native")
+	var transport_setting := str(ProjectSettings.get_setting("kw/network_transport", "")).strip_edges()
+	var env_transport := OS.get_environment("KW_NETWORK_TRANSPORT").strip_edges()
+	var host := host_input.text.strip_edges() if host_input != null else str(ProjectSettings.get_setting("kw/default_server_host", "")).strip_edges()
+	var port := int(port_spin.value) if port_spin != null else int(ProjectSettings.get_setting("kw/default_server_port", 0))
+	var transport := MultiplayerPeerFactory.transport()
+	var endpoint := host
+	if transport == "websocket" and not endpoint.begins_with("ws://") and not endpoint.begins_with("wss://"):
+		endpoint = MultiplayerPeerFactory.websocket_url(host, port)
+	var peer_status := -1
+	if multiplayer != null and multiplayer.multiplayer_peer != null:
+		peer_status = multiplayer.multiplayer_peer.get_connection_status()
+	var browser_protocol := ""
+	if OS.has_feature("web"):
+		browser_protocol = str(JavaScriptBridge.eval("window.location.protocol")).strip_edges()
+	network_diagnostics.print_summary(
+		reason,
+		runtime_label,
+		transport,
+		str(ProjectSettings.get_setting("kw/auth_api_base_url", "")).strip_edges(),
+		endpoint,
+		transport_setting,
+		env_transport,
+		browser_protocol,
+		peer_status
+	)
+
 func _client_ping_tick(delta: float) -> void:
 	if role != Role.CLIENT:
 		return
@@ -309,6 +341,18 @@ func _client_ping_tick(delta: float) -> void:
 		return
 	ping_accumulator = 0.0
 	_rpc_ping_request.rpc_id(1, Time.get_ticks_msec())
+
+func _record_ping_sample(sample_ms: int) -> void:
+	last_ping_ms = network_diagnostics.record_ping_sample(sample_ms) if network_diagnostics != null else maxi(0, sample_ms)
+
+func _network_debug_text() -> String:
+	if network_diagnostics == null:
+		return ui_controller.local_ping_text(role == Role.SERVER, role == Role.CLIENT, last_ping_ms)
+	return network_diagnostics.debug_text(role == Role.SERVER, role == Role.CLIENT)
+
+func _tick_network_diagnostics(delta: float) -> void:
+	if network_diagnostics != null:
+		network_diagnostics.tick(delta, multiplayer, client_input_controller, player_replication)
 
 func _warrior_id_for_peer(peer_id: int) -> String:
 	var normalized := str(peer_character_ids.get(peer_id, "")).strip_edges().to_lower()

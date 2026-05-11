@@ -222,6 +222,7 @@ func start_client(host: String, port: int, reset_attempt_chain: bool = true, lob
 	if status_label != null:
 		status_label.text = "Status: Connecting to %s:%d..." % [host, port]
 	_append_log("Connecting to %s using %s ..." % [str(result.get("endpoint", "%s:%d" % [host, port])), str(result.get("transport", ""))])
+	_append_log("[NET] peer connection status = %d" % peer.get_connection_status())
 	_refresh_ui()
 
 func stop_server() -> void:
@@ -238,6 +239,8 @@ func on_connected_to_server() -> void:
 	if status_label != null:
 		status_label.text = "Status: Connected to server."
 	_append_log("Connected to server. Requesting lobbies.")
+	if multiplayer != null and multiplayer.multiplayer_peer != null:
+		_append_log("[NET] peer connection status = %d" % multiplayer.multiplayer_peer.get_connection_status())
 	_reset_ping_state()
 	_reset_spawn_request_state()
 	_update_ping_label()

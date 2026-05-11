@@ -4,8 +4,12 @@ class_name MultiplayerPeerFactory
 const TRANSPORT_SETTING := "kw/network_transport"
 const TRANSPORT_ENET := "enet"
 const TRANSPORT_WEBSOCKET := "websocket"
+const PRODUCTION_WS_ENDPOINT := "wss://play.outrage.ink/ws"
 
 static func transport() -> String:
+	if OS.has_feature("web"):
+		return TRANSPORT_WEBSOCKET
+
 	var env_transport := OS.get_environment("KW_NETWORK_TRANSPORT").strip_edges().to_lower()
 	if env_transport == "websocket" or env_transport == "ws" or env_transport == "wss":
 		return TRANSPORT_WEBSOCKET
@@ -26,11 +30,13 @@ static func uses_websocket() -> bool:
 	return transport() == TRANSPORT_WEBSOCKET
 
 static func create_client_peer(host: String, port: int) -> Dictionary:
+	var runtime := "web" if OS.has_feature("web") else ("editor" if Engine.is_editor_hint() else "native")
+	print("[NET] runtime = %s" % runtime)
+	print("[NET] selected transport = %s" % transport())
 	if uses_websocket():
 		var ws_peer := WebSocketMultiplayerPeer.new()
 		var url := websocket_url(host, port)
-		print("[NET] transport = websocket")
-		print("[NET] websocket endpoint = %s" % url)
+		print("[NET] final websocket endpoint = %s" % url)
 		return {
 			"peer": ws_peer,
 			"error": ws_peer.create_client(url),
@@ -39,6 +45,7 @@ static func create_client_peer(host: String, port: int) -> Dictionary:
 		}
 
 	var enet_peer := ENetMultiplayerPeer.new()
+	print("[NET] final enet endpoint = %s:%d" % [host, port])
 	return {
 		"peer": enet_peer,
 		"error": enet_peer.create_client(host, port),
@@ -47,6 +54,8 @@ static func create_client_peer(host: String, port: int) -> Dictionary:
 	}
 
 static func create_server_peer(port: int, max_clients: int = 8) -> Dictionary:
+	print("[NET] runtime = server")
+	print("[NET] selected transport = %s" % transport())
 	if uses_websocket():
 		var ws_peer := WebSocketMultiplayerPeer.new()
 		print("[NET] transport = websocket")
@@ -68,9 +77,12 @@ static func create_server_peer(port: int, max_clients: int = 8) -> Dictionary:
 
 static func websocket_url(host: String, port: int) -> String:
 	var trimmed := host.strip_edges()
+	if OS.has_feature("web") and trimmed.is_empty():
+		return PRODUCTION_WS_ENDPOINT
 	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
-		print("[NET] final websocket endpoint = %s" % trimmed)
 		return trimmed
+	if OS.has_feature("web") and (trimmed == "64.225.102.179" or trimmed == "play.outrage.ink"):
+		return PRODUCTION_WS_ENDPOINT
 
 	var scheme := "ws"
 	var scheme_override := str(ProjectSettings.get_setting("kw/network_ws_scheme", "")).strip_edges().to_lower()

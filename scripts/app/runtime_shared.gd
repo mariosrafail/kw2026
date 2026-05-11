@@ -10,10 +10,10 @@ const PLAYER_HISTORY_MS := 800
 const MAX_INPUT_PACKETS_PER_SEC := 120
 const MAX_REPORTED_RTT_MS := 300
 const MAX_INPUT_STALE_MS := 120
-const LOCAL_RECONCILE_SNAP_DISTANCE := 180.0
-const LOCAL_RECONCILE_VERTICAL_SNAP_DISTANCE := 48.0
-const LOCAL_RECONCILE_POS_BLEND := 0.035
-const LOCAL_RECONCILE_VEL_BLEND := 0.08
+const LOCAL_RECONCILE_SNAP_DISTANCE := 260.0
+const LOCAL_RECONCILE_VERTICAL_SNAP_DISTANCE := 220.0
+const LOCAL_RECONCILE_POS_BLEND := 0.025
+const LOCAL_RECONCILE_VEL_BLEND := 0.04
 const LOCAL_RECONCILE_HARD_STOP_NO_INPUT := false
 
 const ARG_MODE_PREFIX := "--mode="
@@ -71,6 +71,7 @@ const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 const LOBBY_FLOW_CONTROLLER_SCRIPT := preload("res://scripts/lobby/lobby_flow_controller.gd")
 const SESSION_CONTROLLER_SCRIPT := preload("res://scripts/network/session_controller.gd")
 const CONNECT_RETRY_SCRIPT := preload("res://scripts/network/connect_retry.gd")
+const NETWORK_DIAGNOSTICS_SCRIPT := preload("res://scripts/network/network_diagnostics.gd")
 const UI_CONTROLLER_SCRIPT := preload("res://scripts/ui/ui_controller.gd")
 const SPAWN_IDENTITY_SCRIPT := preload("res://scripts/entities/spawn_identity.gd")
 const PLAYER_REPLICATION_SCRIPT := preload("res://scripts/network/player_replication.gd")
@@ -249,6 +250,7 @@ var lobby_service: LobbyService
 var lobby_flow_controller: LobbyFlowController
 var session_controller: SessionController
 var connect_retry: ConnectRetry
+var network_diagnostics: RefCounted
 var ui_controller: UiController
 var spawn_identity: SpawnIdentity
 var player_replication: PlayerReplication

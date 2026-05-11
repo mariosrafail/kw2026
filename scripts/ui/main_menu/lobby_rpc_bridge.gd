@@ -99,6 +99,11 @@ func is_connecting_to_server() -> bool:
 		return false
 	return multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING
 
+func connection_status() -> int:
+	if multiplayer == null or multiplayer.multiplayer_peer == null:
+		return MultiplayerPeer.CONNECTION_DISCONNECTED
+	return multiplayer.multiplayer_peer.get_connection_status()
+
 func request_lobby_list() -> bool:
 	if not _can_send_server_rpc():
 		_log("request_lobby_list blocked can_send=false")

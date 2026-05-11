@@ -13,12 +13,19 @@ var player_display_names: Dictionary = {}
 
 var max_input_packets_per_sec := 120
 var max_reported_rtt_ms := 300
-var local_reconcile_snap_distance := 180.0
-var local_reconcile_vertical_snap_distance := 6.0
-var local_reconcile_pos_blend := 0.18
-var local_reconcile_vel_blend := 0.35
+var local_reconcile_snap_distance := 260.0
+var local_reconcile_vertical_snap_distance := 220.0
+var local_reconcile_pos_blend := 0.025
+var local_reconcile_vel_blend := 0.04
 var local_reconcile_stop_x_threshold := 1.0
-var local_reconcile_hard_stop_no_input := true
+var local_reconcile_hard_stop_no_input := false
+
+var _input_packets_accepted := 0
+var _input_packets_dropped := 0
+var _snapshot_packets_sent := 0
+var _snapshot_bytes_estimate := 0
+var _snapshot_recipients := 0
+var _client_snapshots_received := 0
 
 var get_peer_lobby_cb: Callable = Callable()
 var get_lobby_members_cb: Callable = Callable()
@@ -152,6 +159,9 @@ func server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 			player.get_health(),
 			animation_state
 		)
+		_snapshot_packets_sent += 1
+		_snapshot_recipients += 1
+		_snapshot_bytes_estimate += _estimate_snapshot_bytes(animation_state)
 
 func server_respawn_player(peer_id: int, player: NetPlayer) -> void:
 	var respawn_position := _spawn_position_for_peer(peer_id)
@@ -276,7 +286,12 @@ func server_accept_input_packet(peer_id: int) -> bool:
 	count += 1
 	input_rate_window_start_ms[peer_id] = window_start
 	input_rate_counts[peer_id] = count
-	return count <= max_input_packets_per_sec
+	var accepted := count <= max_input_packets_per_sec
+	if accepted:
+		_input_packets_accepted += 1
+	else:
+		_input_packets_dropped += 1
+	return accepted
 
 func server_submit_input(
 	peer_id: int,
@@ -343,32 +358,32 @@ func client_apply_state_snapshot(
 		if player == null:
 			return
 
+	_client_snapshots_received += 1
 	if peer_id == local_peer_id:
 		player.set_health(health)
 		var prev_position := player.global_position
 		var delta_pos := new_position - player.global_position
 		var vertical_error := absf(delta_pos.y)
-		var has_vertical_direction_conflict := (
-			absf(player.velocity.y) > 1.0
-			and absf(new_velocity.y) > 1.0
-			and signf(player.velocity.y) != signf(new_velocity.y)
-		)
+		var local_axis := Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
+		var has_horizontal_input := absf(local_axis) > 0.001
+		var local_vertical_active := not player.is_on_floor() or absf(player.velocity.y) > 24.0 or absf(new_velocity.y) > 24.0
 		var should_hard_snap := (
 			delta_pos.length() > local_reconcile_snap_distance
-			or vertical_error >= local_reconcile_vertical_snap_distance
-			or has_vertical_direction_conflict
+			or (vertical_error >= local_reconcile_vertical_snap_distance and not local_vertical_active)
 		)
 		if should_hard_snap:
 			player.global_position = new_position
 			player.velocity = new_velocity
 		else:
 			player.global_position = player.global_position.lerp(new_position, local_reconcile_pos_blend)
-			player.velocity = player.velocity.lerp(new_velocity, local_reconcile_vel_blend)
+			if not has_horizontal_input:
+				player.velocity.x = lerpf(player.velocity.x, new_velocity.x, local_reconcile_vel_blend)
+			if not local_vertical_active:
+				player.velocity.y = lerpf(player.velocity.y, new_velocity.y, local_reconcile_vel_blend)
 		# Prevent horizontal "micro-slide" after release during local reconciliation.
-		if absf(new_velocity.x) <= local_reconcile_stop_x_threshold:
+		if not has_horizontal_input and absf(new_velocity.x) <= local_reconcile_stop_x_threshold:
 			player.velocity.x = 0.0
 		if local_reconcile_hard_stop_no_input:
-			var local_axis := Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
 			if absf(local_axis) <= 0.001 and absf(new_velocity.x) <= local_reconcile_stop_x_threshold:
 				player.velocity.x = 0.0
 				player.global_position.x = new_position.x
@@ -395,6 +410,37 @@ func _default_input_state() -> Dictionary:
 		"reported_rtt_ms": 0,
 		"last_packet_msec": 0
 	}
+
+func consume_server_input_stats() -> Dictionary:
+	var out := {
+		"accepted": _input_packets_accepted,
+		"dropped": _input_packets_dropped
+	}
+	_input_packets_accepted = 0
+	_input_packets_dropped = 0
+	return out
+
+func consume_snapshot_send_stats() -> Dictionary:
+	var out := {
+		"sent": _snapshot_packets_sent,
+		"bytes": _snapshot_bytes_estimate,
+		"recipients": _snapshot_recipients
+	}
+	_snapshot_packets_sent = 0
+	_snapshot_bytes_estimate = 0
+	_snapshot_recipients = 0
+	return out
+
+func consume_client_snapshot_stats() -> Dictionary:
+	var out := {"received": _client_snapshots_received}
+	_client_snapshots_received = 0
+	return out
+
+func _estimate_snapshot_bytes(animation_state: Dictionary) -> int:
+	var estimate := 40
+	if not animation_state.is_empty():
+		estimate += 96 + animation_state.size() * 24
+	return estimate
 
 func _peer_lobby(peer_id: int) -> int:
 	if get_peer_lobby_cb.is_valid():
