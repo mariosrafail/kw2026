@@ -4,8 +4,10 @@ class_name LobbyConnectionConfigController
 
 const CONNECT_FALLBACK_PORTS := [8081]
 const ALLOW_LOCALHOST_LOBBY_CONNECT := false
-const ONLINE_PRODUCTION_HOST := "ws://64.225.102.179/ws"
-const ONLINE_PRODUCTION_PORT := 80
+const ONLINE_PRODUCTION_HOST := "64.225.102.179"
+const ONLINE_PRODUCTION_WS_HOST := "ws://64.225.102.179/ws"
+const ONLINE_PRODUCTION_ENET_PORT := 8080
+const ONLINE_PRODUCTION_WS_PORT := 80
 
 var _host: Object
 var _browser_hostname_checked := false
@@ -149,11 +151,12 @@ func build_connect_candidates() -> Array[Dictionary]:
 	var lan_block_reason := _lan_block_reason_from_owner()
 	if network_mode == "online":
 		if _is_private_or_local_endpoint(str(ProjectSettings.get_setting("kw/default_server_host", ""))):
-			_log("ONLINE ignored private/local configured endpoint and forced production websocket")
-		var online_host := ONLINE_PRODUCTION_HOST
-		var online_port := ONLINE_PRODUCTION_PORT
+			_log("ONLINE ignored private/local configured endpoint and forced production server")
+		var transport := str(ProjectSettings.get_setting("kw/network_transport", "enet")).strip_edges().to_lower()
+		var online_host := ONLINE_PRODUCTION_WS_HOST if transport == "websocket" else ONLINE_PRODUCTION_HOST
+		var online_port := ONLINE_PRODUCTION_WS_PORT if transport == "websocket" else ONLINE_PRODUCTION_ENET_PORT
 		out.append({"host": online_host, "port": online_port})
-		_log("connect candidates forced ONLINE web=%s" % str(out))
+		_log("connect candidates forced ONLINE transport=%s candidates=%s" % [transport, str(out)])
 		return out
 	if not lan_usable:
 		_log("connect candidates forced LAN web=[] (blocked: %s)" % lan_block_reason)

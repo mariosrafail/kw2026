@@ -36,13 +36,14 @@ const TOXIC_CHAT_MARGIN_Y := 4
 const TOXIC_CHAT_ROW_SEPARATION := 1
 const AUTH_API_BASE_URL_DEFAULT := "http://64.225.102.179/auth"
 const ONLINE_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
-const ONLINE_DEFAULT_HOST := "ws://64.225.102.179/ws"
+const ONLINE_DEFAULT_HOST := "64.225.102.179"
 const DEFAULT_SERVER_PORT := 8080
-const ONLINE_PRODUCTION_PORT := 80
+const ONLINE_PRODUCTION_PORT := 8080
 const ONLINE_PRODUCTION_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
+const ONLINE_PRODUCTION_HOST := "64.225.102.179"
 const ONLINE_PRODUCTION_WS_URL := "ws://64.225.102.179/ws"
 const DIRECT_VPS_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
-const DIRECT_VPS_WS_URL := "ws://64.225.102.179/ws"
+const DIRECT_VPS_WS_URL := "64.225.102.179"
 const ENABLE_LAN_MODE_PICKER := false
 const ARG_ENABLE_LAN_PICKER := "--enable-lan-picker"
 const ENABLE_MENU_LOADING_OVERLAY := true
@@ -313,7 +314,7 @@ var particles_enabled := true
 var screen_shake_enabled := true
 
 func _ready() -> void:
-	print("[BUILD] networking config version = 2026-05-08-websocket-default-test")
+	print("[BUILD] networking config version = 2026-05-11-enet-native-online")
 	_setup_web_audio_unlock_hooks()
 	_ensure_cursor_manager()
 	_menu_sfx.configure(self)
@@ -687,7 +688,7 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 	var server_host := ONLINE_DEFAULT_HOST
 	var server_port := ONLINE_PRODUCTION_PORT
 	var ws_scheme_override := "ws"
-	var transport_override := "websocket"
+	var transport_override := "websocket" if OS.has_feature("web") else "enet"
 	var lan_usable := true
 	var lan_block_reason := ""
 	var page_protocol := _web_page_protocol()
@@ -722,10 +723,10 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 			print("[NET] Or use ONLINE mode.")
 	else:
 		auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
-		server_host = ONLINE_PRODUCTION_WS_URL
-		server_port = ONLINE_PRODUCTION_PORT
+		server_host = ONLINE_PRODUCTION_WS_URL if OS.has_feature("web") else ONLINE_PRODUCTION_HOST
+		server_port = 80 if OS.has_feature("web") else ONLINE_PRODUCTION_PORT
 		ws_scheme_override = "ws"
-		transport_override = "websocket"
+		transport_override = "websocket" if OS.has_feature("web") else "enet"
 		lan_usable = false
 	ProjectSettings.set_setting("kw/auth_api_base_url", auth_base)
 	ProjectSettings.set_setting("kw/default_server_host", server_host)
@@ -752,13 +753,16 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 			print("[NET] LAN blocked reason = %s" % lan_block_reason)
 	print("[NET] selected transport = %s" % transport_override)
 	print("[NET] auth endpoint = %s" % auth_base)
-	var websocket_endpoint := _format_websocket_endpoint(server_host, server_port, ws_scheme_override)
 	if not use_lan:
 		print("[NET] mode = ONLINE")
 		print("[NET] auth endpoint = %s" % auth_base)
-		print("[NET] websocket endpoint = %s" % websocket_endpoint)
+		if transport_override == "websocket":
+			print("[NET] websocket endpoint = %s" % _format_websocket_endpoint(server_host, server_port, ws_scheme_override))
+		else:
+			print("[NET] enet endpoint = %s:%d" % [server_host, server_port])
 		print("[NET] route = VPS dedicated server")
 	if OS.has_feature("web") and use_lan:
+		var websocket_endpoint := _format_websocket_endpoint(server_host, server_port, ws_scheme_override)
 		print("[NET] websocket endpoint = %s" % websocket_endpoint)
 	if _network_mode_overlay != null and is_instance_valid(_network_mode_overlay):
 		_network_mode_overlay.queue_free()

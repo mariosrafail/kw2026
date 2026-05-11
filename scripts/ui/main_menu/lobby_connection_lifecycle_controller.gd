@@ -66,12 +66,15 @@ func begin_connect_attempt(force_restart: bool, reason: String = "Connecting..."
 	print("[NET] selected transport = %s" % transport)
 	print("[NET] auth endpoint = %s" % auth_endpoint)
 	var game_endpoint := game_host
-	if not game_endpoint.begins_with("ws://") and not game_endpoint.begins_with("wss://"):
+	if transport == "websocket" and not game_endpoint.begins_with("ws://") and not game_endpoint.begins_with("wss://"):
 		var ws_scheme := str(ProjectSettings.get_setting("kw/network_ws_scheme", "ws")).strip_edges().to_lower()
 		if ws_scheme != "ws" and ws_scheme != "wss":
 			ws_scheme = "ws"
 		game_endpoint = "%s://%s:%d" % [ws_scheme, game_host, game_port]
-	print("[NET] websocket endpoint = %s" % game_endpoint)
+	if transport == "websocket":
+		print("[NET] websocket endpoint = %s" % game_endpoint)
+	else:
+		print("[NET] enet endpoint = %s:%d" % [game_host, game_port])
 	print("[NET] candidates = %s" % str(connect_candidates))
 	if network_mode == "LAN" and not lan_usable:
 		_host.call("_log", "LAN mode cannot run from HTTPS public host because browser blocks HTTP LAN requests.")

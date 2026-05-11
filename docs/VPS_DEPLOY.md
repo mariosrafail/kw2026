@@ -17,13 +17,13 @@ Production traffic goes directly to the VPS:
 
 Services:
 - `kw_public_proxy` (Caddy): public `80`
-- `kw_server` (Godot): internal `8080`, `KW_NETWORK_TRANSPORT=websocket`
+- `kw_server` (Godot): public UDP `8080`, `KW_NETWORK_TRANSPORT=enet`
 - `kw_auth_api` (FastAPI): internal `8090`
 - `kw_updates_http` (static web export): internal `80`
 
 Routes:
 - `/auth/*` -> `kw_auth_api:8090`, with `/auth` stripped by Caddy
-- `/ws*` -> `kw_server:8080`, with `/ws` stripped by Caddy
+- Native gameplay connects directly to UDP `64.225.102.179:8080`
 - `/` -> `kw_updates_http:80`
 
 No domain, Cloudflare, DDNS, or TLS is required for the native launcher profile.
@@ -32,7 +32,7 @@ No domain, Cloudflare, DDNS, or TLS is required for the native launcher profile.
 
 Native production build:
 - Auth: `http://64.225.102.179/auth`
-- WebSocket: `ws://64.225.102.179/ws`
+- Game: `enet://64.225.102.179:8080` (Godot ENet/UDP)
 - Updates: `http://64.225.102.179/kw/update_manifest.json`
 
 The web build must be served over HTTP when using `ws://` and `http://`. Browsers loaded from an HTTPS page will block these insecure endpoints.
@@ -49,7 +49,7 @@ docker compose -f docker-compose.server.remote.yml ps
 
 Environment is read from the VPS `.env` file. Required values:
 - `DATABASE_URL=...`
-- `KW_NETWORK_TRANSPORT=websocket`
+- `KW_NETWORK_TRANSPORT=enet`
 - `KW_GAME_PORT=8080`
 
 ## Logs
@@ -61,9 +61,7 @@ docker logs kw_public_proxy --tail 100
 ```
 
 Expected `kw_server` startup:
-- `[NET] transport = websocket`
-- `[NET] websocket url = ws://0.0.0.0:8080`
-- `Server started on port 8080 using websocket`
+- `Server started on port 8080 using enet`
 
 ## Verification
 
@@ -75,22 +73,9 @@ curl -v http://64.225.102.179/auth/health
 
 Expected result: HTTP `200` with `{"ok":true,...}`.
 
-WebSocket handshake:
-
-```bash
-curl -v \
-  -H "Connection: Upgrade" \
-  -H "Upgrade: websocket" \
-  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-  -H "Sec-WebSocket-Version: 13" \
-  http://64.225.102.179/ws
-```
-
-Expected result: HTTP `101 Switching Protocols`.
-
 Client online logs should include:
 - `[AUTH] response code = 200 action=profile`
-- `[NET] websocket endpoint = ws://64.225.102.179/ws`
+- `[NET] enet endpoint = 64.225.102.179:8080`
 - `[NET] connected = true`
 
 ## Launcher Config
@@ -101,8 +86,8 @@ Use:
 {
   "update_manifest_url": "http://64.225.102.179/kw/update_manifest.json",
   "auth_api_base_url": "http://64.225.102.179/auth",
-  "default_host": "ws://64.225.102.179/ws",
-  "default_port": 80
+  "default_host": "64.225.102.179",
+  "default_port": 8080
 }
 ```
 

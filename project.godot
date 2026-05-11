@@ -37,11 +37,11 @@ window/stretch/aspect="expand"
 [kw]
 
 auth_api_base_url="http://64.225.102.179/auth"
-default_server_host="ws://64.225.102.179/ws"
-default_server_port=80
+default_server_host="64.225.102.179"
+default_server_port=8080
 enable_auth_direct_port_fallback=false
 enable_network_mode_picker=false
-network_transport="websocket"
+network_transport="enet"
 
 [rendering]
 

@@ -1,8 +1,8 @@
 param(
     [string]$ReleaseDir = "build/release",
     [string]$ManifestUrl = "",
-    [string]$DefaultHost = "ws://64.225.102.179/ws",
-    [int]$DefaultPort = 80,
+    [string]$DefaultHost = "64.225.102.179",
+    [int]$DefaultPort = 8080,
     [string]$AuthApiBaseUrl = "http://64.225.102.179/auth"
 )
 
