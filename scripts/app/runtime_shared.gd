@@ -217,6 +217,7 @@ var ping_accumulator := 0.0
 var last_ping_ms := -1
 var spawn_request_sent := false
 var spawn_request_retry_accumulator := 0.0
+var spawn_response_msec_by_peer: Dictionary = {}
 
 var selected_weapon_id := WEAPON_ID_AK47
 var selected_weapon_skin := 0

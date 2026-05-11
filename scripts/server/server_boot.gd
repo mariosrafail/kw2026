@@ -15,6 +15,7 @@ var map_catalog: MapCatalog
 var map_flow_service: MapFlowService
 var lobby_service: LobbyService
 var lobby_flow_controller: LobbyFlowController
+var _server_map_scene_switch_pending := false
 
 func _ready() -> void:
 	name = "GameRoot"
@@ -138,6 +139,9 @@ func _rpc_request_spawn() -> void:
 	var map_id := str(lobby.get("map_id", _lobby_map_id(lobby_id))).strip_edges().to_lower()
 	var mode_id := map_flow_service.normalize_mode_id(str(lobby.get("mode_id", "deathmatch")))
 	_rpc_scene_switch_to_map.rpc_id(peer_id, map_id)
+	if _server_map_scene_switch_pending:
+		_log("spawn request acknowledged while server map switch is already pending peer_id=%d map=%s" % [peer_id, map_id])
+		return
 	_switch_server_to_map_scene(map_id, mode_id, lobby)
 
 @rpc("any_peer", "reliable")
@@ -439,6 +443,9 @@ func _rpc_lobby_start_match() -> void:
 	_switch_server_to_map_scene(map_id, mode_id, lobby)
 
 func _switch_server_to_map_scene(map_id: String, mode_id: String, lobby: Dictionary) -> void:
+	if _server_map_scene_switch_pending:
+		_log("server scene_switch ignored; switch already pending")
+		return
 	var normalized_map := map_flow_service.normalize_map_id(map_catalog, map_id)
 	var scene_path := map_catalog.scene_path_for_id(normalized_map)
 	if scene_path.strip_edges().is_empty():
@@ -451,6 +458,7 @@ func _switch_server_to_map_scene(map_id: String, mode_id: String, lobby: Diction
 	_log("server scene_switch map=%s mode=%s scene=%s" % [normalized_map, mode_id, scene_path])
 	var tree := get_tree()
 	if tree != null:
+		_server_map_scene_switch_pending = true
 		tree.call_deferred("change_scene_to_file", scene_path)
 
 @rpc("any_peer", "reliable")

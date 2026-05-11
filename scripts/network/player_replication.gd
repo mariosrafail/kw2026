@@ -141,14 +141,16 @@ func server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 	if lobby_id <= 0:
 		return
 	for member_value in _lobby_members(lobby_id):
+		var member_id := int(member_value)
+		var animation_state := {} if member_id == peer_id else player.get_part_animation_state()
 		send_sync_player_state_cb.call(
-			int(member_value),
+			member_id,
 			peer_id,
 			player.global_position,
 			player.velocity,
 			player.get_aim_angle(),
 			player.get_health(),
-			player.get_part_animation_state()
+			animation_state
 		)
 
 func server_respawn_player(peer_id: int, player: NetPlayer) -> void:

@@ -7,6 +7,13 @@ func _rpc_request_spawn() -> void:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	var peer_lobby_id := _peer_lobby(peer_id)
+	var now_msec := Time.get_ticks_msec()
+	if players.has(peer_id):
+		var last_response_msec := int(spawn_response_msec_by_peer.get(peer_id, 0))
+		if last_response_msec > 0 and now_msec - last_response_msec < 1500:
+			_append_log("Spawn request debounce peer_id=%d lobby_id=%d" % [peer_id, peer_lobby_id])
+			return
+		spawn_response_msec_by_peer[peer_id] = now_msec
 	_append_log("Spawn request received peer_id=%d lobby_id=%d lobby_scene=%s scene=%s" % [
 		peer_id,
 		peer_lobby_id,
@@ -17,6 +24,8 @@ func _rpc_request_spawn() -> void:
 		if peer_lobby_id <= 0:
 			_append_log("Spawn request ignored in lobby scene: missing lobby for peer_id=%d" % peer_id)
 			return
+	if not players.has(peer_id):
+		spawn_response_msec_by_peer[peer_id] = now_msec
 	_server_spawn_peer_if_needed(peer_id, peer_lobby_id)
 
 func _rpc_request_reload() -> void:

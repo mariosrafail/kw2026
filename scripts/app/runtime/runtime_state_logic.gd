@@ -77,6 +77,7 @@ func _reset_runtime_state() -> void:
 	player_history.clear()
 	input_rate_window_start_ms.clear()
 	input_rate_counts.clear()
+	spawn_response_msec_by_peer.clear()
 	spawn_slots.clear()
 	player_stats.clear()
 	player_display_names.clear()
