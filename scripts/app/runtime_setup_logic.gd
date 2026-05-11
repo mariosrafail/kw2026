@@ -221,7 +221,8 @@ func _configure_services() -> void:
 			"local_reconcile_snap_distance": LOCAL_RECONCILE_SNAP_DISTANCE,
 			"local_reconcile_vertical_snap_distance": LOCAL_RECONCILE_VERTICAL_SNAP_DISTANCE,
 			"local_reconcile_pos_blend": LOCAL_RECONCILE_POS_BLEND,
-			"local_reconcile_vel_blend": LOCAL_RECONCILE_VEL_BLEND
+			"local_reconcile_vel_blend": LOCAL_RECONCILE_VEL_BLEND,
+			"local_reconcile_hard_stop_no_input": LOCAL_RECONCILE_HARD_STOP_NO_INPUT
 		}
 	)
 
