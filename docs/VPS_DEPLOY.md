@@ -1,6 +1,8 @@
-# VPS Deployment
+# Legacy VPS Deployment
 
-Scope: production online runtime on the DigitalOcean VPS using the public IP directly.
+Scope: legacy production online runtime on the DigitalOcean VPS using the public IP directly.
+
+This setup is preserved for reference and is disabled for local development defaults. Use `docker-compose.local.yml` for local PC development.
 
 Host:
 - Public IPv4: `64.225.102.179`

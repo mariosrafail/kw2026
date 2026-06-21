@@ -4,7 +4,9 @@ class_name MultiplayerPeerFactory
 const TRANSPORT_SETTING := "kw/network_transport"
 const TRANSPORT_ENET := "enet"
 const TRANSPORT_WEBSOCKET := "websocket"
-const PRODUCTION_WS_ENDPOINT := "ws://64.225.102.179/ws"
+const LOCAL_WS_ENDPOINT := "ws://127.0.0.1:8080"
+# Legacy VPS endpoint, disabled for local development.
+const LEGACY_PRODUCTION_WS_ENDPOINT := "ws://64.225.102.179/ws"
 
 static func transport() -> String:
 	if OS.has_feature("web"):
@@ -78,11 +80,12 @@ static func create_server_peer(port: int, max_clients: int = 8) -> Dictionary:
 static func websocket_url(host: String, port: int) -> String:
 	var trimmed := host.strip_edges()
 	if OS.has_feature("web") and trimmed.is_empty():
-		return PRODUCTION_WS_ENDPOINT
+		return LOCAL_WS_ENDPOINT
 	if trimmed.begins_with("ws://") or trimmed.begins_with("wss://"):
 		return trimmed
+	# Legacy VPS endpoint, disabled for local development.
 	if OS.has_feature("web") and trimmed == "64.225.102.179":
-		return PRODUCTION_WS_ENDPOINT
+		return LEGACY_PRODUCTION_WS_ENDPOINT
 
 	var scheme := "ws"
 	var scheme_override := str(ProjectSettings.get_setting("kw/network_ws_scheme", "")).strip_edges().to_lower()

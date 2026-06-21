@@ -1,3 +1,5 @@
+# Legacy VPS/server-style compose. Disabled for local development defaults.
+# Use docker-compose.local.yml for local PC development.
 services:
   kw_server:
     image: barichello/godot-ci:4.6.1

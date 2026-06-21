@@ -33,6 +33,7 @@ Thumbs.db
 # Secrets
 .env
 .env.*
+!.env.local.example
 
 # Python
 __pycache__/

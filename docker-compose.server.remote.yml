@@ -1,3 +1,5 @@
+# Legacy VPS endpoint compose. Disabled for local development defaults.
+# Use docker-compose.local.yml for local PC development.
 services:
   kw_server:
     build:

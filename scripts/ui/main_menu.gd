@@ -34,16 +34,17 @@ const TOXIC_CHAT_BOX_SIZE := Vector2(196.0, 82.0)
 const TOXIC_CHAT_MARGIN_X := 5
 const TOXIC_CHAT_MARGIN_Y := 4
 const TOXIC_CHAT_ROW_SEPARATION := 1
-const AUTH_API_BASE_URL_DEFAULT := "http://64.225.102.179/auth"
-const ONLINE_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
-const ONLINE_DEFAULT_HOST := "ws://64.225.102.179/ws"
+const AUTH_API_BASE_URL_DEFAULT := "http://127.0.0.1:8090"
+const LOCAL_AUTH_API_BASE_URL := "http://127.0.0.1:8090"
+const LOCAL_DEFAULT_HOST := "127.0.0.1"
 const DEFAULT_SERVER_PORT := 8080
 const ONLINE_PRODUCTION_PORT := 80
-const ONLINE_PRODUCTION_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
-const ONLINE_PRODUCTION_HOST := "64.225.102.179"
-const ONLINE_PRODUCTION_WS_URL := "ws://64.225.102.179/ws"
-const DIRECT_VPS_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
-const DIRECT_VPS_WS_URL := "64.225.102.179"
+# Legacy VPS endpoint, disabled for local development.
+const LEGACY_PRODUCTION_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
+const LEGACY_PRODUCTION_HOST := "64.225.102.179"
+const LEGACY_PRODUCTION_WS_URL := "ws://64.225.102.179/ws"
+const LEGACY_DIRECT_VPS_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
+const LEGACY_DIRECT_VPS_WS_URL := "64.225.102.179"
 const ENABLE_LAN_MODE_PICKER := false
 const ARG_ENABLE_LAN_PICKER := "--enable-lan-picker"
 const ENABLE_MENU_LOADING_OVERLAY := true
@@ -583,10 +584,7 @@ func _start_default_network_mode() -> void:
 	if _lan_mode_picker_enabled():
 		_show_network_mode_selector()
 		return
-	# Temporarily disabled: LAN selection is kept for future local testing.
-	# Production currently always starts in ONLINE mode.
-	_show_menu_loading_overlay("Loading online services...")
-	_apply_selected_network_mode(false)
+	_apply_local_network_mode()
 	call_deferred("_hide_startup_loading_if_auth_idle")
 
 func _hide_startup_loading_if_auth_idle() -> void:
@@ -683,9 +681,36 @@ func _show_network_mode_selector() -> void:
 		_apply_selected_network_mode(true)
 	)
 
+func _apply_local_network_mode() -> void:
+	var auth_base := LOCAL_AUTH_API_BASE_URL
+	var server_host := LOCAL_DEFAULT_HOST
+	var server_port := DEFAULT_SERVER_PORT
+	var ws_scheme_override := "ws"
+	var transport_override := "websocket"
+	ProjectSettings.set_setting("kw/auth_api_base_url", auth_base)
+	ProjectSettings.set_setting("kw/default_server_host", server_host)
+	ProjectSettings.set_setting("kw/default_server_port", server_port)
+	ProjectSettings.set_setting("kw/network_ws_scheme", ws_scheme_override)
+	ProjectSettings.set_setting("kw/network_transport", transport_override)
+	set_meta("kw_force_auth_api_base_url", auth_base)
+	set_meta("kw_network_mode", "local")
+	set_meta("kw_lan_usable", true)
+	set_meta("kw_lan_blocked_reason", "")
+	var runtime_label := "web" if OS.has_feature("web") else ("editor" if Engine.is_editor_hint() else "native")
+	print("[AUTH] selected network mode = LOCAL")
+	print("[AUTH] selected auth base url = %s" % auth_base)
+	print("[AUTH] selected game host = %s" % server_host)
+	print("[AUTH] selected game port = %d" % server_port)
+	print("[NET] runtime = %s" % runtime_label)
+	print("[NET] selected mode = LOCAL")
+	print("[NET] selected transport = %s" % transport_override)
+	print("[NET] auth endpoint = %s" % auth_base)
+	print("[NET] websocket endpoint = %s" % _format_websocket_endpoint(server_host, server_port, ws_scheme_override))
+	_setup_auth_gate()
+
 func _apply_selected_network_mode(use_lan: bool) -> void:
-	var auth_base := ONLINE_AUTH_API_BASE_URL
-	var server_host := ONLINE_DEFAULT_HOST
+	var auth_base := LEGACY_PRODUCTION_AUTH_API_BASE_URL
+	var server_host := LEGACY_PRODUCTION_WS_URL
 	var server_port := ONLINE_PRODUCTION_PORT
 	var ws_scheme_override := "ws"
 	var transport_override := "websocket" if OS.has_feature("web") else "enet"
@@ -713,8 +738,8 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 			if _is_private_172_host(server_host):
 				print("[NET][WARN] Selected LAN host looks like a virtual adapter. Prefer your real router LAN IP, usually 192.168.x.x.")
 		else:
-			auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
-			server_host = ONLINE_PRODUCTION_WS_URL
+			auth_base = LEGACY_PRODUCTION_AUTH_API_BASE_URL
+			server_host = LEGACY_PRODUCTION_WS_URL
 			server_port = ONLINE_PRODUCTION_PORT
 			ws_scheme_override = "wss"
 			transport_override = "websocket"
@@ -722,8 +747,8 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 			print("[NET] Open the game from your LAN server instead: http://<LAN_IP>:8081/")
 			print("[NET] Or use ONLINE mode.")
 	else:
-		auth_base = ONLINE_PRODUCTION_AUTH_API_BASE_URL
-		server_host = ONLINE_PRODUCTION_WS_URL
+		auth_base = LEGACY_PRODUCTION_AUTH_API_BASE_URL
+		server_host = LEGACY_PRODUCTION_WS_URL
 		server_port = ONLINE_PRODUCTION_PORT
 		ws_scheme_override = "ws"
 		transport_override = "websocket"
@@ -760,7 +785,7 @@ func _apply_selected_network_mode(use_lan: bool) -> void:
 			print("[NET] websocket endpoint = %s" % _format_websocket_endpoint(server_host, server_port, ws_scheme_override))
 		else:
 			print("[NET] enet endpoint = %s:%d" % [server_host, server_port])
-		print("[NET] route = VPS dedicated server")
+		print("[NET] route = legacy VPS dedicated server")
 	if OS.has_feature("web") and use_lan:
 		var websocket_endpoint := _format_websocket_endpoint(server_host, server_port, ws_scheme_override)
 		print("[NET] websocket endpoint = %s" % websocket_endpoint)

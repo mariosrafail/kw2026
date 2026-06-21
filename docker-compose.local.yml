@@ -1,0 +1,54 @@
+services:
+  kw_postgres:
+    image: postgres:16-alpine
+    container_name: kw_postgres
+    environment:
+      POSTGRES_DB: kw
+      POSTGRES_USER: kw
+      POSTGRES_PASSWORD: kw_local_password
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - kw_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kw -d kw"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kw_auth_api:
+    build:
+      context: ./tools/auth_api
+    container_name: kw_auth_api
+    depends_on:
+      kw_postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://kw:kw_local_password@kw_postgres:5432/kw
+      AUTH_API_HOST: "0.0.0.0"
+      AUTH_API_PORT: "8090"
+      AUTH_API_SEED_LOCAL_DEV_ACCOUNTS: "true"
+    ports:
+      - "127.0.0.1:8090:8090"
+    restart: unless-stopped
+
+  kw_server:
+    image: barichello/godot-ci:4.6.1
+    container_name: kw_server
+    working_dir: /game
+    command: >
+      bash -lc "apt-get update &&
+      apt-get install -y --no-install-recommends libfontconfig1 python3-minimal &&
+      rm -rf /var/lib/apt/lists/* &&
+      python3 /game/tools/check_rpc_surface.py &&
+      if command -v godot4 >/dev/null 2>&1; then godot4 --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=8080; else godot --headless --verbose --path /game res://scenes/server_boot.tscn -- --mode=server --port=8080; fi"
+    volumes:
+      - ./:/game
+    environment:
+      KW_NETWORK_TRANSPORT: "websocket"
+    ports:
+      - "127.0.0.1:8080:8080/tcp"
+    restart: unless-stopped
+
+volumes:
+  kw_postgres_data:

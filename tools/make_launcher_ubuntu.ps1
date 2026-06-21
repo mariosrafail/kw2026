@@ -2,10 +2,15 @@ param(
     [string]$ReleaseDir = "build/launcher_ubuntu",
     [Parameter(Mandatory = $true)]
     [string]$ManifestUrl,
-    [string]$DefaultHost = "ws://64.225.102.179/ws",
-    [int]$DefaultPort = 80,
-    [string]$AuthApiBaseUrl = "http://64.225.102.179/auth"
+    [string]$DefaultHost = "127.0.0.1",
+    [int]$DefaultPort = 8080,
+    [string]$AuthApiBaseUrl = "http://127.0.0.1:8090"
 )
+
+# Legacy VPS endpoint, disabled for local development:
+#   DefaultHost: ws://64.225.102.179/ws
+#   DefaultPort: 80
+#   AuthApiBaseUrl: http://64.225.102.179/auth
 
 $ErrorActionPreference = "Stop"
 

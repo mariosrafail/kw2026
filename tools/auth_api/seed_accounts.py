@@ -10,7 +10,7 @@ import psycopg
 ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = ROOT / ".env"
 
-ACCOUNT_USERNAMES = ["Markos", "Giannis", "Erebus", "Kostas"]
+ACCOUNT_USERNAMES = ["BLACKSHADOW", "mario", "Markos", "Giannis", "Erebus", "Kostas"]
 ACCOUNT_PASSWORD = "1234"
 
 ALLOWED_WARRIORS = ["outrage", "erebus", "tasko", "juice", "madam", "celler", "kotro", "nova", "hindi", "loker", "gan", "veila", "krog", "aevilok", "franky", "varn", "lalou", "m4", "rp", "agelikoula", "crashout", "ctrlalt", "sink", "woman"]

@@ -3,11 +3,12 @@ extends RefCounted
 class_name LobbyConnectionConfigController
 
 const CONNECT_FALLBACK_PORTS := [8081]
-const ALLOW_LOCALHOST_LOBBY_CONNECT := false
-const ONLINE_PRODUCTION_HOST := "64.225.102.179"
-const ONLINE_PRODUCTION_WS_HOST := "ws://64.225.102.179/ws"
-const ONLINE_PRODUCTION_ENET_PORT := 8080
-const ONLINE_PRODUCTION_WS_PORT := 80
+const ALLOW_LOCALHOST_LOBBY_CONNECT := true
+# Legacy VPS endpoint, disabled for local development.
+const LEGACY_PRODUCTION_HOST := "64.225.102.179"
+const LEGACY_PRODUCTION_WS_HOST := "ws://64.225.102.179/ws"
+const LEGACY_PRODUCTION_ENET_PORT := 8080
+const LEGACY_PRODUCTION_WS_PORT := 80
 
 var _host: Object
 var _browser_hostname_checked := false
@@ -125,7 +126,7 @@ func _is_private_or_local_endpoint(host: String) -> bool:
 	return false
 
 func resolve_auth_api_host_port() -> Dictionary:
-	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://64.225.102.179/auth")).strip_edges()
+	var configured := str(ProjectSettings.get_setting("kw/auth_api_base_url", "http://127.0.0.1:8090")).strip_edges()
 	if configured.is_empty():
 		return {"host": "", "port": 8080}
 	var scheme_idx := configured.find("://")
@@ -147,14 +148,25 @@ func resolve_auth_api_host_port() -> Dictionary:
 func build_connect_candidates() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var network_mode := _selected_network_mode()
+	if network_mode == "local":
+		var local_resolved := resolve_server_host_port()
+		var local_host := str(local_resolved.get("host", "127.0.0.1")).strip_edges()
+		var local_port := int(local_resolved.get("port", 8080))
+		if local_host.is_empty():
+			local_host = "127.0.0.1"
+		if local_port < 1 or local_port > 65535:
+			local_port = 8080
+		out.append({"host": local_host, "port": local_port})
+		_log("connect candidates forced LOCAL candidates=%s" % str(out))
+		return out
 	var lan_usable := _is_lan_usable_from_owner()
 	var lan_block_reason := _lan_block_reason_from_owner()
 	if network_mode == "online":
 		if _is_private_or_local_endpoint(str(ProjectSettings.get_setting("kw/default_server_host", ""))):
 			_log("ONLINE ignored private/local configured endpoint and forced production server")
 		var transport := str(ProjectSettings.get_setting("kw/network_transport", "enet")).strip_edges().to_lower()
-		var online_host := ONLINE_PRODUCTION_WS_HOST if transport == "websocket" else ONLINE_PRODUCTION_HOST
-		var online_port := ONLINE_PRODUCTION_WS_PORT if transport == "websocket" else ONLINE_PRODUCTION_ENET_PORT
+		var online_host := LEGACY_PRODUCTION_WS_HOST if transport == "websocket" else LEGACY_PRODUCTION_HOST
+		var online_port := LEGACY_PRODUCTION_WS_PORT if transport == "websocket" else LEGACY_PRODUCTION_ENET_PORT
 		out.append({"host": online_host, "port": online_port})
 		_log("connect candidates forced ONLINE transport=%s candidates=%s" % [transport, str(out)])
 		return out

@@ -1,6 +1,6 @@
 {
-  "update_manifest_url": "http://64.225.102.179/kw/update_manifest.json",
-  "auth_api_base_url": "http://64.225.102.179/auth",
-  "default_host": "64.225.102.179",
+  "update_manifest_url": "http://127.0.0.1:8081/kw/update_manifest.json",
+  "auth_api_base_url": "http://127.0.0.1:8090",
+  "default_host": "127.0.0.1",
   "default_port": 8080
 }

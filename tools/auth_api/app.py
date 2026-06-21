@@ -31,6 +31,7 @@ class Settings:
     listen_host: str
     listen_port: int
     session_ttl_hours: int
+    seed_local_dev_accounts: bool
 
 
 def _load_settings() -> Settings:
@@ -42,6 +43,7 @@ def _load_settings() -> Settings:
         listen_host=os.environ.get("AUTH_API_HOST", "127.0.0.1").strip() or "127.0.0.1",
         listen_port=int(os.environ.get("AUTH_API_PORT", "8090")),
         session_ttl_hours=int(os.environ.get("AUTH_API_SESSION_TTL_HOURS", "168")),
+        seed_local_dev_accounts=os.environ.get("AUTH_API_SEED_LOCAL_DEV_ACCOUNTS", "").strip().lower() in ("1", "true", "yes", "on"),
     )
 
 
@@ -182,6 +184,8 @@ def _on_startup() -> None:
     log.info("Starting auth API (host=%s port=%d)", SETTINGS.listen_host, SETTINGS.listen_port)
     try:
         _init_schema()
+        if SETTINGS.seed_local_dev_accounts:
+            _seed_local_dev_accounts()
     except Exception:
         # Don't log DATABASE_URL. Just the stack trace.
         log.exception("Schema init failed. Check DATABASE_URL connectivity/permissions.")
@@ -472,6 +476,34 @@ def _ensure_account_loadout_defaults_cur(cur, account_uuid: uuid.UUID) -> None:
             0,
         ),
     )
+
+
+def _seed_local_dev_accounts() -> None:
+    dev_accounts = (
+        ("BLACKSHADOW", "1234"),
+        ("mario", "1234"),
+    )
+    with _db_tx() as conn:
+        with conn.cursor() as cur:
+            for username, password in dev_accounts:
+                cur.execute("select id from accounts where lower(username) = lower(%s)", (username,))
+                row = cur.fetchone()
+                account_uuid = uuid.UUID(str(row[0])) if row else uuid.uuid4()
+                cur.execute(
+                    """
+                    insert into accounts (id, username, email, password_hash)
+                    values (%s, %s, null, %s)
+                    on conflict (username) do update set
+                        password_hash = excluded.password_hash
+                    """,
+                    (account_uuid, username, _hash_password(password)),
+                )
+                _ensure_wallet_cur(cur, account_uuid)
+                _ensure_weapon_inventory_defaults_cur(cur, account_uuid)
+                _ensure_account_loadout_defaults_cur(cur, account_uuid)
+                cur.execute("delete from sessions where account_id = %s", (account_uuid,))
+        conn.commit()
+    log.info("Seeded local dev accounts: %s", ", ".join(username for username, _ in dev_accounts))
 
 
 def _loadout_for_account_cur(cur, account_uuid: uuid.UUID) -> dict[str, object]:

@@ -9,8 +9,10 @@ const DEFAULT_AUTH_PASSWORD := "1234"
 const AUTH_SESSION_PATH := "user://main_menu_auth_session.json"
 const AUTH_PROFILE_SETTING := "kw/auth_profile"
 const AUTH_PROFILE_ARG_PREFIX := "--auth-profile="
-const WEB_ONLINE_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
-const WEB_PRODUCTION_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
+const LOCAL_AUTH_API_BASE_URL := "http://127.0.0.1:8090"
+# Legacy VPS endpoint, disabled for local development.
+const LEGACY_WEB_ONLINE_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
+const LEGACY_WEB_PRODUCTION_AUTH_API_BASE_URL := "http://64.225.102.179/auth"
 const WEAPON_UZI := DATA.WEAPON_UZI
 const WEAPON_GRENADE := DATA.WEAPON_GRENADE
 const WEAPON_AK47 := DATA.WEAPON_AK47
@@ -23,7 +25,7 @@ static var _runtime_session_api_base_url := ""
 
 func setup_auth_gate(host: Control, api_base_url_default: String) -> void:
 	resolve_auth_profile(host)
-	var network_mode := str(host.get_meta("kw_network_mode", "online")).strip_edges().to_lower()
+	var network_mode := str(host.get_meta("kw_network_mode", "local")).strip_edges().to_lower()
 	var lan_usable := bool(host.get_meta("kw_lan_usable", true))
 	var lan_block_reason := str(host.get_meta("kw_lan_blocked_reason", "")).strip_edges()
 	if OS.has_feature("web"):
@@ -226,7 +228,7 @@ func auth_set_ui_locked(host: Control, locked: bool) -> void:
 
 func auth_submit_login(host: Control) -> void:
 	if OS.has_feature("web"):
-		var network_mode := str(host.get_meta("kw_network_mode", "online")).strip_edges().to_lower()
+		var network_mode := str(host.get_meta("kw_network_mode", "local")).strip_edges().to_lower()
 		var lan_usable := bool(host.get_meta("kw_lan_usable", true))
 		if network_mode == "lan" and not lan_usable:
 			var auth_status_label := host.get("_auth_status_label") as Label
@@ -738,7 +740,7 @@ func auth_rebuild_login_base_candidates(host: Control) -> void:
 		# Keep web base strict to avoid malformed fallback URLs (e.g. http:///host...).
 		# Desktop mode may still include direct internal auth fallback candidates.
 		var allow_direct_port_fallback := bool(ProjectSettings.get_setting("kw/enable_auth_direct_port_fallback", false)) \
-			or str(host.get_meta("kw_network_mode", "online")).strip_edges().to_lower() == "lan"
+			or str(host.get_meta("kw_network_mode", "local")).strip_edges().to_lower() == "lan"
 		if not is_web and allow_direct_port_fallback:
 			var parts := _split_base_url(normalized)
 			var hostname := str(parts.get("hostname", ""))
@@ -1300,8 +1302,8 @@ func _web_browser_origin() -> String:
 
 func _web_online_auth_api_base_url() -> String:
 	if not OS.has_feature("web"):
-		return WEB_ONLINE_AUTH_API_BASE_URL
-	return _normalize_api_base_url(WEB_PRODUCTION_AUTH_API_BASE_URL)
+		return LEGACY_WEB_ONLINE_AUTH_API_BASE_URL
+	return _normalize_api_base_url(LEGACY_WEB_PRODUCTION_AUTH_API_BASE_URL)
 
 func _append_login_base_candidate(candidates: PackedStringArray, candidate: String) -> void:
 	var normalized := candidate.strip_edges().trim_suffix("/")

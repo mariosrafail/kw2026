@@ -25,6 +25,54 @@ KW is a competitive multiplayer game where players battle in arena maps with gun
 
 ---
 
+## Local Docker Development
+
+Default development is local-only. The Godot client defaults to the local auth API and local WebSocket game server.
+
+Start local services:
+
+```bash
+docker compose -f docker-compose.local.yml up --build
+```
+
+Health checks:
+
+- Auth API: `http://127.0.0.1:8090/health`
+
+Godot client defaults:
+
+- Auth API: `http://127.0.0.1:8090`
+- Game server: `ws://127.0.0.1:8080`
+- Transport: `websocket`
+- Local dev login: `BLACKSHADOW` / `1234`
+
+Stop:
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
+Reset local database:
+
+```bash
+docker compose -f docker-compose.local.yml down -v
+```
+
+The launcher `update_manifest_url` points at `http://127.0.0.1:8081/kw/update_manifest.json` for optional local update-site testing. The local Docker stack does not start the update site, and this URL is not needed for local game/auth testing.
+
+## Legacy VPS Setup
+
+The old VPS deployment that points at `64.225.102.179` is kept as legacy reference material. It is not used by the local default flow.
+
+- Legacy VPS docs: [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md)
+- Legacy server compose: `docker-compose.server.yml`
+- Legacy remote compose: `docker-compose.server.remote.yml`
+- Legacy proxy/update configs: `Caddyfile*`, `updates_site/nginx/*`
+
+Re-enable the VPS path only when intentionally deploying to that environment.
+
+---
+
 ## Quick Start
 
 ### Local Development (Single Machine)
@@ -284,11 +332,13 @@ godot --headless -s tools/diag_map_catalog.gd  # Validate maps
 .\tools\build_launcher.ps1      # Builds C# launcher
 ```
 
-### Docker Server
+### Legacy Docker Server
 
 ```bash
 docker-compose -f docker-compose.server.yml up
 ```
+
+This is the older server-style compose path. For local PC development use `docker compose -f docker-compose.local.yml up --build`.
 
 ### LAN Mobile Browser (HTTPS/WSS, Same-Origin)
 
@@ -300,7 +350,7 @@ Use the dedicated LAN HTTPS stack when testing on phones/tablets:
 See:
 - [docs/LAN_MOBILE_BROWSER_TESTING.md](docs/LAN_MOBILE_BROWSER_TESTING.md)
 
-If you are using a remote Docker engine (e.g. `docker context use stinis-server`), use the remote compose file (no bind mounts):
+If you are intentionally using the legacy remote Docker engine/VPS setup (e.g. `docker context use stinis-server`), use the remote compose file (no bind mounts):
 
 ```bash
 docker compose -f docker-compose.server.remote.yml up -d --build
@@ -384,7 +434,9 @@ location /auth/ {
 # Output: build/kw.exe, build/kw.pck
 ```
 
-### Server Deployment
+### Legacy Server Deployment
+
+The commands below are for the old VPS/server deployment path. Local development should use `docker-compose.local.yml`.
 
 ```bash
 # Docker
