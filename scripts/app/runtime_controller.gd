@@ -129,6 +129,7 @@ func _ready() -> void:
 		_start_fight_soundtrack()
 	randomize()
 	_ensure_input_actions()
+	_load_network_profile()
 	_init_services()
 	_init_weapons()
 	_init_scene_map_context()
@@ -208,6 +209,7 @@ func _ready() -> void:
 	session_controller.set_idle_state()
 	_append_log("Ready.")
 	_append_log("Boot config: mode=%s host=%s port=%d" % [_role_name(startup_mode), host_input.text, int(port_spin.value)])
+	_append_log("Network profile: %s" % network_profile_id)
 	_print_net_diag_summary("boot")
 	if _allows_scene_network_bootstrap():
 		session_controller.auto_boot_from_environment()
@@ -235,6 +237,11 @@ func _ensure_cursor_manager() -> void:
 	cm.name = CURSOR_MANAGER_NAME
 	root.call_deferred("add_child", cm)
 	call_deferred("_apply_game_cursor_context")
+
+func _load_network_profile() -> void:
+	network_profile_id = NETWORK_PROFILES_SCRIPT.selected_profile_name()
+	network_profile = NETWORK_PROFILES_SCRIPT.selected_profile()
+	print("[NET PROFILE] selected=%s values=%s" % [network_profile_id, str(network_profile)])
 
 func _apply_game_cursor_context() -> void:
 	var tree := get_tree()

@@ -13,12 +13,7 @@ const DEFAULT_PORT := 8080
 const MAX_CLIENTS := 8
 const DEFAULT_HOST := "127.0.0.1"
 
-# RPC & Synchronization Rates
-const SNAPSHOT_RATE := 45.0        # Server broadcast frequency (Hz)
-const INPUT_SEND_RATE := 90.0      # Client input frequency (Hz)
-const PING_INTERVAL := 0.75        # Ping request interval (seconds)
-const PLAYER_HISTORY_MS := 800     # Client prediction history (ms)
-const MAX_INPUT_PACKETS_PER_SEC := 120
+# RPC & synchronization rates live in scripts/network/network_profiles.gd.
 const MAX_REPORTED_RTT_MS := 300   # Maximum RTT for lag compensation
 const MAX_INPUT_STALE_MS := 120    # Max input age before ignoring
 

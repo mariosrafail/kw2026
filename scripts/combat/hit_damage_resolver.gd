@@ -50,6 +50,7 @@ var character_id_for_peer_cb: Callable = Callable()
 var authoritative_blood_color_for_peer_cb: Callable = Callable()
 var incoming_damage_multiplier_for_peer_cb: Callable = Callable()
 var clear_all_debuffs_for_peer_cb: Callable = Callable()
+var _raycasts_this_interval := 0
 
 func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = state_refs.get("players", {}) as Dictionary
@@ -86,6 +87,7 @@ func server_projectile_world_hit(from_position: Vector2, to_position: Vector2, w
 	query.collide_with_bodies = true
 	query.collide_with_areas = false
 	var hit: Dictionary = world_2d.direct_space_state.intersect_ray(query)
+	_raycasts_this_interval += 1
 	if hit.is_empty():
 		return {}
 
@@ -98,6 +100,50 @@ func server_projectile_world_hit(from_position: Vector2, to_position: Vector2, w
 	hit["t"] = t
 	return hit
 
+func server_hitscan_player_hit(attacker_peer_id: int, hit_radius: float, lag_comp_ms: int, from_position: Vector2, to_position: Vector2, lobby_id: int) -> Dictionary:
+	var best_t := 2.0
+	var best_peer_id := -1
+	var best_position := to_position
+	var segment := to_position - from_position
+	var segment_len_sq := segment.length_squared()
+	if segment_len_sq <= 0.000001:
+		return {}
+	_raycasts_this_interval += 1
+	for key in players.keys():
+		var target_peer_id := int(key)
+		if target_peer_id == attacker_peer_id:
+			continue
+		if can_damage_peer_cb.is_valid() and not bool(can_damage_peer_cb.call(attacker_peer_id, target_peer_id)):
+			continue
+		if lobby_id > 0 and _peer_lobby(target_peer_id) != lobby_id:
+			continue
+		var target_player := players[target_peer_id] as NetPlayer
+		if target_player == null or target_player.get_health() <= 0:
+			continue
+		if target_player.has_method("is_respawn_hidden") and bool(target_player.call("is_respawn_hidden")):
+			continue
+		var rewound_position := get_player_rewound_position(target_peer_id, lag_comp_ms)
+		var combined_radius := hit_radius + target_player.get_hit_radius()
+		var t := clampf((rewound_position - from_position).dot(segment) / segment_len_sq, 0.0, 1.0)
+		var closest := from_position + segment * t
+		if rewound_position.distance_squared_to(closest) <= combined_radius * combined_radius and t < best_t:
+			best_t = t
+			best_peer_id = target_peer_id
+			best_position = closest
+	if best_peer_id == -1:
+		return {}
+	var hit_player := players.get(best_peer_id, null) as NetPlayer
+	var headshot := false
+	if hit_player != null:
+		var hit_rewound_position := get_player_rewound_position(best_peer_id, lag_comp_ms)
+		headshot = _is_headshot_hit(hit_player, best_position, hit_rewound_position)
+	return {
+		"peer_id": best_peer_id,
+		"position": best_position,
+		"t": best_t,
+		"headshot": headshot
+	}
+
 func server_projectile_player_hit(projectile: NetProjectile, from_position: Vector2, to_position: Vector2, projectile_lobby_id: int) -> Dictionary:
 	if projectile == null:
 		return {}
@@ -108,6 +154,7 @@ func server_projectile_player_hit(projectile: NetProjectile, from_position: Vect
 	var segment_len_sq := segment.length_squared()
 	if segment_len_sq <= 0.000001:
 		return {}
+	_raycasts_this_interval += 1
 
 	for key in players.keys():
 		var target_peer_id := int(key)
@@ -324,6 +371,11 @@ func server_apply_direct_damage(attacker_peer_id: int, target_peer_id: int, targ
 	if server_broadcast_player_state_cb.is_valid():
 		server_broadcast_player_state_cb.call(target_peer_id, target_player)
 	return remaining_health
+
+func consume_debug_counters() -> Dictionary:
+	var out := {"raycasts": _raycasts_this_interval}
+	_raycasts_this_interval = 0
+	return out
 
 func _should_use_round_survival_elimination(target_peer_id: int) -> bool:
 	if should_use_round_survival_elimination_cb.is_valid():

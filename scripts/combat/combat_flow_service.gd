@@ -73,6 +73,7 @@ var send_spawn_blood_particles_cb: Callable = Callable()
 var send_spawn_surface_particles_cb: Callable = Callable()
 var send_projectile_impact_cb: Callable = Callable()
 var send_despawn_projectile_cb: Callable = Callable()
+var send_hitscan_tracer_cb: Callable = Callable()
 var broadcast_player_state_cb: Callable = Callable()
 var send_skill_charge_cb: Callable = Callable()
 var send_debuff_visual_cb: Callable = Callable()
@@ -115,6 +116,7 @@ func configure(state_refs: Dictionary, callbacks: Dictionary, config: Dictionary
 	send_spawn_surface_particles_cb = callbacks.get("send_spawn_surface_particles", Callable()) as Callable
 	send_projectile_impact_cb = callbacks.get("send_projectile_impact", Callable()) as Callable
 	send_despawn_projectile_cb = callbacks.get("send_despawn_projectile", Callable()) as Callable
+	send_hitscan_tracer_cb = callbacks.get("send_hitscan_tracer", Callable()) as Callable
 	broadcast_player_state_cb = callbacks.get("broadcast_player_state", Callable()) as Callable
 	send_skill_charge_cb = callbacks.get("send_skill_charge", Callable()) as Callable
 	send_debuff_visual_cb = callbacks.get("send_debuff_visual", Callable()) as Callable
@@ -269,10 +271,17 @@ func server_begin_reload(peer_id: int, weapon_profile: WeaponProfile) -> void:
 
 func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: WeaponProfile) -> void:
 	var lobby_id := _peer_lobby(peer_id)
-	if lobby_id <= 0 or projectile_system == null:
+	if lobby_id <= 0:
 		return
 	if weapon_profile == null:
 		weapon_profile = _weapon_profile_for_id(weapon_id_ak47)
+	if weapon_profile == null:
+		return
+	if weapon_profile.uses_hitscan():
+		_server_fire_hitscan(peer_id, player, weapon_profile, lobby_id)
+		return
+	if projectile_system == null:
+		return
 	var state: Dictionary = input_states.get(peer_id, default_input_state()) as Dictionary
 	var world_2d := _world_2d()
 	var shot_data := projectile_system.fire_from_weapon(
@@ -322,6 +331,78 @@ func server_fire_projectile(peer_id: int, player: NetPlayer, weapon_profile: Wea
 			)
 	_register_projectiles_for_skill(peer_id, weapon_id, projectile_ids)
 
+func _server_fire_hitscan(peer_id: int, player: NetPlayer, weapon_profile: WeaponProfile, lobby_id: int) -> void:
+	if player == null or hit_damage_resolver == null:
+		return
+	var state: Dictionary = input_states.get(peer_id, default_input_state()) as Dictionary
+	var weapon_id := _weapon_id_for_peer(peer_id)
+	var shot_data_list := weapon_profile.build_server_shots(
+		player,
+		state,
+		0,
+		max_reported_rtt_ms,
+		_world_2d()
+	)
+	if shot_data_list.is_empty():
+		return
+	player.set_shot_audio_stream(_weapon_shot_sfx(weapon_id))
+	player.play_shot_recoil()
+	for shot_value in shot_data_list:
+		if not (shot_value is Dictionary):
+			continue
+		var shot := shot_value as Dictionary
+		var start_position := shot.get("spawn_position", player.global_position) as Vector2
+		var velocity := shot.get("velocity", Vector2.RIGHT) as Vector2
+		var direction := velocity.normalized()
+		if direction.length_squared() <= 0.0001:
+			direction = Vector2.RIGHT
+		var end_position := start_position + direction * weapon_profile.hitscan_range()
+		var lag_comp_ms := int(shot.get("lag_comp_ms", 0))
+		var base_damage := int(shot.get("shot_damage", weapon_profile.base_damage()))
+		var wall_hit := _server_projectile_world_hit(start_position, end_position)
+		var player_hit := hit_damage_resolver.server_hitscan_player_hit(
+			peer_id,
+			weapon_profile.projectile_hit_radius(),
+			lag_comp_ms,
+			start_position,
+			end_position,
+			lobby_id
+		)
+		var wall_t := 2.0
+		if not wall_hit.is_empty():
+			wall_t = float(wall_hit.get("t", 2.0))
+		var player_t := 2.0
+		if not player_hit.is_empty():
+			player_t = float(player_hit.get("t", 2.0))
+		var tracer_end := end_position
+		if not player_hit.is_empty() and player_t <= wall_t:
+			var target_peer_id := int(player_hit.get("peer_id", -1))
+			var target_player := players.get(target_peer_id, null) as NetPlayer
+			var hit_position := player_hit.get("position", end_position) as Vector2
+			var is_headshot := bool(player_hit.get("headshot", false))
+			var damage := base_damage * HitDamageResolver.HEADSHOT_DAMAGE_MULTIPLIER if is_headshot else base_damage
+			tracer_end = hit_position
+			if target_player != null:
+				hit_damage_resolver.server_apply_direct_damage(peer_id, target_peer_id, target_player, damage, velocity)
+			var blood_color := _target_blood_color(target_peer_id, target_player)
+			if combat_effects != null and _server_visual_effects_enabled():
+				combat_effects.spawn_blood_particles(hit_position, velocity, blood_color, 1.0)
+			for member_value in _lobby_members(lobby_id):
+				if send_spawn_blood_particles_cb.is_valid():
+					send_spawn_blood_particles_cb.call(int(member_value), hit_position, velocity, blood_color, 1.0)
+		elif not wall_hit.is_empty():
+			var wall_position := wall_hit.get("position", end_position) as Vector2
+			tracer_end = wall_position
+			if combat_effects != null:
+				var impact_color := combat_effects.sample_map_front_color(wall_position)
+				if impact_color.a > 0.01:
+					for member_value in _lobby_members(lobby_id):
+						if send_spawn_surface_particles_cb.is_valid():
+							send_spawn_surface_particles_cb.call(int(member_value), wall_position, velocity, impact_color)
+		for member_value in _lobby_members(lobby_id):
+			if send_hitscan_tracer_cb.is_valid():
+				send_hitscan_tracer_cb.call(int(member_value), peer_id, start_position, tracer_end, weapon_id)
+
 func server_tick_projectiles(delta: float) -> void:
 	_server_tick_warrior_cooldowns(delta)
 	if projectile_system == null:
@@ -364,7 +445,7 @@ func _on_server_projectile_player_hit(
 	if target_player != null:
 		server_apply_projectile_damage(projectile_id, target_peer_id, target_player, impact_velocity, is_headshot)
 	_notify_projectile_player_hit(projectile_id, attacker_peer_id, target_peer_id, hit_position, impact_velocity, projectile_lobby_id)
-	if combat_effects != null:
+	if combat_effects != null and _server_visual_effects_enabled():
 		combat_effects.spawn_blood_particles(target_blood_position, impact_velocity, blood_color, 1.0)
 	for member_value in _lobby_members(projectile_lobby_id):
 		if send_spawn_blood_particles_cb.is_valid():
@@ -716,6 +797,11 @@ func _weapon_reload_sfx(weapon_id: String) -> AudioStream:
 func _server_send_player_ammo(target_peer_id: int, peer_id: int, ammo: int, is_reloading: bool) -> void:
 	if send_player_ammo_cb.is_valid():
 		send_player_ammo_cb.call(target_peer_id, peer_id, ammo, is_reloading)
+
+func _server_visual_effects_enabled() -> bool:
+	if OS.has_feature("dedicated_server") or OS.has_feature("server"):
+		return false
+	return DisplayServer.get_name().to_lower() != "headless"
 
 # ============================================================================
 # Warrior Management

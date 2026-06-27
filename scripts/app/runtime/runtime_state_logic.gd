@@ -316,6 +316,7 @@ func _print_net_diag_summary(reason: String) -> void:
 		browser_protocol = str(JavaScriptBridge.eval("window.location.protocol")).strip_edges()
 	network_diagnostics.print_summary(
 		reason,
+		network_profile_id,
 		runtime_label,
 		transport,
 		str(ProjectSettings.get_setting("kw/auth_api_base_url", "")).strip_edges(),
@@ -337,7 +338,7 @@ func _client_ping_tick(delta: float) -> void:
 	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		return
 	ping_accumulator += delta
-	if ping_accumulator < PING_INTERVAL:
+	if ping_accumulator < float(network_profile.get("ping_interval", 1.0)):
 		return
 	ping_accumulator = 0.0
 	_rpc_ping_request.rpc_id(1, Time.get_ticks_msec())
@@ -352,7 +353,17 @@ func _network_debug_text() -> String:
 
 func _tick_network_diagnostics(delta: float) -> void:
 	if network_diagnostics != null:
-		network_diagnostics.tick(delta, multiplayer, client_input_controller, player_replication)
+		network_diagnostics.tick(delta, multiplayer, client_input_controller, player_replication, projectile_system, hit_damage_resolver, network_profile_id, MultiplayerPeerFactory.transport())
+
+func _projectile_visuals_enabled() -> bool:
+	if OS.has_feature("dedicated_server") or OS.has_feature("server"):
+		return false
+	return DisplayServer.get_name().to_lower() != "headless"
+
+func _spawn_blood_particles_local(impact_position: Vector2, incoming_velocity: Vector2, blood_color: Color = Color(0.98, 0.02, 0.07, 1.0), count_multiplier: float = 1.0) -> void:
+	if not _projectile_visuals_enabled() or combat_effects == null:
+		return
+	combat_effects.spawn_blood_particles(impact_position, incoming_velocity, blood_color, count_multiplier)
 
 func _warrior_id_for_peer(peer_id: int) -> String:
 	var normalized := str(peer_character_ids.get(peer_id, "")).strip_edges().to_lower()

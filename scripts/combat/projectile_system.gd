@@ -13,12 +13,20 @@ var projectile_damage_by_id: Dictionary = {}
 var projectile_weapon_name_by_id: Dictionary = {}
 var projectile_weapon_id_by_id: Dictionary = {}
 var next_projectile_id: int = 1
+var visuals_enabled := true
+var trail_max_points := 6
+var trail_sample_interval := 0.04
+var trail_wall_clip := false
 
-func configure(root: Node2D, scene: PackedScene, color_callback: Callable, visual_config_callback: Callable = Callable()) -> void:
+func configure(root: Node2D, scene: PackedScene, color_callback: Callable, visual_config_callback: Callable = Callable(), config: Dictionary = {}) -> void:
 	projectiles_root = root
 	projectile_scene = scene
 	resolve_owner_color = color_callback
 	resolve_visual_config_override = visual_config_callback
+	visuals_enabled = bool(config.get("visuals_enabled", visuals_enabled))
+	trail_max_points = maxi(0, int(config.get("trail_max_points", trail_max_points)))
+	trail_sample_interval = maxf(0.0, float(config.get("trail_sample_interval", trail_sample_interval)))
+	trail_wall_clip = bool(config.get("trail_wall_clip", trail_wall_clip))
 
 func reset() -> void:
 	clear()
@@ -131,6 +139,10 @@ func spawn_projectile(
 			var override_value: Variant = resolve_visual_config_override.call(owner_peer_id, weapon.weapon_id(), visual_config)
 			if override_value is Dictionary:
 				visual_config = override_value as Dictionary
+	visual_config["visuals_enabled"] = visuals_enabled
+	visual_config["trail_max_points"] = trail_max_points
+	visual_config["trail_sample_interval"] = trail_sample_interval
+	visual_config["trail_wall_clip"] = trail_wall_clip
 	projectile.configure(
 		_owner_color(owner_peer_id, weapon),
 		velocity,
@@ -171,6 +183,10 @@ func reconfigure_projectile(
 			var override_value: Variant = resolve_visual_config_override.call(owner_peer_id, weapon.weapon_id(), visual_config)
 			if override_value is Dictionary:
 				visual_config = override_value as Dictionary
+	visual_config["visuals_enabled"] = visuals_enabled
+	visual_config["trail_max_points"] = trail_max_points
+	visual_config["trail_sample_interval"] = trail_sample_interval
+	visual_config["trail_wall_clip"] = trail_wall_clip
 	projectile.configure(
 		_owner_color(owner_peer_id, weapon),
 		velocity,
@@ -332,6 +348,12 @@ func _mark_impact_and_emit(projectile_id: int, lobby_id: int, impact_position: V
 			impact_position,
 			impact_data.get("trail_start_position", impact_position) as Vector2
 		)
+
+func consume_debug_counters() -> Dictionary:
+	var out := {
+		"active_projectiles": projectiles.size()
+	}
+	return out
 
 func _owner_color(owner_peer_id: int, weapon: WeaponProfile = null) -> Color:
 	if resolve_owner_color.is_valid():

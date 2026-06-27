@@ -149,7 +149,7 @@ func server_broadcast_player_state(peer_id: int, player: NetPlayer) -> void:
 		return
 	for member_value in _lobby_members(lobby_id):
 		var member_id := int(member_value)
-		var animation_state := {} if member_id == peer_id else player.get_part_animation_state()
+		var animation_state := {} if member_id == peer_id else _compact_animation_state(player)
 		send_sync_player_state_cb.call(
 			member_id,
 			peer_id,
@@ -437,10 +437,22 @@ func consume_client_snapshot_stats() -> Dictionary:
 	return out
 
 func _estimate_snapshot_bytes(animation_state: Dictionary) -> int:
-	var estimate := 40
+	var estimate := 36
 	if not animation_state.is_empty():
-		estimate += 96 + animation_state.size() * 24
+		estimate += 8 + animation_state.size() * 4
 	return estimate
+
+func _compact_animation_state(player: NetPlayer) -> Dictionary:
+	var flags := 0
+	if absf(player.velocity.x) > 8.0:
+		flags |= 1
+	if player.velocity.y < -8.0:
+		flags |= 2
+	elif player.velocity.y > 8.0:
+		flags |= 4
+	if player.get_health() <= 0:
+		flags |= 8
+	return {"f": flags}
 
 func _peer_lobby(peer_id: int) -> int:
 	if get_peer_lobby_cb.is_valid():

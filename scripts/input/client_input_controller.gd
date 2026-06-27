@@ -21,6 +21,7 @@ var _last_sent_axis := 0.0
 var _last_sent_jump_held := false
 var _last_sent_shoot_held := false
 var _last_sent_boost_damage := false
+var _last_sent_aim_world := Vector2.ZERO
 var _input_packets_sent := 0
 var _input_packets_throttled := 0
 var _camera_follow_position := Vector2.ZERO
@@ -37,6 +38,8 @@ const CAMERA_MOUSE_LOOK_CURVE := 1.35
 const WEAPON_ID_KAR := "kar"
 const KAR_CAMERA_ZOOM := Vector2(0.84, 0.84)
 const CAMERA_ZOOM_LERP_SPEED := 7.0
+const AIM_SEND_DISTANCE_SQ := 36.0
+const AIM_SEND_ANGLE_DELTA := 0.035
 
 func configure(refs: Dictionary, callbacks: Dictionary, config: Dictionary = {}) -> void:
 	players = refs.get("players", {}) as Dictionary
@@ -63,6 +66,7 @@ func reset() -> void:
 	_last_sent_jump_held = false
 	_last_sent_shoot_held = false
 	_last_sent_boost_damage = false
+	_last_sent_aim_world = Vector2.ZERO
 	_input_packets_sent = 0
 	_input_packets_throttled = 0
 	_camera_follow_position = Vector2.ZERO
@@ -84,12 +88,15 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 	var jump_held := bool(state.get("jump_held", false))
 	var shoot_held := bool(state.get("shoot_held", false))
 	var boost_damage := bool(state.get("boost_damage", false))
+	var aim_world := state.get("aim_world", Vector2.ZERO) as Vector2
+	var aim_changed := _aim_changed_meaningfully(aim_world)
 	var changed := (
 		absf(axis - _last_sent_axis) > 0.001
 		or jump_pressed
 		or jump_held != _last_sent_jump_held
 		or shoot_held != _last_sent_shoot_held
 		or boost_damage != _last_sent_boost_damage
+		or aim_changed
 	)
 	var local_player := players[local_id] as NetPlayer
 	if local_player != null:
@@ -110,7 +117,7 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 		axis,
 		jump_pressed,
 		jump_held,
-		state.get("aim_world", Vector2.ZERO) as Vector2,
+		aim_world,
 		shoot_held,
 		boost_damage,
 		last_ping_ms
@@ -120,6 +127,7 @@ func client_send_input(delta: float, last_ping_ms: int, damage_boost_enabled: bo
 	_last_sent_jump_held = jump_held
 	_last_sent_shoot_held = shoot_held
 	_last_sent_boost_damage = boost_damage
+	_last_sent_aim_world = aim_world
 
 func consume_debug_counters() -> Dictionary:
 	var out := {
@@ -320,6 +328,21 @@ func _weapon_id_for_peer(peer_id: int) -> String:
 	if weapon_id_for_peer_cb.is_valid():
 		return str(weapon_id_for_peer_cb.call(peer_id)).strip_edges().to_lower()
 	return ""
+
+func _aim_changed_meaningfully(aim_world: Vector2) -> bool:
+	if _last_sent_aim_world == Vector2.ZERO:
+		return true
+	if aim_world.distance_squared_to(_last_sent_aim_world) >= AIM_SEND_DISTANCE_SQ:
+		return true
+	var local_id := multiplayer.get_unique_id() if multiplayer != null else 0
+	var local_player := players.get(local_id, null) as NetPlayer
+	if local_player == null:
+		return false
+	var prev_dir := (_last_sent_aim_world - local_player.global_position).normalized()
+	var next_dir := (aim_world - local_player.global_position).normalized()
+	if prev_dir.length_squared() <= 0.0001 or next_dir.length_squared() <= 0.0001:
+		return false
+	return absf(prev_dir.angle_to(next_dir)) >= AIM_SEND_ANGLE_DELTA
 
 func _ensure_camera_zoom_initialized() -> void:
 	if _camera_zoom_initialized or main_camera == null:

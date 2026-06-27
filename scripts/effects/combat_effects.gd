@@ -49,6 +49,7 @@ const EXPLOSION_FRAME_COUNT := 8
 const EXPLOSION_FRAME_SEC := 0.035
 const EXPLOSION_Y_OFFSET := 10.0
 const HIT_FLASH_LIFETIME := 0.08
+const HITSCAN_TRACER_LIFETIME := 0.055
 const BLOOD_EFFECTS_Z_INDEX := 44
 const SURFACE_ID_WOOD := "wood"
 const SURFACE_ID_GRASS := "grass"
@@ -421,6 +422,22 @@ func spawn_hit_flash(world_position: Vector2) -> void:
 	tw.parallel().tween_property(sprite, "scale", Vector2.ONE * 1.2, HIT_FLASH_LIFETIME)
 	tw.parallel().tween_property(sprite, "modulate:a", 0.0, HIT_FLASH_LIFETIME)
 	tw.tween_callback(Callable(self, "_queue_free_from_weak_ref").bind(weakref(sprite)))
+
+func spawn_hitscan_tracer(start_position: Vector2, end_position: Vector2, color: Color = Color(1.0, 0.86, 0.34, 0.62), width: float = 2.0) -> void:
+	if projectiles_root == null:
+		return
+	var line := Line2D.new()
+	line.z_as_relative = false
+	line.z_index = BLOOD_EFFECTS_Z_INDEX - 2
+	line.default_color = color
+	line.width = maxf(0.5, width)
+	line.antialiased = false
+	line.points = PackedVector2Array([start_position, end_position])
+	_hide_from_minimap(line)
+	projectiles_root.add_child(line)
+	var tw := line.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(line, "modulate:a", 0.0, HITSCAN_TRACER_LIFETIME)
+	tw.tween_callback(Callable(self, "_queue_free_from_weak_ref").bind(weakref(line)))
 
 func _play_positional_sfx(stream: AudioStream, world_position: Vector2, volume_db: float, pitch_scale: float, max_polyphony: int) -> void:
 	if projectiles_root == null or stream == null:

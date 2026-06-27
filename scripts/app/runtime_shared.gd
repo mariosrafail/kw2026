@@ -3,11 +3,6 @@
 const DEFAULT_PORT := 8080
 const MAX_CLIENTS := 8
 const DEFAULT_HOST := "127.0.0.1"
-const SNAPSHOT_RATE := 24.0
-const INPUT_SEND_RATE := 45.0
-const PING_INTERVAL := 0.75
-const PLAYER_HISTORY_MS := 800
-const MAX_INPUT_PACKETS_PER_SEC := 120
 const MAX_REPORTED_RTT_MS := 300
 const MAX_INPUT_STALE_MS := 120
 const LOCAL_RECONCILE_SNAP_DISTANCE := 260.0
@@ -71,6 +66,7 @@ const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 const LOBBY_FLOW_CONTROLLER_SCRIPT := preload("res://scripts/lobby/lobby_flow_controller.gd")
 const SESSION_CONTROLLER_SCRIPT := preload("res://scripts/network/session_controller.gd")
 const CONNECT_RETRY_SCRIPT := preload("res://scripts/network/connect_retry.gd")
+const NETWORK_PROFILES_SCRIPT := preload("res://scripts/network/network_profiles.gd")
 const NETWORK_DIAGNOSTICS_SCRIPT := preload("res://scripts/network/network_diagnostics.gd")
 const UI_CONTROLLER_SCRIPT := preload("res://scripts/ui/ui_controller.gd")
 const SPAWN_IDENTITY_SCRIPT := preload("res://scripts/entities/spawn_identity.gd")
@@ -217,6 +213,8 @@ var peer_skin_indices_by_peer: Dictionary = {}
 var snapshot_accumulator := 0.0
 var ping_accumulator := 0.0
 var last_ping_ms := -1
+var network_profile_id := "local_dev"
+var network_profile: Dictionary = {}
 var spawn_request_sent := false
 var spawn_request_retry_accumulator := 0.0
 var spawn_response_msec_by_peer: Dictionary = {}
@@ -359,6 +357,10 @@ func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: V
 
 @rpc("authority", "reliable")
 func _rpc_spawn_surface_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _particle_color: Color) -> void:
+	pass
+
+@rpc("authority", "unreliable")
+func _rpc_hitscan_tracer(_owner_peer_id: int, _start_position: Vector2, _end_position: Vector2, _weapon_id: String = "") -> void:
 	pass
 
 @rpc("authority", "reliable")

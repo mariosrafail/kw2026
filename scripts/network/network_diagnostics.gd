@@ -71,9 +71,10 @@ func debug_text(role_is_server: bool, role_is_client: bool) -> String:
 		max_ping_ms
 	]
 
-func print_summary(reason: String, runtime_label: String, transport: String, auth_endpoint: String, game_endpoint: String, project_transport: String, env_transport: String, browser_protocol: String, peer_status: int) -> void:
+func print_summary(reason: String, profile_id: String, runtime_label: String, transport: String, auth_endpoint: String, game_endpoint: String, project_transport: String, env_transport: String, browser_protocol: String, peer_status: int) -> void:
 	print("[NET DIAG]")
 	print("reason = %s" % reason)
+	print("network profile = %s" % profile_id)
 	print("runtime = %s" % runtime_label)
 	print("transport = %s" % transport)
 	print("auth = %s" % auth_endpoint)
@@ -83,7 +84,7 @@ func print_summary(reason: String, runtime_label: String, transport: String, aut
 	print("browser protocol = %s" % browser_protocol)
 	print("server peer status = %d" % peer_status)
 
-func tick(delta: float, multiplayer: MultiplayerAPI, client_input_controller: RefCounted, player_replication: RefCounted) -> void:
+func tick(delta: float, multiplayer: MultiplayerAPI, client_input_controller: RefCounted, player_replication: RefCounted, projectile_system: RefCounted = null, hit_damage_resolver: RefCounted = null, profile_id: String = "", transport: String = "") -> void:
 	_physics_delta_sum += delta
 	_physics_delta_max = maxf(_physics_delta_max, delta)
 	_physics_delta_samples += 1
@@ -100,6 +101,11 @@ func tick(delta: float, multiplayer: MultiplayerAPI, client_input_controller: Re
 	var server_input_stats := _consume_dict(player_replication, "consume_server_input_stats")
 	var snapshot_send_stats := _consume_dict(player_replication, "consume_snapshot_send_stats")
 	var snapshot_recv_stats := _consume_dict(player_replication, "consume_client_snapshot_stats")
+	var projectile_stats := _consume_dict(projectile_system, "consume_debug_counters")
+	var resolver_stats := _consume_dict(hit_damage_resolver, "consume_debug_counters")
+	var active_projectiles := int(projectile_stats.get("active_projectiles", 0))
+	var raycasts_per_sec := float(resolver_stats.get("raycasts", 0)) / maxf(0.001, elapsed)
+	print("[NET PROFILE] selected=%s transport=%s" % [profile_id, transport])
 	print("[PING] rtt=%d min=%d avg=%d max=%d jitter=%d smooth=%d" % [
 		last_ping_ms,
 		min_ping_ms,
@@ -120,6 +126,7 @@ func tick(delta: float, multiplayer: MultiplayerAPI, client_input_controller: Re
 		int(snapshot_send_stats.get("bytes", 0)),
 		int(snapshot_send_stats.get("recipients", 0))
 	])
+	print("[PROJECTILES] active=%d raycasts=%.1f/s" % [active_projectiles, raycasts_per_sec])
 	print("[NET] peer connection status = %d fps=%d physics_fps=%.1f physics_delta_avg=%.4f max=%.4f peers=%d" % [
 		peer_status,
 		Engine.get_frames_per_second(),

@@ -168,7 +168,13 @@ func _configure_services() -> void:
 		projectiles_root,
 		PROJECTILE_SCENE,
 		Callable(self, "_projectile_color"),
-		Callable(combat_flow_service, "projectile_visual_config_for_peer")
+		Callable(combat_flow_service, "projectile_visual_config_for_peer"),
+		{
+			"visuals_enabled": _projectile_visuals_enabled(),
+			"trail_max_points": int(network_profile.get("trail_max_points", 6)),
+			"trail_sample_interval": float(network_profile.get("trail_sample_interval", 0.04)),
+			"trail_wall_clip": bool(network_profile.get("trail_wall_clip", false))
+		}
 	)
 	combat_effects.configure(projectiles_root, map_front_sprite, SPLASH_HIT_SFX, DEATH_HIT_SFX, BULLET_TOUCH_SFX, EXPLOSION_EFFECT_TEXTURE, HIT_EFFECT_TEXTURE)
 
@@ -217,7 +223,7 @@ func _configure_services() -> void:
 			"append_log": Callable(self, "_append_log")
 		},
 		{
-			"max_input_packets_per_sec": MAX_INPUT_PACKETS_PER_SEC,
+			"max_input_packets_per_sec": int(network_profile.get("max_input_packets_per_sec", 60)),
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,
 			"local_reconcile_snap_distance": LOCAL_RECONCILE_SNAP_DISTANCE,
 			"local_reconcile_vertical_snap_distance": LOCAL_RECONCILE_VERTICAL_SNAP_DISTANCE,
@@ -244,7 +250,7 @@ func _configure_services() -> void:
 			"get_projectile_damage": Callable(projectile_system, "get_projectile_damage"),
 			"play_death_sfx_local": Callable(self, "_play_death_sfx_local"),
 			"send_play_death_sfx": Callable(self, "_send_play_death_sfx_rpc"),
-			"spawn_blood_particles_local": Callable(combat_effects, "spawn_blood_particles"),
+			"spawn_blood_particles_local": Callable(self, "_spawn_blood_particles_local"),
 			"send_spawn_blood_particles": Callable(self, "_send_spawn_blood_particles_rpc"),
 			"can_damage_peer": Callable(self, "_can_damage_peer"),
 			"character_id_for_peer": Callable(self, "_warrior_id_for_peer"),
@@ -253,7 +259,7 @@ func _configure_services() -> void:
 			"clear_all_debuffs_for_peer": Callable(combat_flow_service, "clear_all_debuffs_for_peer")
 		},
 		{
-			"player_history_ms": PLAYER_HISTORY_MS
+			"player_history_ms": int(network_profile.get("player_history_ms", 350))
 		}
 	)
 
@@ -354,6 +360,7 @@ func _configure_services() -> void:
 			"send_spawn_surface_particles": Callable(self, "_send_spawn_surface_particles_rpc"),
 			"send_projectile_impact": Callable(self, "_send_projectile_impact_rpc"),
 			"send_despawn_projectile": Callable(self, "_send_despawn_projectile_rpc"),
+			"send_hitscan_tracer": Callable(self, "_send_hitscan_tracer_rpc"),
 			"broadcast_player_state": Callable(self, "_server_broadcast_player_state"),
 			"send_skill_charge": Callable(self, "_send_sync_skill_charge_rpc"),
 			"send_debuff_visual": Callable(self, "_send_apply_debuff_visual_rpc"),
@@ -369,7 +376,7 @@ func _configure_services() -> void:
 		},
 		{
 			"max_reported_rtt_ms": MAX_REPORTED_RTT_MS,
-			"snapshot_rate": SNAPSHOT_RATE,
+			"snapshot_rate": float(network_profile.get("server_snapshot_rate", 24.0)),
 			"weapon_id_ak47": WEAPON_ID_AK47,
 			"max_input_stale_ms": MAX_INPUT_STALE_MS
 		}
@@ -411,8 +418,8 @@ func _configure_services() -> void:
 			"weapon_id_for_peer": Callable(self, "_weapon_id_for_peer")
 		},
 		{
-			"input_send_rate": INPUT_SEND_RATE,
-			"idle_input_send_rate": 12.0
+			"input_send_rate": float(network_profile.get("client_input_send_rate", 45.0)),
+			"idle_input_send_rate": float(network_profile.get("client_idle_input_send_rate", 8.0))
 		}
 	)
 

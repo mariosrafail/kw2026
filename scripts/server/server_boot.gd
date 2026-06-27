@@ -10,6 +10,7 @@ const MAP_FLOW_SERVICE_SCRIPT := preload("res://scripts/world/map_flow_service.g
 const LOBBY_CONFIG_SCRIPT := preload("res://scripts/lobby/lobby_config.gd")
 const LOBBY_SERVICE_SCRIPT := preload("res://scripts/lobby/lobby_service.gd")
 const LOBBY_FLOW_CONTROLLER_SCRIPT := preload("res://scripts/lobby/lobby_flow_controller.gd")
+const NETWORK_PROFILES_SCRIPT := preload("res://scripts/network/network_profiles.gd")
 
 var map_catalog: MapCatalog
 var map_flow_service: MapFlowService
@@ -20,10 +21,12 @@ var _diag_accumulator := 0.0
 var _physics_delta_sum := 0.0
 var _physics_delta_max := 0.0
 var _physics_delta_samples := 0
+var _network_profile_id := "local_dev"
 
 func _ready() -> void:
 	Engine.physics_ticks_per_second = 60
 	name = "GameRoot"
+	_network_profile_id = NETWORK_PROFILES_SCRIPT.selected_profile_name()
 	map_catalog = MAP_CATALOG_SCRIPT.new()
 	map_flow_service = MAP_FLOW_SERVICE_SCRIPT.new()
 	lobby_service = LOBBY_SERVICE_SCRIPT.new(LOBBY_CONFIG_SCRIPT.new())
@@ -64,6 +67,7 @@ func _start_server(port: int) -> void:
 	print("Server started on port %d using %s" % [target_port, MULTIPLAYER_PEER_FACTORY.transport()])
 	print("[NET DIAG]")
 	print("runtime = server")
+	print("network profile = %s" % _network_profile_id)
 	print("transport = %s" % MULTIPLAYER_PEER_FACTORY.transport())
 	print("auth = lobby-boot")
 	print("game endpoint = %s" % str(result.get("endpoint", "")))
@@ -80,6 +84,8 @@ func _physics_process(delta: float) -> void:
 	if _diag_accumulator < 1.0:
 		return
 	var avg_delta := _physics_delta_sum / maxf(1.0, float(_physics_delta_samples))
+	print("[NET PROFILE] selected=%s transport=%s" % [_network_profile_id, MULTIPLAYER_PEER_FACTORY.transport()])
+	print("[PROJECTILES] active=0 raycasts=0.0/s")
 	print("[NET] peer connection status = %d fps=%d physics_fps=%.1f physics_delta_avg=%.4f max=%.4f peers=%d" % [
 		multiplayer.multiplayer_peer.get_connection_status() if multiplayer.multiplayer_peer != null else -1,
 		Engine.get_frames_per_second(),
@@ -251,6 +257,10 @@ func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: V
 
 @rpc("authority", "reliable")
 func _rpc_spawn_surface_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _particle_color: Color) -> void:
+	pass
+
+@rpc("authority", "unreliable")
+func _rpc_hitscan_tracer(_owner_peer_id: int, _start_position: Vector2, _end_position: Vector2, _weapon_id: String = "") -> void:
 	pass
 
 @rpc("authority", "reliable")

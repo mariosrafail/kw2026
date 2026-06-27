@@ -116,6 +116,11 @@ func apply_snapshot(new_position: Vector2, new_velocity: Vector2, new_aim_angle:
 			_set_health_cb.call(_player.target_health)
 
 func set_part_animation_state(state: Dictionary) -> void:
+	if state.has("f"):
+		var flags := int(state.get("f", 0))
+		_player.target_animation_on_floor = (flags & 6) == 0
+		_player.target_respawn_hidden = (flags & 8) != 0
+		return
 	_player.target_animation_on_floor = bool(state.get("on_floor", _player.target_animation_on_floor))
 	_player.target_respawn_hidden = bool(state.get("respawn_hidden", _player.target_respawn_hidden))
 	var push_direction_value: Variant = state.get("damage_push_direction", Vector2.ZERO)

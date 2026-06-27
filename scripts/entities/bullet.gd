@@ -2,8 +2,8 @@ extends Node2D
 class_name NetProjectile
 
 const IMPACT_LINGER_TIME := 0.08
-const TRAIL_MAX_POINTS := 11
-const TRAIL_SAMPLE_INTERVAL := 0.02
+const DEFAULT_TRAIL_MAX_POINTS := 6
+const DEFAULT_TRAIL_SAMPLE_INTERVAL := 0.04
 
 @onready var visual: Sprite2D = $Visual
 @onready var trail: Line2D = $Trail
@@ -26,6 +26,10 @@ var trail_sample_accumulator := 0.0
 var force_impact_segment_visual := false
 var rotate_to_velocity := false
 var preserve_impact_segment := true
+var visuals_enabled := true
+var trail_max_points := DEFAULT_TRAIL_MAX_POINTS
+var trail_sample_interval := DEFAULT_TRAIL_SAMPLE_INTERVAL
+var trail_wall_clip := false
 
 func configure(
 	color: Color,
@@ -58,6 +62,10 @@ func configure(
 	force_impact_segment_visual = false
 	rotate_to_velocity = bool(visual_config.get("rotate_to_velocity", false))
 	preserve_impact_segment = bool(visual_config.get("preserve_impact_segment", true))
+	visuals_enabled = bool(visual_config.get("visuals_enabled", true))
+	trail_max_points = maxi(0, int(visual_config.get("trail_max_points", DEFAULT_TRAIL_MAX_POINTS)))
+	trail_sample_interval = maxf(0.0, float(visual_config.get("trail_sample_interval", DEFAULT_TRAIL_SAMPLE_INTERVAL)))
+	trail_wall_clip = bool(visual_config.get("trail_wall_clip", false))
 	rotation = velocity.angle() if rotate_to_velocity and velocity.length_squared() > 0.0001 else 0.0
 
 	var head_scale := maxf(0.2, float(visual_config.get("head_scale", 0.85)))
@@ -71,10 +79,11 @@ func configure(
 	if visual != null:
 		if projectile_texture != null:
 			visual.texture = projectile_texture
-		visual.visible = show_visual
+		visual.visible = visuals_enabled and show_visual
 		visual.scale = Vector2.ONE * head_scale
 		visual.modulate = Color(color.r, color.g, color.b, head_alpha if show_visual else 0.0)
 	if trail != null:
+		trail.visible = visuals_enabled and trail_max_points > 0
 		trail.default_color = Color(color.r, color.g, color.b, effective_trail_alpha)
 		trail.width = trail_width
 		trail.antialiased = true
@@ -88,8 +97,9 @@ func configure(
 		taper.add_point(Vector2(1.0, 0.74))
 		trail.width_curve = taper
 		trail_world_points.clear()
-		trail_world_points.append(global_position)
-		_rebuild_trail()
+		if visuals_enabled and trail_max_points > 0:
+			trail_world_points.append(global_position)
+			_rebuild_trail()
 
 func step(delta: float) -> void:
 	if has_impacted:
@@ -145,7 +155,7 @@ func mark_impact(impact_position: Vector2, trail_start_position: Vector2 = Vecto
 	_rebuild_trail()
 
 func _update_trail(delta: float, force_sample: bool = false) -> void:
-	if trail == null:
+	if not visuals_enabled or trail == null or trail_max_points <= 0:
 		return
 
 	if trail_world_points.is_empty():
@@ -155,17 +165,17 @@ func _update_trail(delta: float, force_sample: bool = false) -> void:
 
 	if not force_sample:
 		trail_sample_accumulator += delta
-		if trail_sample_accumulator < TRAIL_SAMPLE_INTERVAL:
+		if trail_sample_accumulator < trail_sample_interval:
 			return
 
 	trail_sample_accumulator = 0.0
 	trail_world_points.append(global_position)
-	while trail_world_points.size() > TRAIL_MAX_POINTS:
+	while trail_world_points.size() > trail_max_points:
 		trail_world_points.remove_at(0)
 	_rebuild_trail()
 
 func _rebuild_trail() -> void:
-	if trail == null:
+	if not visuals_enabled or trail == null:
 		return
 
 	if trail_world_points.is_empty():
@@ -190,14 +200,15 @@ func _rebuild_trail() -> void:
 		if segment.length_squared() <= 0.0001:
 			continue
 
-		var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(from_point, to_point, 3)
-		query.collide_with_bodies = true
-		query.collide_with_areas = false
-		var hit: Dictionary = get_world_2d().direct_space_state.intersect_ray(query)
-		if not hit.is_empty():
-			var clipped_end: Vector2 = hit.get("position", to_point) as Vector2
-			visible_world_points.append(clipped_end)
-			break
+		if trail_wall_clip:
+			var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(from_point, to_point, 3)
+			query.collide_with_bodies = true
+			query.collide_with_areas = false
+			var hit: Dictionary = get_world_2d().direct_space_state.intersect_ray(query)
+			if not hit.is_empty():
+				var clipped_end: Vector2 = hit.get("position", to_point) as Vector2
+				visible_world_points.append(clipped_end)
+				break
 
 		visible_world_points.append(to_point)
 

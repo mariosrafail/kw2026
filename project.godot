@@ -19,6 +19,7 @@ run/main_scene="res://scenes/ui/main_menu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 boot_splash/show_image=false
 config/icon="res://icon.svg"
+config/network_profile="local_dev"
 
 [autoload]
 

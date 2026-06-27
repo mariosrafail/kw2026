@@ -209,6 +209,11 @@ func _rpc_spawn_surface_particles(_impact_position: Vector2, _incoming_velocity:
 		return
 	client_rpc_flow_service.rpc_spawn_surface_particles(_impact_position, _incoming_velocity, _particle_color)
 
+func _rpc_hitscan_tracer(_owner_peer_id: int, _start_position: Vector2, _end_position: Vector2, _weapon_id: String = "") -> void:
+	if multiplayer.is_server():
+		return
+	client_rpc_flow_service.rpc_hitscan_tracer(_owner_peer_id, _start_position, _end_position, _weapon_id)
+
 func _rpc_play_reload_sfx(_peer_or_payload: Variant, _weapon_id: String = "") -> void:
 	if multiplayer.is_server():
 		return

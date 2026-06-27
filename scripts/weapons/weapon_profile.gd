@@ -34,6 +34,12 @@ func projectile_lifetime() -> float:
 func explosion_radius() -> float:
 	return 0.0
 
+func uses_hitscan() -> bool:
+	return false
+
+func hitscan_range() -> float:
+	return 2200.0
+
 func projectile_visual_config() -> Dictionary:
 	return {
 		"show_head": true,

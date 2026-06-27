@@ -154,6 +154,24 @@ func rpc_spawn_surface_particles(impact_position: Vector2, incoming_velocity: Ve
 		return
 	combat_effects.spawn_surface_particles(impact_position, incoming_velocity, particle_color)
 
+func rpc_hitscan_tracer(owner_peer_id: int, start_position: Vector2, end_position: Vector2, weapon_id: String) -> void:
+	var owner_player := players.get(owner_peer_id, null) as NetPlayer
+	var resolved_weapon_id := weapon_id.strip_edges().to_lower()
+	if owner_player != null:
+		var equipped_weapon_id := _weapon_id_for_peer(owner_peer_id)
+		var matches_equipped_weapon := equipped_weapon_id.is_empty() or equipped_weapon_id == resolved_weapon_id
+		if matches_equipped_weapon:
+			owner_player.set_weapon_visual(_weapon_visual_for_peer(owner_peer_id, resolved_weapon_id))
+			owner_player.set_shot_audio_stream(_weapon_shot_sfx(resolved_weapon_id))
+			owner_player.set_reload_audio_stream(_weapon_reload_sfx(resolved_weapon_id))
+			owner_player.play_shot_recoil()
+	var local_peer_id := multiplayer.get_unique_id() if multiplayer != null else 0
+	var projectile_weapon := _weapon_profile_for_id(resolved_weapon_id)
+	if owner_peer_id == local_peer_id and camera_shake != null and projectile_weapon != null:
+		camera_shake.add_shake(projectile_weapon.camera_shake_per_shot())
+	if combat_effects != null:
+		combat_effects.spawn_hitscan_tracer(start_position, end_position, Color(1.0, 0.86, 0.34, 0.62), 2.0)
+
 func _weapon_profile_for_id(weapon_id: String) -> WeaponProfile:
 	if weapon_profile_for_id_cb.is_valid():
 		return weapon_profile_for_id_cb.call(weapon_id) as WeaponProfile

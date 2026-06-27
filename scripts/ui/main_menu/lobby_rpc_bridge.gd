@@ -462,6 +462,10 @@ func _rpc_spawn_blood_particles(_impact_position: Vector2, _incoming_velocity: V
 func _rpc_spawn_surface_particles(_impact_position: Vector2, _incoming_velocity: Vector2, _particle_color: Color) -> void:
 	pass
 
+@rpc("authority", "unreliable")
+func _rpc_hitscan_tracer(_owner_peer_id: int, _start_position: Vector2, _end_position: Vector2, _weapon_id: String = "") -> void:
+	pass
+
 @rpc("authority", "reliable")
 func _rpc_play_reload_sfx(_peer_or_payload: Variant, _weapon_id: String = "") -> void:
 	pass

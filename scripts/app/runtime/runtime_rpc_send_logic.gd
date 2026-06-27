@@ -154,6 +154,11 @@ func _send_spawn_surface_particles_rpc(target_peer_id: int, impact_position: Vec
 		return
 	_rpc_spawn_surface_particles.rpc_id(target_peer_id, impact_position, incoming_velocity, particle_color)
 
+func _send_hitscan_tracer_rpc(target_peer_id: int, owner_peer_id: int, start_position: Vector2, end_position: Vector2, weapon_id: String) -> void:
+	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
+		return
+	_rpc_hitscan_tracer.rpc_id(target_peer_id, owner_peer_id, start_position, end_position, weapon_id)
+
 func _send_projectile_impact_rpc(target_peer_id: int, projectile_id: int, impact_position: Vector2) -> void:
 	if multiplayer != null and multiplayer.is_server() and target_peer_id == multiplayer.get_unique_id():
 		return
