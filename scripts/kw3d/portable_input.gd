@@ -4,6 +4,8 @@ signal action_requested(action: String)
 signal device_lost
 signal binding_changed
 const PREFIX:="kw3d_"
+const AK_RECOIL:=preload("res://scripts/kw3d/ak_recoil.gd")
+var recoil_model =AK_RECOIL.new()
 var enabled =false
 var focused =true
 var last_device ="keyboard"
@@ -92,8 +94,10 @@ func _input(event: InputEvent) -> void:
 	if not enabled or not focused:return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
 		var ratio =tan(deg_to_rad(fov)*0.5)/tan(deg_to_rad(74.0)*0.5)
-		yaw-=event.screen_relative.x*0.0016*ratio
-		pitch-=event.screen_relative.y*0.0013*ratio*(-1.0 if settings.invert_y else 1.0)
+		var delta_yaw: float =-event.screen_relative.x*0.0016*ratio
+		var delta_pitch: float =-event.screen_relative.y*0.0013*ratio*(-1.0 if settings.invert_y else 1.0)
+		yaw+=delta_yaw;pitch+=delta_pitch
+		recoil_model.note_manual_look(delta_yaw,delta_pitch)
 	for action in ["jump","grenade","shoulder","sprint","aim","help","music","comic","pixels"]:
 		if event.is_action_pressed(PREFIX+action):
 			match action:
@@ -116,18 +120,30 @@ func sample(dt: float) -> Dictionary:
 		var magnitude =look.length()
 		if magnitude>0:look=look.normalized()*pow(magnitude,float(settings.look_curve))
 		aiming=aim_latched if settings.aim_toggle else Input.is_action_pressed(PREFIX+"aim")
-		var multiplier: float=settings.ads if aiming else 1.0
-		yaw-=look.x*float(settings.look_x)*dt*multiplier
-		pitch-=look.y*float(settings.look_y)*dt*multiplier*(-1.0 if settings.invert_y else 1.0)
 		firing=Input.is_action_pressed(PREFIX+"fire")
+		var multiplier: float=settings.ads if aiming else 1.0
+		var delta_yaw: float =-look.x*float(settings.look_x)*dt*multiplier
+		var delta_pitch: float =-look.y*float(settings.look_y)*dt*multiplier*(-1.0 if settings.invert_y else 1.0)
+		yaw+=delta_yaw;pitch+=delta_pitch
+		recoil_model.note_manual_look(delta_yaw,delta_pitch)
+		var recovery: Vector2=recoil_model.step(dt,firing)
+		yaw+=recovery.x;pitch+=recovery.y
 		sprint=sprint_latched if settings.sprint_toggle and last_device=="pad" else Input.is_action_pressed(PREFIX+"sprint")
 		if move.length()<0.05:sprint_latched=false;sprint=false
 	yaw=wrapf(yaw,-PI,PI);pitch=clampf(pitch,-0.837758,0.523599)
 	sequence+=1
 	return {"seq":sequence,"ct":sequence,"js":jump_serial,"gs":grenade_serial,"move":move,"yaw":yaw,"pitch":pitch,"side":side,"fire":firing,"aim":aiming,"sprint":sprint}
 
+func apply_weapon_recoil(aiming: bool) -> Vector2:
+	var kick: Vector2=recoil_model.kick(aiming)
+	yaw=wrapf(yaw+kick.x,-PI,PI);pitch=clampf(pitch+kick.y,-0.837758,0.523599)
+	return kick
+
+func reset_weapon_recoil() -> void:
+	recoil_model.reset()
+
 func suspend() -> void:
-	enabled=false;sprint_latched=false;aim_latched=false
+	enabled=false;sprint_latched=false;aim_latched=false;recoil_model.reset()
 	for key in InputMap.get_actions():
 		if str(key).begins_with(PREFIX):Input.action_release(key)
 	if pad_id>=0:Input.stop_joy_vibration(pad_id)

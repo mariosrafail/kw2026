@@ -57,6 +57,7 @@ var body_yaw := 0.0
 var aiming := false
 var fire_held := false
 var weapon_recoil := 0.0
+var aim_recoil = AK_RECOIL_MODEL.new()
 var weapon_visual_side_kick := 0.0
 var weapon_visual_lift_kick := 0.0
 var weapon_visual_twist_kick := 0.0
@@ -99,6 +100,7 @@ const RIG_CENTER_Y := -4.0
 const OUTRAGE_FULLBODY := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
 const AK47_VOXEL_BUILDER := preload("res://scripts/prototypes/ak47_voxel_builder.gd")
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
+const AK_RECOIL_MODEL := preload("res://scripts/kw3d/ak_recoil.gd")
 const AK_FIRE_INTERVAL := 0.10
 
 func _ready() -> void:
@@ -160,8 +162,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Captured screen delta is independent of the low-resolution canvas scale.
 		# FOV compensation keeps small ADS adjustments controllable, without smoothing lag.
 		var sensitivity := tan(deg_to_rad(camera.fov) * 0.5) / tan(deg_to_rad(74.0) * 0.5)
-		yaw -= event.screen_relative.x * 0.0016 * sensitivity
-		pitch -= event.screen_relative.y * 0.0013 * sensitivity
+		var delta_yaw: float = -event.screen_relative.x * 0.0016 * sensitivity
+		var delta_pitch: float = -event.screen_relative.y * 0.0013 * sensitivity
+		yaw += delta_yaw
+		pitch += delta_pitch
+		aim_recoil.note_manual_look(delta_yaw,delta_pitch)
 		pitch = clamp(pitch, deg_to_rad(-48.0), deg_to_rad(30.0))
 		camera_yaw.rotation.y = yaw
 		camera_pitch.rotation.x = pitch
@@ -253,6 +258,12 @@ func _physics_process(delta: float) -> void:
 
 	animation_impact_velocity = player.velocity.y
 	player.move_and_slide()
+
+	var recoil_recovery: Vector2 = aim_recoil.step(delta, fire_held)
+	yaw = wrapf(yaw + recoil_recovery.x, -PI, PI)
+	pitch = clampf(pitch + recoil_recovery.y, deg_to_rad(-48.0), deg_to_rad(30.0))
+	camera_yaw.rotation.y = yaw
+	camera_pitch.rotation.x = pitch
 
 	_update_third_person_camera(delta)
 	_update_character_animation(delta)
@@ -637,6 +648,11 @@ func _fire_physics_ball() -> void:
 	_play_ak_fire_audio()
 	var chest := _weapon_anchor()
 	combat.fire(weapon_muzzle.global_position,aim_target,chest)
+	var aim_kick: Vector2 = aim_recoil.kick(aiming)
+	yaw = wrapf(yaw + aim_kick.x, -PI, PI)
+	pitch = clampf(pitch + aim_kick.y, deg_to_rad(-48.0), deg_to_rad(30.0))
+	camera_yaw.rotation.y = yaw
+	camera_pitch.rotation.x = pitch
 	_spawn_muzzle_flash()
 
 func _play_ak_fire_audio() -> void:

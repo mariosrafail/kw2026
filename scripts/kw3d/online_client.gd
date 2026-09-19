@@ -130,6 +130,7 @@ func _welcome(payload: Dictionary) -> void:
 			player.global_position=state.p;player.velocity=state.v
 			player.set_meta("motor_grounded",bool(state.ground))
 			input_adapter.yaw=state.ay;input_adapter.pitch=state.ap
+			input_adapter.reset_weapon_recoil()
 			locomotion.reset();break
 	set_menu(false)
 
@@ -180,6 +181,9 @@ func _fire_physics_ball() -> void:
 	shot_cooldown+=0.10
 	_kick_weapon_visuals()
 	_play_ak_fire_audio();_spawn_muzzle_flash();combat.reticle.notify_shot()
+	input_adapter.apply_weapon_recoil(aiming)
+	yaw=input_adapter.yaw;pitch=input_adapter.pitch
+	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
 	last_prediction_at=age
 	input_adapter.rumble(0.24)
 
