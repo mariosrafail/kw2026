@@ -157,7 +157,7 @@ func update(delta: float, impact_velocity: float = 0.0) -> void:
 		if moving:
 			if not was_moving:
 				cycle=0.0;step_clock=0.0
-			cycle=fposmod(cycle+dt/(step_interval*2.0),1.0)
+			cycle=fposmod(cycle+dt/(step_interval*2.10),1.0)
 			step_clock+=dt
 			while step_clock>=step_interval:
 				step_clock-=step_interval
@@ -190,20 +190,19 @@ func _update_run_cycle_feet(ratio: float) -> void:
 	var high:=pow(absf(split),0.46)
 	var front:=Vector3(-sin(travel_yaw),0,-cos(travel_yaw))
 	var stride:=lerpf(0.58,1.08,ratio)
-	var max_lift:=lerpf(0.36,0.62,ratio)
+	var max_lift:=lerpf(0.40,0.69,ratio)
 	for i in range(feet.size()):
 		var f:=feet[i]
 		var side_sign:=1.0 if i==0 else -1.0
 		var longitudinal:=split*side_sign*stride
 		var ground:=_ground(_neutral(i)+front*longitudinal)
 		f.contact=ground.position;f.normal=ground.normal;f.heading=travel_yaw
-		# Keep contact brief: roughly the lowest tenth of the cycle, otherwise both
-		# detached feet are visibly airborne while split front/back.
-		f.swinging=high>0.45
+		# Keep contact even briefer and let the detached feet hang slightly higher/longer.
+		f.swinging=high>0.38
 		f.progress=fposmod(cycle+(0.0 if i==0 else 0.5),1.0)
-		f.duration=step_interval*1.60
+		f.duration=step_interval*1.72
 		f.lift=max_lift*high
-		f.phase="AIR_SPLIT" if high>0.45 else "CONTACT"
+		f.phase="AIR_SPLIT" if high>0.38 else "CONTACT"
 		var pitch_angle:=-split*side_sign*0.28
 		var roll:=side_sign*0.055*high
 		_apply_foot(f,pitch_angle,roll,f.lift)
