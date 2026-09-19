@@ -66,25 +66,26 @@ func run() -> void:
 	for i in range(3): await physics_frame
 	for direction in [Vector3.FORWARD,Vector3.BACK,Vector3.LEFT,Vector3.RIGHT,Vector3(1,0,-1).normalized()]:
 		place()
-		var old_contacts: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
-		var old_stance := [false,false]
 		var before: int = stage.locomotion.step_count
+		var max_split_dir:=-INF
+		var min_split_dir:=INF
+		var low_contact_frames:=0
 		for frame in range(85):
 			await physics_frame
-			advance(direction * 7.5 + Vector3.DOWN * 0.2)
+			advance(direction*7.5+Vector3.DOWN*0.2)
+			var signed_split: float=(stage.left_leg_rig.global_position-stage.right_leg_rig.global_position).dot(direction)
+			max_split_dir=maxf(max_split_dir,signed_split);min_split_dir=minf(min_split_dir,signed_split)
+			if not stage.locomotion.feet[0].swinging and not stage.locomotion.feet[1].swinging:low_contact_frames+=1
 			for i in range(2):
-				var f = stage.locomotion.feet[i]
-				if old_stance[i] and not f.swinging:
-					max_slide = maxf(max_slide,old_contacts[i].distance_to(f.contact))
-					check(old_contacts[i].distance_to(f.contact) < 0.001, "world_plant_lock")
-				old_stance[i] = not f.swinging
-				old_contacts[i] = f.contact
-				if frame > 40:
-					var facing: Vector3 = -f.node.global_basis.z
-					facing.y = 0
-					check(facing.normalized().dot(direction) > 0.80, "feet_follow_actual_motion")
-		check(stage.locomotion.step_count - before >= 5, "multiple_real_steps")
-		print("DIRECTION_PASS ",direction)
+				var f=stage.locomotion.feet[i]
+				if frame>40:
+					var facing: Vector3=-f.node.global_basis.z
+					facing.y=0
+					check(facing.normalized().dot(direction)>0.80,"feet_follow_actual_motion")
+		check(max_split_dir>0.70 and min_split_dir<-0.70,"mirrored_front_back_stride")
+		check(low_contact_frames>=3 and low_contact_frames<=24,"brief_ground_contact_between_hops")
+		check(stage.locomotion.step_count-before>=5,"multiple_real_steps")
+		print("DIRECTION_PASS ",direction," split=[",min_split_dir,",",max_split_dir,"] contact_frames=",low_contact_frames)
 	var count_before: int = stage.locomotion.step_count
 	for frame in range(100):
 		await physics_frame

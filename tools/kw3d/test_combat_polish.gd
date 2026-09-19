@@ -91,8 +91,8 @@ func run() -> void:
 	check(target.collision_layer==0 and not target.health_bar.visible,"dead_no_collider_or_healthbar")
 	check(not target.receive_hit(5,Vector3.FORWARD,99999),"dead_ignores_more_damage")
 	await capture("target_death")
-	for i in range(100): await physics_frame
-	check(not is_instance_valid(target),"death_cleanup")
+	for i in range(180): await physics_frame
+	check(not is_instance_valid(target),"death_cleanup_after_longer_linger")
 	stage.combat.reset_targets()
 	for i in range(3): await physics_frame
 	check(stage.combat.kills==0 and stage.combat.targets.size()==3,"reset_targets")

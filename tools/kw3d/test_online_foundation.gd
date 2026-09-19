@@ -55,6 +55,11 @@ func run() -> void:
 	var world: Node3D=load("res://scripts/kw3d/authority_world.gd").new();root.add_child(world)
 	world.attacks_enabled=false
 	world.add_player(1);world.add_player(2)
+	var recoil_probe: Node3D=world.actors[1]
+	recoil_probe.velocity=Vector3.ZERO
+	recoil_probe.command=load("res://scripts/kw3d/actor_motor.gd").empty(0.0,-0.6)
+	world._shoot(recoil_probe)
+	check(recoil_probe.velocity.length()<0.0001,"authority_shot_recoil_is_visual_only")
 	for i in range(120):
 		world.step();await physics_frame
 	check(root.get_camera_3d()==null,"headless_no_camera")

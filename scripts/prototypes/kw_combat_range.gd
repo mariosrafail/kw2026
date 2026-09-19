@@ -540,32 +540,32 @@ func _build_score_hud() -> void:
 
 func _spawn_damage_feedback(point: Vector3,direction: Vector3,amount: float,lethal: bool,blood_color: Color = Color("fa0512"),show_number: bool = true) -> void:
 	# Cosmetic only. Randomness changes presentation, never hit direction or damage.
-	while hit_effects.size() > 64:
+	while hit_effects.size() > 160:
 		var oldest: Dictionary = hit_effects.pop_front()
 		if is_instance_valid(oldest.node):
 			oldest.node.queue_free()
 	if director != null and show_number:
 		director.hud.damage_number(point, amount, lethal)
-	var blood_material := _fx_material(blood_color,3.2)
-	var blood_hot := _fx_material(blood_color.lightened(0.28),4.6)
-	var count := fx_rng.randi_range(14,19) if lethal else fx_rng.randi_range(8,12)
+	var blood_material := _fx_material(blood_color,5.4)
+	var blood_hot := _fx_material(blood_color.lightened(0.30),7.2)
+	var count := fx_rng.randi_range(38,52) if lethal else fx_rng.randi_range(20,28)
 	var bonk := fx_rng.randf() < 0.10
 	for i in range(count):
 		var chip := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		var base_size := fx_rng.randf_range(0.035,0.075) * (1.45 if lethal and i < 3 else 1.0)
-		box.size = Vector3(base_size,base_size,base_size * fx_rng.randf_range(0.8,1.8))
+		var base_size := fx_rng.randf_range(0.075,0.145) * (1.90 if lethal and i < 7 else 1.0)
+		box.size = Vector3(base_size*fx_rng.randf_range(0.85,1.25),base_size,base_size*fx_rng.randf_range(0.85,2.10))
 		chip.mesh = box
 		chip.material_override = blood_hot if i % 4 == 0 else blood_material
 		chip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(chip)
 		if i < 4:
 			stage._add_scene_outline(chip,0.75)
-		chip.global_position = point + Vector3(fx_rng.randf_range(-0.06,0.06),fx_rng.randf_range(-0.03,0.08),fx_rng.randf_range(-0.06,0.06))
-		var speed := -direction * fx_rng.randf_range(0.15,0.75) + Vector3(fx_rng.randf_range(-2.1,2.1),fx_rng.randf_range(1.0,3.1),fx_rng.randf_range(-2.1,2.1))
+		chip.global_position = point + Vector3(fx_rng.randf_range(-0.11,0.11),fx_rng.randf_range(-0.06,0.14),fx_rng.randf_range(-0.11,0.11))
+		var speed := direction * fx_rng.randf_range(1.2,3.8) + Vector3(fx_rng.randf_range(-3.4,3.4),fx_rng.randf_range(1.6,4.8),fx_rng.randf_range(-3.4,3.4))
 		if bonk and i == 0:
 			speed *= 1.7
-		hit_effects.append({"node":chip,"age":0.0,"duration":fx_rng.randf_range(0.28,0.48) if lethal else fx_rng.randf_range(0.20,0.38),"velocity":speed,"number":false,"kind":"blood_pixel","spin":fx_rng.randf_range(-12.0,12.0)})
+		hit_effects.append({"node":chip,"age":0.0,"duration":fx_rng.randf_range(0.78,1.15) if lethal else fx_rng.randf_range(0.52,0.82),"velocity":speed,"number":false,"kind":"blood_pixel","spin":fx_rng.randf_range(-14.0,14.0)})
 
 func _update_feedback_effects(delta: float) -> void:
 	score_pulse = maxf(0.0, score_pulse - delta)

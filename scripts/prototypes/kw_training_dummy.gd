@@ -287,7 +287,7 @@ func _die(direction: Vector3) -> void:
 	death_time = 0.0
 	for i in range(rigs.size()):
 		var dir := visuals.global_basis.inverse() * direction
-		rigs[i].velocity = dir * (2.0+i*0.45) + Vector3(sin(i*2.1)*1.8,2.8+i*0.45,cos(i*1.8))
+		rigs[i].velocity = dir * (2.8+i*0.55) + Vector3(sin(i*2.1)*2.25,3.5+i*0.55,cos(i*1.8)*1.35)
 
 func _physics_process(delta: float) -> void:
 	time += delta
@@ -308,8 +308,8 @@ func _physics_process(delta: float) -> void:
 			if rig.position.y < -1.35:
 				rig.position.y = -1.35
 				rigs[i].velocity = Vector3(v.x*0.8,0,v.z*0.8)
-			if death_time > 0.85: rig.scale = Vector3.ONE * maxf(0.001,1.0-(death_time-0.85)/0.65)
-		if death_time >= 1.5: queue_free()
+			if death_time > 1.90: rig.scale = Vector3.ONE * maxf(0.001,1.0-(death_time-1.90)/0.90)
+		if death_time >= 2.80: queue_free()
 		return
 	_update_roaming_and_reaction(delta)
 	_update_shapes()

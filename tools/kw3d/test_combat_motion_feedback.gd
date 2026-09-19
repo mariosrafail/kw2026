@@ -26,14 +26,24 @@ func run() -> void:
 
 	stage.player.velocity = Vector3.ZERO
 	stage.yaw = 0.0
+	var before_player_velocity: Vector3=stage.player.velocity
+	var before_body_offset_velocity: Vector3=stage.locomotion.body_offset_velocity
+	var before_body_angular_velocity: Vector3=stage.locomotion.body_angular_velocity
+	var before_head_spring_velocity: Vector3=stage.head_spring_velocity
 	stage._apply_body_fire_recoil(stage.yaw)
-	check(stage.player.velocity.z > 1.20,"shot_pushes_player_backward")
-	check(absf(stage.player.velocity.x)<0.001,"body_recoil_direction_clean")
+	check(stage.player.velocity.distance_to(before_player_velocity)<0.0001,"shot_recoil_does_not_move_characterbody")
+	check(stage.locomotion.body_offset_velocity.z-before_body_offset_velocity.z>0.60 and stage.locomotion.body_angular_velocity.x-before_body_angular_velocity.x<-0.70,"shot_recoil_has_visual_body_kick")
+	check(stage.head_spring_velocity.x-before_head_spring_velocity.x<-0.15,"shot_recoil_has_visual_head_kick")
 
 	stage.combat.hit_effects.clear()
 	var tasko: Color = stage.combat.blood_color_for_skin("tasko")
-	stage.combat._spawn_damage_feedback(stage.player.global_position+Vector3.UP,Vector3.FORWARD,20.0,false,tasko,false)
-	check(stage.combat.hit_effects.size()>=8,"blood_particles_spawn")
+	stage.combat._spawn_damage_feedback(stage.player.global_position+Vector3.UP,Vector3.FORWARD,5.0,false,tasko,false)
+	check(stage.combat.hit_effects.size()>=20,"blood_particles_are_dense")
+	var largest_blood:=0.0
+	for effect in stage.combat.hit_effects:
+		if is_instance_valid(effect.node) and effect.node is MeshInstance3D and (effect.node as MeshInstance3D).mesh is BoxMesh:
+			largest_blood=maxf(largest_blood,((effect.node as MeshInstance3D).mesh as BoxMesh).size.length())
+	check(largest_blood>0.16,"blood_particles_are_visibly_large")
 	if not stage.combat.hit_effects.is_empty():
 		var chip: MeshInstance3D = stage.combat.hit_effects[0].node
 		var material := chip.material_override as StandardMaterial3D
@@ -51,7 +61,11 @@ func run() -> void:
 	var max_duration := 0.0
 	var max_swings := 0
 	var double_air_frames := 0
-	for frame in range(100):
+	var max_leg_split := -INF
+	var min_leg_split := INF
+	var min_body_y := INF
+	var max_body_y := -INF
+	for frame in range(120):
 		stage.player.velocity=Vector3(0,-0.1,-7.5)
 		stage.player.move_and_slide()
 		stage._update_character_animation(1.0/60.0)
@@ -63,9 +77,16 @@ func run() -> void:
 				max_duration=maxf(max_duration,foot.duration)
 		max_swings=maxi(max_swings,swings)
 		if swings==2:double_air_frames+=1
-	check(max_lift>0.65,"run_foot_lifts_high")
-	check(max_duration>0.27,"run_foot_airtime_longer")
-	check(max_swings==2 and double_air_frames>=4,"hop_step_has_double_air_overlap")
+		var signed_split: float=(stage.left_leg_rig.global_position-stage.right_leg_rig.global_position).dot(Vector3.FORWARD)
+		max_leg_split=maxf(max_leg_split,signed_split);min_leg_split=minf(min_leg_split,signed_split)
+		var body_y: float=stage.torso_rig.position.y-stage.torso_rest.y
+		min_body_y=minf(min_body_y,body_y);max_body_y=maxf(max_body_y,body_y)
+	check(max_lift>0.48,"run_foot_lifts_high")
+	check(max_duration>0.32,"run_air_pose_holds")
+	check(max_swings==2 and double_air_frames>=18,"hop_step_has_long_double_air_overlap")
+	check(max_leg_split>0.72 and min_leg_split<-0.72,"legs_alternate_front_and_back")
+	check(max_body_y>0.12 and min_body_y<-0.025 and max_body_y-min_body_y>0.18,"body_head_high_low_cycle")
 	print("COMBAT_MOTION_FEEDBACK_","PASS" if failures.is_empty() else "FAIL",failures,
-		" max_lift=",max_lift," max_duration=",max_duration," double_air_frames=",double_air_frames)
+		" max_lift=",max_lift," max_duration=",max_duration," double_air_frames=",double_air_frames,
+		" split=[",min_leg_split,",",max_leg_split,"] body_y=[",min_body_y,",",max_body_y,"]")
 	quit(0 if failures.is_empty() else 1)

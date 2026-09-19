@@ -193,7 +193,9 @@ func _shoot(a: Node3D) -> void:
 	var profile: Dictionary=WEAPON_RULES.by_slot(a.weapon_slot)
 	a.fire_clock=float(profile.fire_interval)
 	a.ammo=maxi(0,a.ammo-1)
-	a.velocity += Basis(Vector3.UP,a.aim_yaw).z * float(profile.body_recoil)
+	var recoil_strength:=1.0 if a.weapon_slot==0 else 1.45
+	a.recoil_velocity.x-=0.52*recoil_strength
+	a.recoil_velocity.z+=0.20*recoil_strength
 	var rewound: Array=_rewind_targets(int(a.command.get("ct",tick_id)))
 	a.build_aim(get_world_3d().direct_space_state,0.0)
 	if a.weapon_slot==0:_shoot_ak(a,profile)

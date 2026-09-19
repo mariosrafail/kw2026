@@ -1,5 +1,5 @@
 extends RefCounted
-## Authored-foot locomotion: world-space support, alternating swing, then bounded comedy.
+## Authored-foot locomotion: terrain-aware visual poses with a stylized front/back hop cycle.
 ## Never writes the CharacterBody/camera transform or changes gameplay velocity.
 class FootState extends RefCounted:
 	var node: Node3D
@@ -151,36 +151,62 @@ func update(delta: float, impact_velocity: float = 0.0) -> void:
 		head_offset_velocity.y -= 0.65
 		for f in feet: f.swinging = false
 	if grounded:
-		var stride_distance := lerpf(0.95,3.80,sqrt(ratio))
-		step_interval = clampf(stride_distance / maxf(0.25, speed) * 0.5, 0.14, 0.40)
+		# Stylized Rayman-like gait: two clear high split poses (left-front/right-back,
+		# then mirrored) separated by low compression/contact poses.
+		step_interval = lerpf(0.32,0.20,ratio)
 		if moving:
-			cycle = fposmod(cycle + dt / (step_interval * 1.56), 1.0)
-			step_clock += dt
-			if not was_moving: step_clock = step_interval
+			if not was_moving:
+				cycle=0.0;step_clock=0.0
+			cycle=fposmod(cycle+dt/(step_interval*2.0),1.0)
+			step_clock+=dt
+			while step_clock>=step_interval:
+				step_clock-=step_interval
+				step_count+=1
+			_update_run_cycle_feet(ratio)
 		else:
-			step_clock = 0.0
-		if moving: _guard_reach(horizontal)
-		for i in range(feet.size()): _tick_foot(i, dt, moving, horizontal)
-		if moving and step_clock >= step_interval*0.78 and _can_start_running_swing(next_foot):
-			_begin_swing(next_foot,horizontal,false)
-			next_foot=1-next_foot
 			step_clock=0.0
-		elif not moving and not _any_swing():
-			# Finish a final small step rather than sliding both feet back to idle.
-			for i in [next_foot, 1 - next_foot]:
-				var f := feet[i]
-				var difference := _neutral(i) - f.contact
-				difference.y = 0.0
-				if difference.length() > 0.13 or absf(wrapf(f.heading - travel_yaw, -PI, PI)) > 0.3:
-					_begin_swing(i, Vector3.ZERO, true)
-					next_foot = 1 - i
-					break
+			if was_moving:
+				for i in range(feet.size()):
+					feet[i].swinging=false;feet[i].age=0.0
+					_set_contact(feet[i],_ground(_neutral(i)))
+			for i in range(feet.size()):_tick_foot(i,dt,false,Vector3.ZERO)
+			if not _any_swing():
+				for i in [next_foot,1-next_foot]:
+					var f:=feet[i]
+					var difference:=_neutral(i)-f.contact
+					difference.y=0.0
+					if difference.length()>0.13 or absf(wrapf(f.heading-travel_yaw,-PI,PI))>0.3:
+						_begin_swing(i,Vector3.ZERO,true);next_foot=1-i;break
 	else:
-		for i in range(feet.size()): _air_foot(i, dt)
+		for i in range(feet.size()):_air_foot(i,dt)
 	_update_body(dt, local_velocity, local_accel, grounded)
 	was_grounded = grounded
 	was_moving = moving
 	last_velocity = velocity
+
+func _update_run_cycle_feet(ratio: float) -> void:
+	var phase:=cycle*TAU
+	var split:=sin(phase)
+	var high:=pow(absf(split),0.46)
+	var front:=Vector3(-sin(travel_yaw),0,-cos(travel_yaw))
+	var stride:=lerpf(0.58,1.08,ratio)
+	var max_lift:=lerpf(0.36,0.62,ratio)
+	for i in range(feet.size()):
+		var f:=feet[i]
+		var side_sign:=1.0 if i==0 else -1.0
+		var longitudinal:=split*side_sign*stride
+		var ground:=_ground(_neutral(i)+front*longitudinal)
+		f.contact=ground.position;f.normal=ground.normal;f.heading=travel_yaw
+		# Keep contact brief: roughly the lowest tenth of the cycle, otherwise both
+		# detached feet are visibly airborne while split front/back.
+		f.swinging=high>0.45
+		f.progress=fposmod(cycle+(0.0 if i==0 else 0.5),1.0)
+		f.duration=step_interval*1.60
+		f.lift=max_lift*high
+		f.phase="AIR_SPLIT" if high>0.45 else "CONTACT"
+		var pitch_angle:=-split*side_sign*0.28
+		var roll:=side_sign*0.055*high
+		_apply_foot(f,pitch_angle,roll,f.lift)
 
 func _neutral(index: int) -> Vector3:
 	var f := feet[index]
@@ -346,13 +372,16 @@ func _update_body(dt: float, local_velocity: Vector3, accel: Vector3, grounded: 
 	var raw_turn := clampf(wrapf(facing-last_visual_yaw,-PI,PI)/dt,-10.0,10.0)
 	last_visual_yaw = facing
 	turn_rate = lerpf(turn_rate,raw_turn,1.0-exp(-9.0*dt))
-	# The upper mass follows the feet with weight, then lags behind body turns.
-	# Translation and rotation have different springs; the torso is not welded to the head.
-	var bob := -cos(phase*2.0-0.45)*0.105*move_blend
-	var weight_shift := sin(phase)*0.105*move_blend
-	var idle := sin(time*2.15)*0.034*(1.0-move_blend)
-	var step_hop:=pow(absf(sin(phase)),0.58)*0.15*move_blend
-	var target_pos := Vector3(weight_shift,bob+idle+step_hop-landing_kick,0)
+	# High pose = legs split front/back with head+torso lifted. Low pose = both feet
+	# return under the body while the upper mass compresses down, then the pose mirrors.
+	var pose_wave:=sin(phase)
+	var high_pose:=pow(absf(pose_wave),0.46)*move_blend
+	var vertical_wave:=-cos(phase*2.0)
+	var weight_shift:=pose_wave*0.045*move_blend
+	var idle:=sin(time*2.15)*0.034*(1.0-move_blend)
+	# Split poses are decisively high; centre/contact poses compress below rest.
+	var vertical_pose:=(vertical_wave*0.30+0.040)*move_blend
+	var target_pos:=Vector3(weight_shift,idle+vertical_pose-landing_kick,0)
 	target_pos += Vector3(-accel.x,0,-accel.z)*0.0018
 	target_pos += Vector3(_noise(0)*0.031,_noise(2)*0.023,_noise(4)*0.026)*amount
 	var target_rot := Vector3(
@@ -364,21 +393,21 @@ func _update_body(dt: float, local_velocity: Vector3, accel: Vector3, grounded: 
 	if not grounded:
 		target_rot.x += clampf(-velocity.y*0.032,-0.25,0.25)
 		target_rot.y += sin(time*4.5)*0.10*amount
-	var head_target := Vector3(-accel.x*0.002,bob*1.15+idle*1.6+step_hop*1.18-landing_kick*0.90,-accel.z*0.002)
+	var head_target := Vector3(-accel.x*0.002,idle*1.55+vertical_pose*1.18-landing_kick*0.90,-accel.z*0.002)
 	head_target += Vector3(_noise(8)*0.04,_noise(9)*0.03,_noise(10)*0.03)*amount
-	head_target = head_target.clamp(Vector3(-0.14,-0.20,-0.14),Vector3(0.14,0.23,0.14))
+	head_target = head_target.clamp(Vector3(-0.14,-0.24,-0.14),Vector3(0.14,0.36,0.14))
 	var steps := maxi(1,int(ceil(dt*120.0)))
 	var h := dt/float(steps)
 	for unused in range(steps):
 		body_angular_velocity += ((target_rot-body_rotation)*Vector3(72,58,68)-body_angular_velocity*Vector3(7.8,6.8,7.2))*h
 		body_rotation += body_angular_velocity*h
-		body_offset_velocity += ((target_pos-body_offset)*140.0-body_offset_velocity*13.0)*h
+		body_offset_velocity += ((target_pos-body_offset)*190.0-body_offset_velocity*14.0)*h
 		body_offset += body_offset_velocity*h
-		head_offset_velocity += ((head_target-head_offset)*105.0-head_offset_velocity*10.0)*h
+		head_offset_velocity += ((head_target-head_offset)*150.0-head_offset_velocity*11.5)*h
 		head_offset += head_offset_velocity*h
 	body_rotation = body_rotation.clamp(Vector3(-0.42,-0.42,-0.42),Vector3(0.42,0.42,0.42))
-	body_offset = body_offset.clamp(Vector3(-0.18,-0.26,-0.16),Vector3(0.18,0.20,0.16))
-	head_offset = head_offset.clamp(Vector3(-0.15,-0.22,-0.15),Vector3(0.15,0.25,0.15))
+	body_offset = body_offset.clamp(Vector3(-0.18,-0.28,-0.18),Vector3(0.18,0.30,0.18))
+	head_offset = head_offset.clamp(Vector3(-0.15,-0.24,-0.16),Vector3(0.15,0.36,0.16))
 	torso.position = torso_rest+body_offset
 	torso.rotation = body_rotation
 	head.position = head_rest+head_offset

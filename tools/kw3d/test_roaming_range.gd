@@ -87,8 +87,8 @@ func run() -> void:
 	check(stage.combat.kill_label.text == "KILLS  1", "visible_kill_count")
 	check(not target.receive_hit(5, Vector3.FORWARD, 99999), "dead_cannot_award_extra_kill")
 	await capture("kill_counter_hidden_help")
-	for tick in range(100): await physics_frame
-	check(not is_instance_valid(target), "death_cleanup")
+	for tick in range(180): await physics_frame
+	check(not is_instance_valid(target), "death_cleanup_after_longer_linger")
 	stage.combat.reset_targets()
 	for tick in range(4): await physics_frame
 	check(stage.combat.total_kills == 1 and stage.combat.kills == 0, "respawn_preserves_session_kills")

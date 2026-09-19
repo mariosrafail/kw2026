@@ -452,13 +452,16 @@ func _set_player_healthbar(value: float, maximum: float = 100.0) -> void:
 	player_health_bar.visible = player_visual == null or player_visual.visible
 	if player_ammo_label!=null:player_ammo_label.visible=player_health_bar.visible
 
-func _apply_body_fire_recoil(shot_yaw: float) -> void:
+func _apply_body_fire_recoil(_shot_yaw: float) -> void:
 	if player == null:return
-	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
-	var backward := Basis(Vector3.UP,shot_yaw).z.normalized()
-	player.velocity += backward * float(profile.body_recoil)
+	var strength:=1.0 if weapon_slot==0 else 1.45
+	# Visual recoil only: never move the CharacterBody or alter gameplay position.
 	if locomotion != null:
-		locomotion.body_offset_velocity += backward * (0.52 if weapon_slot==1 else 0.34)
+		locomotion.body_offset_velocity += Vector3(0.0,0.10,0.72)*strength
+		locomotion.head_offset_velocity += Vector3(0.0,0.07,0.46)*strength
+		locomotion.body_angular_velocity.x -= 0.82*strength
+	head_spring_velocity.x -= 0.18*strength
+	head_spring_velocity.z += 0.11*strength
 
 func _build_outage_voxel_body() -> void:
 	# One authored source for geometry, UVs, rest positions and pivots.
