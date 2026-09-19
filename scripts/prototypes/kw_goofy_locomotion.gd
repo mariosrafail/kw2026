@@ -151,7 +151,7 @@ func update(delta: float, impact_velocity: float = 0.0) -> void:
 		head_offset_velocity.y -= 0.65
 		for f in feet: f.swinging = false
 	if grounded:
-		var stride_distance := lerpf(0.9, 3.45, sqrt(ratio))
+		var stride_distance := lerpf(0.95,3.80,sqrt(ratio))
 		step_interval = clampf(stride_distance / maxf(0.25, speed) * 0.5, 0.14, 0.40)
 		if moving:
 			cycle = fposmod(cycle + dt / (step_interval * 2.0), 1.0)
@@ -233,13 +233,13 @@ func _begin_swing(index: int, horizontal: Vector3, settle: bool) -> void:
 	f.settle = settle
 	f.elapsed = 0.0
 	f.progress = 0.0
-	f.duration = 0.19 if settle else step_interval * 1.08
+	f.duration = 0.19 if settle else step_interval * 1.16
 	f.start = f.contact
 	f.from_heading = f.heading
-	f.lift = (0.11 if settle else lerpf(0.28, 0.58, clampf(speed / 11.0, 0, 1))) * rng.randf_range(0.94, 1.10)
+	f.lift = (0.11 if settle else lerpf(0.34,0.72,clampf(speed/11.0,0,1))) * rng.randf_range(0.96,1.08)
 	f.flourish = rng.randf_range(-0.22, 0.22) * playfulness
 	f.toe_out = (1.0 if index == 0 else -1.0) * 0.055 + rng.randf_range(-0.04, 0.04) * playfulness
-	f.goal = _ground(_neutral(index) + horizontal * (f.duration + step_interval * 0.54))["position"]
+	f.goal = _ground(_neutral(index) + horizontal * (f.duration + step_interval * 0.68))["position"]
 	f.phase = "TOE_OFF"
 	f.step_id += 1
 	step_count += 1
@@ -255,7 +255,7 @@ func _tick_foot(index: int, dt: float, moving: bool, horizontal: Vector3) -> voi
 		var p := f.progress
 		if p < 0.87:
 			var remaining := maxf(0, f.duration - f.elapsed)
-			var lead := horizontal * (remaining + step_interval * 0.54) if moving and not f.settle else Vector3.ZERO
+			var lead := horizontal * (remaining + step_interval * 0.68) if moving and not f.settle else Vector3.ZERO
 			var target := _ground(_neutral(index) + lead)
 			f.goal = f.goal.lerp(target["position"], 1.0 - exp(-24.0 * dt))
 			f.normal = target["normal"]
@@ -268,13 +268,14 @@ func _tick_foot(index: int, dt: float, moving: bool, horizontal: Vector3) -> voi
 			f.goal = _ground(neutral + delta_goal.normalized() * reach)["position"]
 		var eased := p * p * (3.0 - 2.0 * p)
 		f.contact = f.start.lerp(f.goal, eased)
-		lift = sin(PI * p) * f.lift
+		# Rayman-like floating stride: rise quickly, hang high for most of the swing, then land late.
+		lift = pow(maxf(0.0,sin(PI*p)),0.48) * f.lift
 		var outward := Basis(Vector3.UP, travel_yaw).x * (-1.0 if index == 0 else 1.0)
 		f.contact += outward * sin(PI * p) * 0.055 * playfulness
 		f.heading = lerp_angle(f.from_heading, travel_yaw + f.toe_out, eased)
 		pitch_angle = _swing_pitch(p) + sin(time * 14.0 + index * 2.0) * 0.075 * sin(PI * p) * playfulness
 		roll = f.flourish * sin(PI * p)
-		f.phase = "PASSING" if p < 0.65 else "UP"
+		f.phase = "TOE_OFF" if p<0.20 else "HANG" if p<0.72 else "LAND"
 		if p >= 1.0:
 			f.swinging = false
 			f.age = 0.0

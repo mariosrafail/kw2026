@@ -6,12 +6,15 @@ func check(value: bool,title: String) -> void:
 func run() -> void:
 	var session_script=load("res://scripts/kw3d/online_session.gd")
 	var codec=load("res://scripts/kw3d/input_codec.gd")
-	var frame: Dictionary={"seq":1,"ct":0,"js":0,"gs":0,"move":Vector2(0.4,0.2),"yaw":0.2,"pitch":-0.1,"side":-1.0,"fire":true,"aim":true,"sprint":false}
+	var frame: Dictionary={"seq":1,"ct":0,"js":0,"gs":0,"move":Vector2(0.4,0.2),"yaw":0.2,"pitch":-0.1,"side":-1.0,"fire":true,"aim":true,"sprint":false,"reload":false}
 	check(session_script.valid_frame(frame),"valid_command")
 	var encoded: PackedByteArray=codec.encode([frame,frame,frame,frame])
 	check(encoded.size()==144,"four_commands_below_mtu")
 	var decoded: Array=codec.decode(encoded)
-	check(decoded.size()==4 and decoded[0].move.distance_to(frame.move)<0.00001,"codec_round_trip")
+	check(decoded.size()==4 and decoded[0].move.distance_to(frame.move)<0.00001 and not decoded[0].reload,"codec_round_trip")
+	var reload_frame: Dictionary=frame.duplicate();reload_frame.reload=true
+	var reload_decoded: Array=codec.decode(codec.encode([reload_frame]))
+	check(reload_decoded.size()==1 and reload_decoded[0].reload,"reload_flag_round_trip")
 	for bad in [Vector2(NAN,0),Vector2(2,0)]:
 		var copy: Dictionary=frame.duplicate();copy.move=bad
 		check(not session_script.valid_frame(copy),"reject_bad_movement")
@@ -31,6 +34,12 @@ func run() -> void:
 	var key =InputEventJoypadButton.new();key.button_index=JOY_BUTTON_RIGHT_SHOULDER;key.pressed=true
 	input._input(key)
 	check(input.grenade_serial==1,"gamepad_grenade_binding")
+	var reload_key_found:=false
+	var reload_pad_found:=false
+	for event in InputMap.action_get_events("kw3d_reload"):
+		if event is InputEventKey and event.physical_keycode==KEY_R:reload_key_found=true
+		if event is InputEventJoypadButton and event.button_index==JOY_BUTTON_X:reload_pad_found=true
+	check(reload_key_found and reload_pad_found,"reload_keyboard_gamepad_binding")
 	Input.action_press("kw3d_fire")
 	input.suspend()
 	check(not input.sample(1.0/60.0).fire,"pause_releases_fire")

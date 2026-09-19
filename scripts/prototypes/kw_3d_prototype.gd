@@ -39,6 +39,11 @@ var weapon_root: Node3D
 var weapon_visual_wobble: Node3D
 var weapon_muzzle: Marker3D
 var ak_fire_audio: AudioStreamPlayer3D
+var ak_reload_audio: AudioStreamPlayer3D
+var ammo_label: Label
+var ammo_in_mag := 25
+var reload_remaining := 0.0
+var reload_mag_serial := 0
 var pixel_enabled := true
 var borderlands_enabled := false
 var pixel_materials: Array[WeakRef] = []
@@ -106,8 +111,10 @@ const RIG_CENTER_Y := -4.0
 const OUTRAGE_FULLBODY := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
 const AK47_VOXEL_BUILDER := preload("res://scripts/prototypes/ak47_voxel_builder.gd")
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
+const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
 const AK_RECOIL_MODEL := preload("res://scripts/kw3d/ak_recoil.gd")
-const AK_FIRE_INTERVAL := 0.10
+const AK_MAGAZINE := preload("res://scripts/kw3d/ak_magazine.gd")
+const AK_FIRE_INTERVAL := AK_MAGAZINE.FIRE_INTERVAL
 
 func _ready() -> void:
 	# The baked preview exists only for the editor; runtime builds the same arena.
@@ -213,6 +220,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.physical_keycode == KEY_Y:
 			_set_borderlands_enabled(not borderlands_enabled)
 		elif event.physical_keycode == KEY_R:
+			_start_reload()
+		elif event.physical_keycode == KEY_C:
 			_spawn_chaos_drop()
 		elif event.physical_keycode == KEY_F:
 			low_gravity = not low_gravity
@@ -226,6 +235,7 @@ func _physics_process(delta: float) -> void:
 		player.velocity = Vector3.ZERO
 		return
 	shot_cooldown = maxf(-delta, shot_cooldown - delta)
+	_tick_reload(delta)
 
 	var input_vec := Vector2.ZERO
 	if Input.is_physical_key_pressed(KEY_A):
@@ -280,6 +290,8 @@ func _physics_process(delta: float) -> void:
 	_update_weapon_pose(delta)
 	if fire_held and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_fire_physics_ball()
+	if ammo_in_mag<=0 and reload_remaining<=0.0 and not combat.is_game_over():
+		_start_reload()
 
 	if player.global_position.y < -15.0:
 		player.global_position = Vector3(0.0, 3.0, 6.0)
@@ -474,6 +486,14 @@ func _build_held_ak() -> void:
 	ak_fire_audio.max_polyphony = 8
 	weapon_aim_pivot.add_child(ak_fire_audio)
 
+	ak_reload_audio = AudioStreamPlayer3D.new()
+	ak_reload_audio.name = "AKReloadAudio"
+	ak_reload_audio.stream = AK47_RELOAD_SFX
+	ak_reload_audio.volume_db = -80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db - 3.0
+	ak_reload_audio.max_distance = 24.0
+	ak_reload_audio.unit_size = 2.6
+	weapon_aim_pivot.add_child(ak_reload_audio)
+
 func _add_weapon_hand(node_name: String, pos: Vector3, size: Vector3) -> void:
 	var hand := MeshInstance3D.new()
 	hand.name = node_name
@@ -558,15 +578,18 @@ func _update_weapon_pose(delta: float) -> void:
 	# without changing the camera target or server-side hit direction.
 	var one_hand_pitch := sin(anim_time*6.3+0.4)*0.045*loose_amount + weapon_recoil*0.055
 	var one_hand_roll := sin(anim_time*4.8+1.6)*(0.075+0.045*move_blend)*loose_amount - weapon_recoil*0.14
+	var reload_progress := 0.0 if reload_remaining<=0.0 else 1.0-clampf(reload_remaining/AK_MAGAZINE.RELOAD_DURATION,0.0,1.0)
+	var reload_arc := pow(maxf(0.0,sin(PI*reload_progress)),0.72)
+	var reload_snap := sin(TAU*reload_progress)*0.08*reload_arc
 	weapon_root.rotation = Vector3(0.0, PI*0.5, 0.0)
 	if weapon_visual_wobble != null:
-		weapon_visual_wobble.position = Vector3(weapon_visual_side_kick,weapon_visual_lift_kick,weapon_recoil*0.05)
-		weapon_visual_wobble.rotation = Vector3(one_hand_pitch, 0.0, one_hand_roll + weapon_visual_twist_kick)
+		weapon_visual_wobble.position = Vector3(weapon_visual_side_kick,-0.17*reload_arc+weapon_visual_lift_kick,0.16*reload_arc+weapon_recoil*0.05)
+		weapon_visual_wobble.rotation = Vector3(one_hand_pitch-0.22*reload_arc,0.08*reload_arc,one_hand_roll+weapon_visual_twist_kick+0.62*reload_arc+reload_snap)
 	for child in weapon_aim_pivot.get_children():
 		if child.has_meta("hold_rest"):
 			var hand_rest: Vector3 = child.get_meta("hold_rest")
-			child.position = hand_rest + Vector3(sin(anim_time*5.2)*0.035*loose_amount + weapon_visual_side_kick*0.65, cos(anim_time*6.8)*0.025*loose_amount + weapon_visual_lift_kick*0.65, weapon_root.position.z+0.30)
-			child.rotation = Vector3(one_hand_pitch*0.55, 0.0, one_hand_roll*0.7 + weapon_visual_twist_kick*0.65)
+			child.position = hand_rest + Vector3(sin(anim_time*5.2)*0.035*loose_amount + weapon_visual_side_kick*0.65,-0.10*reload_arc+cos(anim_time*6.8)*0.025*loose_amount + weapon_visual_lift_kick*0.65,weapon_root.position.z+0.30+0.10*reload_arc)
+			child.rotation = Vector3(one_hand_pitch*0.55-0.12*reload_arc,0.0,one_hand_roll*0.7 + weapon_visual_twist_kick*0.65+0.38*reload_arc)
 	if combat != null:
 		combat.update_aim_feedback(weapon_muzzle.global_position, aim_target, chest)
 
@@ -653,7 +676,7 @@ func _build_hud() -> void:
 	title.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
 	help_panel.add_child(title)
 	var help := Label.new()
-	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire\nG grenade   Q swap   B retry   O comic   P pixels   Y Borderlands   M music\nMOUSE look   R chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
+	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire   R reload\nG grenade   Q swap   B retry   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
 	help.position = Vector2(12, 28)
 	help.add_theme_font_size_override("font_size", 11)
 	help.add_theme_color_override("font_color", Color(0.86, 0.86, 0.92))
@@ -669,6 +692,81 @@ func _build_hud() -> void:
 	crosshair.name = "Crosshair"
 	canvas.add_child(crosshair)
 	crosshair.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	ammo_label = Label.new()
+	ammo_label.name = "AKAmmo"
+	ammo_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	ammo_label.offset_left = -220
+	ammo_label.offset_right = -18
+	ammo_label.offset_top = -72
+	ammo_label.offset_bottom = -28
+	ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ammo_label.add_theme_font_size_override("font_size",18)
+	ammo_label.add_theme_constant_override("outline_size",4)
+	ammo_label.add_theme_color_override("font_color",Color("fff2c7"))
+	canvas.add_child(ammo_label)
+	_refresh_ammo_hud()
+
+func _refresh_ammo_hud() -> void:
+	if ammo_label == null:return
+	if reload_remaining>0.0:
+		ammo_label.text = "AK  %02d / %02d   //   RELOAD %.1f" % [ammo_in_mag,AK_MAGAZINE.MAGAZINE_SIZE,reload_remaining]
+		ammo_label.add_theme_color_override("font_color",Color("ffcf70"))
+	else:
+		ammo_label.text = "AK  %02d / %02d" % [ammo_in_mag,AK_MAGAZINE.MAGAZINE_SIZE]
+		ammo_label.add_theme_color_override("font_color",Color("ff7b76") if ammo_in_mag<=5 else Color("fff2c7"))
+
+func _tick_reload(delta: float) -> void:
+	if reload_remaining<=0.0:return
+	var before := reload_remaining
+	reload_remaining=maxf(0.0,reload_remaining-delta)
+	if before>0.0 and reload_remaining<=0.0:
+		ammo_in_mag=AK_MAGAZINE.MAGAZINE_SIZE
+	_refresh_ammo_hud()
+
+func _start_reload(play_fx: bool = true) -> bool:
+	if reload_remaining>0.0 or ammo_in_mag>=AK_MAGAZINE.MAGAZINE_SIZE:return false
+	if combat!=null and combat.is_game_over():return false
+	reload_remaining=AK_MAGAZINE.RELOAD_DURATION
+	aim_recoil.reset()
+	if play_fx:
+		if ak_reload_audio!=null:ak_reload_audio.play()
+		_spawn_reload_magazine()
+	_refresh_ammo_hud()
+	return true
+
+func _spawn_reload_magazine() -> void:
+	if weapon_root==null:return
+	reload_mag_serial+=1
+	var mag := MeshInstance3D.new()
+	mag.name="ReloadMag%02d"%reload_mag_serial
+	var box:=BoxMesh.new();box.size=Vector3(0.15,0.36,0.09);mag.mesh=box
+	mag.material_override=_material(Color("24262d"),false,0.0)
+	mag.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mag)
+	mag.global_transform=Transform3D(weapon_root.global_basis,weapon_root.to_global(Vector3(0.38,-0.20,0.0)))
+	_add_scene_outline(mag,0.85)
+	var start:=mag.global_position
+	var side_dir:=weapon_root.global_basis.z.normalized()*0.18
+	var tween:=mag.create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(mag,"global_position",start+Vector3.DOWN*1.15+side_dir,0.55)
+	tween.tween_property(mag,"rotation",mag.rotation+Vector3(1.6,0.8,-1.2),0.55)
+	tween.tween_property(mag,"scale",Vector3.ONE*0.65,0.55)
+	tween.chain().tween_callback(mag.queue_free)
+
+func _set_authoritative_weapon_state(server_ammo: int,server_reload: float,force: bool=false) -> void:
+	server_ammo=clampi(server_ammo,0,AK_MAGAZINE.MAGAZINE_SIZE)
+	server_reload=clampf(server_reload,0.0,AK_MAGAZINE.RELOAD_DURATION)
+	if force:
+		ammo_in_mag=server_ammo;reload_remaining=server_reload
+	elif server_reload>0.0:
+		if reload_remaining<=0.0:_start_reload(true)
+		reload_remaining=server_reload;ammo_in_mag=server_ammo
+	elif reload_remaining>0.0 and server_ammo==AK_MAGAZINE.MAGAZINE_SIZE:
+		reload_remaining=0.0;ammo_in_mag=server_ammo
+	elif server_ammo<=ammo_in_mag:
+		ammo_in_mag=server_ammo
+	_refresh_ammo_hud()
 
 func _update_status() -> void:
 	if status_label:
@@ -686,8 +784,12 @@ func _kick_weapon_visuals() -> void:
 	weapon_visual_twist_kick = clampf(weapon_visual_twist_kick + randf_range(-0.085,0.085) * goofy,-0.19,0.19)
 
 func _fire_physics_ball() -> void:
-	if camera == null or combat == null or combat.is_game_over() or shot_cooldown > 0.00001:
-		return
+	if camera == null or combat == null or combat.is_game_over() or shot_cooldown > 0.00001:return
+	if reload_remaining>0.0:return
+	if ammo_in_mag<=0:
+		_start_reload();return
+	ammo_in_mag-=1
+	_refresh_ammo_hud()
 	shot_cooldown += AK_FIRE_INTERVAL
 	_update_weapon_pose(0.0)
 	_kick_weapon_visuals()
@@ -701,6 +803,7 @@ func _fire_physics_ball() -> void:
 	camera_yaw.rotation.y = yaw
 	camera_pitch.rotation.x = pitch
 	_spawn_muzzle_flash()
+	if ammo_in_mag<=0:_start_reload()
 
 func _play_ak_fire_audio() -> void:
 	if ak_fire_audio == null or ak_fire_audio.stream == null:

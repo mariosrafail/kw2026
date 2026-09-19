@@ -3,6 +3,7 @@ extends Node3D
 signal event_created(data: Dictionary)
 const LEVEL:=preload("res://scripts/kw3d/online_level.gd")
 const AK_RECOIL:=preload("res://scripts/kw3d/ak_recoil.gd")
+const AK_MAG:=preload("res://scripts/kw3d/ak_magazine.gd")
 const ACTOR:=preload("res://scripts/kw3d/authority_actor.gd")
 const MOTOR:=preload("res://scripts/kw3d/actor_motor.gd")
 const DT:=1.0/60.0
@@ -70,6 +71,7 @@ func respawn(id: int) -> bool:
 	var a: Node3D=actors[id]
 	if a.health>0 or a.death_clock<3:return false
 	a.health=100.0;a.death_clock=0;a.position=Vector3(-2 if id%2 else 2,2.2,8)
+	a.reset_magazine()
 	a.collision_layer=2;a.hit_body.collision_layer=16;a.velocity=Vector3.ZERO
 	a.command=MOTOR.empty(a.aim_yaw,a.aim_pitch);a.input_queue.clear();a.locomotion.reset()
 	emit("respawn",{"actor":id,"hp":100.0})
@@ -148,8 +150,11 @@ func step() -> void:
 		var a: Node3D=actors[id]
 		if a.is_bot or a.health<=0:continue
 		a.build_aim(get_world_3d().direct_space_state,DT)
-		if (a.command.get("move",Vector2.ZERO) as Vector2).length_squared()>0.001 or a.command.get("fire",false) or a.command.get("aim",false) or a.command.get("grenade",false):round_live=true
-		if a.command.get("fire",false) and a.fire_clock<=0.00001:_shoot(a)
+		if (a.command.get("move",Vector2.ZERO) as Vector2).length_squared()>0.001 or a.command.get("fire",false) or a.command.get("aim",false) or a.command.get("grenade",false) or a.command.get("reload",false):round_live=true
+		if a.command.get("reload",false):_request_reload(a)
+		if a.command.get("fire",false) and a.fire_clock<=0.00001:
+			if a.reload_clock<=0.00001 and a.ammo>0:_shoot(a)
+			elif a.reload_clock<=0.00001:_request_reload(a)
 		if a.command.get("grenade",false):
 			a.command.grenade=false
 			if a.grenade_clock<=0.00001:_throw(a)
@@ -177,8 +182,14 @@ func ray(from: Vector3,to: Vector3,mask: int=5,exclude: Array[RID]=[]) -> Dictio
 	var q =PhysicsRayQueryParameters3D.create(from,to,mask,exclude);q.hit_from_inside=true
 	return get_world_3d().direct_space_state.intersect_ray(q)
 
+func _request_reload(a: Node3D) -> bool:
+	if not a.start_reload():return false
+	emit("reload",{"actor":a.actor_id,"duration":AK_MAG.RELOAD_DURATION,"ammo":a.ammo,"p":a.weapon_anchor()})
+	return true
+
 func _shoot(a: Node3D) -> void:
-	a.fire_clock=0.10
+	a.fire_clock=AK_MAG.FIRE_INTERVAL
+	a.ammo=maxi(0,a.ammo-1)
 	a.velocity += Basis(Vector3.UP,a.aim_yaw).z * AK_RECOIL.BODY_RECOIL_IMPULSE
 	var rewound: Array=_rewind_targets(int(a.command.get("ct",tick_id)))
 	a.build_aim(get_world_3d().direct_space_state,0.0)
@@ -187,10 +198,11 @@ func _shoot(a: Node3D) -> void:
 	if hit.is_empty():hit=ray(a.muzzle,a.aim_target+(a.aim_target-a.muzzle).normalized()*0.035)
 	var endpoint: Vector3=hit.get("position",a.aim_target)
 	_restore_targets(rewound)
-	emit("shot",{"actor":a.actor_id,"input":a.ack,"from":a.muzzle,"to":endpoint,"blocked":blocked,
+	emit("shot",{"actor":a.actor_id,"input":a.ack,"from":a.muzzle,"to":endpoint,"blocked":blocked,"ammo":a.ammo,
 		"hit":not hit.is_empty(),"normal":hit.get("normal",Vector3.UP)})
 	if not hit.is_empty() and (hit.collider as Node).has_meta("actor_id"):
 		damage(int(hit.collider.get_meta("actor_id")),20.0,(endpoint-a.muzzle).normalized(),a.actor_id,endpoint)
+	if a.ammo<=0:_request_reload(a)
 
 func damage(victim: int,amount: float,direction: Vector3,owner: int,point: Vector3) -> bool:
 	if not actors.has(victim) or amount<=0:return false

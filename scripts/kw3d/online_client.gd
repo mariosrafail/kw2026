@@ -67,7 +67,7 @@ func _ready() -> void:
 	network_status=Label.new();network_status.position=Vector2(12,108);network_status.add_theme_font_size_override("font_size",10)
 	help_panel.add_child(network_status)
 	for c in help_panel.get_children():
-		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim   G / RB grenade\nSpace / A jump   Q / R3 shoulder   Y Borderlands edges   Esc / Start menu"
+		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim   R / X reload   G / RB grenade\nSpace / A jump   Q / R3 shoulder   Y Borderlands edges   Esc / Start menu"
 	set_menu(true)
 	if options.has("connect") or options.has("qa-client"):
 		connect_server(str(options.get("host","127.0.0.1")),int(options.get("port","18886")))
@@ -132,6 +132,7 @@ func _welcome(payload: Dictionary) -> void:
 			player.set_meta("motor_grounded",bool(state.ground))
 			input_adapter.yaw=state.ay;input_adapter.pitch=state.ap
 			input_adapter.reset_weapon_recoil()
+			_set_authoritative_weapon_state(int(state.get("ammo",AK_MAGAZINE.MAGAZINE_SIZE)),float(state.get("reload",0.0)),true)
 			locomotion.reset();break
 	set_menu(false)
 
@@ -152,6 +153,8 @@ func _physics_process(delta: float) -> void:
 	input_adapter.fov=camera.fov
 	var command: Dictionary=input_adapter.sample(dt)
 	command.ct=maxi(0,session.last_snapshot_tick-3)
+	_tick_reload(dt)
+	if bool(command.get("reload",false)):_start_reload()
 	if options.has("qa-client"):_qa_command(command)
 	if combat.is_game_over():command.move=Vector2.ZERO;command.fire=false
 	yaw=command.yaw;pitch=command.pitch;aiming=command.aim;fire_held=command.fire;weapon_side=command.side
@@ -179,7 +182,11 @@ func _physics_process(delta: float) -> void:
 
 func _fire_physics_ball() -> void:
 	if not session.connected or combat.is_game_over() or shot_cooldown>0.00001:return
-	shot_cooldown+=0.10
+	if reload_remaining>0.0:return
+	if ammo_in_mag<=0:
+		_start_reload();return
+	ammo_in_mag-=1;_refresh_ammo_hud()
+	shot_cooldown+=AK_MAGAZINE.FIRE_INTERVAL
 	_kick_weapon_visuals()
 	_apply_body_fire_recoil(yaw)
 	_play_ak_fire_audio();_spawn_muzzle_flash();combat.reticle.notify_shot()
@@ -188,6 +195,7 @@ func _fire_physics_ball() -> void:
 	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
 	last_prediction_at=age
 	input_adapter.rumble(0.24)
+	if ammo_in_mag<=0:_start_reload()
 
 func _snapshot(snapshot: Dictionary) -> void:
 	# Network polling may happen outside physics. Replay must only run in a fixed physics tick.
@@ -223,6 +231,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 			if difference.length()<1.8:correction=(correction+difference).limit_length(0.45)
 			else:correction=Vector3.ZERO;locomotion.reset()
 			grenade_skill.set_cooldown(state.gcd)
+			_set_authoritative_weapon_state(int(state.get("ammo",ammo_in_mag)),float(state.get("reload",reload_remaining)),false)
 			if snapshot.tick>=last_health_tick:combat.apply_status(snapshot,state)
 			continue
 		if not replicas.has(id):
@@ -421,6 +430,10 @@ func _event(e: Dictionary) -> void:
 				if float(e.get("heal",0.0))>0.0:arena_audio.play_event("heal")
 				combat._update_counter()
 		"explosion":grenade_skill.show_blast(e.p)
+		"reload":
+			if int(e.actor)!=session.actor_id:arena_audio._play_spatial(AK47_RELOAD_SFX,e.p,-17.0,1.0)
+			elif reload_remaining<=0.0:
+				ammo_in_mag=int(e.get("ammo",ammo_in_mag));_start_reload()
 		"throw":arena_audio.play_event("throw",e.p,-14)
 		"bounce":arena_audio.play_event("bounce",e.p,-19)
 		"wave":combat.director.hud.announce("WAVE %02d"%e.wave,"ONLINE CO-OP  /  %d ENEMIES"%e.budget);arena_audio.play_event("wave")

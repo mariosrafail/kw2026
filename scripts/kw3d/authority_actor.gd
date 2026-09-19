@@ -3,6 +3,7 @@ const LEVEL:=preload("res://scripts/kw3d/online_level.gd")
 const MOTOR:=preload("res://scripts/kw3d/actor_motor.gd")
 const WALK:=preload("res://scripts/kw3d/authority_locomotion.gd")
 const BRAIN:=preload("res://scripts/prototypes/kw_roaming_brain.gd")
+const AK_MAG:=preload("res://scripts/kw3d/ak_magazine.gd")
 const RIGS: Array[String]=["HeadRig","TorsoRig","LeftLegRig","RightLegRig"]
 var actor_id =0
 var is_bot =false
@@ -14,6 +15,8 @@ var connected =true
 var ack =0
 var last_input_tick =0
 var fire_clock =0.0
+var ammo =AK_MAG.MAGAZINE_SIZE
+var reload_clock =0.0
 var grenade_clock =0.0
 var death_clock =0.0
 var body_yaw =0.0
@@ -81,6 +84,10 @@ func configure(id: int,bot: bool,profile: Dictionary,appearance: String) -> void
 func tick(dt: float) -> void:
 	damage_grace=maxf(0,damage_grace-dt)
 	fire_clock=maxf(0,fire_clock-dt);grenade_clock=maxf(0,grenade_clock-dt)
+	if reload_clock>0.0:
+		var before_reload: float = reload_clock
+		reload_clock=maxf(0.0,reload_clock-dt)
+		if before_reload>0.0 and reload_clock<=0.0:ammo=AK_MAG.MAGAZINE_SIZE
 	if health<=0:
 		death_clock+=dt;velocity=Vector3.ZERO;return
 	var impact =velocity.y
@@ -115,6 +122,15 @@ func tick(dt: float) -> void:
 	recoil=recoil.limit_length(0.30)
 	rigs.TorsoRig.rotation+=recoil*0.8;head.rotation+=recoil*1.2
 	update_shapes()
+
+func start_reload() -> bool:
+	if is_bot or health<=0 or reload_clock>0.0 or ammo>=AK_MAG.MAGAZINE_SIZE:return false
+	reload_clock=AK_MAG.RELOAD_DURATION
+	return true
+
+func reset_magazine() -> void:
+	ammo=AK_MAG.MAGAZINE_SIZE
+	reload_clock=0.0
 
 func update_shapes() -> void:
 	for record in hit_records:
@@ -170,5 +186,5 @@ func packet() -> Dictionary:
 		var rig: Node3D=rigs[title]
 		for v in [rig.position,rig.rotation,rig.scale]: pose.append_array([v.x,v.y,v.z])
 	return {"id":actor_id,"bot":is_bot,"skin":skin,"p":global_position,"v":velocity,"yaw":body_yaw,
-		"ay":aim_yaw,"ap":aim_pitch,"hp":health,"kills":kills,"gcd":grenade_clock,"fcd":fire_clock,
+		"ay":aim_yaw,"ap":aim_pitch,"hp":health,"kills":kills,"gcd":grenade_clock,"fcd":fire_clock,"ammo":ammo,"reload":reload_clock,
 		"ack":ack,"js":last_jump_serial,"gs":last_grenade_serial,"connected":connected,"respawn_left":maxf(0,3.0-death_clock) if health<=0 else 0.0,"pose":pose,"steps":step_count,"ground":is_on_floor(),"phase":phase}

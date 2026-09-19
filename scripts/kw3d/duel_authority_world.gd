@@ -35,6 +35,7 @@ func _reset_actor_for_match(a: Node3D) -> void:
 	a.input_started = false
 	a.input_wait = 0
 	a.fire_clock = 0.0
+	a.reset_magazine()
 	a.grenade_clock = 0.0
 	a.locomotion.reset()
 	a.update_shapes()
@@ -174,6 +175,7 @@ func respawn(id: int) -> bool:
 		return false
 	a.health = 100.0
 	a.death_clock = 0.0
+	a.reset_magazine()
 	a.global_position = _spawn_for_slot(id)
 	a.collision_layer = 2
 	a.hit_body.collision_layer = 4

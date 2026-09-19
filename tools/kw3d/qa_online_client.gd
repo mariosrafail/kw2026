@@ -42,7 +42,7 @@ func _qa_tick(_delta: float) -> void:
 			elif injected.has("grenade"):button(JOY_BUTTON_RIGHT_SHOULDER,false)
 		if age>7.5 and probe_round<6 and age>=7.5+float(probe_round)*0.12:
 			probe_round+=1
-			var source: Dictionary={"seq":input_adapter.sequence+1,"ct":0,"js":0,"gs":0,"move":Vector2.ZERO,"yaw":0.0,"pitch":0.0,"side":-1.0,"fire":false,"aim":false,"sprint":false}
+			var source: Dictionary={"seq":input_adapter.sequence+1,"ct":0,"js":0,"gs":0,"move":Vector2.ZERO,"yaw":0.0,"pitch":0.0,"side":-1.0,"fire":false,"aim":false,"sprint":false,"reload":false}
 			var bad_move: Dictionary=source.duplicate();bad_move.move=Vector2(NAN,0)
 			var bad_sequence: Dictionary=source.duplicate();bad_sequence.seq=2000000000
 			var bad_pitch: Dictionary=source.duplicate();bad_pitch.pitch=20.0
@@ -63,13 +63,14 @@ func _qa_tick(_delta: float) -> void:
 		if steady_max_correction>0.55:failures.append("prediction_correction_over_budget")
 		if int(qa_events.get("damage",0))<1:failures.append("no_authority_damage")
 		if int(qa_events.get("explosion",0))<1:failures.append("no_shared_explosion")
+		if int(qa_events.get("reload",0))<1:failures.append("no_authority_reload")
 		if role==2:
 			if not qa_rejoined or joined_slots.size()!=2 or joined_slots[0]!=joined_slots[1]:failures.append("rejoin_identity")
 			if not gamepad_move_seen or not gamepad_fire_seen:failures.append("synthetic_gamepad_path")
 		var actors: Dictionary={}
 		for id in state_records:
 			var s: Dictionary=state_records[id]
-			actors[str(id)]={"hp":s.hp,"kills":s.kills,"bot":s.bot,"gcd":s.gcd,"p":s.p}
+			actors[str(id)]={"hp":s.hp,"kills":s.kills,"bot":s.bot,"gcd":s.gcd,"ammo":s.get("ammo",-1),"reload":s.get("reload",-1.0),"p":s.p}
 		var result: Dictionary={"failures":failures,"slot":session.actor_id,"joined_slots":joined_slots,"snapshots":session.snapshot_count,"rtt_ms":session.rtt_ms,"max_correction":max_correction,"steady_max_correction":steady_max_correction,"large_corrections":corrections_over_half_meter,"maximum_travel":maximum_travel,"events":qa_events,"actors":actors,"synthetic_pad_move":gamepad_move_seen,"synthetic_pad_fire":gamepad_fire_seen,"physical_controllers":Input.get_connected_joypads()}
 		var file =FileAccess.open(str(options.output).path_join("client_%d.json"%role),FileAccess.WRITE)
 		file.store_string(JSON.stringify(result,"\t"));file.close()
