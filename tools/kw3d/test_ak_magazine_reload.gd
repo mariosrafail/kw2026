@@ -31,7 +31,13 @@ func run() -> void:
 	check(stage._start_reload(false),"offline_manual_reload")
 	for i in range(61):stage._tick_reload(1.0/60.0)
 	check(stage.ammo_in_mag==25,"offline_manual_refill")
-	check(stage.ammo_label!=null and "25 / 25" in stage.ammo_label.text,"ammo_hud_updates")
+	check(stage.player_ammo_label!=null and "25 / 25" in stage.player_ammo_label.text,"ammo_hud_updates")
+	stage._set_weapon_slot(1,false)
+	check(stage.ammo_in_mag==2 and "SHOTGUN" in stage.player_ammo_label.text,"shotgun_slot_has_two_shells")
+	stage.shot_cooldown=0.0;stage._fire_physics_ball();stage.shot_cooldown=0.0;stage._fire_physics_ball()
+	check(stage.ammo_in_mag==0 and stage.reload_remaining>1.0,"shotgun_two_shell_auto_reload")
+	stage._set_weapon_slot(0,false)
+	check(stage.ammo_in_mag==25,"switch_back_preserves_ak_mag")
 	stage.queue_free()
 	for i in range(3):await process_frame
 

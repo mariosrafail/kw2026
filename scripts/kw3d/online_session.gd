@@ -6,8 +6,8 @@ signal combat_event(data: Dictionary)
 signal connection_message(text: String)
 const LEVEL=preload("res://scripts/kw3d/online_level.gd")
 const CODEC=preload("res://scripts/kw3d/input_codec.gd")
-const PROTOCOL=2
-const BUILD="kw3d-proof-20260920-mag-v2"
+const PROTOCOL=3
+const BUILD="kw3d-proof-20260920-weapons-v3"
 const MAX_PLAYERS=4
 var server=false
 var world: Node3D
@@ -180,7 +180,7 @@ func _reject(reason: String) -> void:
 	_lost(reason);close_connection(false)
 
 static func valid_frame(f: Dictionary) -> bool:
-	if f.size()!=12:return false
+	if f.size()!=13:return false
 	for key in ["seq","ct","js","gs"]:
 		if typeof(f.get(key))!=TYPE_INT or f[key]<0 or f[key]>2000000000:return false
 	if typeof(f.get("move"))!=TYPE_VECTOR2 or not (f.move as Vector2).is_finite() or f.move.length()>1.001:return false
@@ -189,6 +189,7 @@ static func valid_frame(f: Dictionary) -> bool:
 	if absf(f.yaw)>PI+0.001 or f.pitch < -0.84 or f.pitch>0.53 or f.side not in [-1.0,1.0]:return false
 	for key in ["fire","aim","sprint","reload"]:
 		if typeof(f.get(key))!=TYPE_BOOL:return false
+	if typeof(f.get("weapon"))!=TYPE_INT or int(f.weapon) not in [0,1]:return false
 	return f.seq>0
 
 func send_frames(frames: Array) -> void:

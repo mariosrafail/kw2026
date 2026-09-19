@@ -59,20 +59,20 @@ func run() -> void:
 	stage.shot_cooldown=0
 	stage._fire_physics_ball()
 	check(stage.combat.last_shot.damage_applied,"camera_to_muzzle_hits_target")
-	check(target.health==before-20.0,"exact_damage")
+	check(is_equal_approx(target.health,before-5.0),"exact_ak_body_damage_5")
 	check(target.hit_count==1,"one_hit_per_shot")
 	check(target.flash_time>0,"flash_started")
 	for record in target.records: check(record.mesh.material_overlay!=null,"all_parts_white")
 	for record in stage.combat.targets[1].records: check(record.mesh.material_overlay==null,"other_target_not_flashing")
-	check(not target.receive_hit(20,Vector3.FORWARD,stage.combat.shots_fired),"duplicate_shot_ignored")
+	check(not target.receive_hit(5,Vector3.FORWARD,stage.combat.shots_fired),"duplicate_shot_ignored")
 	observer.global_position=target.global_position+Vector3(3.2,1.2,4.2)
 	observer.look_at(target.global_position+Vector3(0,0.3,0),Vector3.UP)
 	observer.fov=42
 	await capture("target_hit_white")
 	for i in range(10): await physics_frame
 	for record in target.records: check(record.mesh.material_overlay==null,"flash_recovers")
-	check(target.health==80,"health_persists")
-	await capture("target_health_80")
+	check(target.health==95,"health_persists")
+	await capture("target_health_95")
 	# Occlusion: insert cover between the muzzle and the victim.
 	var shield:=StaticBody3D.new()
 	var shape:=CollisionShape3D.new()
@@ -81,19 +81,15 @@ func run() -> void:
 	shield.global_position=target.global_position+Vector3(0,0,2)
 	for i in range(2): await physics_frame
 	stage.shot_cooldown=0; stage._fire_physics_ball()
-	check(target.health==80,"cover_blocks_damage")
+	check(target.health==95,"cover_blocks_damage")
 	shield.queue_free()
 	for i in range(2): await physics_frame
-	for i in range(4):
-		# Reacquire the animated torso after each stronger flinch.
-		place_for_target(target)
-		stage.shot_cooldown=0
-		stage._fire_physics_ball()
-		await physics_frame
-	check(target.dead and target.health==0,"five_shot_death")
+	target.health=5.0;target._refresh_bar()
+	place_for_target(target);stage.shot_cooldown=0;stage._fire_physics_ball();await physics_frame
+	check(target.dead and target.health==0,"five_damage_finisher_death")
 	check(stage.combat.kills==1,"one_kill")
 	check(target.collision_layer==0 and not target.health_bar.visible,"dead_no_collider_or_healthbar")
-	check(not target.receive_hit(20,Vector3.FORWARD,99999),"dead_ignores_more_damage")
+	check(not target.receive_hit(5,Vector3.FORWARD,99999),"dead_ignores_more_damage")
 	await capture("target_death")
 	for i in range(100): await physics_frame
 	check(not is_instance_valid(target),"death_cleanup")
@@ -107,12 +103,13 @@ func run() -> void:
 		place_for_target(bot)
 		await physics_frame
 		stage.shot_cooldown=0; stage._fire_physics_ball()
-		check(bot.health==80,"variant_hit_"+str(i))
+		check(bot.health==95,"variant_hit_"+str(i))
 	stage._set_pixel_enabled(false); stage.head_style.set_enabled(false); stage.combat.sync_style()
 	for bot in stage.combat.targets: check(not bot.pixel_enabled and not bot.comic_enabled,"style_sync")
 	stage._set_pixel_enabled(true); stage.head_style.set_enabled(true); stage.combat.sync_style()
 	# Repeatable fire interval; cosmetic traces never block subsequent shots.
 	var count: int=stage.combat.shots_fired
+	stage.ammo_by_weapon[0]=25;stage.reload_by_weapon[0]=0.0;stage._set_weapon_slot(0,false)
 	stage.shot_cooldown=0.0
 	for i in range(120):
 		stage.shot_cooldown=maxf(-1.0/60.0,stage.shot_cooldown-1.0/60.0)

@@ -3,7 +3,8 @@ extends Node3D
 signal event_created(data: Dictionary)
 const LEVEL:=preload("res://scripts/kw3d/online_level.gd")
 const AK_RECOIL:=preload("res://scripts/kw3d/ak_recoil.gd")
-const AK_MAG:=preload("res://scripts/kw3d/ak_magazine.gd")
+const WEAPON_RULES:=preload("res://scripts/kw3d/weapon_rules.gd")
+const HIT_REGIONS:=preload("res://scripts/kw3d/hit_regions.gd")
 const ACTOR:=preload("res://scripts/kw3d/authority_actor.gd")
 const MOTOR:=preload("res://scripts/kw3d/actor_motor.gd")
 const DT:=1.0/60.0
@@ -184,34 +185,61 @@ func ray(from: Vector3,to: Vector3,mask: int=5,exclude: Array[RID]=[]) -> Dictio
 
 func _request_reload(a: Node3D) -> bool:
 	if not a.start_reload():return false
-	emit("reload",{"actor":a.actor_id,"duration":AK_MAG.RELOAD_DURATION,"ammo":a.ammo,"p":a.weapon_anchor()})
+	var profile: Dictionary=WEAPON_RULES.by_slot(a.weapon_slot)
+	emit("reload",{"actor":a.actor_id,"weapon":a.weapon_slot,"duration":float(profile.reload),"ammo":a.ammo,"p":a.weapon_anchor()})
 	return true
 
 func _shoot(a: Node3D) -> void:
-	a.fire_clock=AK_MAG.FIRE_INTERVAL
+	var profile: Dictionary=WEAPON_RULES.by_slot(a.weapon_slot)
+	a.fire_clock=float(profile.fire_interval)
 	a.ammo=maxi(0,a.ammo-1)
-	a.velocity += Basis(Vector3.UP,a.aim_yaw).z * AK_RECOIL.BODY_RECOIL_IMPULSE
+	a.velocity += Basis(Vector3.UP,a.aim_yaw).z * float(profile.body_recoil)
 	var rewound: Array=_rewind_targets(int(a.command.get("ct",tick_id)))
 	a.build_aim(get_world_3d().direct_space_state,0.0)
-	var hit =ray(a.weapon_anchor(),a.muzzle)
+	if a.weapon_slot==0:_shoot_ak(a,profile)
+	else:_shoot_shotgun(a,profile)
+	_restore_targets(rewound)
+	if a.ammo<=0:_request_reload(a)
+
+func _shoot_ak(a: Node3D,profile: Dictionary) -> void:
+	var hit=ray(a.weapon_anchor(),a.muzzle)
 	var blocked: bool=not hit.is_empty()
 	if hit.is_empty():hit=ray(a.muzzle,a.aim_target+(a.aim_target-a.muzzle).normalized()*0.035)
 	var endpoint: Vector3=hit.get("position",a.aim_target)
-	_restore_targets(rewound)
-	emit("shot",{"actor":a.actor_id,"input":a.ack,"from":a.muzzle,"to":endpoint,"blocked":blocked,"ammo":a.ammo,
-		"hit":not hit.is_empty(),"normal":hit.get("normal",Vector3.UP)})
+	var headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
+	emit("shot",{"actor":a.actor_id,"input":a.ack,"weapon":0,"from":a.muzzle,"to":endpoint,"blocked":blocked,"ammo":a.ammo,
+		"hit":not hit.is_empty(),"headshot":headshot,"normal":hit.get("normal",Vector3.UP)})
 	if not hit.is_empty() and (hit.collider as Node).has_meta("actor_id"):
-		damage(int(hit.collider.get_meta("actor_id")),20.0,(endpoint-a.muzzle).normalized(),a.actor_id,endpoint)
-	if a.ammo<=0:_request_reload(a)
+		damage(int(hit.collider.get_meta("actor_id")),WEAPON_RULES.damage(profile,headshot),(endpoint-a.muzzle).normalized(),a.actor_id,endpoint,headshot,"ak")
 
-func damage(victim: int,amount: float,direction: Vector3,owner: int,point: Vector3) -> bool:
+func _shoot_shotgun(a: Node3D,profile: Dictionary) -> void:
+	var guard:=ray(a.weapon_anchor(),a.muzzle)
+	var centre: Vector3=(a.aim_target-a.muzzle).normalized()
+	var right:=centre.cross(Vector3.UP).normalized()
+	if right.length_squared()<0.01:right=Vector3.RIGHT
+	var up:=right.cross(centre).normalized()
+	var shot_rng:=RandomNumberGenerator.new();shot_rng.seed=int(tick_id*7919+a.actor_id*104729+a.ack)
+	var pellets: Array=[]
+	for pellet in range(int(profile.pellets)):
+		var angle:=shot_rng.randf_range(0.0,TAU)
+		var radius:=sqrt(shot_rng.randf())*tan(deg_to_rad(float(profile.spread_deg)))
+		var direction: Vector3=(centre+right*cos(angle)*radius+up*sin(angle)*radius).normalized()
+		var hit: Dictionary=guard if not guard.is_empty() else ray(a.muzzle,a.muzzle+direction*float(profile.range))
+		var endpoint: Vector3=hit.get("position",a.muzzle+direction*float(profile.range))
+		var headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
+		pellets.append({"to":endpoint,"normal":hit.get("normal",Vector3.UP),"hit":not hit.is_empty(),"headshot":headshot})
+		if not hit.is_empty() and (hit.collider as Node).has_meta("actor_id"):
+			damage(int(hit.collider.get_meta("actor_id")),WEAPON_RULES.damage(profile,headshot),direction,a.actor_id,endpoint,headshot,"shotgun")
+	emit("shotgun",{"actor":a.actor_id,"input":a.ack,"weapon":1,"from":a.muzzle,"pellets":pellets,"blocked":not guard.is_empty(),"ammo":a.ammo})
+
+func damage(victim: int,amount: float,direction: Vector3,owner: int,point: Vector3,headshot: bool=false,weapon: String="") -> bool:
 	if not actors.has(victim) or amount<=0:return false
 	var target: Node3D=actors[victim]
 	if target.health<=0:return false
 	if not target.is_bot and (owner>0 or target.damage_grace>0):return false # friendly fire is disabled in this proof
 	target.hurt(amount,direction);damage_count+=1
 	if not target.is_bot:target.damage_grace=0.38
-	emit("damage",{"actor":victim,"owner":owner,"amount":amount,"hp":target.health,"p":point,"dir":direction,"lethal":target.health<=0})
+	emit("damage",{"actor":victim,"owner":owner,"amount":amount,"hp":target.health,"p":point,"dir":direction,"headshot":headshot,"weapon":weapon,"lethal":target.health<=0})
 	if target.health<=0:
 		kill_count+=1
 		if owner>0 and actors.has(owner) and actors[owner].health>0:

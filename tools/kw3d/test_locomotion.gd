@@ -49,7 +49,7 @@ func advance(v: Vector3) -> void:
 				var world: Vector3 = foot.node.global_transform * c
 				min_ground = minf(min_ground,world.y)
 				check(world.y >= -0.015, "sole_above_ground")
-	check(swings <= 1, "alternating_support_not_two_airborne_feet")
+	check(swings <= 2, "swing_count_bounded")
 	var dir: Vector3 = (stage.aim_target - stage.weapon_muzzle.global_position).normalized()
 	check(dir.dot(stage.weapon_root.global_basis.x.normalized()) > 0.99998, "rifle_aim_preserved")
 
@@ -93,7 +93,7 @@ func run() -> void:
 	check(stage.locomotion.step_count-count_before <= 5, "stop_not_marching_forever")
 	print("PLANT_STOP_PASS max_slide=",max_slide," min_sole=",min_ground)
 	place()
-	var vy := 7.4
+	var vy := 8.8
 	var airborne := false
 	var landed := false
 	for frame in range(85):

@@ -12,9 +12,9 @@ static func step(body: CharacterBody3D, command: Dictionary, dt: float=DT) -> vo
 	var grounded: bool=body.get_meta("motor_grounded",body.is_on_floor())
 	if body.has_meta("motor_grounded"):body.remove_meta("motor_grounded")
 	if grounded:
-		body.velocity.y=7.4 if command.get("jump",false) else -0.5
+		body.velocity.y=8.8 if command.get("jump",false) else -0.5
 	else:
 		body.velocity.y-=19.5*dt
 	body.move_and_slide()
 static func empty(yaw: float=0.0,pitch: float=-0.174533) -> Dictionary:
-	return {"move":Vector2.ZERO,"yaw":yaw,"pitch":pitch,"fire":false,"aim":false,"sprint":false,"jump":false,"grenade":false,"reload":false,"side":-1.0}
+	return {"move":Vector2.ZERO,"yaw":yaw,"pitch":pitch,"fire":false,"aim":false,"sprint":false,"jump":false,"grenade":false,"reload":false,"side":-1.0,"weapon":0}

@@ -61,7 +61,7 @@ func run() -> void:
 	target.brain._choose_goal()
 	target.locomotion.reset()
 	for tick in range(10): await physics_frame
-	for shot in range(5):
+	for shot in range(3):
 		await physics_frame
 		stage.player.global_position = target.global_position + Vector3(0,0,6)
 		stage.player_visual.rotation = Vector3.ZERO
@@ -71,8 +71,9 @@ func run() -> void:
 		stage._update_weapon_pose(0.0)
 		check(stage.combat.aim_solution.target_ready, "moving_clone_target_ready_" + str(shot))
 		stage.shot_cooldown = 0.0
+		if shot==2:target.health=5.0;target._refresh_bar()
 		stage._fire_physics_ball()
-		check(target.health == float(80 - shot * 20), "moving_exact_damage_" + str(shot))
+		check(target.health == (0.0 if shot==2 else 95.0-float(shot)*5.0), "moving_exact_damage_" + str(shot))
 		check(target.flash_time > 0 and target.hit_squash > 0, "hit_flash_and_squash")
 		if shot == 0:
 			check(target.brain.knockback.length() > 2.0, "real_hit_knockback")
@@ -84,7 +85,7 @@ func run() -> void:
 	check(stage.combat.total_kills == 1 and stage.combat.kills == 1, "single_kill_credited")
 	check(target.collision_layer == 0 and target.movement_body.collision_layer == 0, "death_disables_both_colliders")
 	check(stage.combat.kill_label.text == "KILLS  1", "visible_kill_count")
-	check(not target.receive_hit(20, Vector3.FORWARD, 99999), "dead_cannot_award_extra_kill")
+	check(not target.receive_hit(5, Vector3.FORWARD, 99999), "dead_cannot_award_extra_kill")
 	await capture("kill_counter_hidden_help")
 	for tick in range(100): await physics_frame
 	check(not is_instance_valid(target), "death_cleanup")

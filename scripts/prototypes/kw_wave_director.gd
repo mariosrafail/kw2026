@@ -125,7 +125,8 @@ func restart_run() -> void:
 	stage.fire_held=false
 	stage.aiming=false
 	stage.shot_cooldown=0.0
-	stage.ammo_in_mag=stage.AK_MAGAZINE.MAGAZINE_SIZE;stage.reload_remaining=0.0;stage._refresh_ammo_hud()
+	stage.ammo_by_weapon[0]=int(stage.WEAPON_RULES.AK.magazine);stage.ammo_by_weapon[1]=int(stage.WEAPON_RULES.SHOTGUN.magazine)
+	stage.reload_by_weapon[0]=0.0;stage.reload_by_weapon[1]=0.0;stage._set_weapon_slot(0,false);stage._refresh_ammo_hud()
 	stage.locomotion.reset()
 	hud.reset_run()
 	if stage.grenade_skill != null: stage.grenade_skill.clear_active(true)

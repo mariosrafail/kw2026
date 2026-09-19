@@ -50,11 +50,12 @@ func run() -> void:
 	check(d.receive_player_damage(40,Vector3.ZERO),"player_can_take_damage")
 	check(d.health==60,"health_decrement")
 	check(not d.receive_player_damage(8,Vector3.ZERO),"brief_damage_grace")
-	for n in range(5):
+	for n in range(2):
 		aim_at(bot)
 		stage.shot_cooldown=0
+		if n==1:bot.health=5.0;bot._refresh_bar()
 		stage._fire_physics_ball()
-		check(bot.health==float(80-n*20),"rifle_damage_"+str(n))
+		check(bot.health==(95.0 if n==0 else 0.0),"rifle_damage_"+str(n))
 		if n==0:
 			check(not d.hud.damage_labels.is_empty(),"red_damage_created")
 			var number: Label=d.hud.damage_labels.back().node

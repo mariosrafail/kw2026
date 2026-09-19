@@ -54,8 +54,8 @@ func run() -> void:
 			check(before.target_ready and not before.occluded,"valid_target_feedback_"+str([side,distance]))
 			stage.shot_cooldown = 0.0
 			stage._fire_physics_ball()
-			if bot.health != 80.0: print("AIM_DIAGNOSTIC ",[side,distance]," health=",bot.health," before=",before," actual=",stage.combat.last_shot," wanted=",bot.name)
-			check(bot.health == 80.0,"crosshair_hit_"+str([side,distance]))
+			if bot.health != 95.0: print("AIM_DIAGNOSTIC ",[side,distance]," health=",bot.health," before=",before," actual=",stage.combat.last_shot," wanted=",bot.name)
+			check(bot.health == 95.0,"crosshair_hit_"+str([side,distance]))
 			check(before.end.distance_to(stage.combat.last_shot.end)<0.001,"preview_shot_match")
 			if side < 0.0 and distance == 9.0:
 				await capture("aim_hit_confirmation")

@@ -50,6 +50,7 @@ func run() -> void:
 	var max_lift := 0.0
 	var max_duration := 0.0
 	var max_swings := 0
+	var double_air_frames := 0
 	for frame in range(100):
 		stage.player.velocity=Vector3(0,-0.1,-7.5)
 		stage.player.move_and_slide()
@@ -61,9 +62,10 @@ func run() -> void:
 				max_lift=maxf(max_lift,foot.lift)
 				max_duration=maxf(max_duration,foot.duration)
 		max_swings=maxi(max_swings,swings)
-	check(max_lift>0.40,"run_foot_lifts_high")
-	check(max_duration>0.18,"run_foot_airtime_longer")
-	check(max_swings<=1,"alternating_support_preserved")
+		if swings==2:double_air_frames+=1
+	check(max_lift>0.65,"run_foot_lifts_high")
+	check(max_duration>0.27,"run_foot_airtime_longer")
+	check(max_swings==2 and double_air_frames>=4,"hop_step_has_double_air_overlap")
 	print("COMBAT_MOTION_FEEDBACK_","PASS" if failures.is_empty() else "FAIL",failures,
-		" max_lift=",max_lift," max_duration=",max_duration)
+		" max_lift=",max_lift," max_duration=",max_duration," double_air_frames=",double_air_frames)
 	quit(0 if failures.is_empty() else 1)

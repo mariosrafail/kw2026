@@ -87,6 +87,7 @@ func _record_mesh(mesh: MeshInstance3D, color: Color, hurtbox: bool = true) -> v
 	var box := BoxShape3D.new()
 	box.size = mesh.mesh.get_aabb().size
 	shape.shape = box
+	shape.set_meta("hit_region","head" if mesh.get_parent()!=null and str(mesh.get_parent().name)=="HeadRig" else "body")
 	add_child(shape)
 	hit_shapes.append({"shape": shape, "mesh": mesh})
 

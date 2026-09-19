@@ -1,6 +1,6 @@
 # Shooting Polish Status
 
-Checkpoint baseline: alpha-0.1.40. AK recoil v1 below is local development work and has not been published as a new build yet.
+Checkpoint baseline: alpha-0.1.40. The shooting/weapon work below is local development work and has not been published as a new build yet.
 
 - Ballistic aim/damage remains deterministic. No random spread or random damage was added.
 - AK now has real learnable aim recoil in addition to cosmetic weapon kick. The first shots are mild, sustained fire climbs more, and a fixed left/right pattern replaces RNG for gameplay aim.
@@ -24,10 +24,14 @@ Checkpoint baseline: alpha-0.1.40. AK recoil v1 below is local development work 
 - Borderlands edge QA verifies the fullscreen depth pass on the Compatibility renderer and a visible frame difference with the effect enabled.
 - Tightened the 3D AK hold slightly toward the body and lower (`side 1.10 -> 0.90`, `height 0.80 -> 0.72`, `distance 0.98 -> 0.92`). Side-swap clearance, ADS stability, near/far aim and cover-camera tests remain passing.
 - Rifle fire now gives the shooter a small real backward body impulse (`1.25` velocity units) plus a visual torso spring kick. The same impulse runs in local prediction and the authoritative server; two-client integration remains consistent.
-- Confirmed bullet damage now throws 3D voxel blood/chunk particles using the victim warrior primary palette (e.g. Tasko purple, Gan cyan, CrashOut red). Kill bursts are larger; gameplay damage remains unchanged.
+- Confirmed bullet damage throws cosmetic 3D voxel blood/chunk particles using the victim warrior primary palette (e.g. Tasko purple, Gan cyan, CrashOut red). Kill bursts are larger; the particles themselves never alter damage.
 - The local player now has a billboarded world-space health bar above the head, driven by the same authoritative/local health state as the existing HUD.
-- Locomotion was pushed further toward the supplied floating/disconnected Rayman-like reference: a wider stride, fast lift into a broad high hang, and late landing. Current QA reaches roughly `0.65 m` peak swing lift and `0.255 s` swing airtime at the tested run speed while preserving one support foot, slope contact and sharp-reversal safety.
+- Locomotion now follows the supplied floating/disconnected Rayman-like reference more aggressively: feet rise quickly, hang high for most of each stride, and the next foot can lift before the previous one lands. QA measures roughly `0.72 m` peak lift, `0.295 s` swing duration and 49/100 sampled running frames with both feet visually airborne, while the gameplay collision body remains grounded and terrain/slope/sharp-reversal tests pass.
+- Gameplay jump impulse increased from `7.4` to `8.8` in both offline movement and authoritative/local-predicted online movement.
 - The 3D AK now has a `25`-round magazine and `1.0 s` reload, matching the existing KW AK weapon identity. `R` reloads on keyboard; Xbox `X` / PlayStation `Square` reloads on controller; empty magazines auto-reload.
-- Reload blocks firing, plays the existing `ak_reload.wav`, lowers/rolls the held rifle, drops a short-lived cosmetic magazine prop and updates a bottom-right ammo/reload HUD. Offline, Waves and native online clients share the same presentation.
-- Online ammo and reload timing are server-authoritative and included in snapshots; clients only predict local presentation and reconcile back to authority. Input protocol was bumped to `2` / build `kw3d-proof-20260920-mag-v2` so older public-alpha clients/servers cannot silently mix with the new weapon-state semantics.
-- Dedicated magazine QA verifies exactly 25 authoritative shots before empty, blocks a 26th shot, auto/manual reload refill, and the protocol-2 two-client integration completed with reload events and no state failures.
+- Reload blocks firing, plays weapon reload audio, lowers/rolls the held weapon and drops a short-lived cosmetic reload prop. Ammo/reload UI is now world-space above the local player health bar instead of the bottom-right HUD.
+- Online ammo, reload timing, active weapon and damage are server-authoritative and included in snapshots; clients only predict local presentation and reconcile back to authority. Input protocol is now `3` / build `kw3d-proof-20260920-weapons-v3`, preventing older builds from silently mixing with the two-weapon/headshot semantics.
+- Permanent ballistic rule: headshots use the exact hit CollisionShape3D region and multiply weapon damage by `1.5`. AK body damage is `5.0`; AK headshot damage is `7.5`. The shared multiplier is used by the weapon rules layer so shotgun pellets follow the same rule.
+- Added a 3D shotgun as weapon slot 2: `10` pellets × `5` body damage, `11°` spread, `2` shells, `1.2 s` reload, stronger body/aim recoil and its own boxy floating 3D model. Mouse wheel switches AK ↔ Shotgun for now; each weapon preserves its own magazine/reload state.
+- Remote online players also render the authoritative AK/Shotgun selection. The protocol-v3 two-client integration recorded `4` authoritative shotgun events and `4` reload events with `failures: []` and no large prediction corrections.
+- Dedicated headshot QA verifies a real HeadRig ray resolves as headshot and applies `7.5`, a real TorsoRig ray applies `5.0`, and the authority server resolves the same real head CollisionShape3D region. Shotgun QA verifies 10 real pellet rays and the two-shell slot.

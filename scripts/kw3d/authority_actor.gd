@@ -3,7 +3,7 @@ const LEVEL:=preload("res://scripts/kw3d/online_level.gd")
 const MOTOR:=preload("res://scripts/kw3d/actor_motor.gd")
 const WALK:=preload("res://scripts/kw3d/authority_locomotion.gd")
 const BRAIN:=preload("res://scripts/prototypes/kw_roaming_brain.gd")
-const AK_MAG:=preload("res://scripts/kw3d/ak_magazine.gd")
+const WEAPON_RULES:=preload("res://scripts/kw3d/weapon_rules.gd")
 const RIGS: Array[String]=["HeadRig","TorsoRig","LeftLegRig","RightLegRig"]
 var actor_id =0
 var is_bot =false
@@ -15,8 +15,15 @@ var connected =true
 var ack =0
 var last_input_tick =0
 var fire_clock =0.0
-var ammo =AK_MAG.MAGAZINE_SIZE
-var reload_clock =0.0
+var weapon_slot =0
+var ammo_by_weapon: Array[int]=[25,2]
+var reload_by_weapon: Array[float]=[0.0,0.0]
+var ammo: int:
+	get:return ammo_by_weapon[weapon_slot]
+	set(value):ammo_by_weapon[weapon_slot]=value
+var reload_clock: float:
+	get:return reload_by_weapon[weapon_slot]
+	set(value):reload_by_weapon[weapon_slot]=value
 var grenade_clock =0.0
 var death_clock =0.0
 var body_yaw =0.0
@@ -70,8 +77,8 @@ func configure(id: int,bot: bool,profile: Dictionary,appearance: String) -> void
 		rig.set_meta("sole_geometry",r.sole);rigs[title]=rig
 		for part in r.parts:
 			var hs =CollisionShape3D.new();var b =BoxShape3D.new();b.size=LEVEL.vec(part.s)
-			hs.shape=b;hit_body.add_child(hs)
-			hit_records.append({"shape":hs,"rig":rig,"part":Transform3D(Basis.from_euler(LEVEL.vec(part.r)),LEVEL.vec(part.p)),"size":b.size})
+			hs.shape=b;hs.set_meta("hit_region","head" if title=="HeadRig" else "body");hit_body.add_child(hs)
+			hit_records.append({"shape":hs,"rig":rig,"part":Transform3D(Basis.from_euler(LEVEL.vec(part.r)),LEVEL.vec(part.p)),"size":b.size,"region":"head" if title=="HeadRig" else "body"})
 	base_head=rigs.HeadRig.position;base_torso=rigs.TorsoRig.position
 	probe.radius=0.18
 	command=MOTOR.empty()
@@ -84,10 +91,12 @@ func configure(id: int,bot: bool,profile: Dictionary,appearance: String) -> void
 func tick(dt: float) -> void:
 	damage_grace=maxf(0,damage_grace-dt)
 	fire_clock=maxf(0,fire_clock-dt);grenade_clock=maxf(0,grenade_clock-dt)
-	if reload_clock>0.0:
-		var before_reload: float = reload_clock
-		reload_clock=maxf(0.0,reload_clock-dt)
-		if before_reload>0.0 and reload_clock<=0.0:ammo=AK_MAG.MAGAZINE_SIZE
+	for slot in range(2):
+		if reload_by_weapon[slot]<=0.0:continue
+		var before_reload: float=reload_by_weapon[slot]
+		reload_by_weapon[slot]=maxf(0.0,reload_by_weapon[slot]-dt)
+		if before_reload>0.0 and reload_by_weapon[slot]<=0.0:
+			ammo_by_weapon[slot]=int(WEAPON_RULES.by_slot(slot).magazine)
 	if health<=0:
 		death_clock+=dt;velocity=Vector3.ZERO;return
 	var impact =velocity.y
@@ -95,6 +104,7 @@ func tick(dt: float) -> void:
 		brain.update(dt);impact=brain.impact_velocity
 		body_yaw=visual.rotation.y;aim_yaw=body_yaw
 	else:
+		weapon_slot=clampi(int(command.get("weapon",weapon_slot)),0,1)
 		aim_yaw=command.get("yaw",aim_yaw);aim_pitch=command.get("pitch",aim_pitch)
 		MOTOR.step(self,command,dt)
 		var movement: Vector2=command.get("move",Vector2.ZERO)
@@ -124,13 +134,15 @@ func tick(dt: float) -> void:
 	update_shapes()
 
 func start_reload() -> bool:
-	if is_bot or health<=0 or reload_clock>0.0 or ammo>=AK_MAG.MAGAZINE_SIZE:return false
-	reload_clock=AK_MAG.RELOAD_DURATION
+	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
+	if is_bot or health<=0 or reload_clock>0.0 or ammo>=int(profile.magazine):return false
+	reload_clock=float(profile.reload)
 	return true
 
 func reset_magazine() -> void:
-	ammo=AK_MAG.MAGAZINE_SIZE
-	reload_clock=0.0
+	ammo_by_weapon=[int(WEAPON_RULES.AK.magazine),int(WEAPON_RULES.SHOTGUN.magazine)]
+	reload_by_weapon=[0.0,0.0]
+	weapon_slot=0
 
 func update_shapes() -> void:
 	for record in hit_records:
@@ -163,7 +175,8 @@ func build_aim(space: PhysicsDirectSpaceState3D,dt: float) -> void:
 	var clearance: float=(1.0-absf(smoothed_weapon_side))*1.80
 	var pivot =chest+front*(0.64+clearance)+right*smoothed_weapon_side
 	var distance =pivot.distance_to(aim_target)
-	var m =Vector3(0.10,0.02,-1.58+maxf(0,1.72-distance))
+	var muzzle_length:=1.58 if weapon_slot==0 else 1.78
+	var m =Vector3(0.10,0.02,-muzzle_length+maxf(0,1.92-distance))
 	var local_target =Vector3(m.x,m.y,-sqrt(maxf(0.00001,distance*distance-m.x*m.x-m.y*m.y))).normalized()
 	var gun_basis =Basis.looking_at(aim_target-pivot,Vector3.UP)*Basis(Quaternion(local_target,Vector3.FORWARD))
 	muzzle=pivot+gun_basis*m
@@ -186,5 +199,6 @@ func packet() -> Dictionary:
 		var rig: Node3D=rigs[title]
 		for v in [rig.position,rig.rotation,rig.scale]: pose.append_array([v.x,v.y,v.z])
 	return {"id":actor_id,"bot":is_bot,"skin":skin,"p":global_position,"v":velocity,"yaw":body_yaw,
-		"ay":aim_yaw,"ap":aim_pitch,"hp":health,"kills":kills,"gcd":grenade_clock,"fcd":fire_clock,"ammo":ammo,"reload":reload_clock,
+		"ay":aim_yaw,"ap":aim_pitch,"hp":health,"kills":kills,"gcd":grenade_clock,"fcd":fire_clock,"weapon":weapon_slot,
+		"ammo":ammo,"reload":reload_clock,"ak_ammo":ammo_by_weapon[0],"sg_ammo":ammo_by_weapon[1],"ak_reload":reload_by_weapon[0],"sg_reload":reload_by_weapon[1],
 		"ack":ack,"js":last_jump_serial,"gs":last_grenade_serial,"connected":connected,"respawn_left":maxf(0,3.0-death_clock) if health<=0 else 0.0,"pose":pose,"steps":step_count,"ground":is_on_floor(),"phase":phase}

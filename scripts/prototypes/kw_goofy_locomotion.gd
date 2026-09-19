@@ -154,17 +154,17 @@ func update(delta: float, impact_velocity: float = 0.0) -> void:
 		var stride_distance := lerpf(0.95,3.80,sqrt(ratio))
 		step_interval = clampf(stride_distance / maxf(0.25, speed) * 0.5, 0.14, 0.40)
 		if moving:
-			cycle = fposmod(cycle + dt / (step_interval * 2.0), 1.0)
+			cycle = fposmod(cycle + dt / (step_interval * 1.56), 1.0)
 			step_clock += dt
 			if not was_moving: step_clock = step_interval
 		else:
 			step_clock = 0.0
 		if moving: _guard_reach(horizontal)
 		for i in range(feet.size()): _tick_foot(i, dt, moving, horizontal)
-		if moving and step_clock >= step_interval and not _any_swing():
-			_begin_swing(next_foot, horizontal, false)
-			next_foot = 1 - next_foot
-			step_clock = 0.0
+		if moving and step_clock >= step_interval*0.78 and _can_start_running_swing(next_foot):
+			_begin_swing(next_foot,horizontal,false)
+			next_foot=1-next_foot
+			step_clock=0.0
 		elif not moving and not _any_swing():
 			# Finish a final small step rather than sliding both feet back to idle.
 			for i in [next_foot, 1 - next_foot]:
@@ -209,6 +209,14 @@ func _set_contact(f: FootState, hit: Dictionary) -> void:
 func _any_swing() -> bool:
 	return feet[0].swinging or feet[1].swinging
 
+func _swing_count() -> int:
+	return int(feet[0].swinging)+int(feet[1].swinging)
+
+func _can_start_running_swing(index: int) -> bool:
+	if feet[index].swinging:return false
+	var other:=feet[1-index]
+	return not other.swinging or other.progress>=0.52
+
 func _guard_reach(horizontal: Vector3) -> void:
 	# A sharp reversal can outpace the previously planned contact. Take a quick
 	# recovery step instead of stretching a planted shoe far behind the character.
@@ -233,10 +241,10 @@ func _begin_swing(index: int, horizontal: Vector3, settle: bool) -> void:
 	f.settle = settle
 	f.elapsed = 0.0
 	f.progress = 0.0
-	f.duration = 0.19 if settle else step_interval * 1.16
+	f.duration = 0.19 if settle else step_interval * 1.34
 	f.start = f.contact
 	f.from_heading = f.heading
-	f.lift = (0.11 if settle else lerpf(0.34,0.72,clampf(speed/11.0,0,1))) * rng.randf_range(0.96,1.08)
+	f.lift = (0.11 if settle else lerpf(0.40,0.82,clampf(speed/11.0,0,1))) * rng.randf_range(0.97,1.06)
 	f.flourish = rng.randf_range(-0.22, 0.22) * playfulness
 	f.toe_out = (1.0 if index == 0 else -1.0) * 0.055 + rng.randf_range(-0.04, 0.04) * playfulness
 	f.goal = _ground(_neutral(index) + horizontal * (f.duration + step_interval * 0.68))["position"]
@@ -318,7 +326,7 @@ func _air_foot(index: int, dt: float) -> void:
 	f.phase = "AIR"
 	var side := -1.0 if index == 0 else 1.0
 	var flight := Basis(Vector3.UP, travel_yaw)
-	var target := _neutral(index) + flight * Vector3(side * 0.11,0.30 + (0.15 if index == 0 else 0.0),side * 0.28)
+	var target := _neutral(index) + flight * Vector3(side*0.14,0.46+(0.20 if index==0 else 0.0),side*0.34)
 	f.contact = target
 	f.heading = lerp_angle(f.heading, travel_yaw, 1.0 - exp(-10.0 * dt))
 	f.normal = Vector3.UP
@@ -343,7 +351,8 @@ func _update_body(dt: float, local_velocity: Vector3, accel: Vector3, grounded: 
 	var bob := -cos(phase*2.0-0.45)*0.105*move_blend
 	var weight_shift := sin(phase)*0.105*move_blend
 	var idle := sin(time*2.15)*0.034*(1.0-move_blend)
-	var target_pos := Vector3(weight_shift,bob+idle-landing_kick,0)
+	var step_hop:=pow(absf(sin(phase)),0.58)*0.15*move_blend
+	var target_pos := Vector3(weight_shift,bob+idle+step_hop-landing_kick,0)
 	target_pos += Vector3(-accel.x,0,-accel.z)*0.0018
 	target_pos += Vector3(_noise(0)*0.031,_noise(2)*0.023,_noise(4)*0.026)*amount
 	var target_rot := Vector3(
@@ -355,7 +364,7 @@ func _update_body(dt: float, local_velocity: Vector3, accel: Vector3, grounded: 
 	if not grounded:
 		target_rot.x += clampf(-velocity.y*0.032,-0.25,0.25)
 		target_rot.y += sin(time*4.5)*0.10*amount
-	var head_target := Vector3(-accel.x*0.002,bob*1.15+idle*1.6-landing_kick*0.90,-accel.z*0.002)
+	var head_target := Vector3(-accel.x*0.002,bob*1.15+idle*1.6+step_hop*1.18-landing_kick*0.90,-accel.z*0.002)
 	head_target += Vector3(_noise(8)*0.04,_noise(9)*0.03,_noise(10)*0.03)*amount
 	head_target = head_target.clamp(Vector3(-0.14,-0.20,-0.14),Vector3(0.14,0.23,0.14))
 	var steps := maxi(1,int(ceil(dt*120.0)))

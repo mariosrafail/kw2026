@@ -2,9 +2,11 @@ extends Node3D
 ## Local-only practice range. All gameplay damage is one muzzle ray per rifle shot.
 const DUMMY := preload("res://scripts/prototypes/kw_training_dummy.gd")
 const WAVE_DIRECTOR := preload("res://scripts/prototypes/kw_wave_director.gd")
+const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
+const HIT_REGIONS := preload("res://scripts/kw3d/hit_regions.gd")
 var director: RefCounted
 var wave_label: Label
-const DAMAGE := 20.0
+const DAMAGE := 5.0
 const RANGE := 120.0
 const SHOT_MASK := 5 # environment (1) + targets (4); cosmetic effects have no bodies.
 const VICTIM_MAIN_COLORS := {
@@ -148,21 +150,67 @@ func fire(muzzle: Vector3, target: Vector3, chest: Vector3) -> Dictionary:
 	if not hit.is_empty():
 		var object: Object = hit.get("collider")
 		var direction := (endpoint - start).normalized()
+		var headshot := HIT_REGIONS.is_headshot(hit)
+		var shot_damage := WEAPON_RULES.damage(WEAPON_RULES.AK,headshot)
 		if object != null and object.has_method("receive_hit"):
-			applied = object.receive_hit(DAMAGE, direction, shots_fired)
+			applied = object.receive_hit(shot_damage, direction, shots_fired)
 			target_name = str(object.name)
 		elif object is RigidBody3D:
 			object.apply_impulse(direction * 1.6, endpoint - object.global_position)
 		_spawn_impact(endpoint, solution["normal"])
 		if applied:
 			var victim_skin := str(object.get("warrior_id")) if object != null else "outrage"
-			_spawn_damage_feedback(endpoint,direction,DAMAGE,object.dead,blood_color_for_skin(victim_skin),true)
+			_spawn_damage_feedback(endpoint,direction,shot_damage,object.dead,blood_color_for_skin(victim_skin),true)
 	# Never draw a misleading line leaving the chest when the barrel is blocked.
 	if not solution["guard_blocked"]: _spawn_tracer(muzzle, endpoint)
 	if reticle != null: reticle.notify_shot()
+	var was_headshot := HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
 	last_shot = {"id": shots_fired, "damage_applied": applied, "target": target_name,
-		"start": start, "end": endpoint, "blocked": not hit.is_empty(),
-		"occluded": solution["occluded"], "guard_blocked": solution["guard_blocked"]}
+		"start": start, "end": endpoint, "blocked": not hit.is_empty(),"headshot":was_headshot,
+		"damage":WEAPON_RULES.damage(WEAPON_RULES.AK,was_headshot) if applied else 0.0,
+		"occluded": solution["occluded"], "guard_blocked": solution["guard_blocked"],"weapon":"ak"}
+	return last_shot
+
+func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
+	shots_fired += 1
+	var profile: Dictionary=WEAPON_RULES.SHOTGUN
+	var guard_hit:=_ray(chest,muzzle)
+	var centre_dir: Vector3=(target-muzzle).normalized()
+	var right:=centre_dir.cross(Vector3.UP).normalized()
+	if right.length_squared()<0.01:right=stage.camera.global_basis.x.normalized()
+	var up:=right.cross(centre_dir).normalized()
+	var pellet_results: Array=[]
+	var applied_damage:=0.0
+	var headshots:=0
+	var rng:=RandomNumberGenerator.new();rng.seed=int(shots_fired*7919+stage.get_instance_id()%100000)
+	for pellet in range(int(profile.pellets)):
+		var angle:=rng.randf_range(0.0,TAU)
+		var radius:=sqrt(rng.randf())*tan(deg_to_rad(float(profile.spread_deg)))
+		var direction: Vector3=(centre_dir+right*cos(angle)*radius+up*sin(angle)*radius).normalized()
+		var hit: Dictionary=guard_hit if not guard_hit.is_empty() else _ray(muzzle,muzzle+direction*float(profile.range))
+		var endpoint: Vector3=hit.get("position",muzzle+direction*float(profile.range))
+		var normal: Vector3=hit.get("normal",Vector3.UP)
+		var pellet_headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
+		var pellet_damage:=WEAPON_RULES.damage(profile,pellet_headshot)
+		var applied:=false
+		if not hit.is_empty():
+			var object: Object=hit.get("collider")
+			if object!=null and object.has_method("receive_hit"):
+				applied=object.receive_hit(pellet_damage,direction,shots_fired*100+pellet)
+				if applied:
+					applied_damage+=pellet_damage
+					if pellet_headshot:headshots+=1
+					var victim_skin:=str(object.get("warrior_id")) if object!=null else "outrage"
+					_spawn_damage_feedback(endpoint,direction,pellet_damage,object.dead,blood_color_for_skin(victim_skin),pellet==0)
+			elif object is RigidBody3D:
+				object.apply_impulse(direction*2.6,endpoint-object.global_position)
+			_spawn_impact(endpoint,normal)
+		_spawn_tracer(muzzle,endpoint)
+		pellet_results.append({"to":endpoint,"normal":normal,"hit":not hit.is_empty(),"headshot":pellet_headshot})
+	if reticle!=null:
+		reticle.notify_shot()
+		if applied_damage>0.0:reticle.notify_hit(false)
+	last_shot={"id":shots_fired,"weapon":"shotgun","pellets":pellet_results,"damage_applied":applied_damage>0.0,"damage":applied_damage,"headshots":headshots,"start":muzzle,"end":target,"guard_blocked":not guard_hit.is_empty()}
 	return last_shot
 
 func _spawn_tracer(start: Vector3, end: Vector3) -> void:

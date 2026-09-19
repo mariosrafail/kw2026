@@ -36,20 +36,18 @@ func run() -> void:
 	var probe_hit=world.ray(p1.muzzle,p1.aim_target,5,exclusions)
 	print("DUEL_RAY ",probe_hit)
 	world._shoot(p1)
-	check(p2.health==80.0,"real_hitscan_player_damage")
-	for i in range(4):
-		for tick in range(7): world.step()
-		p1.fire_clock=0
-		p1.build_aim(world.get_world_3d().direct_space_state,0.0)
-		world._shoot(p1)
+	check(p2.health==95.0,"real_hitscan_player_damage_5")
+	p2.health=5.0;p2.damage_grace=0.0
+	for tick in range(7):world.step()
+	p1.fire_clock=0;p1.build_aim(world.get_world_3d().direct_space_state,0.0);world._shoot(p1)
 	check(p2.health==0.0 and p1.kills==1,"player_kill_counts")
 	for i in range(125):
 		world.step()
 	check(p2.health==100.0,"auto_respawn")
 	p1.kills=9
-	p2.health=20.0
+	p2.health=5.0
 	p2.damage_grace=0
-	check(world.damage(2,20,Vector3.FORWARD,1,p2.global_position),"final_damage")
+	check(world.damage(2,5,Vector3.FORWARD,1,p2.global_position,false,"ak"),"final_damage")
 	check(world.phase=="RESULT" and world.winner_id==1 and p1.kills==10,"first_to_ten_result")
 	world.set_ready(1,true);world.set_ready(2,true)
 	check(world.start_match(1),"rematch_start")

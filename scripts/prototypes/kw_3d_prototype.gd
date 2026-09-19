@@ -40,10 +40,21 @@ var weapon_visual_wobble: Node3D
 var weapon_muzzle: Marker3D
 var ak_fire_audio: AudioStreamPlayer3D
 var ak_reload_audio: AudioStreamPlayer3D
-var ammo_label: Label
-var ammo_in_mag := 25
-var reload_remaining := 0.0
+var shotgun_fire_audio: AudioStreamPlayer3D
+var shotgun_reload_audio: AudioStreamPlayer3D
+var player_ammo_label: Label3D
+var weapon_slot := 0
+var ammo_by_weapon: Array[int]=[25,2]
+var reload_by_weapon: Array[float]=[0.0,0.0]
+var ammo_in_mag: int:
+	get:return ammo_by_weapon[weapon_slot]
+	set(value):ammo_by_weapon[weapon_slot]=value
+var reload_remaining: float:
+	get:return reload_by_weapon[weapon_slot]
+	set(value):reload_by_weapon[weapon_slot]=value
 var reload_mag_serial := 0
+var ak_visual_root: Node3D
+var shotgun_visual_root: Node3D
 var pixel_enabled := true
 var borderlands_enabled := false
 var pixel_materials: Array[WeakRef] = []
@@ -103,7 +114,7 @@ const MOVE_SPEED := 7.5
 const SPRINT_SPEED := 11.0
 const ACCEL := 28.0
 const TURN_SPEED := 10.0
-const JUMP_SPEED := 7.4
+const JUMP_SPEED := 8.8
 const GRAVITY := 19.5
 const VOXEL_UNIT := 0.082
 const RIG_CENTER_X := 2.0
@@ -112,9 +123,10 @@ const OUTRAGE_FULLBODY := preload("res://scenes/prototypes/characters/outrage_fu
 const AK47_VOXEL_BUILDER := preload("res://scripts/prototypes/ak47_voxel_builder.gd")
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
+const SHOTGUN_FIRE_SFX := preload("res://assets/sounds/sfx/guns/magnum/magnum_shoot.wav")
+const SHOTGUN_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/magnum/magnum_reload.wav")
 const AK_RECOIL_MODEL := preload("res://scripts/kw3d/ak_recoil.gd")
-const AK_MAGAZINE := preload("res://scripts/kw3d/ak_magazine.gd")
-const AK_FIRE_INTERVAL := AK_MAGAZINE.FIRE_INTERVAL
+const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
 
 func _ready() -> void:
 	# The baked preview exists only for the editor; runtime builds the same arena.
@@ -185,6 +197,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera_pitch.rotation.x = pitch
 
 	if event is InputEventMouseButton:
+		if Input.mouse_mode==Input.MOUSE_MODE_CAPTURED and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
+			_cycle_weapon(1 if event.button_index==MOUSE_BUTTON_WHEEL_DOWN else -1)
+			get_viewport().set_input_as_handled();return
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -403,10 +418,21 @@ func _build_player_healthbar() -> void:
 	player_health_bar.name = "PlayerHealthBar"
 	player_health_bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	player_health_bar.pixel_size = 0.013
-	player_health_bar.position = Vector3(0,2.58,0)
+	player_health_bar.position = Vector3(0,2.52,0)
 	player_health_bar.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	player.add_child(player_health_bar)
+	player_ammo_label=Label3D.new()
+	player_ammo_label.name="PlayerAmmoUI"
+	player_ammo_label.position=Vector3(0,2.82,0)
+	player_ammo_label.billboard=BaseMaterial3D.BILLBOARD_ENABLED
+	player_ammo_label.font_size=34
+	player_ammo_label.pixel_size=0.0065
+	player_ammo_label.outline_size=7
+	player_ammo_label.modulate=Color("fff2c7")
+	player_ammo_label.outline_modulate=Color("141520")
+	player.add_child(player_ammo_label)
 	_set_player_healthbar(100.0,100.0)
+	_refresh_ammo_hud()
 
 func _set_player_healthbar(value: float, maximum: float = 100.0) -> void:
 	player_health_value = clampf(value,0.0,maximum)
@@ -424,13 +450,15 @@ func _set_player_healthbar(value: float, maximum: float = 100.0) -> void:
 		player_health_bar.texture=player_health_texture
 	else:player_health_texture.update(image)
 	player_health_bar.visible = player_visual == null or player_visual.visible
+	if player_ammo_label!=null:player_ammo_label.visible=player_health_bar.visible
 
 func _apply_body_fire_recoil(shot_yaw: float) -> void:
 	if player == null:return
+	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
 	var backward := Basis(Vector3.UP,shot_yaw).z.normalized()
-	player.velocity += backward * AK_RECOIL_MODEL.BODY_RECOIL_IMPULSE
+	player.velocity += backward * float(profile.body_recoil)
 	if locomotion != null:
-		locomotion.body_offset_velocity += backward * 0.34
+		locomotion.body_offset_velocity += backward * (0.52 if weapon_slot==1 else 0.34)
 
 func _build_outage_voxel_body() -> void:
 	# One authored source for geometry, UVs, rest positions and pivots.
@@ -466,9 +494,12 @@ func _build_held_ak() -> void:
 	weapon_visual_wobble = Node3D.new()
 	weapon_visual_wobble.name = "WeaponVisualWobble"
 	weapon_root.add_child(weapon_visual_wobble)
+	ak_visual_root=Node3D.new();ak_visual_root.name="AKVisual";weapon_visual_wobble.add_child(ak_visual_root)
 	for child in weapon_root.get_children().duplicate():
 		if child is MeshInstance3D:
-			child.reparent(weapon_visual_wobble, false)
+			child.reparent(ak_visual_root,false)
+	shotgun_visual_root=Node3D.new();shotgun_visual_root.name="ShotgunVisual";weapon_visual_wobble.add_child(shotgun_visual_root)
+	_build_shotgun_visual()
 
 	weapon_muzzle = Marker3D.new()
 	weapon_muzzle.name = "Muzzle"
@@ -493,6 +524,41 @@ func _build_held_ak() -> void:
 	ak_reload_audio.max_distance = 24.0
 	ak_reload_audio.unit_size = 2.6
 	weapon_aim_pivot.add_child(ak_reload_audio)
+
+	shotgun_fire_audio=AudioStreamPlayer3D.new();shotgun_fire_audio.name="ShotgunFireAudio";shotgun_fire_audio.stream=SHOTGUN_FIRE_SFX
+	shotgun_fire_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db+1.0
+	shotgun_fire_audio.pitch_scale=0.82;shotgun_fire_audio.max_distance=34.0;shotgun_fire_audio.unit_size=3.2;shotgun_fire_audio.max_polyphony=4
+	weapon_aim_pivot.add_child(shotgun_fire_audio)
+	shotgun_reload_audio=AudioStreamPlayer3D.new();shotgun_reload_audio.name="ShotgunReloadAudio";shotgun_reload_audio.stream=SHOTGUN_RELOAD_SFX
+	shotgun_reload_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db-2.0
+	shotgun_reload_audio.pitch_scale=0.92;shotgun_reload_audio.max_distance=26.0;shotgun_reload_audio.unit_size=2.8
+	weapon_aim_pivot.add_child(shotgun_reload_audio)
+	_set_weapon_slot(0,false)
+
+func _build_shotgun_visual() -> void:
+	_add_weapon_box(shotgun_visual_root,"SG_Stock",Vector3(-0.36,-0.02,0),Vector3(0.62,0.22,0.24),Color("6d4030"))
+	_add_weapon_box(shotgun_visual_root,"SG_Receiver",Vector3(0.18,0.01,0),Vector3(0.62,0.25,0.22),Color("30343b"))
+	_add_weapon_box(shotgun_visual_root,"SG_Barrel",Vector3(0.88,0.055,0),Vector3(0.92,0.12,0.14),Color("b7c0c8"))
+	_add_weapon_box(shotgun_visual_root,"SG_Pump",Vector3(0.62,-0.09,0),Vector3(0.42,0.18,0.25),Color("8a5238"))
+	_add_weapon_box(shotgun_visual_root,"SG_Grip",Vector3(0.02,-0.22,0),Vector3(0.20,0.36,0.22),Color("20232a"))
+	_add_weapon_box(shotgun_visual_root,"SG_Sight",Vector3(0.30,0.18,0),Vector3(0.10,0.08,0.10),Color("ffcf70"))
+
+func _add_weapon_box(parent: Node3D,title: String,pos: Vector3,size: Vector3,color: Color) -> MeshInstance3D:
+	var mesh:=MeshInstance3D.new();mesh.name=title
+	var box:=BoxMesh.new();box.size=size;mesh.mesh=box;mesh.position=pos
+	mesh.material_override=_material(color,false,0.0);parent.add_child(mesh);_add_scene_outline(mesh,1.25)
+	return mesh
+
+func _set_weapon_slot(slot: int,play_fx: bool=true) -> void:
+	weapon_slot=clampi(slot,0,1)
+	if ak_visual_root!=null:ak_visual_root.visible=weapon_slot==0
+	if shotgun_visual_root!=null:shotgun_visual_root.visible=weapon_slot==1
+	if weapon_muzzle!=null:weapon_muzzle.position=Vector3(float(WEAPON_RULES.by_slot(weapon_slot).muzzle_x),0.02,0.0)
+	if play_fx and arena_audio!=null:arena_audio.play_event("switch",Vector3.ZERO,-22.0)
+	aim_recoil.reset();shot_cooldown=maxf(shot_cooldown,0.08);_refresh_ammo_hud()
+
+func _cycle_weapon(direction: int) -> void:
+	_set_weapon_slot(posmod(weapon_slot+direction,2),true)
 
 func _add_weapon_hand(node_name: String, pos: Vector3, size: Vector3) -> void:
 	var hand := MeshInstance3D.new()
@@ -578,7 +644,8 @@ func _update_weapon_pose(delta: float) -> void:
 	# without changing the camera target or server-side hit direction.
 	var one_hand_pitch := sin(anim_time*6.3+0.4)*0.045*loose_amount + weapon_recoil*0.055
 	var one_hand_roll := sin(anim_time*4.8+1.6)*(0.075+0.045*move_blend)*loose_amount - weapon_recoil*0.14
-	var reload_progress := 0.0 if reload_remaining<=0.0 else 1.0-clampf(reload_remaining/AK_MAGAZINE.RELOAD_DURATION,0.0,1.0)
+	var active_profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
+	var reload_progress := 0.0 if reload_remaining<=0.0 else 1.0-clampf(reload_remaining/float(active_profile.reload),0.0,1.0)
 	var reload_arc := pow(maxf(0.0,sin(PI*reload_progress)),0.72)
 	var reload_snap := sin(TAU*reload_progress)*0.08*reload_arc
 	weapon_root.rotation = Vector3(0.0, PI*0.5, 0.0)
@@ -676,7 +743,7 @@ func _build_hud() -> void:
 	title.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
 	help_panel.add_child(title)
 	var help := Label.new()
-	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire   R reload\nG grenade   Q swap   B retry   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
+	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire   R reload\nWHEEL weapon   G grenade   Q shoulder   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
 	help.position = Vector2(12, 28)
 	help.add_theme_font_size_override("font_size", 11)
 	help.add_theme_color_override("font_color", Color(0.86, 0.86, 0.92))
@@ -693,44 +760,39 @@ func _build_hud() -> void:
 	canvas.add_child(crosshair)
 	crosshair.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	ammo_label = Label.new()
-	ammo_label.name = "AKAmmo"
-	ammo_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	ammo_label.offset_left = -220
-	ammo_label.offset_right = -18
-	ammo_label.offset_top = -72
-	ammo_label.offset_bottom = -28
-	ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	ammo_label.add_theme_font_size_override("font_size",18)
-	ammo_label.add_theme_constant_override("outline_size",4)
-	ammo_label.add_theme_color_override("font_color",Color("fff2c7"))
-	canvas.add_child(ammo_label)
 	_refresh_ammo_hud()
 
 func _refresh_ammo_hud() -> void:
-	if ammo_label == null:return
+	if player_ammo_label==null:return
+	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
+	var maximum:=int(profile.magazine)
 	if reload_remaining>0.0:
-		ammo_label.text = "AK  %02d / %02d   //   RELOAD %.1f" % [ammo_in_mag,AK_MAGAZINE.MAGAZINE_SIZE,reload_remaining]
-		ammo_label.add_theme_color_override("font_color",Color("ffcf70"))
+		player_ammo_label.text="%s  %d / %d  //  RELOAD %.1f" % [str(profile.label),ammo_in_mag,maximum,reload_remaining]
+		player_ammo_label.modulate=Color("ffcf70")
 	else:
-		ammo_label.text = "AK  %02d / %02d" % [ammo_in_mag,AK_MAGAZINE.MAGAZINE_SIZE]
-		ammo_label.add_theme_color_override("font_color",Color("ff7b76") if ammo_in_mag<=5 else Color("fff2c7"))
+		player_ammo_label.text="%s  %d / %d" % [str(profile.label),ammo_in_mag,maximum]
+		player_ammo_label.modulate=Color("ff7b76") if ammo_in_mag<=maxi(1,int(ceil(maximum*0.20))) else Color("fff2c7")
 
 func _tick_reload(delta: float) -> void:
-	if reload_remaining<=0.0:return
-	var before := reload_remaining
-	reload_remaining=maxf(0.0,reload_remaining-delta)
-	if before>0.0 and reload_remaining<=0.0:
-		ammo_in_mag=AK_MAGAZINE.MAGAZINE_SIZE
-	_refresh_ammo_hud()
+	var changed:=false
+	for slot in range(2):
+		if reload_by_weapon[slot]<=0.0:continue
+		var before: float=reload_by_weapon[slot]
+		reload_by_weapon[slot]=maxf(0.0,reload_by_weapon[slot]-delta)
+		if before>0.0 and reload_by_weapon[slot]<=0.0:
+			ammo_by_weapon[slot]=int(WEAPON_RULES.by_slot(slot).magazine)
+		changed=true
+	if changed or reload_remaining>0.0:_refresh_ammo_hud()
 
 func _start_reload(play_fx: bool = true) -> bool:
-	if reload_remaining>0.0 or ammo_in_mag>=AK_MAGAZINE.MAGAZINE_SIZE:return false
+	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
+	if reload_remaining>0.0 or ammo_in_mag>=int(profile.magazine):return false
 	if combat!=null and combat.is_game_over():return false
-	reload_remaining=AK_MAGAZINE.RELOAD_DURATION
+	reload_remaining=float(profile.reload)
 	aim_recoil.reset()
 	if play_fx:
-		if ak_reload_audio!=null:ak_reload_audio.play()
+		var audio:=ak_reload_audio if weapon_slot==0 else shotgun_reload_audio
+		if audio!=null:audio.play()
 		_spawn_reload_magazine()
 	_refresh_ammo_hud()
 	return true
@@ -754,18 +816,17 @@ func _spawn_reload_magazine() -> void:
 	tween.tween_property(mag,"scale",Vector3.ONE*0.65,0.55)
 	tween.chain().tween_callback(mag.queue_free)
 
-func _set_authoritative_weapon_state(server_ammo: int,server_reload: float,force: bool=false) -> void:
-	server_ammo=clampi(server_ammo,0,AK_MAGAZINE.MAGAZINE_SIZE)
-	server_reload=clampf(server_reload,0.0,AK_MAGAZINE.RELOAD_DURATION)
+func _set_authoritative_weapon_state(state: Dictionary,force: bool=false) -> void:
+	var server_slot:=clampi(int(state.get("weapon",weapon_slot)),0,1)
+	var server_ammo: Array[int]=[clampi(int(state.get("ak_ammo",ammo_by_weapon[0])),0,int(WEAPON_RULES.AK.magazine)),clampi(int(state.get("sg_ammo",ammo_by_weapon[1])),0,int(WEAPON_RULES.SHOTGUN.magazine))]
+	var server_reload: Array[float]=[clampf(float(state.get("ak_reload",reload_by_weapon[0])),0.0,float(WEAPON_RULES.AK.reload)),clampf(float(state.get("sg_reload",reload_by_weapon[1])),0.0,float(WEAPON_RULES.SHOTGUN.reload))]
 	if force:
-		ammo_in_mag=server_ammo;reload_remaining=server_reload
-	elif server_reload>0.0:
-		if reload_remaining<=0.0:_start_reload(true)
-		reload_remaining=server_reload;ammo_in_mag=server_ammo
-	elif reload_remaining>0.0 and server_ammo==AK_MAGAZINE.MAGAZINE_SIZE:
-		reload_remaining=0.0;ammo_in_mag=server_ammo
-	elif server_ammo<=ammo_in_mag:
-		ammo_in_mag=server_ammo
+		ammo_by_weapon=server_ammo;reload_by_weapon=server_reload;_set_weapon_slot(server_slot,false)
+	else:
+		for slot in range(2):
+			if server_reload[slot]>0.0 and reload_by_weapon[slot]<=0.0 and slot==weapon_slot:_start_reload(true)
+			ammo_by_weapon[slot]=server_ammo[slot];reload_by_weapon[slot]=server_reload[slot]
+		if server_slot!=weapon_slot:_set_weapon_slot(server_slot,false)
 	_refresh_ammo_hud()
 
 func _update_status() -> void:
@@ -777,40 +838,41 @@ func _update_status() -> void:
 		status_label.text = test_status + "  |  " + world_status + "  |  " + ink_status + ("  |  PIXEL: ON" if pixel_enabled else "  |  PIXEL: OFF") + "  |  " + edge_status
 		status_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.55) if low_gravity else Color(0.4, 0.9, 1.0))
 func _kick_weapon_visuals() -> void:
-	weapon_recoil = 1.0
+	weapon_recoil = 1.0 if weapon_slot==0 else 1.45
 	var goofy := 1.75 if randf() < 0.08 else 1.0
-	weapon_visual_side_kick = clampf(weapon_visual_side_kick + randf_range(-0.055,0.055) * goofy,-0.12,0.12)
-	weapon_visual_lift_kick = clampf(weapon_visual_lift_kick + randf_range(0.022,0.060) * goofy,0.0,0.13)
-	weapon_visual_twist_kick = clampf(weapon_visual_twist_kick + randf_range(-0.085,0.085) * goofy,-0.19,0.19)
+	var strength:=1.0 if weapon_slot==0 else 1.65
+	weapon_visual_side_kick = clampf(weapon_visual_side_kick + randf_range(-0.055,0.055)*goofy*strength,-0.18,0.18)
+	weapon_visual_lift_kick = clampf(weapon_visual_lift_kick + randf_range(0.022,0.060)*goofy*strength,0.0,0.20)
+	weapon_visual_twist_kick = clampf(weapon_visual_twist_kick + randf_range(-0.085,0.085)*goofy*strength,-0.28,0.28)
 
 func _fire_physics_ball() -> void:
 	if camera == null or combat == null or combat.is_game_over() or shot_cooldown > 0.00001:return
 	if reload_remaining>0.0:return
 	if ammo_in_mag<=0:
 		_start_reload();return
-	ammo_in_mag-=1
-	_refresh_ammo_hud()
-	shot_cooldown += AK_FIRE_INTERVAL
-	_update_weapon_pose(0.0)
-	_kick_weapon_visuals()
-	_play_ak_fire_audio()
+	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
+	ammo_in_mag-=1;_refresh_ammo_hud();shot_cooldown+=float(profile.fire_interval)
+	_update_weapon_pose(0.0);_kick_weapon_visuals();_play_weapon_fire_audio()
 	var chest := _weapon_anchor()
-	combat.fire(weapon_muzzle.global_position,aim_target,chest)
+	if weapon_slot==0:combat.fire(weapon_muzzle.global_position,aim_target,chest)
+	else:combat.fire_shotgun(weapon_muzzle.global_position,aim_target,chest)
 	_apply_body_fire_recoil(yaw)
-	var aim_kick: Vector2 = aim_recoil.kick(aiming)
-	yaw = wrapf(yaw + aim_kick.x, -PI, PI)
-	pitch = clampf(pitch + aim_kick.y, deg_to_rad(-48.0), deg_to_rad(30.0))
-	camera_yaw.rotation.y = yaw
-	camera_pitch.rotation.x = pitch
+	var aim_kick: Vector2=aim_recoil.kick(aiming)
+	if weapon_slot==1:aim_kick+=aim_recoil.kick(aiming)
+	yaw=wrapf(yaw+aim_kick.x,-PI,PI);pitch=clampf(pitch+aim_kick.y,deg_to_rad(-48.0),deg_to_rad(30.0))
+	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
 	_spawn_muzzle_flash()
 	if ammo_in_mag<=0:_start_reload()
 
+func _play_weapon_fire_audio() -> void:
+	if weapon_slot==0:
+		_play_ak_fire_audio();return
+	if shotgun_fire_audio!=null and shotgun_fire_audio.stream!=null:
+		shotgun_fire_audio.pitch_scale=randf_range(0.78,0.86);shotgun_fire_audio.play()
+
 func _play_ak_fire_audio() -> void:
-	if ak_fire_audio == null or ak_fire_audio.stream == null:
-		return
-	# Dry rifle shot, louder than the previous pass, with the same small pitch variation.
-	ak_fire_audio.pitch_scale = randf_range(0.975, 1.025)
-	ak_fire_audio.play()
+	if ak_fire_audio == null or ak_fire_audio.stream == null:return
+	ak_fire_audio.pitch_scale = randf_range(0.975, 1.025);ak_fire_audio.play()
 
 func _spawn_muzzle_flash() -> void:
 	if weapon_muzzle == null:

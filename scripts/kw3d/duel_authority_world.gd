@@ -188,7 +188,7 @@ func respawn(id: int) -> bool:
 	emit("respawn", {"actor": id, "hp": 100.0})
 	return true
 
-func damage(victim: int, amount: float, direction: Vector3, owner: int, point: Vector3) -> bool:
+func damage(victim: int, amount: float, direction: Vector3, owner: int, point: Vector3, headshot: bool = false, weapon: String = "") -> bool:
 	if phase != "MATCH" or not actors.has(victim) or amount <= 0.0:
 		return false
 	if owner <= 0 or owner == victim or not actors.has(owner):
@@ -206,6 +206,8 @@ func damage(victim: int, amount: float, direction: Vector3, owner: int, point: V
 		"hp": target.health,
 		"p": point,
 		"dir": direction,
+		"headshot": headshot,
+		"weapon": weapon,
 		"lethal": target.health <= 0.0
 	})
 	if target.health <= 0.0:

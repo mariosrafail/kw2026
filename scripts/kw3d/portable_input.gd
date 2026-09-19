@@ -13,6 +13,7 @@ var pad_id =-1
 var yaw =0.0
 var pitch =-0.174533
 var side =-1.0
+var weapon_slot =0
 var jump_serial =0
 var grenade_serial =0
 var sequence =0
@@ -92,6 +93,10 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed(PREFIX+"pause"):
 		action_requested.emit("pause");get_viewport().set_input_as_handled();return
 	if not enabled or not focused:return
+	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
+		weapon_slot=posmod(weapon_slot+(1 if event.button_index==MOUSE_BUTTON_WHEEL_DOWN else -1),2)
+		action_requested.emit("weapon")
+		get_viewport().set_input_as_handled();return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
 		var ratio =tan(deg_to_rad(fov)*0.5)/tan(deg_to_rad(74.0)*0.5)
 		var delta_yaw: float =-event.screen_relative.x*0.0016*ratio
@@ -134,7 +139,7 @@ func sample(dt: float) -> Dictionary:
 		if move.length()<0.05:sprint_latched=false;sprint=false
 	yaw=wrapf(yaw,-PI,PI);pitch=clampf(pitch,-0.837758,0.523599)
 	sequence+=1
-	return {"seq":sequence,"ct":sequence,"js":jump_serial,"gs":grenade_serial,"move":move,"yaw":yaw,"pitch":pitch,"side":side,"fire":firing,"aim":aiming,"sprint":sprint,"reload":reloading}
+	return {"seq":sequence,"ct":sequence,"js":jump_serial,"gs":grenade_serial,"move":move,"yaw":yaw,"pitch":pitch,"side":side,"fire":firing,"aim":aiming,"sprint":sprint,"reload":reloading,"weapon":weapon_slot}
 
 func apply_weapon_recoil(aiming: bool) -> Vector2:
 	var kick: Vector2=recoil_model.kick(aiming)

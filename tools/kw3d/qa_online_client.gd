@@ -42,7 +42,7 @@ func _qa_tick(_delta: float) -> void:
 			elif injected.has("grenade"):button(JOY_BUTTON_RIGHT_SHOULDER,false)
 		if age>7.5 and probe_round<6 and age>=7.5+float(probe_round)*0.12:
 			probe_round+=1
-			var source: Dictionary={"seq":input_adapter.sequence+1,"ct":0,"js":0,"gs":0,"move":Vector2.ZERO,"yaw":0.0,"pitch":0.0,"side":-1.0,"fire":false,"aim":false,"sprint":false,"reload":false}
+			var source: Dictionary={"seq":input_adapter.sequence+1,"ct":0,"js":0,"gs":0,"move":Vector2.ZERO,"yaw":0.0,"pitch":0.0,"side":-1.0,"fire":false,"aim":false,"sprint":false,"reload":false,"weapon":0}
 			var bad_move: Dictionary=source.duplicate();bad_move.move=Vector2(NAN,0)
 			var bad_sequence: Dictionary=source.duplicate();bad_sequence.seq=2000000000
 			var bad_pitch: Dictionary=source.duplicate();bad_pitch.pitch=20.0
@@ -64,6 +64,7 @@ func _qa_tick(_delta: float) -> void:
 		if int(qa_events.get("damage",0))<1:failures.append("no_authority_damage")
 		if int(qa_events.get("explosion",0))<1:failures.append("no_shared_explosion")
 		if int(qa_events.get("reload",0))<1:failures.append("no_authority_reload")
+		if int(qa_events.get("shotgun",0))<1:failures.append("no_authority_shotgun")
 		if role==2:
 			if not qa_rejoined or joined_slots.size()!=2 or joined_slots[0]!=joined_slots[1]:failures.append("rejoin_identity")
 			if not gamepad_move_seen or not gamepad_fire_seen:failures.append("synthetic_gamepad_path")
@@ -82,9 +83,11 @@ func _qa_command(command: Dictionary) -> void:
 	if role==2:
 		if command.move.x>0.2:gamepad_move_seen=true
 		if command.fire:gamepad_fire_seen=true
+		command.weapon=1 if age>5.0 and age<7.0 else 0
 	else:
 		command.move=Vector2(-0.5,0) if age<1.8 else Vector2.ZERO
 		command.fire=age>1.7 and age<7.2
+		command.weapon=0
 		if age>3.0 and not qa_did_throw:
 			qa_did_throw=true;input_adapter.grenade_serial+=1;command.gs=input_adapter.grenade_serial
 	var target: Dictionary={}
