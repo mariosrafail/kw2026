@@ -40,5 +40,7 @@ __pycache__/
 *.pyc
 
 # Local debug artifacts
+/tmp/
+.tmp_login_payload*.json
 tools/auth_api/tmp.err
 tools/auth_api/tmp.out

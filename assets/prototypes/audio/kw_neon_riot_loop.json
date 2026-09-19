@@ -1,0 +1,11 @@
+{
+  "title": "KW Neon Riot",
+  "bpm": 128,
+  "bars": 32,
+  "seconds": 60.0,
+  "sample_rate": 32000,
+  "peak": 0.78,
+  "rms": 0.15170240386920963,
+  "loop_boundary_delta": 0.0007831360791866748,
+  "source": "Original deterministic synthesis; no external samples."
+}

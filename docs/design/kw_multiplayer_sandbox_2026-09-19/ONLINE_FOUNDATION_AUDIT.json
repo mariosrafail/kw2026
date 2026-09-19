@@ -1,0 +1,214 @@
+{
+  "date": "2026-09-19",
+  "status": "native_two_client_foundation",
+  "baseline_files_preserved": 117,
+  "baseline_differences": [],
+  "network_scenarios": {
+    "localhost_timeline": {
+      "failures": [],
+      "configured_rtt_ms": 0,
+      "jitter_per_leg_ms": 0,
+      "loss": 0,
+      "server_metrics": {
+        "max_tick_usec": 6122,
+        "ticks": 1800
+      },
+      "server_damage_events": 15,
+      "server_kills": 3,
+      "server_grenades": 2,
+      "server_rejected": 36,
+      "clients": [
+        {
+          "slot": 1,
+          "snapshots": 394,
+          "rtt_ms": 2.0,
+          "steady_max_correction": 0.0,
+          "joined_slots": [
+            1
+          ],
+          "synthetic_pad_move": false,
+          "synthetic_pad_fire": false
+        },
+        {
+          "slot": 2,
+          "snapshots": 374,
+          "rtt_ms": 19.0,
+          "steady_max_correction": 0.000464440381620079,
+          "joined_slots": [
+            2,
+            2
+          ],
+          "synthetic_pad_move": true,
+          "synthetic_pad_fire": true
+        }
+      ]
+    },
+    "latency120_timeline": {
+      "failures": [],
+      "configured_rtt_ms": 120.0,
+      "jitter_per_leg_ms": 10.0,
+      "loss": 0.02,
+      "server_metrics": {
+        "max_tick_usec": 4451,
+        "ticks": 1800
+      },
+      "server_damage_events": 6,
+      "server_kills": 1,
+      "server_grenades": 2,
+      "server_rejected": 21,
+      "clients": [
+        {
+          "slot": 2,
+          "snapshots": 370,
+          "rtt_ms": 117.0,
+          "steady_max_correction": 0.0,
+          "joined_slots": [
+            2
+          ],
+          "synthetic_pad_move": false,
+          "synthetic_pad_fire": false
+        },
+        {
+          "slot": 1,
+          "snapshots": 338,
+          "rtt_ms": 150.0,
+          "steady_max_correction": 0.0,
+          "joined_slots": [
+            1,
+            1
+          ],
+          "synthetic_pad_move": true,
+          "synthetic_pad_fire": true
+        }
+      ]
+    }
+  },
+  "regression_scripts": [
+    {
+      "test": "test_online_foundation",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_online_ui",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_sound_pressure",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_grenade_audio_ink",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_aim_polish",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_weapon_side",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_pixel_pass",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_waves",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_wave_live",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_combat_polish",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_fullbody",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_locomotion",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_locomotion_terrain",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    },
+    {
+      "test": "test_roaming_range",
+      "passed": true,
+      "exit_code": 0,
+      "errors": []
+    }
+  ],
+  "authority_live_combat": "PASS: 9 hostile shots, player damage, friendly-fire off, owner heal",
+  "physical_gamepads_detected": 0,
+  "normal_launch": {
+    "created": "20260919_160328",
+    "pids": [
+      33016,
+      24116,
+      15260
+    ],
+    "server_pid": 33016,
+    "bind": "127.0.0.1",
+    "port": 18886,
+    "scene": "res://scenes/prototypes/kw_3d_multiplayer.tscn",
+    "logs": "C:\\Users\\mario\\Nextcloud\\kw_godot\\tmp\\kw3d\\online_play_20260919_160328",
+    "automatic_idle_shutdown_seconds": 120
+  },
+  "scope_limits": [
+    "same PC with real ENet clients and local UDP fault proxy",
+    "no physical controller feel test",
+    "no second physical computer or NAT/Internet test",
+    "no Steam/PSN/Xbox integrations or public hosting",
+    "no 4-player stress/soak test",
+    "no level editor"
+  ],
+  "source_hashes": {
+    "scripts/kw3d/actor_motor.gd": "f4f68ae459d0999a21a8bee3cb6e24b06367ffc9386d66b88ee1e13bdc244fb5",
+    "scripts/kw3d/authority_actor.gd": "3d9dcee1060bd57687ca80ac39c6763cf664383b14d7c9e5d825c6d6f5a855ad",
+    "scripts/kw3d/authority_locomotion.gd": "1aa74077851e8c4dc0577d39adda148af45addbafc93af66ed5c23971fa7ad95",
+    "scripts/kw3d/authority_world.gd": "7ef80ad1ec45ea860dda053ee859383c7a0a6b1ee5c370f5cbfe8541a76e4cae",
+    "scripts/kw3d/combat_view.gd": "c4895fbc5030821ea8e828f7cecb6d58645a7afb9d4cf7138e04030bcc31d4d4",
+    "scripts/kw3d/director_view.gd": "4a1ec9625d8d0ab34964e8d9fdc91828c174e9ac0c0c70f4133078d9b14f64d9",
+    "scripts/kw3d/grenade_view.gd": "461cbbb6858de15e96e07b9acff11a0f5c5a05a59d4688b7beccc3f0e06ec8d4",
+    "scripts/kw3d/input_codec.gd": "5cd032e9a13bab08c87987f78c20310b4c70cf959ec7abf4ddb5c3579a8f3c5c",
+    "scripts/kw3d/online_client.gd": "893899359cfa43da2dee88b409399fea29eb6fd5c3f1e81918681d7d3eefe1aa",
+    "scripts/kw3d/online_entry.gd": "d97be14a93aa2aa371e95f860cfe010bf1564e7eafd0715f1ce7d593c067ffbc",
+    "scripts/kw3d/online_level.gd": "d747c9033fe4fe4b4cc148bb0355564f3c41fdaf98c86654f940dac579a1b3e1",
+    "scripts/kw3d/online_menu.gd": "f709ab387b28a4e8ca7d1811b615db6a522916f09d4ca3960f565b2167a241da",
+    "scripts/kw3d/online_session.gd": "f7d57c11b25e228675514dcdd9f96be0deb0a956b673f10158fb5bcb6105d5a9",
+    "scripts/kw3d/portable_input.gd": "f39c60d9981e5d943fd6f25fa9e0e6d0321c1226f6bd79c0bd3302895ac1d335",
+    "assets/kw3d/arena_seed.json": "3f71aa5fea4d52e1ca58bc0bb54d50731f881c5f87f99e4080ca1c76c6a8b426",
+    "scenes/prototypes/kw_3d_multiplayer.tscn": "177b6726788a89dcc31597c4413e2e9f5b8e8ce429edeb7a6cb09497d8b02428"
+  }
+}

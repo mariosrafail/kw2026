@@ -1,0 +1,7 @@
+{
+  "portal_url": "https://portal-fresh-pleasant-peoples.trycloudflare.com",
+  "game_ws_url": "wss://portal-fresh-pleasant-peoples.trycloudflare.com/game",
+  "mode": "temporary_quick_tunnel",
+  "version": "alpha-0.1.40",
+  "updated": "2026-09-19T23:03:00+03:00"
+}

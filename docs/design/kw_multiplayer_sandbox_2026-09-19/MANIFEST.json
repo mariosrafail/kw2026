@@ -1,0 +1,46 @@
+{
+  "version": "1.0-proposal",
+  "date": "2026-09-19",
+  "documents": [
+    {
+      "file": "00_CONTEXT_AND_SOURCES.md",
+      "bytes": 14598,
+      "sha256": "0f5dda5fe34e51d26944fe3c70a8d0c830638c48c103dcb7d166d124f4e75e2d"
+    },
+    {
+      "file": "01_GAME_VISION.md",
+      "bytes": 16538,
+      "sha256": "4479c51421abed347c635c5bc9119d14e1a0c1a362f50ff15ebfed9b3437a7d2"
+    },
+    {
+      "file": "02_MULTIPLAYER_ARCHITECTURE.md",
+      "bytes": 17425,
+      "sha256": "400e1035a47916d846541bb2784da5da26638e7f79cf8dff70a3920662de569f"
+    },
+    {
+      "file": "03_SANDBOX_AND_UGC.md",
+      "bytes": 16578,
+      "sha256": "f8f453ed59192292533647e80d3e7b43263ca81f7a593d1b7a81b362c0ff1f70"
+    },
+    {
+      "file": "04_PLATFORMS_AND_CONTROLS.md",
+      "bytes": 15168,
+      "sha256": "17e0b97edcdd0856155cd5d8b442be43f3f51e40be9e0251e0b9466d1ff2fd75"
+    },
+    {
+      "file": "05_ROADMAP_AND_DECISIONS.md",
+      "bytes": 17437,
+      "sha256": "d24c1ca6397f3d11cc26465084ac3b9714f7aea3ae504619359ddba421dc7c8c"
+    },
+    {
+      "file": "KW_MASTER_PLAN.md",
+      "bytes": 99134,
+      "sha256": "03f050de6bd954a5d9d477542a23ea424aa4092f5ac7a06a442e8a286a4e66d3"
+    },
+    {
+      "file": "README.txt",
+      "bytes": 918,
+      "sha256": "6daa0ff470a7f4034ccfa770433175837af76c980f48133d6f2e9ea9e48b1e69"
+    }
+  ]
+}

@@ -27,6 +27,7 @@ const MENU_LOBBY_FLOW_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_me
 const MENU_LAYOUT_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_layout_controller.gd")
 const MENU_LOADOUT_STATE_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_loadout_state_controller.gd")
 const MENU_DIALOG_CTRL_SCRIPT := preload("res://scripts/ui/main_menu/main_menu_dialog_controller.gd")
+const OFFLINE_TEST_ROOMS_SCRIPT := preload("res://scripts/ui/main_menu/offline_test_rooms.gd")
 const MENU_PALETTE := preload("res://scripts/ui/main_menu/menu_palette.gd")
 const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
 const PIXEL_FONT_CHAT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
@@ -48,6 +49,9 @@ const LEGACY_DIRECT_VPS_WS_URL := "64.225.102.179"
 const ENABLE_LAN_MODE_PICKER := false
 const ARG_ENABLE_LAN_PICKER := "--enable-lan-picker"
 const ENABLE_MENU_LOADING_OVERLAY := true
+const KW3D_DUEL_SCENE := "res://scenes/prototypes/kw_3d_lan_duel.tscn"
+const KW3D_OFFLINE_PROTOTYPE_SCENE := "res://scenes/prototypes/kw_3d_prototype.tscn"
+const KW3D_MENU_MODE := true
 var MENU_CLR_BASE := MENU_PALETTE.base()
 var MENU_CLR_ACCENT := MENU_PALETTE.accent()
 var MENU_CLR_HOT := MENU_PALETTE.hot()
@@ -154,6 +158,7 @@ var logo_node: Node = null
 @onready var weapon_area: Control = %WeaponArea
 
 @onready var play_button: Button = %PlayButton
+@onready var offline_test_button: Button = %OfflineTestButton
 @onready var options_button: Button = %OptionsButton
 @onready var exit_button: Button = %ExitButton
 @onready var warrior_button: Button = %WarriorButton
@@ -267,6 +272,7 @@ var _main_warrior_visual_base_scale := Vector2.ONE
 var _warrior_shop_visual_base_scale := Vector2.ONE
 var _weapon_shop_preview_base_scale := Vector2.ONE
 var _confirm_overlay_ui: Control
+var _offline_test_overlay: Control
 
 var _logo_base_pos := Vector2.ZERO
 var _warrior_area_base_pos := Vector2.ZERO
@@ -342,6 +348,8 @@ func _ready() -> void:
 	)
 	_bind_web_audio_unlock_to_menu_buttons()
 	randomize()
+	if OS.get_cmdline_user_args().has("--kw-qa-auto-fight"):
+		enable_intro_animation = false
 	_weapon_ui.weapon_icon_max_height_ratio = weapon_icon_max_height_ratio
 	_weapon_ui.weapons_menu_preview_scale_mult = weapons_menu_preview_scale_mult
 	_weapon_ui.rainbow_skin_cost = rainbow_skin_cost
@@ -507,13 +515,26 @@ func _ready() -> void:
 	_refresh_selection_context_visuals()
 
 	_connect_signals()
-	_start_default_network_mode()
+	if KW3D_MENU_MODE:
+		_auth_logged_in = true
+		call_deferred("_hide_menu_loading_overlay")
+	else:
+		_start_default_network_mode()
 	_play_intro_animation_safe()
 	_apply_uniform_button_outlines(self, 0)
 	_apply_main_category_button_brightness()
 	_apply_runtime_palette()
-	if _auth_logged_in:
-		_start_idle_loop()
+	_start_idle_loop()
+	if bool(ProjectSettings.get_setting("kw3d/open_offline_tests_on_load", false)):
+		ProjectSettings.set_setting("kw3d/open_offline_tests_on_load", false)
+		call_deferred("_open_offline_test_rooms")
+	if OS.get_cmdline_user_args().has("--kw-qa-auto-fight"):
+		call_deferred("_kw_qa_auto_fight")
+
+func _kw_qa_auto_fight() -> void:
+	await get_tree().process_frame
+	await get_tree().create_timer(0.08).timeout
+	_on_play_pressed()
 
 func _kw_log_mobile_orientation_lock_result() -> void:
 	if not OS.has_feature("web"):
@@ -1067,6 +1088,7 @@ func _connect_signals() -> void:
 		)
 
 	play_button.pressed.connect(_on_play_pressed)
+	offline_test_button.pressed.connect(_on_test_offline_pressed)
 	options_button.pressed.connect(func() -> void:
 		_button_press_anim(options_button)
 		_switch_to(screen_options, 1)
@@ -1088,6 +1110,8 @@ func _connect_signals() -> void:
 	weapon_action_button.pressed.connect(_on_weapon_action_pressed)
 
 	_add_hover_pop(play_button)
+	_add_hover_pop(offline_test_button)
+	_bind_menu_sfx_button(offline_test_button)
 	_add_hover_pop(options_button)
 	_add_hover_pop(exit_button)
 	if _auth_logout_button != null:
@@ -1121,8 +1145,61 @@ func _connect_signals() -> void:
 			screen_shake_toggle_button.pressed.connect(shake_cb)
 		_bind_menu_sfx_button(screen_shake_toggle_button)
 
+func _on_test_offline_pressed() -> void:
+	if _offline_test_overlay != null and is_instance_valid(_offline_test_overlay):
+		return
+	_button_press_anim(offline_test_button)
+	_open_offline_test_rooms()
+
+func _open_offline_test_rooms() -> void:
+	if _offline_test_overlay != null and is_instance_valid(_offline_test_overlay):
+		return
+	var overlay := OFFLINE_TEST_ROOMS_SCRIPT.new()
+	_offline_test_overlay = overlay
+	add_child(overlay)
+	overlay.setup(
+		self,
+		Callable(self, "_close_offline_test_rooms"),
+		Callable(self, "_launch_offline_test_room")
+	)
+	_refresh_global_overlay_ui_state()
+
+func _close_offline_test_rooms() -> void:
+	if _offline_test_overlay != null and is_instance_valid(_offline_test_overlay):
+		_offline_test_overlay.queue_free()
+	_offline_test_overlay = null
+	call_deferred("_refresh_global_overlay_ui_state")
+	if offline_test_button != null:
+		offline_test_button.grab_focus()
+
+func _launch_offline_test_room(mode: String) -> void:
+	var normalized := mode.strip_edges().to_lower()
+	if normalized not in ["waves", "sandbox"]:
+		normalized = "waves"
+	ProjectSettings.set_setting("kw3d/offline_test_mode", normalized)
+	ProjectSettings.set_setting("kw3d/open_offline_tests_on_load", false)
+	_show_menu_loading_overlay("LOADING %s..." % ("WAVES TEST" if normalized == "waves" else "SANDBOX / AIM LAB"))
+	await get_tree().create_timer(0.42).timeout
+	var err := get_tree().change_scene_to_file(KW3D_OFFLINE_PROTOTYPE_SCENE)
+	if err != OK:
+		_hide_menu_loading_overlay()
+		if _offline_test_overlay != null and is_instance_valid(_offline_test_overlay):
+			_offline_test_overlay.set_process_input(true)
+
 func _on_play_pressed() -> void:
-	await _lobby_flow_ctrl.on_play_pressed()
+	if not KW3D_MENU_MODE:
+		await _lobby_flow_ctrl.on_play_pressed()
+		return
+	if _play_lobby_transition_running:
+		return
+	_button_press_anim(play_button)
+	await _lobby_flow_ctrl.run_play_lobby_transition()
+	_show_menu_loading_overlay("CONNECTING TO KW ONLINE...")
+	await get_tree().create_timer(0.72).timeout
+	var err := get_tree().change_scene_to_file(KW3D_DUEL_SCENE)
+	if err != OK:
+		_hide_menu_loading_overlay()
+		_lobby_flow_ctrl.cleanup_play_lobby_transition()
 
 func _open_lobby_menu_flow() -> void:
 	_lobby_flow_ctrl.open_lobby_menu_flow()

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KW // Online</title>
+<style>
+:root{--base:#faf7f1;--accent:#47429d;--hot:#20acf3;--hi:#e27393;--mint:#85c799;--ink:#0f0d14;--panel:#202943}
+*{box-sizing:border-box} body{margin:0;min-height:100vh;background:#86bbc5;color:var(--base);font-family:Consolas,"Segoe UI",sans-serif;display:grid;place-items:center;overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;opacity:.13;background-image:linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px);background-size:22px 22px;pointer-events:none}
+.shell{width:min(940px,calc(100% - 28px));position:relative;background:rgba(32,41,67,.97);border:4px solid #edf7bd;box-shadow:0 13px 0 rgba(71,66,157,.34);padding:24px;margin:24px}
+.logo{font-weight:900;letter-spacing:4px;font-size:clamp(38px,7vw,78px);text-align:center;text-shadow:5px 5px 0 #47429d}
+.tag{text-align:center;color:#85c799;font-weight:800;letter-spacing:2px;margin-top:5px}
+.status{margin:22px auto 16px;max-width:720px;background:#111827;border:3px solid #85c799;padding:14px;text-align:center}
+.version{font-size:24px;font-weight:900;color:#edf7bd}.sub{font-size:13px;color:#b8c3d4;margin-top:6px}.online{color:#85c799;font-weight:900}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card{background:#182036;border:3px solid #85c799;padding:18px;min-height:230px;display:flex;flex-direction:column}
+.card h2{margin:0 0 10px;text-align:center;color:#faf7f1;font-size:21px}.card p{color:#cbd5e1;line-height:1.45;font-size:14px}
+.btn{display:block;margin-top:auto;text-align:center;text-decoration:none;border:3px solid #85c799;border-bottom-width:6px;background:#4e8d9c;color:#faf7f1;font-weight:900;font-size:18px;padding:14px 12px;transition:transform .12s ease,background .12s ease,border-color .12s ease;cursor:pointer}
+.btn:hover{background:#85c799;color:#0f0d14;border-color:#edf7bd;transform:scale(1.035)}.btn:active{transform:scale(.96);background:#47429d;color:#faf7f1}.alt{background:#47429d;border-color:#e27393}.alt:hover{background:#e27393}
+.steps{margin-top:14px;padding:14px 18px;border:3px solid #47429d;background:rgba(15,13,20,.36);font-size:13px;line-height:1.7}.steps b{color:#edf7bd}.server{color:#20acf3;font-weight:800}
+.footer{text-align:center;color:#aab6ca;font-size:11px;margin-top:14px}@media(max-width:700px){.cards{grid-template-columns:1fr}.shell{padding:16px}.card{min-height:190px}}
+</style>
+</head>
+<body>
+<main class="shell">
+<div class="logo">KW</div>
+<div class="tag">3D ONLINE DUEL // DEVELOPMENT BUILD</div>
+<section class="status">
+<div class="version" id="version">CHECKING BUILD...</div>
+<div class="sub"><span class="online" id="server">CHECKING ONLINE SERVER...</span><br><span id="published">Reading manifest</span></div>
+</section>
+<section class="cards">
+<article class="card"><h2>FIRST TIME</h2>
+<p>Download the portable KW updater once. No .NET install and no Python install. Pick a folder and it downloads the current build with verified SHA-256 hashes.</p>
+<a class="btn" href="/kw/KWUpdater.exe" download>DOWNLOAD KW UPDATER</a></article>
+<article class="card"><h2>ALREADY HAVE KW</h2>
+<p>Run the same updater again. It checks each game file and downloads only what changed, usually just <b>kw.pck</b> after gameplay or menu updates.</p>
+<a class="btn alt" href="/kw/KWUpdater.exe" download>GET LATEST UPDATER</a></article>
+</section>
+<div class="steps">
+<b>ONLINE 1V1:</b> Open KW, press <b>FIGHT!</b>, then choose <b>CREATE ROOM</b>. Your friend opens the same build and chooses <b>JOIN ROOM</b>.<br>
+Both players press <b>READY</b>. Host presses <b>START MATCH</b>. First to 10 kills wins.<br>
+<b>Public transport:</b> encrypted WebSocket through Cloudflare Tunnel. <b>No router port forwarding.</b><br>
+<b>LAN fallback:</b> Direct LAN is still available inside the room browser if Internet access is unavailable.<br>
+<b>Controller:</b> Left stick move, right stick aim, RT/R2 fire, LT/L2 aim, A/Cross jump, RB/R1 grenade.
+</div>
+<div class="footer">Temporary Cloudflare development endpoint. If the host tunnel restarts, a new temporary link may be required.</div>
+</main>
+<script>
+async function boot(){
+  try{
+    const [mr,cr]=await Promise.all([
+      fetch('/kw/update_manifest.json?ts='+Date.now(),{cache:'no-store'}),
+      fetch('/kw/online_config.json?ts='+Date.now(),{cache:'no-store'})
+    ]);
+    if(!mr.ok) throw new Error('manifest HTTP '+mr.status);
+    const m=await mr.json();
+    document.getElementById('version').textContent='LATEST  '+m.version;
+    const date=m.published_at_utc?new Date(m.published_at_utc).toLocaleString():'';
+    document.getElementById('published').textContent=date?'Published '+date:'Update server online';
+    document.getElementById('server').textContent=cr.ok?'PUBLIC SERVER ONLINE':'PUBLIC SERVER CONFIG UNAVAILABLE';
+  }catch(e){
+    document.getElementById('version').textContent='UPDATE SERVER OFFLINE';
+    document.getElementById('server').textContent='CHECK HOST PC / TUNNEL';
+    document.getElementById('published').textContent=String(e);
+  }
+}
+boot();
+</script>
+</body></html>

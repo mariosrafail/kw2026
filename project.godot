@@ -16,7 +16,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="kw_Godot"
 run/main_scene="res://scenes/ui/main_menu.tscn"
-config/features=PackedStringArray("4.6", "Forward Plus")
+config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/show_image=false
 config/icon="res://icon.svg"
 config/network_profile="local_dev"
@@ -44,6 +44,12 @@ enable_auth_direct_port_fallback=false
 enable_network_mode_picker=false
 network_transport="websocket"
 network_ws_scheme="ws"
+
+[kw3d]
+
+public_portal_url="https://portal-fresh-pleasant-peoples.trycloudflare.com"
+public_ws_url="wss://portal-fresh-pleasant-peoples.trycloudflare.com/game"
+public_online_enabled=true
 
 [rendering]
 

@@ -149,8 +149,10 @@ func _refresh_hover_fill_size(btn: Button) -> void:
 	if fill == null:
 		return
 	var hovered := bool(btn.get_meta("kw_hovered", false))
-	fill.size = Vector2(btn.size.x if hovered else 0.0, btn.size.y)
-	fill.position = Vector2.ZERO
+	fill.offset_left = 0.0
+	fill.offset_top = 0.0
+	fill.offset_right = btn.size.x if hovered else 0.0
+	fill.offset_bottom = 0.0
 
 func _tween_hover_fill(btn: Button, hovered: bool) -> void:
 	var fill := btn.get_node_or_null(HOVER_FILL_NODE) as ColorRect
@@ -162,5 +164,5 @@ func _tween_hover_fill(btn: Button, hovered: bool) -> void:
 	var t := btn.create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	var target_w := btn.size.x if hovered else 0.0
 	var dur := 0.16 if hovered else 0.12
-	t.tween_property(fill, "size:x", target_w, dur)
+	t.tween_property(fill, "offset_right", target_w, dur)
 	btn.set_meta(HOVER_FILL_TWEEN_META, t)

@@ -20,7 +20,8 @@ Write-Output "[publish] Project root: $projectRoot"
 
 Ensure-File "build/kw.exe"
 Ensure-File "build/kw.pck"
-Write-Output "[publish] Found build/kw.exe and build/kw.pck"
+Ensure-File "build/release/launcher_config.json"
+Write-Output "[publish] Found build/kw.exe, build/kw.pck and launcher_config.json"
 
 $updateDir = Join-Path $projectRoot "updates_site/kw"
 New-Item -ItemType Directory -Path $updateDir -Force | Out-Null
@@ -30,6 +31,7 @@ $pckTarget = Join-Path $updateDir "kw.pck"
 $zipTarget = Join-Path $updateDir "kw_update.zip"
 $versionTag = ($Version -replace '[^A-Za-z0-9._-]', '_')
 $zipVersionedTarget = Join-Path $updateDir ("kw_update_{0}.zip" -f $versionTag)
+$configTarget = Join-Path $updateDir "launcher_config.json"
 $manifestTarget = Join-Path $updateDir "update_manifest.json"
 $repoManifestTarget = Join-Path $projectRoot "update_manifest.json"
 $releaseManifestTarget = Join-Path $projectRoot "build/release/update_manifest.json"
@@ -37,7 +39,8 @@ $launcherManifestTarget = Join-Path $projectRoot "build/launcher/update_manifest
 
 Copy-Item "build/kw.exe" $exeTarget -Force
 Copy-Item "build/kw.pck" $pckTarget -Force
-Write-Output "[publish] Copied game files to updates_site/kw"
+Copy-Item "build/release/launcher_config.json" $configTarget -Force
+Write-Output "[publish] Copied game files and launcher config to updates_site/kw"
 
 if (Test-Path $zipTarget) {
     Remove-Item $zipTarget -Force
@@ -45,7 +48,7 @@ if (Test-Path $zipTarget) {
 if (Test-Path $zipVersionedTarget) {
     Remove-Item $zipVersionedTarget -Force
 }
-Compress-Archive -Path @($exeTarget, $pckTarget) -DestinationPath $zipVersionedTarget -CompressionLevel Optimal
+Compress-Archive -Path @($exeTarget, $pckTarget, $configTarget) -DestinationPath $zipVersionedTarget -CompressionLevel Optimal
 Copy-Item $zipVersionedTarget $zipTarget -Force
 Write-Output "[publish] Created $zipVersionedTarget"
 
@@ -78,6 +81,7 @@ if (Test-Path (Split-Path $launcherManifestTarget -Parent)) {
 Write-Output "[publish] Published update files:"
 Write-Output "  $exeTarget"
 Write-Output "  $pckTarget"
+Write-Output "  $configTarget"
 Write-Output "  $zipTarget"
 Write-Output "  $manifestTarget"
 Write-Output ""

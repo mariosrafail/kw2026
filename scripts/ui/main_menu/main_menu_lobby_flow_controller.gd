@@ -113,6 +113,7 @@ func cache_play_lobby_fade_targets() -> void:
 	fade_base_alpha.clear()
 	var targets: Array[CanvasItem] = []
 	var play_button := _host.get("play_button") as Button
+	var offline_test_button := _host.get("offline_test_button") as Button
 	var options_button := _host.get("options_button") as Button
 	var exit_button := _host.get("exit_button") as Button
 	var auth_footer_panel := _host.get("_auth_footer_panel") as PanelContainer
@@ -120,6 +121,8 @@ func cache_play_lobby_fade_targets() -> void:
 	var logo_node: Variant = _host.get("logo_node")
 	if play_button != null:
 		targets.append(play_button)
+	if offline_test_button != null:
+		targets.append(offline_test_button)
 	if options_button != null:
 		targets.append(options_button)
 	if exit_button != null:

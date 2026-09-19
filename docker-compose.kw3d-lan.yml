@@ -1,0 +1,40 @@
+services:
+  kw_3d_duel_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.kw3d_server
+    container_name: kw_3d_duel_server
+    working_dir: /game
+    volumes:
+      - ./:/game
+    command: ["godot","--headless","--path","/game","--rendering-method","gl_compatibility","res://scenes/prototypes/kw_3d_lan_duel.tscn","--","--kw-server","--kw-port=18886","--kw-bind=0.0.0.0","--kw-transport=enet"]
+    ports:
+      - "18886:18886/udp"
+    restart: unless-stopped
+
+  kw_3d_duel_ws:
+    build:
+      context: .
+      dockerfile: Dockerfile.kw3d_server
+    container_name: kw_3d_duel_ws
+    working_dir: /game
+    volumes:
+      - ./:/game
+    command: ["godot","--headless","--path","/game","--rendering-method","gl_compatibility","res://scenes/prototypes/kw_3d_lan_duel.tscn","--","--kw-server","--kw-port=18887","--kw-bind=0.0.0.0","--kw-transport=websocket"]
+    expose:
+      - "18887"
+    ports:
+      - "18887:18887/tcp"
+    restart: unless-stopped
+
+  kw_lan_portal:
+    image: nginx:alpine
+    container_name: kw_lan_portal
+    depends_on:
+      - kw_3d_duel_ws
+    volumes:
+      - ./updates_site:/usr/share/nginx/html:ro
+      - ./updates_site/nginx/kw_lan_portal.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8082:80"
+    restart: unless-stopped

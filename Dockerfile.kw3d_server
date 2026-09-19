@@ -1,0 +1,5 @@
+FROM barichello/godot-ci:4.7.2
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 && rm -rf /var/lib/apt/lists/*
+WORKDIR /game
+CMD ["godot","--headless","--path","/game","--rendering-method","gl_compatibility","res://scenes/prototypes/kw_3d_lan_duel.tscn","--","--kw-server","--kw-port=18886","--kw-bind=0.0.0.0"]

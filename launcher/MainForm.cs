@@ -73,7 +73,7 @@ public sealed class MainForm : Form
         _titleLabel.BackColor = Color.Transparent;
         _titleLabel.TextAlign = ContentAlignment.MiddleCenter;
 
-        _subtitleLabel.Text = "Online Client";
+        _subtitleLabel.Text = "LAN Duel";
         _subtitleLabel.Left = 20;
         _subtitleLabel.Top = 60;
         _subtitleLabel.Width = 340;
@@ -109,7 +109,7 @@ public sealed class MainForm : Form
         _endpointLabel.BackColor = Color.Transparent;
         _endpointLabel.TextAlign = ContentAlignment.MiddleCenter;
 
-        _actionButton.Text = "Connect";
+        _actionButton.Text = "PLAY";
         _actionButton.Left = 95;
         _actionButton.Top = 192;
         _actionButton.Width = 190;
@@ -161,7 +161,7 @@ public sealed class MainForm : Form
     private async Task InitializeAsync()
     {
         _config = NormalizeConfig(LoadConfig());
-        _endpointLabel.Text = $"{_config.DefaultHost}:{_config.DefaultPort}";
+        _endpointLabel.Text = "Create / Join room inside the game";
         await RefreshModeAsync();
     }
 
@@ -219,7 +219,7 @@ public sealed class MainForm : Form
     {
         _manifest = null;
         _mode = LauncherMode.Connect;
-        _actionButton.Text = "Connect";
+        _actionButton.Text = "PLAY";
 
         _localVersion = ReadLocalGameVersion();
         UpdateVersionLabel();
@@ -262,7 +262,7 @@ public sealed class MainForm : Form
             else
             {
                 _mode = LauncherMode.Connect;
-                _actionButton.Text = "Connect";
+                _actionButton.Text = "PLAY";
                 _statusLabel.Text = hasLocalGame
                     ? $"Ready (v{_localVersion})"
                     : "Game missing. Upload update payload.";
@@ -359,7 +359,7 @@ public sealed class MainForm : Form
             _statusLabel.Text = $"Updated to {_manifest.Version}";
 
             _mode = LauncherMode.Connect;
-            _actionButton.Text = "Connect";
+            _actionButton.Text = "PLAY";
         }
         catch (Exception ex)
         {
@@ -386,7 +386,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        var args = $"--mode=client --host={_config.DefaultHost} --port={_config.DefaultPort}";
+        var args = "";
         var psi = new ProcessStartInfo
         {
             FileName = gameExe,
