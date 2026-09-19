@@ -151,7 +151,7 @@ func update(delta: float, impact_velocity: float = 0.0) -> void:
 		head_offset_velocity.y -= 0.65
 		for f in feet: f.swinging = false
 	if grounded:
-		var stride_distance := lerpf(0.8, 3.2, sqrt(ratio))
+		var stride_distance := lerpf(0.9, 3.45, sqrt(ratio))
 		step_interval = clampf(stride_distance / maxf(0.25, speed) * 0.5, 0.14, 0.40)
 		if moving:
 			cycle = fposmod(cycle + dt / (step_interval * 2.0), 1.0)
@@ -233,10 +233,10 @@ func _begin_swing(index: int, horizontal: Vector3, settle: bool) -> void:
 	f.settle = settle
 	f.elapsed = 0.0
 	f.progress = 0.0
-	f.duration = 0.19 if settle else step_interval * 0.86
+	f.duration = 0.19 if settle else step_interval * 1.08
 	f.start = f.contact
 	f.from_heading = f.heading
-	f.lift = (0.11 if settle else lerpf(0.20, 0.38, clampf(speed / 11.0, 0, 1))) * rng.randf_range(0.92, 1.14)
+	f.lift = (0.11 if settle else lerpf(0.28, 0.58, clampf(speed / 11.0, 0, 1))) * rng.randf_range(0.94, 1.10)
 	f.flourish = rng.randf_range(-0.22, 0.22) * playfulness
 	f.toe_out = (1.0 if index == 0 else -1.0) * 0.055 + rng.randf_range(-0.04, 0.04) * playfulness
 	f.goal = _ground(_neutral(index) + horizontal * (f.duration + step_interval * 0.54))["position"]
@@ -296,9 +296,9 @@ func _tick_foot(index: int, dt: float, moving: bool, horizontal: Vector3) -> voi
 	_apply_foot(f, pitch_angle, roll, lift)
 
 func _swing_pitch(p: float) -> float:
-	if p < 0.25: return lerpf(-0.32, -0.55, smoothstep(0, 0.25, p))
-	if p < 0.68: return lerpf(-0.55, 0.32, smoothstep(0.25, 0.68, p))
-	return lerpf(0.32, 0.25, smoothstep(0.68, 1, p))
+	if p < 0.25: return lerpf(-0.32,-0.55,smoothstep(0,0.25,p))
+	if p < 0.68: return lerpf(-0.55,0.32,smoothstep(0.25,0.68,p))
+	return lerpf(0.32,0.25,smoothstep(0.68,1,p))
 
 func _apply_foot(f: FootState, pitch_angle: float, roll: float, lift: float) -> void:
 	var front := Vector3(-sin(f.heading), 0, -cos(f.heading))
@@ -309,7 +309,7 @@ func _apply_foot(f: FootState, pitch_angle: float, roll: float, lift: float) -> 
 	for point in f.corners: bottom = minf(bottom, f.normal.dot(basis * point))
 	var center := basis * f.sole_center
 	# A heel/toe roll may rotate the mesh, but cannot push the sole through its floor.
-	var origin := f.contact - center + f.normal * (center.dot(f.normal) - bottom + lift + 0.012)
+	var origin := f.contact - center + f.normal * (center.dot(f.normal) - bottom + lift + 0.035)
 	f.node.global_transform = Transform3D(basis, origin)
 
 func _air_foot(index: int, dt: float) -> void:
@@ -317,7 +317,7 @@ func _air_foot(index: int, dt: float) -> void:
 	f.phase = "AIR"
 	var side := -1.0 if index == 0 else 1.0
 	var flight := Basis(Vector3.UP, travel_yaw)
-	var target := _neutral(index) + flight * Vector3(side * 0.09, 0.20 + (0.12 if index == 0 else 0.0), side * 0.24)
+	var target := _neutral(index) + flight * Vector3(side * 0.11,0.30 + (0.15 if index == 0 else 0.0),side * 0.28)
 	f.contact = target
 	f.heading = lerp_angle(f.heading, travel_yaw, 1.0 - exp(-10.0 * dt))
 	f.normal = Vector3.UP

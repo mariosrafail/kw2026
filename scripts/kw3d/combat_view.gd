@@ -17,8 +17,7 @@ func _update_counter() -> void:
 	if kill_label!=null:kill_label.text="KILLS  %d"%total_kills
 	if alive_label!=null:alive_label.text="CO-OP  %d PLAYERS"%stage.player_count
 	if wave_label!=null and director!=null:wave_label.text="WAVE %02d  //  %d LEFT"%[director.wave,director.remaining]
-func notify_hit(point: Vector3,direction: Vector3,amount: float,lethal: bool) -> void:
-	_spawn_damage_feedback(point,direction,amount,lethal)
+func notify_hit(_point: Vector3,_direction: Vector3,_amount: float,lethal: bool) -> void:
 	reticle.notify_hit(lethal)
 	confirm_audio.stream=confirm_kill if lethal else confirm_hit;confirm_audio.play()
 	if lethal:score_pulse=0.65
@@ -29,6 +28,7 @@ func apply_status(snapshot: Dictionary,local: Dictionary) -> void:
 	director.health=local.get("hp",director.health)
 	director.dead=director.health<=0
 	director.hud.set_health(director.health,100.0)
+	stage._set_player_healthbar(director.health,100.0)
 	if director.dead and not director.hud.game_over_panel.visible and not stage.menu.visible:
 		director.hud.show_death(director.wave,total_kills)
 		director.hud.death_stats.text="TEAM STILL PLAYING"

@@ -181,6 +181,7 @@ func _fire_physics_ball() -> void:
 	if not session.connected or combat.is_game_over() or shot_cooldown>0.00001:return
 	shot_cooldown+=0.10
 	_kick_weapon_visuals()
+	_apply_body_fire_recoil(yaw)
 	_play_ak_fire_audio();_spawn_muzzle_flash();combat.reticle.notify_shot()
 	input_adapter.apply_weapon_recoil(aiming)
 	yaw=input_adapter.yaw;pitch=input_adapter.pitch
@@ -381,10 +382,17 @@ func _event(e: Dictionary) -> void:
 				combat._spawn_world_muzzle_flash(e.from,(e.to-e.from).normalized())
 				arena_audio._play_spatial(AK47_SHOT_SFX,e.from,-14.0,randf_range(0.96,1.04))
 		"damage":
+			var victim_skin := "outrage"
+			if int(e.actor)==session.actor_id:
+				victim_skin=str(local_state.get("skin","outrage"))
+			elif state_records.has(e.actor):
+				victim_skin=str((state_records[e.actor] as Dictionary).get("skin","outrage"))
+			combat._spawn_damage_feedback(e.p,e.dir,e.amount,e.lethal,combat.blood_color_for_skin(victim_skin),e.owner==session.actor_id)
 			if e.owner==session.actor_id:
 				combat.notify_hit(e.p,e.dir,e.amount,e.lethal)
 			if e.actor==session.actor_id:
 				last_health_tick=e.tick;combat.director.health=e.hp;combat.director.dead=e.lethal
+				_set_player_healthbar(e.hp,100.0)
 				combat.director.hud.set_health(e.hp,100);combat.director.hud.notify_hurt(e.amount);input_adapter.rumble(0.65,0.15)
 				var local_dir: Vector3 = player_visual.global_basis.inverse() * (e.dir as Vector3)
 				if locomotion != null:

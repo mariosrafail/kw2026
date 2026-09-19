@@ -23,3 +23,7 @@ Checkpoint baseline: alpha-0.1.40. AK recoil v1 below is local development work 
 - Added an optional Godot 4.7 screen/depth edge-detection pass inspired by the supplied NekotoArts Borderlands-style shader. `Y` toggles it independently of `O` comic ink and `P` pixel rendering; default is OFF.
 - Borderlands edge QA verifies the fullscreen depth pass on the Compatibility renderer and a visible frame difference with the effect enabled.
 - Tightened the 3D AK hold slightly toward the body and lower (`side 1.10 -> 0.90`, `height 0.80 -> 0.72`, `distance 0.98 -> 0.92`). Side-swap clearance, ADS stability, near/far aim and cover-camera tests remain passing.
+- Rifle fire now gives the shooter a small real backward body impulse (`1.25` velocity units) plus a visual torso spring kick. The same impulse runs in local prediction and the authoritative server; two-client integration remains consistent.
+- Confirmed bullet damage now throws 3D voxel blood/chunk particles using the victim warrior primary palette (e.g. Tasko purple, Gan cyan, CrashOut red). Kill bursts are larger; gameplay damage remains unchanged.
+- The local player now has a billboarded world-space health bar above the head, driven by the same authoritative/local health state as the existing HUD.
+- Locomotion was pushed toward a running gait: longer stride, roughly `0.53 m` peak swing lift and roughly `0.216 s` swing airtime at the tested run speed. Alternating support, slope contact and sharp-reversal QA remain passing.

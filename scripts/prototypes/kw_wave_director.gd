@@ -216,8 +216,11 @@ func receive_player_damage(amount: float, source: Vector3) -> bool:
 	damage_grace=0.38
 	hud.set_health(health,MAX_HEALTH)
 	hud.notify_hurt(amount)
+	stage._set_player_healthbar(health,MAX_HEALTH)
+	var hit_direction: Vector3 = (stage.player.global_position-source).normalized()
+	combat._spawn_damage_feedback(stage.player.global_position+Vector3(0,1.15,0),hit_direction,amount,health<=0,combat.blood_color_for_skin("outrage"),false)
 	# Visual-only flinch, never a camera kick or an aim displacement.
-	var local: Vector3=stage.player_visual.global_basis.inverse()*(stage.player.global_position-source).normalized()
+	var local: Vector3=stage.player_visual.global_basis.inverse()*hit_direction
 	stage.locomotion.body_angular_velocity+=Vector3(local.z,0,-local.x)*0.9
 	if health<=0:
 		dead=true

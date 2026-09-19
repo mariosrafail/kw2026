@@ -44,6 +44,9 @@ var borderlands_enabled := false
 var pixel_materials: Array[WeakRef] = []
 var pixel_post_layer: CanvasLayer
 var borderlands_quad: MeshInstance3D
+var player_health_bar: Sprite3D
+var player_health_texture: ImageTexture
+var player_health_value := 100.0
 var aim_target := Vector3.ZERO
 
 var head_rig: Node3D
@@ -217,6 +220,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if player == null:
 		return
+	if combat != null and combat.director != null:
+		_set_player_healthbar(combat.director.health,100.0)
 	if combat != null and combat.is_game_over():
 		player.velocity = Vector3.ZERO
 		return
@@ -379,6 +384,41 @@ func _build_player() -> void:
 
 	camera_yaw.rotation.y = yaw
 	camera_pitch.rotation.x = pitch
+	_build_player_healthbar()
+
+func _build_player_healthbar() -> void:
+	player_health_bar = Sprite3D.new()
+	player_health_bar.name = "PlayerHealthBar"
+	player_health_bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	player_health_bar.pixel_size = 0.013
+	player_health_bar.position = Vector3(0,2.58,0)
+	player_health_bar.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	player.add_child(player_health_bar)
+	_set_player_healthbar(100.0,100.0)
+
+func _set_player_healthbar(value: float, maximum: float = 100.0) -> void:
+	player_health_value = clampf(value,0.0,maximum)
+	if player_health_bar == null:return
+	var image := Image.create(128,18,false,Image.FORMAT_RGBA8)
+	image.fill(Color("111726"))
+	image.fill_rect(Rect2i(2,2,124,14),Color("351621"))
+	var width := int(round(120.0*player_health_value/maxf(1.0,maximum)))
+	if width > 0:
+		image.fill_rect(Rect2i(4,4,width,10),Color("ff586e"))
+		image.fill_rect(Rect2i(4,4,width,2),Color("ff9aac"))
+	for i in range(1,5):image.fill_rect(Rect2i(4+i*24,4,1,10),Color("562333"))
+	if player_health_texture == null:
+		player_health_texture=ImageTexture.create_from_image(image)
+		player_health_bar.texture=player_health_texture
+	else:player_health_texture.update(image)
+	player_health_bar.visible = player_visual == null or player_visual.visible
+
+func _apply_body_fire_recoil(shot_yaw: float) -> void:
+	if player == null:return
+	var backward := Basis(Vector3.UP,shot_yaw).z.normalized()
+	player.velocity += backward * AK_RECOIL_MODEL.BODY_RECOIL_IMPULSE
+	if locomotion != null:
+		locomotion.body_offset_velocity += backward * 0.34
 
 func _build_outage_voxel_body() -> void:
 	# One authored source for geometry, UVs, rest positions and pivots.
@@ -654,6 +694,7 @@ func _fire_physics_ball() -> void:
 	_play_ak_fire_audio()
 	var chest := _weapon_anchor()
 	combat.fire(weapon_muzzle.global_position,aim_target,chest)
+	_apply_body_fire_recoil(yaw)
 	var aim_kick: Vector2 = aim_recoil.kick(aiming)
 	yaw = wrapf(yaw + aim_kick.x, -PI, PI)
 	pitch = clampf(pitch + aim_kick.y, deg_to_rad(-48.0), deg_to_rad(30.0))

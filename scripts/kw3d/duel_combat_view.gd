@@ -23,6 +23,7 @@ func apply_status(snapshot: Dictionary, local: Dictionary) -> void:
 	director.health = float(local.get("hp",director.health))
 	director.dead = director.health <= 0.0
 	director.hud.set_health(director.health,100.0)
+	stage._set_player_healthbar(director.health,100.0)
 	if director.dead:
 		var left = float(local.get("respawn_left",0.0))
 		director.hud.banner.text = "DOWN  //  RESPAWN %.1fs" % left

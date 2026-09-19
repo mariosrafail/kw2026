@@ -7,6 +7,11 @@ var wave_label: Label
 const DAMAGE := 20.0
 const RANGE := 120.0
 const SHOT_MASK := 5 # environment (1) + targets (4); cosmetic effects have no bodies.
+const VICTIM_MAIN_COLORS := {
+	"outrage": Color("fa0512"), "tasko": Color("bf3fff"), "gan": Color("7ab1b7"),
+	"celler": Color("eaeaea"), "nova": Color("334756"), "m4": Color("c59370"),
+	"crashout": Color("a11b1b"), "juice": Color("f2ff8f"), "kotro": Color("78ead8")
+}
 var stage: Node3D
 var targets: Array[Node3D] = []
 var shots_fired := 0
@@ -41,6 +46,9 @@ var impacts: Array[Node3D] = []
 var confirm_audio: AudioStreamPlayer
 var confirm_hit: AudioStreamWAV
 var confirm_kill: AudioStreamWAV
+
+static func blood_color_for_skin(skin: String) -> Color:
+	return VICTIM_MAIN_COLORS.get(skin.to_lower(),Color("fa0512"))
 
 func setup(owner_stage: Node3D) -> void:
 	stage = owner_stage
@@ -147,7 +155,8 @@ func fire(muzzle: Vector3, target: Vector3, chest: Vector3) -> Dictionary:
 			object.apply_impulse(direction * 1.6, endpoint - object.global_position)
 		_spawn_impact(endpoint, solution["normal"])
 		if applied:
-			_spawn_damage_feedback(endpoint, direction, DAMAGE, object.dead)
+			var victim_skin := str(object.get("warrior_id")) if object != null else "outrage"
+			_spawn_damage_feedback(endpoint,direction,DAMAGE,object.dead,blood_color_for_skin(victim_skin),true)
 	# Never draw a misleading line leaving the chest when the barrel is blocked.
 	if not solution["guard_blocked"]: _spawn_tracer(muzzle, endpoint)
 	if reticle != null: reticle.notify_shot()
@@ -481,15 +490,17 @@ func _build_score_hud() -> void:
 	kill_notice.offset_bottom = 56
 	kill_notice.hide()
 
-func _spawn_damage_feedback(point: Vector3, direction: Vector3, amount: float, lethal: bool) -> void:
+func _spawn_damage_feedback(point: Vector3,direction: Vector3,amount: float,lethal: bool,blood_color: Color = Color("fa0512"),show_number: bool = true) -> void:
 	# Cosmetic only. Randomness changes presentation, never hit direction or damage.
 	while hit_effects.size() > 64:
 		var oldest: Dictionary = hit_effects.pop_front()
 		if is_instance_valid(oldest.node):
 			oldest.node.queue_free()
-	if director != null:
+	if director != null and show_number:
 		director.hud.damage_number(point, amount, lethal)
-	var count := fx_rng.randi_range(11,15) if lethal else fx_rng.randi_range(7,10)
+	var blood_material := _fx_material(blood_color,3.2)
+	var blood_hot := _fx_material(blood_color.lightened(0.28),4.6)
+	var count := fx_rng.randi_range(14,19) if lethal else fx_rng.randi_range(8,12)
 	var bonk := fx_rng.randf() < 0.10
 	for i in range(count):
 		var chip := MeshInstance3D.new()
@@ -497,7 +508,7 @@ func _spawn_damage_feedback(point: Vector3, direction: Vector3, amount: float, l
 		var base_size := fx_rng.randf_range(0.035,0.075) * (1.45 if lethal and i < 3 else 1.0)
 		box.size = Vector3(base_size,base_size,base_size * fx_rng.randf_range(0.8,1.8))
 		chip.mesh = box
-		chip.material_override = hit_material if i % 3 != 0 else impact_material
+		chip.material_override = blood_hot if i % 4 == 0 else blood_material
 		chip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(chip)
 		if i < 4:

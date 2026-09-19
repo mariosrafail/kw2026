@@ -2,6 +2,7 @@ extends Node3D
 ## Authoritative 60 Hz co-op proof. This scene creates no camera, mesh, HUD or audio node.
 signal event_created(data: Dictionary)
 const LEVEL:=preload("res://scripts/kw3d/online_level.gd")
+const AK_RECOIL:=preload("res://scripts/kw3d/ak_recoil.gd")
 const ACTOR:=preload("res://scripts/kw3d/authority_actor.gd")
 const MOTOR:=preload("res://scripts/kw3d/actor_motor.gd")
 const DT:=1.0/60.0
@@ -178,6 +179,7 @@ func ray(from: Vector3,to: Vector3,mask: int=5,exclude: Array[RID]=[]) -> Dictio
 
 func _shoot(a: Node3D) -> void:
 	a.fire_clock=0.10
+	a.velocity += Basis(Vector3.UP,a.aim_yaw).z * AK_RECOIL.BODY_RECOIL_IMPULSE
 	var rewound: Array=_rewind_targets(int(a.command.get("ct",tick_id)))
 	a.build_aim(get_world_3d().direct_space_state,0.0)
 	var hit =ray(a.weapon_anchor(),a.muzzle)
