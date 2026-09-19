@@ -67,7 +67,7 @@ func _ready() -> void:
 	network_status=Label.new();network_status.position=Vector2(12,108);network_status.add_theme_font_size_override("font_size",10)
 	help_panel.add_child(network_status)
 	for c in help_panel.get_children():
-		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim   G / RB grenade\nSpace / A jump   Q / R3 shoulder   Esc / Start menu"
+		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim   G / RB grenade\nSpace / A jump   Q / R3 shoulder   Y Borderlands edges   Esc / Start menu"
 	set_menu(true)
 	if options.has("connect") or options.has("qa-client"):
 		connect_server(str(options.get("host","127.0.0.1")),int(options.get("port","18886")))
@@ -80,6 +80,7 @@ func _control_action(action: String) -> void:
 		"music":arena_audio.toggle_music()
 		"comic":_set_comic_enabled(not comic_enabled)
 		"pixels":_set_pixel_enabled(not pixel_enabled)
+		"borderlands":_set_borderlands_enabled(not borderlands_enabled)
 
 func set_menu(opened: bool) -> void:
 	if input_adapter==null:return

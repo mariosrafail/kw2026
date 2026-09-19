@@ -23,7 +23,7 @@ var config_path ="user://kw3d_controls.cfg"
 var settings: Dictionary={"look_x":2.6,"look_y":2.1,"deadzone":0.16,"look_curve":1.5,"ads":0.78,"invert_y":false,"aim_toggle":false,"sprint_toggle":true,"vibration":0.4}
 var overrides: Dictionary={}
 var fov =74.0
-const KEYS: Dictionary={"left":KEY_A,"right":KEY_D,"forward":KEY_W,"back":KEY_S,"jump":KEY_SPACE,"sprint":KEY_SHIFT,"grenade":KEY_G,"shoulder":KEY_Q,"pause":KEY_ESCAPE,"help":KEY_TAB,"music":KEY_M,"comic":KEY_O,"pixels":KEY_P}
+const KEYS: Dictionary={"left":KEY_A,"right":KEY_D,"forward":KEY_W,"back":KEY_S,"jump":KEY_SPACE,"sprint":KEY_SHIFT,"grenade":KEY_G,"shoulder":KEY_Q,"pause":KEY_ESCAPE,"help":KEY_TAB,"music":KEY_M,"comic":KEY_O,"pixels":KEY_P,"borderlands":KEY_Y}
 const BUTTONS: Dictionary={"jump":JOY_BUTTON_A,"sprint":JOY_BUTTON_LEFT_STICK,"grenade":JOY_BUTTON_RIGHT_SHOULDER,"shoulder":JOY_BUTTON_RIGHT_STICK,"pause":JOY_BUTTON_START,"help":JOY_BUTTON_BACK}
 func _ready() -> void:
 	name="PortableInput"
@@ -98,7 +98,7 @@ func _input(event: InputEvent) -> void:
 		var delta_pitch: float =-event.screen_relative.y*0.0013*ratio*(-1.0 if settings.invert_y else 1.0)
 		yaw+=delta_yaw;pitch+=delta_pitch
 		recoil_model.note_manual_look(delta_yaw,delta_pitch)
-	for action in ["jump","grenade","shoulder","sprint","aim","help","music","comic","pixels"]:
+	for action in ["jump","grenade","shoulder","sprint","aim","help","music","comic","pixels","borderlands"]:
 		if event.is_action_pressed(PREFIX+action):
 			match action:
 				"jump":jump_serial+=1
@@ -158,7 +158,7 @@ func rumble(strength: float,duration: float=0.08) -> void:
 		Input.start_joy_vibration(pad_id,strength*float(settings.vibration),strength*float(settings.vibration)*0.55,duration)
 
 func prompt() -> String:
-	if last_device!="pad":return "WASD move  |  LMB / RMB fire / aim  |  G grenade  |  Esc menu"
+	if last_device!="pad":return "WASD move  |  LMB / RMB fire / aim  |  G grenade  |  Y edges  |  Esc menu"
 	var sony =pad_id>=0 and ("Dual" in Input.get_joy_name(pad_id) or "PS" in Input.get_joy_name(pad_id))
 	return "Sticks move / look  |  R2 / L2 fire / aim  |  R1 grenade  |  Options menu" if sony else "Sticks move / look  |  RT / LT fire / aim  |  RB grenade  |  Menu"
 

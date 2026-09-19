@@ -3,8 +3,9 @@ extends Node3D
 const ARENA_AUDIO := preload("res://scripts/prototypes/kw_arena_audio.gd")
 const GRENADE_SKILL := preload("res://scripts/prototypes/kw_grenade_skill.gd")
 const SCENE_INK := preload("res://scripts/prototypes/kw_scene_ink.gd")
+const BORDERLANDS_EDGE := preload("res://scripts/prototypes/kw_borderlands_edge.gdshader")
 const AK_INK_HULL := preload("res://assets/prototypes/ak47_outline/hull.res")
-const WEAPON_HOLD_HEIGHT := 0.80
+const WEAPON_HOLD_HEIGHT := 0.72
 var arena_audio: Node
 var grenade_skill: Node3D
 var comic_enabled := true
@@ -39,8 +40,10 @@ var weapon_visual_wobble: Node3D
 var weapon_muzzle: Marker3D
 var ak_fire_audio: AudioStreamPlayer3D
 var pixel_enabled := true
+var borderlands_enabled := false
 var pixel_materials: Array[WeakRef] = []
 var pixel_post_layer: CanvasLayer
+var borderlands_quad: MeshInstance3D
 var aim_target := Vector3.ZERO
 
 var head_rig: Node3D
@@ -86,8 +89,8 @@ var head_motion_initialized := false
 
 const PIXEL_MATERIALS := preload("res://scripts/prototypes/kw_pixel_materials.gd")
 const PIXEL_SCREEN := preload("res://scripts/prototypes/kw_pixel_screen.gdshader")
-const WEAPON_HOLD_DISTANCE := 0.98
-const WEAPON_HOLD_SIDE := 1.10
+const WEAPON_HOLD_DISTANCE := 0.92
+const WEAPON_HOLD_SIDE := 0.90
 const MOVE_SPEED := 7.5
 const SPRINT_SPEED := 11.0
 const ACCEL := 28.0
@@ -204,6 +207,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_pixel_enabled(not pixel_enabled)
 		elif event.physical_keycode == KEY_O:
 			_set_comic_enabled(not comic_enabled)
+		elif event.physical_keycode == KEY_Y:
+			_set_borderlands_enabled(not borderlands_enabled)
 		elif event.physical_keycode == KEY_R:
 			_spawn_chaos_drop()
 		elif event.physical_keycode == KEY_F:
@@ -608,7 +613,7 @@ func _build_hud() -> void:
 	title.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
 	help_panel.add_child(title)
 	var help := Label.new()
-	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire\nG grenade   Q swap   B retry   O comic   P pixels   M music   TAB help\nMOUSE look   R chaos   F low gravity   ESC cursor   F10 test rooms"
+	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire\nG grenade   Q swap   B retry   O comic   P pixels   Y Borderlands   M music\nMOUSE look   R chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
 	help.position = Vector2(12, 28)
 	help.add_theme_font_size_override("font_size", 11)
 	help.add_theme_color_override("font_color", Color(0.86, 0.86, 0.92))
@@ -630,7 +635,8 @@ func _update_status() -> void:
 		var world_status := "LOW GRAVITY" if low_gravity else "NORMAL GRAVITY"
 		var ink_status := "COMIC INK: ON" if head_style != null and head_style.enabled else "COMIC INK: OFF"
 		var test_status := "SANDBOX / AIM LAB" if offline_test_mode == "sandbox" else "WAVES / COMBAT RANGE"
-		status_label.text = test_status + "  |  " + world_status + "  |  " + ink_status + ("  |  PIXEL: ON" if pixel_enabled else "  |  PIXEL: OFF")
+		var edge_status := "EDGES: ON" if borderlands_enabled else "EDGES: OFF"
+		status_label.text = test_status + "  |  " + world_status + "  |  " + ink_status + ("  |  PIXEL: ON" if pixel_enabled else "  |  PIXEL: OFF") + "  |  " + edge_status
 		status_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.55) if low_gravity else Color(0.4, 0.9, 1.0))
 func _kick_weapon_visuals() -> void:
 	weapon_recoil = 1.0
@@ -858,6 +864,28 @@ func _build_pixel_pass() -> void:
 	mat.shader = PIXEL_SCREEN
 	rect.material = mat
 	pixel_post_layer.add_child(rect)
+	_build_borderlands_pass()
+
+func _build_borderlands_pass() -> void:
+	borderlands_quad = MeshInstance3D.new()
+	borderlands_quad.name = "BorderlandsEdgePass"
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.0, 2.0)
+	borderlands_quad.mesh = quad
+	borderlands_quad.extra_cull_margin = 16384.0
+	borderlands_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := ShaderMaterial.new()
+	mat.shader = BORDERLANDS_EDGE
+	mat.render_priority = 127
+	borderlands_quad.material_override = mat
+	borderlands_quad.visible = borderlands_enabled
+	add_child(borderlands_quad)
+
+func _set_borderlands_enabled(value: bool) -> void:
+	borderlands_enabled = value
+	if borderlands_quad != null:
+		borderlands_quad.visible = value
+	_update_status()
 
 func _set_pixel_enabled(value: bool) -> void:
 	pixel_enabled = value

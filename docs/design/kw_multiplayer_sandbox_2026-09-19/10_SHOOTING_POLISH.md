@@ -20,3 +20,6 @@ Checkpoint baseline: alpha-0.1.40. AK recoil v1 below is local development work 
 - Aim/ADS/cover/weapon-side regressions passed after the polish.
 - Public retail 2-client WSS test passed in MATCH on alpha-0.1.38 (historical published baseline).
 - Local two-client native network integration passed with AK recoil v1, including authoritative combat/state consistency.
+- Added an optional Godot 4.7 screen/depth edge-detection pass inspired by the supplied NekotoArts Borderlands-style shader. `Y` toggles it independently of `O` comic ink and `P` pixel rendering; default is OFF.
+- Borderlands edge QA verifies the fullscreen depth pass on the Compatibility renderer and a visible frame difference with the effect enabled.
+- Tightened the 3D AK hold slightly toward the body and lower (`side 1.10 -> 0.90`, `height 0.80 -> 0.72`, `distance 0.98 -> 0.92`). Side-swap clearance, ADS stability, near/far aim and cover-camera tests remain passing.
