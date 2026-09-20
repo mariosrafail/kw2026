@@ -14,6 +14,7 @@ var yaw =0.0
 var pitch =-0.174533
 var side =1.0
 var weapon_slot =0
+var inspect_requested=false
 var jump_serial =0
 var grenade_serial =0
 var sequence =0
@@ -24,7 +25,7 @@ var config_path ="user://kw3d_controls.cfg"
 var settings: Dictionary={"look_x":2.6,"look_y":2.1,"deadzone":0.16,"look_curve":1.5,"ads":0.78,"invert_y":false,"aim_toggle":false,"sprint_toggle":true,"vibration":0.4}
 var overrides: Dictionary={}
 var fov =74.0
-const KEYS: Dictionary={"left":KEY_A,"right":KEY_D,"forward":KEY_W,"back":KEY_S,"jump":KEY_SPACE,"sprint":KEY_SHIFT,"grenade":KEY_G,"reload":KEY_R,"shoulder":KEY_Q,"pause":KEY_ESCAPE,"help":KEY_TAB,"music":KEY_M,"comic":KEY_O,"pixels":KEY_P,"borderlands":KEY_Y}
+const KEYS: Dictionary={"left":KEY_A,"right":KEY_D,"forward":KEY_W,"back":KEY_S,"jump":KEY_SPACE,"sprint":KEY_SHIFT,"grenade":KEY_G,"reload":KEY_R,"inspect":KEY_H,"shoulder":KEY_Q,"pause":KEY_ESCAPE,"help":KEY_TAB,"music":KEY_M,"comic":KEY_O,"pixels":KEY_P,"borderlands":KEY_Y}
 const BUTTONS: Dictionary={"jump":JOY_BUTTON_A,"sprint":JOY_BUTTON_LEFT_STICK,"grenade":JOY_BUTTON_RIGHT_SHOULDER,"reload":JOY_BUTTON_X,"shoulder":JOY_BUTTON_RIGHT_STICK,"pause":JOY_BUTTON_START,"help":JOY_BUTTON_BACK}
 func _ready() -> void:
 	name="PortableInput"
@@ -94,7 +95,7 @@ func _input(event: InputEvent) -> void:
 		action_requested.emit("pause");get_viewport().set_input_as_handled();return
 	if not enabled or not focused:return
 	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
-		weapon_slot=posmod(weapon_slot+(1 if event.button_index==MOUSE_BUTTON_WHEEL_DOWN else -1),2)
+		weapon_slot=posmod(weapon_slot+(1 if event.button_index==MOUSE_BUTTON_WHEEL_DOWN else -1),3)
 		action_requested.emit("weapon")
 		get_viewport().set_input_as_handled();return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
@@ -103,11 +104,12 @@ func _input(event: InputEvent) -> void:
 		var delta_pitch: float =-event.screen_relative.y*0.0013*ratio*(-1.0 if settings.invert_y else 1.0)
 		yaw+=delta_yaw;pitch+=delta_pitch
 		recoil_model.note_manual_look(delta_yaw,delta_pitch)
-	for action in ["jump","grenade","shoulder","sprint","aim","help","music","comic","pixels","borderlands"]:
+	for action in ["jump","grenade","inspect","shoulder","sprint","aim","help","music","comic","pixels","borderlands"]:
 		if event.is_action_pressed(PREFIX+action):
 			match action:
 				"jump":jump_serial+=1
 				"grenade":grenade_serial+=1
+				"inspect":action_requested.emit("inspect")
 				"shoulder":side=1.0
 				"sprint":sprint_latched=not sprint_latched
 				"aim":aim_latched=not aim_latched
@@ -166,7 +168,7 @@ func rumble(strength: float,duration: float=0.08) -> void:
 		Input.start_joy_vibration(pad_id,strength*float(settings.vibration),strength*float(settings.vibration)*0.55,duration)
 
 func prompt() -> String:
-	if last_device!="pad":return "WASD move  |  LMB fire  |  RMB aim+magnet (slow)  |  R reload  |  G grenade  |  Y edges  |  Esc menu"
+	if last_device!="pad":return "WASD move  |  LMB fire  |  RMB aim+magnet (slow)  |  H inspect  |  wheel weapon  |  R reload  |  Esc menu"
 	var sony =pad_id>=0 and ("Dual" in Input.get_joy_name(pad_id) or "PS" in Input.get_joy_name(pad_id))
 	return "Sticks move / look  |  R2 fire  |  L2 aim+magnet (slow)  |  Square reload  |  R1 grenade  |  Options menu" if sony else "Sticks move / look  |  RT fire  |  LT aim+magnet (slow)  |  X reload  |  RB grenade  |  Menu"
 

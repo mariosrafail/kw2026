@@ -67,7 +67,7 @@ func _ready() -> void:
 	network_status=Label.new();network_status.position=Vector2(12,108);network_status.add_theme_font_size_override("font_size",10)
 	help_panel.add_child(network_status)
 	for c in help_panel.get_children():
-		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim+magnet (slow)   R / X reload   WHEEL weapon   G / RB grenade\nSpace / A jump   Y Borderlands edges   Esc / Start menu"
+		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim+magnet (slow)   R / X reload   WHEEL weapon   H inspect\nKAR: RMB/LT sniper scope   G / RB grenade   Y Borderlands edges   Esc / Start menu"
 	set_menu(true)
 	if options.has("connect") or options.has("qa-client"):
 		connect_server(str(options.get("host","127.0.0.1")),int(options.get("port","18886")))
@@ -82,6 +82,7 @@ func _control_action(action: String) -> void:
 		"pixels":_set_pixel_enabled(not pixel_enabled)
 		"borderlands":_set_borderlands_enabled(not borderlands_enabled)
 		"weapon":_set_weapon_slot(input_adapter.weapon_slot,true)
+		"inspect":_start_weapon_inspect()
 
 func set_menu(opened: bool) -> void:
 	if input_adapter==null:return
@@ -225,6 +226,7 @@ func _apply_online_aim_assist(command: Dictionary,dt: float) -> void:
 
 func _fire_physics_ball() -> void:
 	if not session.connected or combat.is_game_over() or shot_cooldown>0.00001:return
+	if inspect_time>0.0:return
 	if reload_remaining>0.0:return
 	if ammo_in_mag<=0:
 		_start_reload();return
@@ -234,9 +236,12 @@ func _fire_physics_ball() -> void:
 	var kick: Vector2=input_adapter.apply_weapon_recoil(aiming)
 	if weapon_slot==1:
 		kick+=input_adapter.apply_weapon_recoil(aiming)
+	elif weapon_slot==2:
+		kick+=input_adapter.apply_weapon_recoil(aiming)*1.55
 	yaw=input_adapter.yaw;pitch=input_adapter.pitch
 	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
-	last_prediction_at=age;input_adapter.rumble(0.42 if weapon_slot==1 else 0.24,0.11 if weapon_slot==1 else 0.08)
+	last_prediction_at=age
+	input_adapter.rumble(0.65 if weapon_slot==2 else 0.42 if weapon_slot==1 else 0.24,0.14 if weapon_slot==2 else 0.11 if weapon_slot==1 else 0.08)
 	if ammo_in_mag<=0:_start_reload()
 
 func _snapshot(snapshot: Dictionary) -> void:
@@ -313,6 +318,7 @@ func _make_replica(state: Dictionary) -> void:
 	var gun: Node3D=null
 	var ak_body: Node3D=null
 	var shotgun_body: Node3D=null
+	var kar_body: Node3D=null
 	var damage_visual: Node=null
 	if state.bot:
 		node=load("res://scripts/prototypes/kw_training_dummy.gd").new()
@@ -355,9 +361,21 @@ func _make_replica(state: Dictionary) -> void:
 		_add_weapon_box(shotgun_body,"SG_Receiver",Vector3(0.18,0.01,0),Vector3(0.62,0.25,0.22),Color("30343b"))
 		_add_weapon_box(shotgun_body,"SG_Barrel",Vector3(0.88,0.055,0),Vector3(0.92,0.12,0.14),Color("b7c0c8"))
 		_add_weapon_box(shotgun_body,"SG_Pump",Vector3(0.62,-0.09,0),Vector3(0.42,0.18,0.25),Color("8a5238"))
-		shotgun_body.visible=int(state.get("weapon",0))==1;ak_body.visible=not shotgun_body.visible
+		kar_body=Node3D.new();kar_body.name="RemoteKARBody";kar_body.rotation.y=PI*0.5;kar_body.position=Vector3(0.10,0,-0.30);gun.add_child(kar_body)
+		KAR_VOXEL_BUILDER.build(kar_body)
+		var kar_materials: Dictionary={}
+		for part in kar_body.get_children():
+			if not part is MeshInstance3D:continue
+			var original:=part.material_override as StandardMaterial3D
+			var key:=original.get_instance_id()
+			if not kar_materials.has(key):
+				var mat:=PIXEL_MATERIALS.from_standard(original,0.018);mat.set_shader_parameter("comic_enabled",comic_enabled);mat.set_shader_parameter("pixel_enabled",pixel_enabled)
+				kar_materials[key]=mat;pixel_materials.append(weakref(mat))
+			part.material_override=kar_materials[key];_add_scene_outline(part,1.10)
+		var selected:=clampi(int(state.get("weapon",0)),0,2)
+		ak_body.visible=selected==0;shotgun_body.visible=selected==1;kar_body.visible=selected==2
 	var record: Dictionary={"node":node,"visual":visual,"style":style,"rigs":rig_nodes,"next":state,"prev":state,"age":0.05,"bot":state.bot,"steps":state.steps,"dead":false,
-		"gun":gun,"ak_body":ak_body,"shotgun_body":shotgun_body,"damage_visual":damage_visual,
+		"gun":gun,"ak_body":ak_body,"shotgun_body":shotgun_body,"kar_body":kar_body,"damage_visual":damage_visual,
 		"hit_punch":0.0,"hit_sign":1.0,"hit_seed":0.0}
 	replicas[state.id]=record
 	_apply_replica(record,1.0)
@@ -385,8 +403,8 @@ func _apply_replica(r: Dictionary,alpha: float) -> void:
 		r.node._update_shapes()
 	else:
 		var gun: Node3D=r.gun
-		var selected_weapon:=clampi(int(b.get("weapon",0)),0,1)
-		r.ak_body.visible=selected_weapon==0;r.shotgun_body.visible=selected_weapon==1
+		var selected_weapon:=clampi(int(b.get("weapon",0)),0,2)
+		r.ak_body.visible=selected_weapon==0;r.shotgun_body.visible=selected_weapon==1;r.kar_body.visible=selected_weapon==2
 		var phase_value := float(b.get("phase",0.0))*TAU
 		var remote_roll := sin(phase_value+1.2)*0.085
 		var remote_pitch := sin(phase_value*1.7+0.4)*0.035
@@ -442,11 +460,14 @@ func _event(e: Dictionary) -> void:
 	qa_events[e.type]=int(qa_events.get(e.type,0))+1
 	match str(e.type):
 		"shot":
+			if int(e.get("weapon",0))==2:qa_events["kar_shot"]=int(qa_events.get("kar_shot",0))+1
 			if not e.blocked:combat._spawn_tracer(e.from,e.to)
 			if bool(e.get("hit",false)):combat._spawn_impact(e.to,e.get("normal",Vector3.UP))
 			if e.actor!=session.actor_id:
 				combat._spawn_world_muzzle_flash(e.from,(e.to-e.from).normalized())
-				arena_audio._play_spatial(AK47_SHOT_SFX,e.from,-14.0,randf_range(0.96,1.04))
+				var shot_weapon:=int(e.get("weapon",0))
+				var stream: AudioStream=KAR_FIRE_SFX if shot_weapon==2 else AK47_SHOT_SFX
+				arena_audio._play_spatial(stream,e.from,-10.0 if shot_weapon==2 else -14.0,randf_range(0.96,1.04))
 		"shotgun":
 			for pellet in e.pellets:
 				combat._spawn_tracer(e.from,pellet.to)
@@ -499,14 +520,15 @@ func _event(e: Dictionary) -> void:
 				combat._update_counter()
 		"explosion":grenade_skill.show_blast(e.p)
 		"reload":
-			var reload_slot:=clampi(int(e.get("weapon",0)),0,1)
+			var reload_slot:=clampi(int(e.get("weapon",0)),0,2)
 			if int(e.actor)!=session.actor_id:
-				arena_audio._play_spatial(AK47_RELOAD_SFX if reload_slot==0 else SHOTGUN_RELOAD_SFX,e.p,-17.0,1.0)
+				var reload_stream: AudioStream=AK47_RELOAD_SFX if reload_slot==0 else SHOTGUN_RELOAD_SFX if reload_slot==1 else KAR_RELOAD_SFX
+				arena_audio._play_spatial(reload_stream,e.p,-14.0,1.0)
 			elif reload_by_weapon[reload_slot]<=0.0:
 				ammo_by_weapon[reload_slot]=int(e.get("ammo",ammo_by_weapon[reload_slot]))
 				reload_by_weapon[reload_slot]=float(e.get("duration",WEAPON_RULES.by_slot(reload_slot).reload))
 				if reload_slot==weapon_slot:
-					var reload_audio:=ak_reload_audio if reload_slot==0 else shotgun_reload_audio
+					var reload_audio:=ak_reload_audio if reload_slot==0 else shotgun_reload_audio if reload_slot==1 else kar_reload_audio
 					if reload_audio!=null:reload_audio.play()
 					_spawn_reload_magazine();_refresh_ammo_hud()
 		"throw":arena_audio.play_event("throw",e.p,-14)

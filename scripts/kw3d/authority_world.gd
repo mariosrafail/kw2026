@@ -193,41 +193,39 @@ func _shoot(a: Node3D) -> void:
 	var profile: Dictionary=WEAPON_RULES.by_slot(a.weapon_slot)
 	a.fire_clock=float(profile.fire_interval)
 	a.ammo=maxi(0,a.ammo-1)
-	var recoil_strength:=1.0 if a.weapon_slot==0 else 1.45
+	var recoil_strength:=1.0 if a.weapon_slot==0 else 1.45 if a.weapon_slot==1 else 1.85
 	a.recoil_velocity.x-=0.52*recoil_strength
 	a.recoil_velocity.z+=0.20*recoil_strength
 	var rewound: Array=_rewind_targets(int(a.command.get("ct",tick_id)))
 	a.build_aim(get_world_3d().direct_space_state,0.0)
-	if a.weapon_slot==0:_shoot_ak(a,profile)
-	else:_shoot_shotgun(a,profile)
+	if a.weapon_slot==0:_shoot_single(a,profile,0,"ak")
+	elif a.weapon_slot==1:_shoot_shotgun(a,profile)
+	else:_shoot_single(a,profile,2,"kar")
 	_restore_targets(rewound)
 	if a.ammo<=0:_request_reload(a)
 
-func _shoot_ak(a: Node3D,profile: Dictionary) -> void:
+func _shoot_single(a: Node3D,profile: Dictionary,weapon_index: int,weapon_id: String) -> void:
 	var exclusions: Array[RID]=[a.get_rid(),a.hit_body.get_rid()]
-	var hit=ray(a.weapon_anchor(),a.muzzle,5,exclusions)
-	var blocked: bool=not hit.is_empty()
-	if hit.is_empty():hit=ray(a.muzzle,a.aim_target+(a.aim_target-a.muzzle).normalized()*0.035,5,exclusions)
-	var endpoint: Vector3=hit.get("position",a.aim_target)
+	var guard=ray(a.weapon_anchor(),a.muzzle,5,exclusions)
+	var blocked: bool=not guard.is_empty()
+	var base_direction: Vector3=(a.aim_target-a.muzzle).normalized()
+	var seed:=int(tick_id*7919+a.actor_id*104729+a.ack*31+weapon_index*997)
+	var direction:=WEAPON_RULES.spread_direction(base_direction,profile,bool(a.command.get("aim",false)),seed)
+	var hit: Dictionary=guard if not guard.is_empty() else ray(a.muzzle,a.muzzle+direction*float(profile.range),5,exclusions)
+	var endpoint: Vector3=hit.get("position",a.muzzle+direction*float(profile.range))
 	var headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
-	emit("shot",{"actor":a.actor_id,"input":a.ack,"weapon":0,"from":a.muzzle,"to":endpoint,"blocked":blocked,"ammo":a.ammo,
-		"hit":not hit.is_empty(),"headshot":headshot,"normal":hit.get("normal",Vector3.UP)})
+	emit("shot",{"actor":a.actor_id,"input":a.ack,"weapon":weapon_index,"from":a.muzzle,"to":endpoint,"blocked":blocked,"ammo":a.ammo,
+		"hit":not hit.is_empty(),"headshot":headshot,"normal":hit.get("normal",Vector3.UP),"spread":WEAPON_RULES.spread_for(profile,bool(a.command.get("aim",false)))})
 	if not hit.is_empty() and (hit.collider as Node).has_meta("actor_id"):
-		damage(int(hit.collider.get_meta("actor_id")),WEAPON_RULES.damage(profile,headshot),(endpoint-a.muzzle).normalized(),a.actor_id,endpoint,headshot,"ak")
+		damage(int(hit.collider.get_meta("actor_id")),WEAPON_RULES.damage(profile,headshot),direction,a.actor_id,endpoint,headshot,weapon_id)
 
 func _shoot_shotgun(a: Node3D,profile: Dictionary) -> void:
 	var exclusions: Array[RID]=[a.get_rid(),a.hit_body.get_rid()]
 	var guard:=ray(a.weapon_anchor(),a.muzzle,5,exclusions)
 	var centre: Vector3=(a.aim_target-a.muzzle).normalized()
-	var right:=centre.cross(Vector3.UP).normalized()
-	if right.length_squared()<0.01:right=Vector3.RIGHT
-	var up:=right.cross(centre).normalized()
-	var shot_rng:=RandomNumberGenerator.new();shot_rng.seed=int(tick_id*7919+a.actor_id*104729+a.ack)
 	var pellets: Array=[]
 	for pellet in range(int(profile.pellets)):
-		var angle:=shot_rng.randf_range(0.0,TAU)
-		var radius:=sqrt(shot_rng.randf())*tan(deg_to_rad(float(profile.spread_deg)))
-		var direction: Vector3=(centre+right*cos(angle)*radius+up*sin(angle)*radius).normalized()
+		var direction: Vector3=WEAPON_RULES.spread_direction(centre,profile,bool(a.command.get("aim",false)),int(tick_id*7919+a.actor_id*104729+a.ack*31+pellet*131))
 		var hit: Dictionary=guard if not guard.is_empty() else ray(a.muzzle,a.muzzle+direction*float(profile.range),5,exclusions)
 		var endpoint: Vector3=hit.get("position",a.muzzle+direction*float(profile.range))
 		var headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false

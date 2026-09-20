@@ -139,36 +139,33 @@ func update_aim_feedback(muzzle: Vector3, target: Vector3, chest: Vector3) -> vo
 	aim_solution = predict_shot(muzzle, target, chest)
 	if reticle != null: reticle.set_feedback(aim_solution, stage.camera, stage.aiming)
 
-func fire(muzzle: Vector3, target: Vector3, chest: Vector3) -> Dictionary:
-	shots_fired += 1
-	var solution := predict_shot(muzzle, target, chest)
-	var hit: Dictionary = solution["hit"]
-	var start: Vector3 = solution["start"]
-	var endpoint: Vector3 = solution["end"]
-	var applied := false
-	var target_name := ""
+func fire(muzzle: Vector3,target: Vector3,chest: Vector3,profile: Dictionary=WEAPON_RULES.AK,weapon_id: String="ak") -> Dictionary:
+	shots_fired+=1
+	var guard_hit:=_ray(chest,muzzle)
+	var start: Vector3=chest if not guard_hit.is_empty() else muzzle
+	var base_direction: Vector3=(target-muzzle).normalized()
+	var direction:=WEAPON_RULES.spread_direction(base_direction,profile,bool(stage.aiming),int(shots_fired*7919+stage.get_instance_id()%100000+stage.weapon_slot*977))
+	var hit: Dictionary=guard_hit if not guard_hit.is_empty() else _ray(muzzle,muzzle+direction*float(profile.range))
+	var endpoint: Vector3=hit.get("position",muzzle+direction*float(profile.range))
+	var applied:=false
+	var target_name:=""
+	var headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
+	var shot_damage:=WEAPON_RULES.damage(profile,headshot)
 	if not hit.is_empty():
-		var object: Object = hit.get("collider")
-		var direction := (endpoint - start).normalized()
-		var headshot := HIT_REGIONS.is_headshot(hit)
-		var shot_damage := WEAPON_RULES.damage(WEAPON_RULES.AK,headshot)
-		if object != null and object.has_method("receive_hit"):
-			applied = object.receive_hit(shot_damage,direction,shots_fired,endpoint)
-			target_name = str(object.name)
-		elif object is RigidBody3D:
-			object.apply_impulse(direction * 1.6, endpoint - object.global_position)
-		_spawn_impact(endpoint, solution["normal"])
+		var object: Object=hit.get("collider")
+		if object!=null and object.has_method("receive_hit"):
+			applied=object.receive_hit(shot_damage,direction,shots_fired,endpoint);target_name=str(object.name)
+		elif object is RigidBody3D:object.apply_impulse(direction*1.6,endpoint-object.global_position)
+		_spawn_impact(endpoint,hit.get("normal",Vector3.UP))
 		if applied:
-			var victim_skin := str(object.get("warrior_id")) if object != null else "outrage"
+			var victim_skin:=str(object.get("warrior_id")) if object!=null else "outrage"
 			_spawn_damage_feedback(endpoint,direction,shot_damage,object.dead,blood_color_for_skin(victim_skin),true)
-	# Never draw a misleading line leaving the chest when the barrel is blocked.
-	if not solution["guard_blocked"]: _spawn_tracer(muzzle, endpoint)
-	if reticle != null: reticle.notify_shot()
-	var was_headshot := HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
-	last_shot = {"id": shots_fired, "damage_applied": applied, "target": target_name,
-		"start": start, "end": endpoint, "blocked": not hit.is_empty(),"headshot":was_headshot,
-		"damage":WEAPON_RULES.damage(WEAPON_RULES.AK,was_headshot) if applied else 0.0,
-		"occluded": solution["occluded"], "guard_blocked": solution["guard_blocked"],"weapon":"ak"}
+	if guard_hit.is_empty():_spawn_tracer(muzzle,endpoint)
+	if reticle!=null:reticle.notify_shot()
+	last_shot={"id":shots_fired,"damage_applied":applied,"target":target_name,"start":start,"end":endpoint,
+		"blocked":not hit.is_empty(),"headshot":headshot,"damage":shot_damage if applied else 0.0,
+		"occluded":not guard_hit.is_empty(),"guard_blocked":not guard_hit.is_empty(),"weapon":weapon_id,
+		"spread_deg":WEAPON_RULES.spread_for(profile,bool(stage.aiming))}
 	return last_shot
 
 func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
@@ -176,17 +173,11 @@ func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
 	var profile: Dictionary=WEAPON_RULES.SHOTGUN
 	var guard_hit:=_ray(chest,muzzle)
 	var centre_dir: Vector3=(target-muzzle).normalized()
-	var right:=centre_dir.cross(Vector3.UP).normalized()
-	if right.length_squared()<0.01:right=stage.camera.global_basis.x.normalized()
-	var up:=right.cross(centre_dir).normalized()
 	var pellet_results: Array=[]
 	var applied_damage:=0.0
 	var headshots:=0
-	var rng:=RandomNumberGenerator.new();rng.seed=int(shots_fired*7919+stage.get_instance_id()%100000)
 	for pellet in range(int(profile.pellets)):
-		var angle:=rng.randf_range(0.0,TAU)
-		var radius:=sqrt(rng.randf())*tan(deg_to_rad(float(profile.spread_deg)))
-		var direction: Vector3=(centre_dir+right*cos(angle)*radius+up*sin(angle)*radius).normalized()
+		var direction: Vector3=WEAPON_RULES.spread_direction(centre_dir,profile,bool(stage.aiming),int(shots_fired*7919+stage.get_instance_id()%100000+pellet*131))
 		var hit: Dictionary=guard_hit if not guard_hit.is_empty() else _ray(muzzle,muzzle+direction*float(profile.range))
 		var endpoint: Vector3=hit.get("position",muzzle+direction*float(profile.range))
 		var normal: Vector3=hit.get("normal",Vector3.UP)

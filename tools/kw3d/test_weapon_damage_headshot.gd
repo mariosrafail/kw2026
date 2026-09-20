@@ -41,6 +41,8 @@ func run()->void:
 	check(is_equal_approx(RULES.damage(RULES.AK,false),5.0),"ak_body_5")
 	check(is_equal_approx(RULES.damage(RULES.AK,true),7.5),"headshot_multiplier_1_5")
 	check(is_equal_approx(RULES.damage(RULES.SHOTGUN,true),7.5),"shotgun_pellet_headshot_multiplier_1_5")
+	check(is_equal_approx(RULES.damage(RULES.KAR,false),50.0),"kar_body_50")
+	check(RULES.damage(RULES.KAR,true)>=100.0,"kar_headshot_instant_kill_damage")
 
 	target.health=100.0;target.dead=false;target.collision_layer=4
 	stage.combat.camera_hit=head_hit
@@ -52,6 +54,15 @@ func run()->void:
 	var body_result: Dictionary=stage.combat.fire(body_from,torso.global_position,body_from+Vector3(0,0,0.05))
 	check(body_result.damage_applied and not body_result.headshot,"actual_ak_bodyshot_applied")
 	check(is_equal_approx(float(body_result.damage),5.0) and is_equal_approx(target.health,95.0),"actual_ak_bodyshot_5")
+
+	stage.aiming=true;stage._set_weapon_slot(2,false)
+	target.health=100.0;target.dead=false;target.collision_layer=4;target.seen_shots.clear()
+	var kar_body: Dictionary=stage.combat.fire(body_from,torso.global_position,body_from+Vector3(0,0,0.05),RULES.KAR,"kar")
+	check(kar_body.damage_applied and not kar_body.headshot and is_equal_approx(target.health,50.0),"actual_kar_bodyshot_50")
+	target.health=100.0;target.dead=false;target.collision_layer=4;target.seen_shots.clear()
+	var kar_head: Dictionary=stage.combat.fire(head_from,head.global_position,head_from+Vector3(0,0,0.05),RULES.KAR,"kar")
+	check(kar_head.damage_applied and kar_head.headshot and target.dead and target.health==0.0,"actual_kar_headshot_instant_kill")
+	stage.aiming=false
 
 	stage._set_weapon_slot(1,false)
 	check(stage.weapon_slot==1 and stage.shotgun_visual_root.visible and not stage.ak_visual_root.visible,"shotgun_visual_switch")

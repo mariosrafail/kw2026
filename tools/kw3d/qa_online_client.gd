@@ -61,7 +61,10 @@ func _qa_tick(_delta: float) -> void:
 		var failures: Array[String]=[]
 		if not session.connected:failures.append("not_connected")
 		if session.snapshot_count<70:failures.append("insufficient_snapshots")
-		if player_count!=2:failures.append("two_real_players_missing")
+		var present_humans:=0
+		for state in state_records.values():
+			if not bool(state.get("bot",false)):present_humans+=1
+		if present_humans!=2:failures.append("two_real_players_missing")
 		if maximum_travel<0.4:failures.append("no_movement")
 		if steady_max_correction>0.55:failures.append("prediction_correction_over_budget")
 		if max_ads_horizontal_speed>5.15:failures.append("ads_slowdown_not_authoritative")
@@ -70,6 +73,7 @@ func _qa_tick(_delta: float) -> void:
 		if int(qa_events.get("explosion",0))<1:failures.append("no_shared_explosion")
 		if int(qa_events.get("reload",0))<1:failures.append("no_authority_reload")
 		if int(qa_events.get("shotgun",0))<1:failures.append("no_authority_shotgun")
+		if int(qa_events.get("kar_shot",0))<1:failures.append("no_authority_kar")
 		if role==2:
 			if not qa_rejoined or joined_slots.size()!=2 or joined_slots[0]!=joined_slots[1]:failures.append("rejoin_identity")
 			if not gamepad_move_seen or not gamepad_fire_seen:failures.append("synthetic_gamepad_path")
@@ -88,7 +92,7 @@ func _qa_command(command: Dictionary) -> void:
 	if role==2:
 		if command.move.x>0.2:gamepad_move_seen=true
 		if command.fire:gamepad_fire_seen=true
-		command.weapon=1 if age>5.0 and age<7.0 else 0
+		command.weapon=1 if age>5.0 and age<6.0 else 2 if age>6.15 and age<7.35 else 0
 	else:
 		command.move=Vector2(-0.5,0) if age<1.8 else Vector2.ZERO
 		command.fire=age>1.7 and age<7.2

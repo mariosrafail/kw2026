@@ -26,6 +26,8 @@ func run()->void:
 	check(stage.ak_reload_audio.bus=="SFX","ak_reload_on_sfx")
 	check(stage.shotgun_fire_audio.bus=="SFX","shotgun_fire_on_sfx")
 	check(stage.shotgun_reload_audio.bus=="SFX","shotgun_reload_on_sfx")
+	check(stage.kar_fire_audio.bus=="SFX","kar_fire_on_sfx")
+	check(stage.kar_reload_audio.bus=="SFX","kar_reload_on_sfx")
 	check(stage.arena_audio.music.bus=="Music","fight_music_on_music")
 	for p in stage.arena_audio.spatial_pool:check(p.bus=="SFX","arena_spatial_on_sfx")
 	for p in stage.arena_audio.ui_pool:check(p.bus=="SFX","arena_ui_on_sfx")

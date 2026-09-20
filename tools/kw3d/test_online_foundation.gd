@@ -12,9 +12,12 @@ func run() -> void:
 	check(encoded.size()==144,"four_commands_below_mtu")
 	var decoded: Array=codec.decode(encoded)
 	check(decoded.size()==4 and decoded[0].move.distance_to(frame.move)<0.00001 and not decoded[0].reload and decoded[0].weapon==0,"codec_round_trip")
-	var weapon_frame: Dictionary=frame.duplicate();weapon_frame.weapon=1
+	var weapon_frame: Dictionary=frame.duplicate();weapon_frame.weapon=2
 	var weapon_decoded: Array=codec.decode(codec.encode([weapon_frame]))
-	check(weapon_decoded.size()==1 and weapon_decoded[0].weapon==1,"weapon_slot_round_trip")
+	check(weapon_decoded.size()==1 and weapon_decoded[0].weapon==2,"weapon_slot_kar_round_trip")
+	var bad_weapon: Dictionary=frame.duplicate();bad_weapon.weapon=3
+	check(not session_script.valid_frame(bad_weapon),"reject_weapon_slot_3")
+	check(session_script.PROTOCOL==4,"protocol_kar_v4")
 	var reload_frame: Dictionary=frame.duplicate();reload_frame.reload=true
 	var reload_decoded: Array=codec.decode(codec.encode([reload_frame]))
 	check(reload_decoded.size()==1 and reload_decoded[0].reload,"reload_flag_round_trip")
@@ -44,8 +47,12 @@ func run() -> void:
 		if event is InputEventJoypadButton and event.button_index==JOY_BUTTON_X:reload_pad_found=true
 	check(reload_key_found and reload_pad_found,"reload_keyboard_gamepad_binding")
 	var wheel:=InputEventMouseButton.new();wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN;wheel.pressed=true
-	input._input(wheel)
-	check(input.weapon_slot==1,"mouse_wheel_weapon_switch")
+	input._input(wheel);input._input(wheel)
+	check(input.weapon_slot==2,"mouse_wheel_reaches_kar")
+	var inspect_bound:=false
+	for event in InputMap.action_get_events("kw3d_inspect"):
+		if event is InputEventKey and event.physical_keycode==KEY_H:inspect_bound=true
+	check(inspect_bound,"inspect_h_binding")
 	Input.action_press("kw3d_fire")
 	input.suspend()
 	check(not input.sample(1.0/60.0).fire,"pause_releases_fire")

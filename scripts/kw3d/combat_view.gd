@@ -10,7 +10,7 @@ func setup(owner_stage: Node3D) -> void:
 	_update_counter()
 func _physics_process(_delta: float) -> void:pass
 func reset_targets() -> void:stage.session.request_respawn()
-func fire(_muzzle: Vector3,_target: Vector3,_chest: Vector3) -> Dictionary:return {}
+func fire(_muzzle: Vector3,_target: Vector3,_chest: Vector3,_profile: Dictionary=WEAPON_RULES.AK,_weapon_id: String="ak") -> Dictionary:return {}
 func _on_target_damaged(_target: Node3D,_lethal: bool) -> void:pass
 func _update_counter() -> void:
 	if counter!=null:counter.text="Esc / Start: network menu and controls. TAB: help. Online world does not pause."

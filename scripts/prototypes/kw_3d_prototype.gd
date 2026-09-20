@@ -24,6 +24,7 @@ const COMBAT_RANGE := preload("res://scripts/prototypes/kw_combat_range.gd")
 var animation_impact_velocity := 0.0
 const LOCOMOTION := preload("res://scripts/prototypes/kw_goofy_locomotion.gd")
 const AIM_ASSIST := preload("res://scripts/kw3d/aim_assist.gd")
+const SNIPER_SCOPE := preload("res://scripts/kw3d/sniper_scope.gdshader")
 
 var player: CharacterBody3D
 var player_visual: Node3D
@@ -42,10 +43,12 @@ var ak_fire_audio: AudioStreamPlayer3D
 var ak_reload_audio: AudioStreamPlayer3D
 var shotgun_fire_audio: AudioStreamPlayer3D
 var shotgun_reload_audio: AudioStreamPlayer3D
+var kar_fire_audio: AudioStreamPlayer3D
+var kar_reload_audio: AudioStreamPlayer3D
 var player_ammo_label: Label3D
 var weapon_slot := 0
-var ammo_by_weapon: Array[int]=[25,2]
-var reload_by_weapon: Array[float]=[0.0,0.0]
+var ammo_by_weapon: Array[int]=[25,2,1]
+var reload_by_weapon: Array[float]=[0.0,0.0,0.0]
 var ammo_in_mag: int:
 	get:return ammo_by_weapon[weapon_slot]
 	set(value):ammo_by_weapon[weapon_slot]=value
@@ -55,6 +58,11 @@ var reload_remaining: float:
 var reload_mag_serial := 0
 var ak_visual_root: Node3D
 var shotgun_visual_root: Node3D
+var kar_visual_root: Node3D
+var sniper_scope_layer: CanvasLayer
+var sniper_scope_rect: ColorRect
+var inspect_time:=0.0
+const INSPECT_DURATION:=1.65
 var pixel_enabled := false
 var borderlands_enabled := true
 var pixel_materials: Array[WeakRef] = []
@@ -124,10 +132,13 @@ const RIG_CENTER_X := 2.0
 const RIG_CENTER_Y := -4.0
 const OUTRAGE_FULLBODY := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
 const AK47_VOXEL_BUILDER := preload("res://scripts/prototypes/ak47_voxel_builder.gd")
+const KAR_VOXEL_BUILDER := preload("res://scripts/prototypes/kar_voxel_builder.gd")
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
 const AK47_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_reload.wav")
 const SHOTGUN_FIRE_SFX := preload("res://assets/sounds/sfx/guns/magnum/magnum_shoot.wav")
 const SHOTGUN_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/magnum/magnum_reload.wav")
+const KAR_FIRE_SFX := preload("res://assets/sounds/sfx/guns/kar98/kar98_shoot.wav")
+const KAR_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/kar98/kar98_reload.wav")
 const AK_RECOIL_MODEL := preload("res://scripts/kw3d/ak_recoil.gd")
 const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
 const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd")
@@ -240,6 +251,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_borderlands_enabled(not borderlands_enabled)
 		elif event.physical_keycode == KEY_R:
 			_start_reload()
+		elif event.physical_keycode == KEY_H:
+			_start_weapon_inspect()
 		elif event.physical_keycode == KEY_C:
 			_spawn_chaos_drop()
 		elif event.physical_keycode == KEY_F:
@@ -466,7 +479,7 @@ func _set_player_healthbar(value: float, maximum: float = 100.0) -> void:
 
 func _apply_body_fire_recoil(_shot_yaw: float) -> void:
 	if player == null:return
-	var strength:=1.0 if weapon_slot==0 else 1.45
+	var strength:=1.0 if weapon_slot==0 else 1.45 if weapon_slot==1 else 1.90
 	# Visual recoil only: never move the CharacterBody or alter gameplay position.
 	if locomotion != null:
 		locomotion.body_offset_velocity += Vector3(0.0,0.10,0.72)*strength
@@ -516,6 +529,8 @@ func _build_held_ak() -> void:
 			child.reparent(ak_visual_root,false)
 	shotgun_visual_root=Node3D.new();shotgun_visual_root.name="ShotgunVisual";weapon_visual_wobble.add_child(shotgun_visual_root)
 	_build_shotgun_visual()
+	kar_visual_root=Node3D.new();kar_visual_root.name="KARVisual";weapon_visual_wobble.add_child(kar_visual_root)
+	_build_kar_visual()
 
 	weapon_muzzle = Marker3D.new()
 	weapon_muzzle.name = "Muzzle"
@@ -551,7 +566,30 @@ func _build_held_ak() -> void:
 	shotgun_reload_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db-2.0
 	shotgun_reload_audio.bus="SFX";shotgun_reload_audio.pitch_scale=0.92;shotgun_reload_audio.max_distance=30.0;shotgun_reload_audio.unit_size=2.8
 	weapon_aim_pivot.add_child(shotgun_reload_audio)
+	kar_fire_audio=AudioStreamPlayer3D.new();kar_fire_audio.name="KARFireAudio";kar_fire_audio.stream=KAR_FIRE_SFX
+	kar_fire_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db+1.5
+	kar_fire_audio.bus="SFX";kar_fire_audio.max_distance=58.0;kar_fire_audio.unit_size=4.2;kar_fire_audio.max_polyphony=3
+	weapon_aim_pivot.add_child(kar_fire_audio)
+	kar_reload_audio=AudioStreamPlayer3D.new();kar_reload_audio.name="KARReloadAudio";kar_reload_audio.stream=KAR_RELOAD_SFX
+	kar_reload_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db-1.0
+	kar_reload_audio.bus="SFX";kar_reload_audio.max_distance=34.0;kar_reload_audio.unit_size=3.0
+	weapon_aim_pivot.add_child(kar_reload_audio)
 	_set_weapon_slot(0,false)
+
+func _build_kar_visual() -> void:
+	KAR_VOXEL_BUILDER.build(kar_visual_root)
+	var cache: Dictionary={}
+	for part in kar_visual_root.get_children():
+		if not part is MeshInstance3D:continue
+		var original:=part.material_override as StandardMaterial3D
+		if original==null:continue
+		var key:=original.get_instance_id()
+		if not cache.has(key):
+			var mat:=PIXEL_MATERIALS.from_standard(original,0.018)
+			mat.set_shader_parameter("comic_enabled",comic_enabled);mat.set_shader_parameter("pixel_enabled",pixel_enabled)
+			cache[key]=mat;pixel_materials.append(weakref(mat))
+		part.material_override=cache[key]
+		_add_scene_outline(part,1.10)
 
 func _build_shotgun_visual() -> void:
 	_add_weapon_box(shotgun_visual_root,"SG_Stock",Vector3(-0.36,-0.02,0),Vector3(0.62,0.22,0.24),Color("6d4030"))
@@ -568,15 +606,23 @@ func _add_weapon_box(parent: Node3D,title: String,pos: Vector3,size: Vector3,col
 	return mesh
 
 func _set_weapon_slot(slot: int,play_fx: bool=true) -> void:
-	weapon_slot=clampi(slot,0,1)
+	weapon_slot=clampi(slot,0,2)
+	inspect_time=0.0
 	if ak_visual_root!=null:ak_visual_root.visible=weapon_slot==0
 	if shotgun_visual_root!=null:shotgun_visual_root.visible=weapon_slot==1
+	if kar_visual_root!=null:kar_visual_root.visible=weapon_slot==2
 	if weapon_muzzle!=null:weapon_muzzle.position=Vector3(float(WEAPON_RULES.by_slot(weapon_slot).muzzle_x),0.02,0.0)
-	if play_fx and arena_audio!=null:arena_audio.play_event("switch",Vector3.ZERO,-22.0)
-	aim_recoil.reset();shot_cooldown=maxf(shot_cooldown,0.08);_refresh_ammo_hud()
+	if play_fx and arena_audio!=null:arena_audio.play_event("switch",Vector3.ZERO,-18.0)
+	aim_recoil.reset();shot_cooldown=maxf(shot_cooldown,0.08);_refresh_ammo_hud();_update_scope_visibility()
 
 func _cycle_weapon(direction: int) -> void:
-	_set_weapon_slot(posmod(weapon_slot+direction,2),true)
+	_set_weapon_slot(posmod(weapon_slot+direction,3),true)
+
+func _start_weapon_inspect() -> void:
+	if reload_remaining>0.0 or fire_held:return
+	inspect_time=INSPECT_DURATION
+	aiming=false
+	_update_scope_visibility()
 
 func _add_weapon_hand(node_name: String, pos: Vector3, size: Vector3) -> void:
 	var hand := MeshInstance3D.new()
@@ -625,11 +671,14 @@ func _apply_offline_aim_assist(delta: float) -> void:
 	aim_assist_active=after+0.0001<before
 
 func _update_third_person_camera(delta: float) -> void:
-	if camera == null:
-		return
-	var weight := 1.0 - exp(-12.0 * maxf(delta, 0.0))
-	camera_boom_z = lerpf(camera_boom_z, 3.80 if aiming else 6.40, weight)
-	camera.fov = lerpf(camera.fov, 58.0 if aiming else 74.0, weight)
+	if camera == null:return
+	var weight := 1.0-exp(-12.0*maxf(delta,0.0))
+	var sniper_ads:=aiming and weapon_slot==2 and inspect_time<=0.0
+	var target_boom:=2.65 if sniper_ads else 3.80 if aiming else 6.40
+	var target_fov:=27.0 if sniper_ads else 58.0 if aiming else 74.0
+	camera_boom_z=lerpf(camera_boom_z,target_boom,weight)
+	camera.fov=lerpf(camera.fov,target_fov,weight)
+	_update_scope_visibility()
 	# Zoom along the SAME optical ray: changing aim must not slide the crosshair
 	# sideways/upwards off a stationary enemy as the shoulder camera transitions.
 	var desired_local := Vector3(CAMERA_SHOULDER_X, 1.35, camera_boom_z)
@@ -661,8 +710,10 @@ func _get_aim_target() -> Vector3:
 	return camera.global_position - camera.global_basis.z * 120.0
 
 func _update_weapon_pose(delta: float) -> void:
-	if weapon_aim_pivot == null or weapon_root == null or camera == null:
-		return
+	if weapon_aim_pivot == null or weapon_root == null or camera == null:return
+	if inspect_time>0.0:
+		inspect_time=maxf(0.0,inspect_time-maxf(0.0,delta))
+		if inspect_time<=0.0:_update_scope_visibility()
 	aim_target = _get_aim_target()
 	# Fixed right-shoulder hold: keeps the weapon near the camera/crosshair side and
 	# removes lateral shoulder swapping as a source of visual aim instability.
@@ -703,8 +754,12 @@ func _update_weapon_pose(delta: float) -> void:
 	var reload_snap := sin(TAU*reload_progress)*0.08*reload_arc
 	weapon_root.rotation = Vector3(0.0, PI*0.5, 0.0)
 	if weapon_visual_wobble != null:
-		weapon_visual_wobble.position = Vector3(weapon_visual_side_kick,-0.17*reload_arc+weapon_visual_lift_kick,0.16*reload_arc+weapon_recoil*0.05)
-		weapon_visual_wobble.rotation = Vector3(one_hand_pitch-0.22*reload_arc,0.08*reload_arc,one_hand_roll+weapon_visual_twist_kick+0.62*reload_arc+reload_snap)
+		var inspect_progress:=0.0 if inspect_time<=0.0 else 1.0-clampf(inspect_time/INSPECT_DURATION,0.0,1.0)
+		var inspect_arc:=pow(maxf(0.0,sin(PI*inspect_progress)),0.72)
+		var inspect_turn:=sin(PI*inspect_progress)*1.18
+		var inspect_roll:=sin(TAU*inspect_progress)*0.18*inspect_arc
+		weapon_visual_wobble.position=Vector3(-0.16*inspect_arc+weapon_visual_side_kick,0.18*inspect_arc-0.17*reload_arc+weapon_visual_lift_kick,0.34*inspect_arc+0.16*reload_arc+weapon_recoil*0.05)
+		weapon_visual_wobble.rotation=Vector3(one_hand_pitch-0.28*inspect_arc-0.22*reload_arc,inspect_turn+0.08*reload_arc,one_hand_roll+inspect_roll+weapon_visual_twist_kick+0.62*reload_arc+reload_snap)
 	for child in weapon_aim_pivot.get_children():
 		if child.has_meta("hold_rest"):
 			var hand_rest: Vector3 = child.get_meta("hold_rest")
@@ -796,7 +851,7 @@ func _build_hud() -> void:
 	title.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
 	help_panel.add_child(title)
 	var help := Label.new()
-	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim+magnet (slow)   LMB fire   R reload\nWHEEL weapon   G grenade   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
+	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim+magnet (slow)   LMB fire   R reload\nWHEEL weapon   H inspect   G grenade   O comic   P pixels   Y Borderlands   M music\nKAR: RMB sniper scope   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
 	help.position = Vector2(12, 28)
 	help.add_theme_font_size_override("font_size", 11)
 	help.add_theme_color_override("font_color", Color(0.86, 0.86, 0.92))
@@ -813,7 +868,19 @@ func _build_hud() -> void:
 	canvas.add_child(crosshair)
 	crosshair.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
+	sniper_scope_layer=CanvasLayer.new();sniper_scope_layer.name="SniperScopeLayer";sniper_scope_layer.layer=22;add_child(sniper_scope_layer)
+	sniper_scope_rect=ColorRect.new();sniper_scope_rect.name="SniperScope";sniper_scope_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sniper_scope_rect.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	var scope_mat:=ShaderMaterial.new();scope_mat.shader=SNIPER_SCOPE;sniper_scope_rect.material=scope_mat
+	sniper_scope_layer.add_child(sniper_scope_rect);sniper_scope_layer.visible=false
 	_refresh_ammo_hud()
+
+func _update_scope_visibility() -> void:
+	var scoped:=weapon_slot==2 and aiming and inspect_time<=0.0 and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED
+	if sniper_scope_layer!=null:sniper_scope_layer.visible=scoped
+	var crosshair:=get_node_or_null("HUD/Crosshair") as Control
+	if crosshair!=null:crosshair.visible=not scoped
+	if weapon_aim_pivot!=null:weapon_aim_pivot.visible=not scoped
 
 func _refresh_ammo_hud() -> void:
 	if player_ammo_label==null:return
@@ -828,7 +895,7 @@ func _refresh_ammo_hud() -> void:
 
 func _tick_reload(delta: float) -> void:
 	var changed:=false
-	for slot in range(2):
+	for slot in range(3):
 		if reload_by_weapon[slot]<=0.0:continue
 		var before: float=reload_by_weapon[slot]
 		reload_by_weapon[slot]=maxf(0.0,reload_by_weapon[slot]-delta)
@@ -839,14 +906,15 @@ func _tick_reload(delta: float) -> void:
 
 func _start_reload(play_fx: bool = true) -> bool:
 	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
+	if inspect_time>0.0:return false
 	if reload_remaining>0.0 or ammo_in_mag>=int(profile.magazine):return false
 	if combat!=null and combat.is_game_over():return false
 	reload_remaining=float(profile.reload)
 	aim_recoil.reset()
 	if play_fx:
-		var audio:=ak_reload_audio if weapon_slot==0 else shotgun_reload_audio
+		var audio:=ak_reload_audio if weapon_slot==0 else shotgun_reload_audio if weapon_slot==1 else kar_reload_audio
 		if audio!=null:audio.play()
-		_spawn_reload_magazine()
+		if weapon_slot!=2:_spawn_reload_magazine()
 	_refresh_ammo_hud()
 	return true
 
@@ -870,13 +938,19 @@ func _spawn_reload_magazine() -> void:
 	tween.chain().tween_callback(mag.queue_free)
 
 func _set_authoritative_weapon_state(state: Dictionary,force: bool=false) -> void:
-	var server_slot:=clampi(int(state.get("weapon",weapon_slot)),0,1)
-	var server_ammo: Array[int]=[clampi(int(state.get("ak_ammo",ammo_by_weapon[0])),0,int(WEAPON_RULES.AK.magazine)),clampi(int(state.get("sg_ammo",ammo_by_weapon[1])),0,int(WEAPON_RULES.SHOTGUN.magazine))]
-	var server_reload: Array[float]=[clampf(float(state.get("ak_reload",reload_by_weapon[0])),0.0,float(WEAPON_RULES.AK.reload)),clampf(float(state.get("sg_reload",reload_by_weapon[1])),0.0,float(WEAPON_RULES.SHOTGUN.reload))]
+	var server_slot:=clampi(int(state.get("weapon",weapon_slot)),0,2)
+	var server_ammo: Array[int]=[
+		clampi(int(state.get("ak_ammo",ammo_by_weapon[0])),0,int(WEAPON_RULES.AK.magazine)),
+		clampi(int(state.get("sg_ammo",ammo_by_weapon[1])),0,int(WEAPON_RULES.SHOTGUN.magazine)),
+		clampi(int(state.get("kar_ammo",ammo_by_weapon[2])),0,int(WEAPON_RULES.KAR.magazine))]
+	var server_reload: Array[float]=[
+		clampf(float(state.get("ak_reload",reload_by_weapon[0])),0.0,float(WEAPON_RULES.AK.reload)),
+		clampf(float(state.get("sg_reload",reload_by_weapon[1])),0.0,float(WEAPON_RULES.SHOTGUN.reload)),
+		clampf(float(state.get("kar_reload",reload_by_weapon[2])),0.0,float(WEAPON_RULES.KAR.reload))]
 	if force:
 		ammo_by_weapon=server_ammo;reload_by_weapon=server_reload;_set_weapon_slot(server_slot,false)
 	else:
-		for slot in range(2):
+		for slot in range(3):
 			if server_reload[slot]>0.0 and reload_by_weapon[slot]<=0.0 and slot==weapon_slot:_start_reload(true)
 			ammo_by_weapon[slot]=server_ammo[slot];reload_by_weapon[slot]=server_reload[slot]
 		if server_slot!=weapon_slot:_set_weapon_slot(server_slot,false)
@@ -891,15 +965,16 @@ func _update_status() -> void:
 		status_label.text = test_status + "  |  " + world_status + "  |  " + ink_status + ("  |  PIXEL: ON" if pixel_enabled else "  |  PIXEL: OFF") + "  |  " + edge_status
 		status_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.55) if low_gravity else Color(0.4, 0.9, 1.0))
 func _kick_weapon_visuals() -> void:
-	weapon_recoil = 1.0 if weapon_slot==0 else 1.45
-	var goofy := 1.75 if randf() < 0.08 else 1.0
-	var strength:=1.0 if weapon_slot==0 else 1.65
+	weapon_recoil=1.0 if weapon_slot==0 else 1.45 if weapon_slot==1 else 1.75
+	var goofy:=1.75 if randf()<0.08 else 1.0
+	var strength:=1.0 if weapon_slot==0 else 1.65 if weapon_slot==1 else 2.05
 	weapon_visual_side_kick = clampf(weapon_visual_side_kick + randf_range(-0.055,0.055)*goofy*strength,-0.18,0.18)
 	weapon_visual_lift_kick = clampf(weapon_visual_lift_kick + randf_range(0.022,0.060)*goofy*strength,0.0,0.20)
 	weapon_visual_twist_kick = clampf(weapon_visual_twist_kick + randf_range(-0.085,0.085)*goofy*strength,-0.28,0.28)
 
 func _fire_physics_ball() -> void:
 	if camera == null or combat == null or combat.is_game_over() or shot_cooldown > 0.00001:return
+	if inspect_time>0.0:return
 	if reload_remaining>0.0:return
 	if ammo_in_mag<=0:
 		_start_reload();return
@@ -907,11 +982,14 @@ func _fire_physics_ball() -> void:
 	ammo_in_mag-=1;_refresh_ammo_hud();shot_cooldown+=float(profile.fire_interval)
 	_update_weapon_pose(0.0);_kick_weapon_visuals();_play_weapon_fire_audio()
 	var chest := _weapon_anchor()
-	if weapon_slot==0:combat.fire(weapon_muzzle.global_position,aim_target,chest)
-	else:combat.fire_shotgun(weapon_muzzle.global_position,aim_target,chest)
+	if weapon_slot==0:combat.fire(weapon_muzzle.global_position,aim_target,chest,WEAPON_RULES.AK,"ak")
+	elif weapon_slot==1:combat.fire_shotgun(weapon_muzzle.global_position,aim_target,chest)
+	else:combat.fire(weapon_muzzle.global_position,aim_target,chest,WEAPON_RULES.KAR,"kar")
 	_apply_body_fire_recoil(yaw)
 	var aim_kick: Vector2=aim_recoil.kick(aiming)
 	if weapon_slot==1:aim_kick+=aim_recoil.kick(aiming)
+	elif weapon_slot==2:
+		aim_kick+=aim_recoil.kick(aiming)*1.55
 	yaw=wrapf(yaw+aim_kick.x,-PI,PI);pitch=clampf(pitch+aim_kick.y,deg_to_rad(-48.0),deg_to_rad(30.0))
 	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
 	_spawn_muzzle_flash()
@@ -920,8 +998,12 @@ func _fire_physics_ball() -> void:
 func _play_weapon_fire_audio() -> void:
 	if weapon_slot==0:
 		_play_ak_fire_audio();return
-	if shotgun_fire_audio!=null and shotgun_fire_audio.stream!=null:
-		shotgun_fire_audio.pitch_scale=randf_range(0.78,0.86);shotgun_fire_audio.play()
+	if weapon_slot==1:
+		if shotgun_fire_audio!=null and shotgun_fire_audio.stream!=null:
+			shotgun_fire_audio.pitch_scale=randf_range(0.78,0.86);shotgun_fire_audio.play()
+		return
+	if kar_fire_audio!=null and kar_fire_audio.stream!=null:
+		kar_fire_audio.pitch_scale=randf_range(0.96,1.02);kar_fire_audio.play()
 
 func _play_ak_fire_audio() -> void:
 	if ak_fire_audio == null or ak_fire_audio.stream == null:return
