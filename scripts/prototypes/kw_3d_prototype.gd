@@ -62,6 +62,7 @@ var pixel_post_layer: CanvasLayer
 var borderlands_quad: MeshInstance3D
 var player_health_bar: Sprite3D
 var player_health_texture: ImageTexture
+var player_damage_visual: Node
 var player_health_value := 100.0
 var aim_target := Vector3.ZERO
 
@@ -127,6 +128,7 @@ const SHOTGUN_FIRE_SFX := preload("res://assets/sounds/sfx/guns/magnum/magnum_sh
 const SHOTGUN_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/magnum/magnum_reload.wav")
 const AK_RECOIL_MODEL := preload("res://scripts/kw3d/ak_recoil.gd")
 const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
+const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd")
 
 func _ready() -> void:
 	# The baked preview exists only for the editor; runtime builds the same arena.
@@ -380,6 +382,10 @@ func _build_player() -> void:
 	player_visual.name = "OutrageVisual"
 	player.add_child(player_visual)
 	_build_outage_voxel_body()
+	player_damage_visual=VOXEL_DAMAGE_VISUAL.new()
+	player_visual.add_child(player_damage_visual)
+	player_damage_visual.setup(head_style,["HeadRig","TorsoRig","LeftLegRig","RightLegRig"],137)
+	player_damage_visual.set_pixel_enabled(pixel_enabled)
 	capsule_shape.height = float(head_style.get_meta("capsule_height", 3.43))
 	player_visual.rotation.y = body_yaw
 
@@ -438,6 +444,7 @@ func _build_player_healthbar() -> void:
 
 func _set_player_healthbar(value: float, maximum: float = 100.0) -> void:
 	player_health_value = clampf(value,0.0,maximum)
+	if player_damage_visual!=null:player_damage_visual.set_health(player_health_value,maximum)
 	if player_health_bar == null:return
 	var image := Image.create(128,18,false,Image.FORMAT_RGBA8)
 	image.fill(Color("111726"))
@@ -1113,6 +1120,8 @@ func _set_pixel_enabled(value: bool) -> void:
 	if head_style != null:
 		head_style.set_pixel_enabled(value)
 	if combat != null: combat.sync_style()
+	for damage_visual in get_tree().get_nodes_in_group("kw_damage_visual"):
+		if damage_visual is Node and is_ancestor_of(damage_visual):damage_visual.set_pixel_enabled(value)
 	_update_status()
 
 func _prune_pixel_materials() -> void:
@@ -1165,4 +1174,6 @@ func _set_comic_enabled(value: bool) -> void:
 	for shell in get_tree().get_nodes_in_group("kw_world_ink"):
 		if is_ancestor_of(shell): shell.visible = value
 	if combat != null: combat.sync_style()
+	for damage_visual in get_tree().get_nodes_in_group("kw_damage_visual"):
+		if damage_visual is Node and is_ancestor_of(damage_visual):damage_visual.set_comic_enabled(value)
 	_update_status()

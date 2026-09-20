@@ -272,12 +272,13 @@ func _make_replica(state: Dictionary) -> void:
 	var gun: Node3D=null
 	var ak_body: Node3D=null
 	var shotgun_body: Node3D=null
+	var damage_visual: Node=null
 	if state.bot:
 		node=load("res://scripts/prototypes/kw_training_dummy.gd").new()
 		node.warrior_id=state.skin;node.roaming_enabled=false;node.position=state.p
 		add_child(node);node.set_physics_process(false)
 		node.movement_body.collision_layer=8;node.movement_body.collision_mask=0
-		visual=node.visuals;style=node
+		visual=node.visuals;style=node;damage_visual=node.damage_visual
 		for title in RIG_NAMES:rig_nodes[title]=visual.get_node(title)
 		combat.targets.append(node)
 	else:
@@ -285,6 +286,8 @@ func _make_replica(state: Dictionary) -> void:
 		visual=Node3D.new();node.add_child(visual)
 		style=OUTRAGE_FULLBODY.instantiate();visual.add_child(style)
 		for title in RIG_NAMES:rig_nodes[title]=style.get_node(title)
+		damage_visual=VOXEL_DAMAGE_VISUAL.new();visual.add_child(damage_visual)
+		damage_visual.setup(style,RIG_NAMES,int(state.id)*911+73);damage_visual.set_pixel_enabled(pixel_enabled)
 		var tag =Label3D.new();tag.text="ALLY / OUTRAGE %d"%state.id;tag.font_size=36;tag.outline_size=6;tag.modulate=Color("8ef1de");tag.billboard=BaseMaterial3D.BILLBOARD_ENABLED;tag.position=Vector3(0,2.1,0);tag.render_priority=126;node.add_child(tag)
 		gun=Node3D.new();gun.name="RemoteAK";visual.add_child(gun);gun.position=Vector3(-1.10,torso_rest.y+0.88,-0.98)
 		ak_body=Node3D.new();ak_body.name="RemoteAKBody";ak_body.rotation.y=PI*0.5;ak_body.position=Vector3(0.10,0,-0.30);gun.add_child(ak_body)
@@ -316,7 +319,7 @@ func _make_replica(state: Dictionary) -> void:
 		_add_weapon_box(shotgun_body,"SG_Pump",Vector3(0.62,-0.09,0),Vector3(0.42,0.18,0.25),Color("8a5238"))
 		shotgun_body.visible=int(state.get("weapon",0))==1;ak_body.visible=not shotgun_body.visible
 	var record: Dictionary={"node":node,"visual":visual,"style":style,"rigs":rig_nodes,"next":state,"prev":state,"age":0.05,"bot":state.bot,"steps":state.steps,"dead":false,
-		"gun":gun,"ak_body":ak_body,"shotgun_body":shotgun_body,
+		"gun":gun,"ak_body":ak_body,"shotgun_body":shotgun_body,"damage_visual":damage_visual,
 		"hit_punch":0.0,"hit_sign":1.0,"hit_seed":0.0}
 	replicas[state.id]=record
 	_apply_replica(record,1.0)
@@ -337,6 +340,7 @@ func _apply_replica(r: Dictionary,alpha: float) -> void:
 		rig.position=Vector3(first[k],first[k+1],first[k+2]).lerp(Vector3(second[k],second[k+1],second[k+2]),alpha)
 		rig.quaternion=Quaternion.from_euler(Vector3(first[k+3],first[k+4],first[k+5])).slerp(Quaternion.from_euler(Vector3(second[k+3],second[k+4],second[k+5])),alpha)
 		rig.scale=Vector3(second[k+6],second[k+7],second[k+8])
+	if r.damage_visual!=null:r.damage_visual.set_health(float(b.hp),100.0)
 	if r.bot:
 		r.node.movement_body.global_position=r.node.global_position
 		if b.hp<r.node.health:r.node.health=b.hp;r.node._refresh_bar()
@@ -424,6 +428,7 @@ func _event(e: Dictionary) -> void:
 				combat.notify_hit(e.p,e.dir,e.amount,e.lethal)
 			if e.actor==session.actor_id:
 				last_health_tick=e.tick;combat.director.health=e.hp;combat.director.dead=e.lethal
+				if player_damage_visual!=null:player_damage_visual.damage_at(e.p,float(e.hp),100.0,float(e.amount),e.dir)
 				_set_player_healthbar(e.hp,100.0)
 				combat.director.hud.set_health(e.hp,100);combat.director.hud.notify_hurt(e.amount);input_adapter.rumble(0.65,0.15)
 				var local_dir: Vector3 = player_visual.global_basis.inverse() * (e.dir as Vector3)
@@ -433,6 +438,7 @@ func _event(e: Dictionary) -> void:
 				if e.lethal and _open_menu_on_death():input_adapter.suspend();set_menu(true)
 			elif replicas.has(e.actor):
 				var r: Dictionary=replicas[e.actor]
+				if r.damage_visual!=null:r.damage_visual.damage_at(e.p,float(e.hp),100.0,float(e.amount),e.dir)
 				if is_instance_valid(r.node):
 					if r.bot:
 						r.node.set_attack_warning(false)
@@ -450,6 +456,7 @@ func _event(e: Dictionary) -> void:
 			if e.owner==session.actor_id:
 				last_health_tick=e.tick;combat.total_kills=e.kills;combat.score_pulse=0.65
 				combat.director.health=e.hp;combat.director.hud.set_health(e.hp,100);combat.director.hud.notify_heal(e.heal)
+				_set_player_healthbar(float(e.hp),100.0)
 				if float(e.get("heal",0.0))>0.0:arena_audio.play_event("heal")
 				combat._update_counter()
 		"explosion":grenade_skill.show_blast(e.p)

@@ -26,7 +26,7 @@ func run() -> void:
 	check(stage.player.is_on_floor(),"player_grounded")
 	check(stage.head_rest.z < stage.torso_rest.z-0.25,"head_forward")
 	check(stage.head_rest.y-stage.torso_rest.y>1.40,"readable_neck_gap")
-	check(stage.weapon_side<0,"left_side_default")
+	check(stage.weapon_side>0 and stage.smoothed_weapon_side>0,"right_side_default")
 	await capture("combat_gameplay")
 	var spawn_points: Array[Vector3] = []
 	for bot in stage.combat.targets: spawn_points.append(bot.global_position)

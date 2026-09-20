@@ -153,7 +153,7 @@ func fire(muzzle: Vector3, target: Vector3, chest: Vector3) -> Dictionary:
 		var headshot := HIT_REGIONS.is_headshot(hit)
 		var shot_damage := WEAPON_RULES.damage(WEAPON_RULES.AK,headshot)
 		if object != null and object.has_method("receive_hit"):
-			applied = object.receive_hit(shot_damage, direction, shots_fired)
+			applied = object.receive_hit(shot_damage,direction,shots_fired,endpoint)
 			target_name = str(object.name)
 		elif object is RigidBody3D:
 			object.apply_impulse(direction * 1.6, endpoint - object.global_position)
@@ -196,7 +196,7 @@ func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
 		if not hit.is_empty():
 			var object: Object=hit.get("collider")
 			if object!=null and object.has_method("receive_hit"):
-				applied=object.receive_hit(pellet_damage,direction,shots_fired*100+pellet)
+				applied=object.receive_hit(pellet_damage,direction,shots_fired*100+pellet,endpoint)
 				if applied:
 					applied_damage+=pellet_damage
 					if pellet_headshot:headshots+=1

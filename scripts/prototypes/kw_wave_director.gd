@@ -122,6 +122,8 @@ func restart_run() -> void:
 	stage.player.global_position=Vector3(0,2.2,6)
 	stage.player.velocity=Vector3.ZERO
 	stage.player_visual.visible=true
+	if stage.player_damage_visual!=null:stage.player_damage_visual.restore_all_immediate()
+	stage._set_player_healthbar(MAX_HEALTH,MAX_HEALTH)
 	stage.fire_held=false
 	stage.aiming=false
 	stage.shot_cooldown=0.0
@@ -208,6 +210,7 @@ func on_kill(_target: Node3D) -> void:
 	health+=restored
 	healing_received+=restored
 	hud.set_health(health,MAX_HEALTH)
+	stage._set_player_healthbar(health,MAX_HEALTH)
 	hud.notify_heal(restored)
 	if restored>0 and stage.arena_audio != null: stage.arena_audio.play_event("heal",Vector3.ZERO,-24.0)
 
@@ -218,8 +221,10 @@ func receive_player_damage(amount: float, source: Vector3) -> bool:
 	damage_grace=0.38
 	hud.set_health(health,MAX_HEALTH)
 	hud.notify_hurt(amount)
-	stage._set_player_healthbar(health,MAX_HEALTH)
 	var hit_direction: Vector3 = (stage.player.global_position-source).normalized()
+	var impact_point: Vector3=stage.player.global_position+Vector3(0,1.12,0)-hit_direction*0.32
+	if stage.player_damage_visual!=null:stage.player_damage_visual.damage_at(impact_point,health,MAX_HEALTH,amount,hit_direction)
+	stage._set_player_healthbar(health,MAX_HEALTH)
 	combat._spawn_damage_feedback(stage.player.global_position+Vector3(0,1.15,0),hit_direction,amount,health<=0,combat.blood_color_for_skin("outrage"),false)
 	# Visual-only flinch, never a camera kick or an aim displacement.
 	var local: Vector3=stage.player_visual.global_basis.inverse()*hit_direction

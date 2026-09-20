@@ -2,6 +2,7 @@ extends StaticBody3D
 ## Roaming practice clone: separate movement capsule and exact animated shot shapes.
 signal damaged(target: Node3D, lethal: bool)
 const SCENE_INK := preload("res://scripts/prototypes/kw_scene_ink.gd")
+const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd")
 const ROAMING := preload("res://scripts/prototypes/kw_roaming_brain.gd")
 const LOCOMOTION := preload("res://scripts/prototypes/kw_goofy_locomotion.gd")
 @export var roaming_enabled := true
@@ -34,6 +35,7 @@ var bar_texture: ImageTexture
 var records: Array[Dictionary] = []
 var rigs: Array[Dictionary] = []
 var hit_shapes: Array[Dictionary] = []
+var damage_visual: Node
 var body_bridge: CollisionShape3D
 const BODY_BRIDGE_RADIUS := 0.24
 const BODY_BRIDGE_HEAD_CLEARANCE := 0.46
@@ -65,6 +67,9 @@ func _ready() -> void:
 	flash_material.albedo_color = Color.WHITE
 	flash_material.render_priority = 2
 	_build_visuals()
+	damage_visual=VOXEL_DAMAGE_VISUAL.new();add_child(damage_visual)
+	damage_visual.setup(visuals,["HeadRig","TorsoRig","LeftLegRig","RightLegRig"],int(get_instance_id()%2147483647))
+	damage_visual.set_pixel_enabled(pixel_enabled)
 	_build_body_bridge()
 	_build_healthbar()
 	_build_enemy_weapon()
@@ -271,11 +276,14 @@ func _refresh_bar() -> void:
 		health_bar.texture=bar_texture
 	else: bar_texture.update(image)
 
-func receive_hit(amount: float, direction: Vector3, shot_id: int) -> bool:
+func receive_hit(amount: float, direction: Vector3, shot_id: int, impact_point: Vector3 = Vector3.INF) -> bool:
 	if dead or amount <= 0.0 or seen_shots.has(shot_id): return false
 	seen_shots[shot_id] = true
 	trail_delay = 0.22
 	health = maxf(0.0,health-amount)
+	if damage_visual!=null:
+		var point:=impact_point if impact_point.is_finite() else visuals.global_position+Vector3(0,0.45,0)
+		damage_visual.damage_at(point,health,max_health,amount,direction)
 	hit_count += 1
 	flash_time = 0.075
 	for record in records: record.mesh.material_overlay = flash_material
@@ -368,6 +376,9 @@ func set_style(comic: bool, pixels: bool) -> void:
 			for part in rig.get_children():
 				if part.name == "ShaderInkOutline": part.visible = comic
 	for shell in find_children("WorldInkOutline","MeshInstance3D",true,false): shell.visible=comic
+	if damage_visual!=null:
+		damage_visual.set_pixel_enabled(pixels)
+		damage_visual.set_comic_enabled(comic)
 
 func _setup_roaming() -> void:
 	# The movement capsule is physical layer 8, not a shot hitbox. Animated mesh
