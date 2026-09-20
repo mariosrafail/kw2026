@@ -26,7 +26,7 @@ var settings: Dictionary={"look_x":2.6,"look_y":2.1,"deadzone":0.16,"look_curve"
 var overrides: Dictionary={}
 var fov =74.0
 const KEYS: Dictionary={"left":KEY_A,"right":KEY_D,"forward":KEY_W,"back":KEY_S,"jump":KEY_SPACE,"sprint":KEY_SHIFT,"grenade":KEY_G,"reload":KEY_R,"inspect":KEY_H,"shoulder":KEY_Q,"pause":KEY_ESCAPE,"help":KEY_TAB,"music":KEY_M,"comic":KEY_O,"pixels":KEY_P,"borderlands":KEY_Y}
-const BUTTONS: Dictionary={"jump":JOY_BUTTON_A,"sprint":JOY_BUTTON_LEFT_STICK,"grenade":JOY_BUTTON_RIGHT_SHOULDER,"reload":JOY_BUTTON_X,"shoulder":JOY_BUTTON_RIGHT_STICK,"pause":JOY_BUTTON_START,"help":JOY_BUTTON_BACK}
+const BUTTONS: Dictionary={"jump":JOY_BUTTON_A,"sprint":JOY_BUTTON_LEFT_STICK,"grenade":JOY_BUTTON_RIGHT_SHOULDER,"reload":JOY_BUTTON_X,"inspect":JOY_BUTTON_Y,"weapon_next":JOY_BUTTON_DPAD_RIGHT,"weapon_prev":JOY_BUTTON_DPAD_LEFT,"shoulder":JOY_BUTTON_RIGHT_STICK,"pause":JOY_BUTTON_START,"help":JOY_BUTTON_BACK}
 func _ready() -> void:
 	name="PortableInput"
 	load_settings()
@@ -104,12 +104,14 @@ func _input(event: InputEvent) -> void:
 		var delta_pitch: float =-event.screen_relative.y*0.0013*ratio*(-1.0 if settings.invert_y else 1.0)
 		yaw+=delta_yaw;pitch+=delta_pitch
 		recoil_model.note_manual_look(delta_yaw,delta_pitch)
-	for action in ["jump","grenade","inspect","shoulder","sprint","aim","help","music","comic","pixels","borderlands"]:
+	for action in ["jump","grenade","inspect","weapon_next","weapon_prev","shoulder","sprint","aim","help","music","comic","pixels","borderlands"]:
 		if event.is_action_pressed(PREFIX+action):
 			match action:
 				"jump":jump_serial+=1
 				"grenade":grenade_serial+=1
 				"inspect":action_requested.emit("inspect")
+				"weapon_next":weapon_slot=posmod(weapon_slot+1,3);action_requested.emit("weapon")
+				"weapon_prev":weapon_slot=posmod(weapon_slot-1,3);action_requested.emit("weapon")
 				"shoulder":side=1.0
 				"sprint":sprint_latched=not sprint_latched
 				"aim":aim_latched=not aim_latched
@@ -159,18 +161,23 @@ func suspend() -> void:
 	if pad_id>=0:Input.stop_joy_vibration(pad_id)
 
 func _joy_connection(id: int,present: bool) -> void:
-	if present and pad_id<0:pad_id=id
+	if present and pad_id<0:
+		pad_id=id
+		# Do not force-enable here: online menus intentionally control enabled state.
+		# Offline adapters that were already enabled remain enabled across reconnects.
 	elif not present and id==pad_id:
-		pad_id=-1;suspend();device_lost.emit()
+		pad_id=-1
+		sprint_latched=false;aim_latched=false;recoil_model.reset()
+		device_lost.emit()
 
 func rumble(strength: float,duration: float=0.08) -> void:
 	if last_device=="pad" and pad_id>=0 and enabled and focused and not OS.get_cmdline_user_args().has("--kw-qa"):
 		Input.start_joy_vibration(pad_id,strength*float(settings.vibration),strength*float(settings.vibration)*0.55,duration)
 
 func prompt() -> String:
-	if last_device!="pad":return "WASD move  |  LMB fire  |  RMB aim+magnet  |  KAR RMB scope/no lock/near-still  |  H inspect  |  Esc menu"
+	if last_device!="pad":return "WASD move  |  LMB fire  |  RMB aim+magnet  |  H inspect  |  wheel weapon  |  Esc menu"
 	var sony =pad_id>=0 and ("Dual" in Input.get_joy_name(pad_id) or "PS" in Input.get_joy_name(pad_id))
-	return "Sticks move / look  |  R2 fire  |  L2 aim+magnet  |  KAR L2 scope/no lock/near-still  |  Square reload  |  Options" if sony else "Sticks move / look  |  RT fire  |  LT aim+magnet  |  KAR LT scope/no lock/near-still  |  X reload  |  Menu"
+	return "Sticks move/look  |  R2/L2 fire/aim  |  Square reload  |  Triangle inspect  |  D-pad weapons  |  R1 grenade  |  Options" if sony else "Sticks move/look  |  RT/LT fire/aim  |  X reload  |  Y inspect  |  D-pad weapons  |  RB grenade  |  Menu"
 
 func _replace_binding(action: String,event: InputEvent) -> void:
 	if event is InputEventJoypadButton and event.button_index in [JOY_BUTTON_START,JOY_BUTTON_BACK]:return

@@ -93,6 +93,9 @@ var aim_recoil = AK_RECOIL_MODEL.new()
 var weapon_visual_side_kick := 0.0
 var weapon_visual_lift_kick := 0.0
 var weapon_visual_twist_kick := 0.0
+var offline_input_adapter: Node
+var offline_jump_serial:=0
+var offline_grenade_serial:=0
 var sniper_sway_offset:=Vector2.ZERO
 var sniper_sway_velocity:=Vector2.ZERO
 var sniper_sway_phase:=0.0
@@ -149,6 +152,7 @@ const KAR_RELOAD_SFX := preload("res://assets/sounds/sfx/guns/kar98/kar98_reload
 const AK_RECOIL_MODEL := preload("res://scripts/kw3d/ak_recoil.gd")
 const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
 const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd")
+const PORTABLE_INPUT := preload("res://scripts/kw3d/portable_input.gd")
 
 func _ready() -> void:
 	# The baked preview exists only for the editor; runtime builds the same arena.
@@ -160,6 +164,11 @@ func _ready() -> void:
 	_build_environment()
 	_build_arena()
 	_build_player()
+	offline_input_adapter=PORTABLE_INPUT.new();add_child(offline_input_adapter)
+	offline_input_adapter.enabled=true
+	offline_input_adapter.yaw=yaw;offline_input_adapter.pitch=pitch;offline_input_adapter.weapon_slot=weapon_slot
+	offline_input_adapter.action_requested.connect(_offline_control_action)
+	offline_input_adapter.device_lost.connect(func():fire_held=false;aiming=false)
 	locomotion = LOCOMOTION.new()
 	locomotion.setup(player, player_visual, head_rig, torso_rig, left_leg_rig, right_leg_rig, randi())
 	_build_pixel_pass()
@@ -192,6 +201,27 @@ func _apply_offline_test_mode() -> void:
 		combat.set_roaming_enabled(true)
 	_update_status()
 
+func _offline_control_action(action: String) -> void:
+	if offline_input_adapter==null:return
+	# Pause and wheel/D-pad weapon switching may consume the input event before _unhandled_input.
+	if action=="pause":
+		Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if Input.mouse_mode==Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED
+		fire_held=false;aiming=false
+		return
+	if action=="weapon":
+		_set_weapon_slot(int(offline_input_adapter.weapon_slot),true)
+		return
+	# Keyboard/mouse versions of these actions are still handled by the legacy offline event path.
+	if str(offline_input_adapter.last_device)!="pad":return
+	match action:
+		"help":_toggle_instructions()
+		"music":
+			if arena_audio!=null:arena_audio.toggle_music()
+		"comic":_set_comic_enabled(not comic_enabled)
+		"pixels":_set_pixel_enabled(not pixel_enabled)
+		"borderlands":_set_borderlands_enabled(not borderlands_enabled)
+		"inspect":_start_weapon_inspect()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F10:
 		ProjectSettings.set_setting("kw3d/open_offline_tests_on_load", true)
@@ -217,6 +247,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch = clamp(pitch, deg_to_rad(-48.0), deg_to_rad(30.0))
 		camera_yaw.rotation.y = yaw
 		camera_pitch.rotation.x = pitch
+		if offline_input_adapter!=null:
+			offline_input_adapter.yaw=yaw;offline_input_adapter.pitch=pitch;offline_input_adapter.weapon_slot=weapon_slot
 
 	if event is InputEventMouseButton:
 		if Input.mouse_mode==Input.MOUSE_MODE_CAPTURED and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
@@ -276,16 +308,35 @@ func _physics_process(delta: float) -> void:
 	shot_cooldown = maxf(-delta, shot_cooldown - delta)
 	_tick_reload(delta)
 
-	var input_vec := Vector2.ZERO
-	if Input.is_physical_key_pressed(KEY_A):
-		input_vec.x -= 1.0
-	if Input.is_physical_key_pressed(KEY_D):
-		input_vec.x += 1.0
-	if Input.is_physical_key_pressed(KEY_W):
-		input_vec.y += 1.0
-	if Input.is_physical_key_pressed(KEY_S):
-		input_vec.y -= 1.0
-	input_vec = input_vec.normalized()
+	var input_vec:=Vector2.ZERO
+	var jump_pressed:=false
+	var using_pad: bool=offline_input_adapter!=null and bool(offline_input_adapter.enabled) and int(offline_input_adapter.pad_id)>=0 and str(offline_input_adapter.last_device)=="pad"
+	var sprinting:=false
+	if using_pad:
+		offline_input_adapter.fov=camera.fov
+		var command: Dictionary=offline_input_adapter.sample(delta)
+		if int(command.get("weapon",weapon_slot))!=weapon_slot:_set_weapon_slot(int(command.weapon),false)
+		yaw=float(command.yaw);pitch=float(command.pitch);aiming=bool(command.aim);fire_held=bool(command.fire)
+		input_vec=command.move as Vector2
+		var sniper_scoped_pad:=aiming and weapon_slot==2
+		sprinting=bool(command.sprint) and not sniper_scoped_pad
+		if bool(command.get("reload",false)):_start_reload()
+		if int(command.js)>offline_jump_serial:
+			offline_jump_serial=int(command.js);jump_pressed=true
+		if int(command.gs)>offline_grenade_serial:
+			offline_grenade_serial=int(command.gs)
+			if grenade_skill!=null:grenade_skill.requested=true
+	else:
+		if offline_input_adapter!=null:
+			offline_input_adapter.yaw=yaw;offline_input_adapter.pitch=pitch;offline_input_adapter.weapon_slot=weapon_slot
+		if Input.is_physical_key_pressed(KEY_A):input_vec.x-=1.0
+		if Input.is_physical_key_pressed(KEY_D):input_vec.x+=1.0
+		if Input.is_physical_key_pressed(KEY_W):input_vec.y+=1.0
+		if Input.is_physical_key_pressed(KEY_S):input_vec.y-=1.0
+		input_vec=input_vec.normalized()
+		var sniper_scoped_keys:=aiming and weapon_slot==2
+		sprinting=Input.is_physical_key_pressed(KEY_SHIFT) and not sniper_scoped_keys
+		jump_pressed=Input.is_physical_key_pressed(KEY_SPACE)
 
 	var forward := -camera_yaw.global_transform.basis.z
 	var right := camera_yaw.global_transform.basis.x
@@ -293,7 +344,6 @@ func _physics_process(delta: float) -> void:
 	right.y = 0.0
 	var direction := (right.normalized() * input_vec.x + forward.normalized() * input_vec.y).normalized()
 	var sniper_scoped:=aiming and weapon_slot==2
-	var sprinting:=Input.is_physical_key_pressed(KEY_SHIFT) and not sniper_scoped
 	var move_speed:=SNIPER_AIM_MOVE_SPEED if sniper_scoped else SPRINT_SPEED if sprinting else MOVE_SPEED
 	var target_x := direction.x * move_speed
 	var target_z := direction.z * move_speed
@@ -313,7 +363,7 @@ func _physics_process(delta: float) -> void:
 	var gravity_strength := GRAVITY * (0.32 if low_gravity else 1.0)
 	if not player.is_on_floor():
 		player.velocity.y -= gravity_strength * delta
-	elif Input.is_physical_key_pressed(KEY_SPACE):
+	elif jump_pressed:
 		player.velocity.y = JUMP_SPEED * (1.18 if low_gravity else 1.0)
 
 	animation_impact_velocity = player.velocity.y
@@ -335,6 +385,8 @@ func _physics_process(delta: float) -> void:
 		_fire_physics_ball()
 	if ammo_in_mag<=0 and reload_remaining<=0.0 and not combat.is_game_over():
 		_start_reload()
+	if offline_input_adapter!=null:
+		offline_input_adapter.yaw=yaw;offline_input_adapter.pitch=pitch;offline_input_adapter.weapon_slot=weapon_slot
 
 	if player.global_position.y < -15.0:
 		player.global_position = Vector3(0.0, 3.0, 6.0)
