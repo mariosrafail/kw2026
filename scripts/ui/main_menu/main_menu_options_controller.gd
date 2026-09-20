@@ -27,10 +27,10 @@ func bind_menu_sfx_option(option: OptionButton) -> void:
 	_menu_sfx.bind_option(option)
 
 func on_music_slider_changed(value: float) -> void:
-	if _intro_fx == null:
-		return
-	if _intro_fx.has_method("set_menu_music_volume_linear"):
-		_intro_fx.call("set_menu_music_volume_linear", clampf(value, 0.0, 1.0))
+	var clamped:=clampf(value,0.0,1.0)
+	if _intro_fx != null and _intro_fx.has_method("set_menu_music_volume_linear"):
+		_intro_fx.call("set_menu_music_volume_linear",clamped)
+	set_audio_bus_volume_linear("Music",clamped)
 	_host.call("_save_state")
 
 func on_sfx_slider_changed(value: float) -> void:
@@ -75,6 +75,11 @@ func set_screen_shake_enabled(enabled: bool, save: bool) -> void:
 		screen_shake_toggle_button.modulate = Color(1.0, 1.0, 1.0, 1.0) if bool(_host.get("screen_shake_enabled")) else Color(0.78, 0.78, 0.82, 1.0)
 	if save:
 		_host.call("_save_state")
+
+func set_audio_bus_volume_linear(bus_name: String,value: float) -> void:
+	var db: float=-80.0 if value<=0.001 else linear_to_db(value)
+	var idx:=ensure_audio_bus(bus_name,"Master")
+	if idx>=0:AudioServer.set_bus_volume_db(idx,db)
 
 func set_sound_buses_volume_linear(value: float) -> void:
 	var db: float = -80.0 if value <= 0.001 else linear_to_db(value)

@@ -91,6 +91,9 @@ func _record_mesh(mesh: MeshInstance3D, color: Color, hurtbox: bool = true) -> v
 	var toon := _color_material(color)
 	var pixel := PIXELS.from_standard(plain)
 	mesh.material_override = toon
+	mesh.set_meta("plain_material",plain)
+	mesh.set_meta("toon_material",toon)
+	mesh.set_meta("pixel_material",pixel)
 	records.append({"mesh": mesh, "plain": plain, "toon": toon, "pixel": pixel})
 	if not hurtbox: return
 	var shape := CollisionShape3D.new()
@@ -368,9 +371,13 @@ func set_style(comic: bool, pixels: bool) -> void:
 	comic_enabled = comic
 	pixel_enabled = pixels
 	for record in records:
-		record.toon.set_shader_parameter("pixel_enabled",pixels)
-		record.pixel.set_shader_parameter("pixel_enabled",pixels)
-		record.mesh.material_override = record.toon if comic else record.pixel if pixels else record.plain
+		var mesh:=record.mesh as MeshInstance3D
+		var toon: ShaderMaterial=mesh.get_meta("toon_material",record.toon) as ShaderMaterial
+		var pixel: ShaderMaterial=mesh.get_meta("pixel_material",record.pixel) as ShaderMaterial
+		toon.set_shader_parameter("pixel_enabled",pixels)
+		pixel.set_shader_parameter("pixel_enabled",pixels)
+		# Keep the damage-enabled shader path even with comic/pixels disabled; pixel_enabled=false gives the plain look.
+		mesh.material_override = toon if comic else pixel
 	if visuals != null:
 		for rig in visuals.get_children():
 			for part in rig.get_children():
@@ -476,7 +483,8 @@ func _build_enemy_weapon() -> void:
 	attack_label.hide()
 	attack_audio=AudioStreamPlayer3D.new()
 	attack_audio.stream=load("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
-	attack_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else -18.0
+	attack_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else -12.0
+	attack_audio.bus="SFX"
 	attack_audio.pitch_scale=1.22
 	attack_audio.unit_size=4.0
 	attack_audio.max_distance=42.0

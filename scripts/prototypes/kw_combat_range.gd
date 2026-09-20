@@ -457,7 +457,8 @@ func _build_confirm_audio() -> void:
 	confirm_kill = _make_tick(true)
 	confirm_audio = AudioStreamPlayer.new()
 	confirm_audio.name = "HitConfirmAudio"
-	confirm_audio.volume_db = -80.0 if OS.get_cmdline_user_args().has("--kw-qa") else -22.0
+	confirm_audio.volume_db = -80.0 if OS.get_cmdline_user_args().has("--kw-qa") else -14.0
+	confirm_audio.bus="SFX"
 	confirm_audio.max_polyphony = 3
 	add_child(confirm_audio)
 

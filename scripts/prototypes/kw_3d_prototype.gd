@@ -4,7 +4,6 @@ const ARENA_AUDIO := preload("res://scripts/prototypes/kw_arena_audio.gd")
 const GRENADE_SKILL := preload("res://scripts/prototypes/kw_grenade_skill.gd")
 const SCENE_INK := preload("res://scripts/prototypes/kw_scene_ink.gd")
 const BORDERLANDS_EDGE := preload("res://scripts/prototypes/kw_borderlands_edge.gdshader")
-const AK_INK_HULL := preload("res://assets/prototypes/ak47_outline/hull.res")
 const WEAPON_HOLD_HEIGHT := 0.72
 var arena_audio: Node
 var grenade_skill: Node3D
@@ -24,6 +23,7 @@ var camera_probe: SphereShape3D
 const COMBAT_RANGE := preload("res://scripts/prototypes/kw_combat_range.gd")
 var animation_impact_velocity := 0.0
 const LOCOMOTION := preload("res://scripts/prototypes/kw_goofy_locomotion.gd")
+const AIM_ASSIST := preload("res://scripts/kw3d/aim_assist.gd")
 
 var player: CharacterBody3D
 var player_visual: Node3D
@@ -33,7 +33,7 @@ var camera: Camera3D
 var status_label: Label
 var help_panel: Control
 var instructions_visible := true
-@export_range(-30.0, -1.0, 0.5) var shooting_volume_db := -7.5
+@export_range(-30.0, 0.0, 0.5) var shooting_volume_db := 0.0
 var weapon_aim_pivot: Node3D
 var weapon_root: Node3D
 var weapon_visual_wobble: Node3D
@@ -65,6 +65,7 @@ var player_health_texture: ImageTexture
 var player_damage_visual: Node
 var player_health_value := 100.0
 var aim_target := Vector3.ZERO
+var aim_assist_active := false
 
 var head_rig: Node3D
 var torso_rig: Node3D
@@ -113,6 +114,7 @@ const WEAPON_HOLD_DISTANCE := 0.92
 const WEAPON_HOLD_SIDE := 0.74
 const MOVE_SPEED := 7.5
 const SPRINT_SPEED := 11.0
+const AIM_MOVE_SPEED := 4.8
 const ACCEL := 28.0
 const TURN_SPEED := 10.0
 const JUMP_SPEED := 8.8
@@ -271,7 +273,7 @@ func _physics_process(delta: float) -> void:
 	right.y = 0.0
 	var direction := (right.normalized() * input_vec.x + forward.normalized() * input_vec.y).normalized()
 	var sprinting := Input.is_physical_key_pressed(KEY_SHIFT) and not aiming
-	var move_speed := SPRINT_SPEED if sprinting else MOVE_SPEED
+	var move_speed := AIM_MOVE_SPEED if aiming else SPRINT_SPEED if sprinting else MOVE_SPEED
 	var target_x := direction.x * move_speed
 	var target_z := direction.z * move_speed
 	player.velocity.x = move_toward(player.velocity.x, target_x, ACCEL * delta)
@@ -299,6 +301,7 @@ func _physics_process(delta: float) -> void:
 	var recoil_recovery: Vector2 = aim_recoil.step(delta, fire_held)
 	yaw = wrapf(yaw + recoil_recovery.x, -PI, PI)
 	pitch = clampf(pitch + recoil_recovery.y, deg_to_rad(-48.0), deg_to_rad(30.0))
+	_apply_offline_aim_assist(delta)
 	camera_yaw.rotation.y = yaw
 	camera_pitch.rotation.x = pitch
 
@@ -502,7 +505,8 @@ func _build_held_ak() -> void:
 	weapon_aim_pivot.add_child(weapon_root)
 	AK47_VOXEL_BUILDER.build(weapon_root)
 	_pixelize_weapon_materials()
-	_build_weapon_outline()
+	for ak_part in weapon_root.get_children():
+		if ak_part is MeshInstance3D:_add_scene_outline(ak_part,1.15)
 	weapon_visual_wobble = Node3D.new()
 	weapon_visual_wobble.name = "WeaponVisualWobble"
 	weapon_root.add_child(weapon_visual_wobble)
@@ -524,7 +528,8 @@ func _build_held_ak() -> void:
 	ak_fire_audio.name = "AKFireAudio"
 	ak_fire_audio.stream = AK47_SHOT_SFX
 	ak_fire_audio.volume_db = -80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db
-	ak_fire_audio.max_distance = 28.0
+	ak_fire_audio.bus="SFX"
+	ak_fire_audio.max_distance = 34.0
 	ak_fire_audio.unit_size = 2.8
 	ak_fire_audio.max_polyphony = 8
 	weapon_aim_pivot.add_child(ak_fire_audio)
@@ -533,17 +538,18 @@ func _build_held_ak() -> void:
 	ak_reload_audio.name = "AKReloadAudio"
 	ak_reload_audio.stream = AK47_RELOAD_SFX
 	ak_reload_audio.volume_db = -80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db - 3.0
-	ak_reload_audio.max_distance = 24.0
+	ak_reload_audio.bus="SFX"
+	ak_reload_audio.max_distance = 28.0
 	ak_reload_audio.unit_size = 2.6
 	weapon_aim_pivot.add_child(ak_reload_audio)
 
 	shotgun_fire_audio=AudioStreamPlayer3D.new();shotgun_fire_audio.name="ShotgunFireAudio";shotgun_fire_audio.stream=SHOTGUN_FIRE_SFX
 	shotgun_fire_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db+1.0
-	shotgun_fire_audio.pitch_scale=0.82;shotgun_fire_audio.max_distance=34.0;shotgun_fire_audio.unit_size=3.2;shotgun_fire_audio.max_polyphony=4
+	shotgun_fire_audio.bus="SFX";shotgun_fire_audio.pitch_scale=0.82;shotgun_fire_audio.max_distance=40.0;shotgun_fire_audio.unit_size=3.2;shotgun_fire_audio.max_polyphony=4
 	weapon_aim_pivot.add_child(shotgun_fire_audio)
 	shotgun_reload_audio=AudioStreamPlayer3D.new();shotgun_reload_audio.name="ShotgunReloadAudio";shotgun_reload_audio.stream=SHOTGUN_RELOAD_SFX
 	shotgun_reload_audio.volume_db=-80.0 if OS.get_cmdline_user_args().has("--kw-qa") else shooting_volume_db-2.0
-	shotgun_reload_audio.pitch_scale=0.92;shotgun_reload_audio.max_distance=26.0;shotgun_reload_audio.unit_size=2.8
+	shotgun_reload_audio.bus="SFX";shotgun_reload_audio.pitch_scale=0.92;shotgun_reload_audio.max_distance=30.0;shotgun_reload_audio.unit_size=2.8
 	weapon_aim_pivot.add_child(shotgun_reload_audio)
 	_set_weapon_slot(0,false)
 
@@ -583,6 +589,40 @@ func _add_weapon_hand(node_name: String, pos: Vector3, size: Vector3) -> void:
 	hand.material_override = _material(Color(0.56, 0.11, 0.15), false, 0.0)
 	weapon_aim_pivot.add_child(hand)
 	_add_scene_outline(hand, 1.6)
+
+func _best_offline_aim_assist_target() -> Vector3:
+	if camera==null or combat==null:return Vector3(INF,INF,INF)
+	var best_point:=Vector3(INF,INF,INF)
+	var best_angle:=AIM_ASSIST.CONE_DEG+0.001
+	for target in combat.targets:
+		if not is_instance_valid(target) or bool(target.dead):continue
+		var torso:=target.visuals.get_node_or_null("TorsoRig") as Node3D
+		if torso==null:continue
+		var point:=torso.global_position+Vector3.UP*0.34
+		if not AIM_ASSIST.eligible(camera.global_position,yaw,pitch,point):continue
+		if not _aim_assist_line_clear(point):continue
+		var angle:=AIM_ASSIST.angle_degrees(camera.global_position,yaw,pitch,point)
+		if angle<best_angle:
+			best_angle=angle;best_point=point
+	return best_point
+
+func _aim_assist_line_clear(point: Vector3) -> bool:
+	if camera==null or player==null:return false
+	var query:=PhysicsRayQueryParameters3D.create(camera.global_position,point,1,[player.get_rid()])
+	query.hit_from_inside=true
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+func _apply_offline_aim_assist(delta: float) -> void:
+	aim_assist_active=false
+	if not aiming:return
+	var point:=_best_offline_aim_assist_target()
+	if not point.is_finite():return
+	var before:=AIM_ASSIST.angle_degrees(camera.global_position,yaw,pitch,point)
+	var assisted:=AIM_ASSIST.step(yaw,pitch,camera.global_position,point,delta)
+	yaw=wrapf(assisted.x,-PI,PI)
+	pitch=clampf(assisted.y,deg_to_rad(-48.0),deg_to_rad(30.0))
+	var after:=AIM_ASSIST.angle_degrees(camera.global_position,yaw,pitch,point)
+	aim_assist_active=after+0.0001<before
 
 func _update_third_person_camera(delta: float) -> void:
 	if camera == null:
@@ -756,7 +796,7 @@ func _build_hud() -> void:
 	title.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
 	help_panel.add_child(title)
 	var help := Label.new()
-	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire   R reload\nWHEEL weapon   G grenade   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
+	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim+magnet (slow)   LMB fire   R reload\nWHEEL weapon   G grenade   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
 	help.position = Vector2(12, 28)
 	help.add_theme_font_size_override("font_size", 11)
 	help.add_theme_color_override("font_color", Color(0.86, 0.86, 0.92))
@@ -1149,20 +1189,6 @@ func _weapon_anchor() -> Vector3:
 
 func _add_scene_outline(mesh: MeshInstance3D, width: float = 2.6) -> void:
 	SCENE_INK.add_to(mesh, comic_enabled, width)
-
-func _build_weapon_outline() -> void:
-	var shell := MeshInstance3D.new()
-	shell.name = "WorldInkOutline"
-	shell.mesh = AK_INK_HULL
-	var material := ShaderMaterial.new()
-	material.shader = load("res://scripts/prototypes/kw_comic_ink.gdshader")
-	material.set_shader_parameter("width_pixels", 1.6)
-	shell.material_override = material
-	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	shell.extra_cull_margin = 0.15
-	shell.visible = comic_enabled
-	weapon_root.add_child(shell)
-	shell.add_to_group("kw_world_ink")
 
 func _set_comic_enabled(value: bool) -> void:
 	comic_enabled = value

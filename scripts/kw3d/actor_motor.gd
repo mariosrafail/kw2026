@@ -1,12 +1,20 @@
 extends RefCounted
 ## Identical fixed-step motor for authority and local prediction. No input or camera dependencies.
 const DT := 1.0/60.0
+const WALK_SPEED := 7.5
+const SPRINT_SPEED := 11.0
+const AIM_SPEED := 4.8
+
+static func speed_for(command: Dictionary) -> float:
+	if bool(command.get("aim",false)):return AIM_SPEED
+	return SPRINT_SPEED if bool(command.get("sprint",false)) else WALK_SPEED
+
 static func step(body: CharacterBody3D, command: Dictionary, dt: float=DT) -> void:
 	var move: Vector2=command.get("move",Vector2.ZERO)
 	var yaw: float=command.get("yaw",0.0)
 	var basis =Basis(Vector3.UP,yaw)
 	var direction: Vector3=(basis.x*move.x-basis.z*move.y).limit_length(1.0)
-	var speed =11.0 if command.get("sprint",false) and not command.get("aim",false) else 7.5
+	var speed: float=speed_for(command)
 	body.velocity.x=move_toward(body.velocity.x,direction.x*speed,28.0*dt)
 	body.velocity.z=move_toward(body.velocity.z,direction.z*speed,28.0*dt)
 	var grounded: bool=body.get_meta("motor_grounded",body.is_on_floor())

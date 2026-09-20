@@ -1,6 +1,7 @@
 extends Node
 ## Local prototype mix. Original arena music plus the project's existing movement/weapon SFX.
 const MUSIC := preload("res://assets/prototypes/audio/kw_neon_riot_loop.res")
+const AUDIO_STATE_PATH := "user://main_menu_shop_state.json"
 const STEPS := [preload("res://assets/sounds/sfx/ground/wood/wood_step_1.wav"), preload("res://assets/sounds/sfx/ground/wood/wood_step_2.wav"), preload("res://assets/sounds/sfx/ground/wood/wood_step_3.wav"), preload("res://assets/sounds/sfx/ground/wood/wood_step_4.wav")]
 const SOUNDS := {
 	"jump": preload("res://assets/sounds/sfx/ground/wood/wood_jump.wav"),
@@ -26,39 +27,64 @@ var duck := 0.0
 var heal_gate := 0.0
 var event_counts: Dictionary = {}
 var rng := RandomNumberGenerator.new()
+var saved_sfx_linear := 0.7
+var saved_music_linear := 0.8
 
 func setup(owner_stage: Node3D) -> void:
 	stage = owner_stage
 	name = "ArenaAudio"
 	qa_muted = OS.get_cmdline_user_args().has("--kw-qa")
 	rng.randomize()
+	_apply_saved_mix()
 	music = AudioStreamPlayer.new()
 	music.name = "FightSoundtrack"
 	var loop := MUSIC.duplicate() as AudioStreamWAV
 	loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	music.stream = loop
-	music.volume_db = -80.0 if qa_muted else -23.0
+	music.bus="Music"
+	music.volume_db = -80.0 if qa_muted else -20.0
 	add_child(music)
 	if not qa_muted: music.play()
 	for i in range(12):
 		var player := AudioStreamPlayer3D.new()
 		player.name = "SpatialSFX%02d" % i
 		player.max_polyphony = 1
-		player.max_distance = 42.0
+		player.bus="SFX"
+		player.max_distance = 48.0
 		player.unit_size = 6.0
 		add_child(player)
 		spatial_pool.append(player)
 	for i in range(3):
 		var player := AudioStreamPlayer.new()
 		player.name = "UISFX%02d" % i
+		player.bus="SFX"
 		add_child(player)
 		ui_pool.append(player)
+
+func _apply_saved_mix() -> void:
+	var state: Dictionary={}
+	if FileAccess.file_exists(AUDIO_STATE_PATH):
+		var parsed: Variant=JSON.parse_string(FileAccess.get_file_as_string(AUDIO_STATE_PATH))
+		if parsed is Dictionary:state=parsed
+	saved_sfx_linear=clampf(float(state.get("sfx_volume",0.7)),0.0,1.0)
+	saved_music_linear=clampf(float(state.get("music_volume",0.8)),0.0,1.0)
+	_set_bus_linear("SFX",saved_sfx_linear)
+	_set_bus_linear("Music",saved_music_linear)
+
+func _set_bus_linear(bus_name: String,value: float) -> void:
+	var idx: int=-1
+	for i in range(AudioServer.get_bus_count()):
+		if AudioServer.get_bus_name(i).to_lower()==bus_name.to_lower():idx=i;break
+	if idx<0:
+		AudioServer.add_bus(AudioServer.get_bus_count());idx=AudioServer.get_bus_count()-1
+		AudioServer.set_bus_name(idx,bus_name);AudioServer.set_bus_send(idx,"Master")
+	AudioServer.set_bus_volume_db(idx,-80.0 if value<=0.001 else linear_to_db(value))
 
 func toggle_music() -> void:
 	music_enabled = not music_enabled
 	if music_enabled and not music.playing and not qa_muted: music.play()
 
-func play_event(key: String, point: Vector3 = Vector3.ZERO, volume: float = -16.0) -> void:
+func play_event(key: String, point: Vector3 = Vector3.ZERO, volume: float = -12.0) -> void:
 	if not SOUNDS.has(key): return
 	if key == "heal":
 		if heal_gate > 0.0: return
@@ -110,12 +136,12 @@ func _physics_process(delta: float) -> void:
 	var grounded: bool = stage.player.is_on_floor()
 	if initialized:
 		if was_grounded and not grounded and stage.player.velocity.y > 1.0:
-			play_event("jump", stage.player.global_position, -17.0)
+			play_event("jump", stage.player.global_position, -12.0)
 		elif grounded and not was_grounded:
-			play_event("land", stage.player.global_position, -15.0)
+			play_event("land", stage.player.global_position, -10.0)
 	initialized = true
 	was_grounded = grounded
-	_feet(0, stage.locomotion, -18.0)
+	_feet(0, stage.locomotion, -13.0)
 	var live_keys: Dictionary = {0:true}
 	if stage.combat != null:
 		for bot in stage.combat.targets:
@@ -123,7 +149,7 @@ func _physics_process(delta: float) -> void:
 			var key: int = bot.get_instance_id()
 			live_keys[key] = true
 			if bot.global_position.distance_to(stage.player.global_position) < 16.0:
-				_feet(key, bot.locomotion, -26.0)
+				_feet(key, bot.locomotion, -20.0)
 	for key in foot_states.keys():
 		if not live_keys.has(key): foot_states.erase(key)
 
@@ -132,7 +158,7 @@ func _process(delta: float) -> void:
 	duck = maxf(0.0, duck-delta)
 	heal_gate = maxf(0.0, heal_gate-delta)
 	var resting: bool = stage.combat != null and stage.combat.director.phase != "WAVE"
-	var target := -23.0 if resting else -18.0
+	var target := -21.0 if resting else -16.0
 	if stage.fire_held: target -= 2.5
 	if duck > 0.0: target -= 4.0
 	if not music_enabled: target = -80.0

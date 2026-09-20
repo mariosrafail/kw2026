@@ -67,7 +67,7 @@ func _ready() -> void:
 	network_status=Label.new();network_status.position=Vector2(12,108);network_status.add_theme_font_size_override("font_size",10)
 	help_panel.add_child(network_status)
 	for c in help_panel.get_children():
-		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim   R / X reload   WHEEL weapon   G / RB grenade\nSpace / A jump   Y Borderlands edges   Esc / Start menu"
+		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim+magnet (slow)   R / X reload   WHEEL weapon   G / RB grenade\nSpace / A jump   Y Borderlands edges   Esc / Start menu"
 	set_menu(true)
 	if options.has("connect") or options.has("qa-client"):
 		connect_server(str(options.get("host","127.0.0.1")),int(options.get("port","18886")))
@@ -153,6 +153,7 @@ func _physics_process(delta: float) -> void:
 	var dt =1.0/60.0
 	input_adapter.fov=camera.fov
 	var command: Dictionary=input_adapter.sample(dt)
+	_apply_online_aim_assist(command,dt)
 	command.ct=maxi(0,session.last_snapshot_tick-3)
 	_tick_reload(dt)
 	if bool(command.get("reload",false)):_start_reload()
@@ -160,6 +161,7 @@ func _physics_process(delta: float) -> void:
 	if combat.is_game_over():command.move=Vector2.ZERO;command.fire=false
 	if int(command.get("weapon",weapon_slot))!=weapon_slot:_set_weapon_slot(int(command.weapon),false)
 	yaw=command.yaw;pitch=command.pitch;aiming=command.aim;fire_held=command.fire;weapon_side=1.0;command.side=1.0
+	if aiming:command.sprint=false
 	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
 	var simulation =command.duplicate()
 	simulation.jump=int(command.js)>local_jump;local_jump=command.js
@@ -180,7 +182,46 @@ func _physics_process(delta: float) -> void:
 	_update_third_person_camera(dt);_update_character_animation(dt);_update_weapon_pose(dt)
 	shot_cooldown=maxf(-dt,shot_cooldown-dt)
 	if fire_held:_fire_physics_ball()
-	network_status.text="PLAYER %d   |   RTT %.0f ms   |   %s"%[session.actor_id,session.rtt_ms,"PAD" if input_adapter.last_device=="pad" else "MOUSE"]
+	network_status.text="PLAYER %d   |   RTT %.0f ms   |   %s%s"%[session.actor_id,session.rtt_ms,"PAD" if input_adapter.last_device=="pad" else "MOUSE","   |   MAGNET" if aim_assist_active else ""]
+
+func _aim_assist_is_hostile(state: Dictionary) -> bool:
+	return bool(state.get("bot",false)) and float(state.get("hp",0.0))>0.0
+
+func _best_online_aim_assist_target(command: Dictionary) -> Vector3:
+	if camera==null:return Vector3(INF,INF,INF)
+	var best_point:=Vector3(INF,INF,INF)
+	var best_angle:=AIM_ASSIST.CONE_DEG+0.001
+	for record in replicas.values():
+		if not is_instance_valid(record.node) or bool(record.get("dead",false)):continue
+		var state: Dictionary=record.get("next",{})
+		if not _aim_assist_is_hostile(state):continue
+		var torso:=record.rigs.get("TorsoRig") as Node3D
+		if torso==null:continue
+		var point:=torso.global_position+Vector3.UP*0.34
+		var cyaw:=float(command.get("yaw",input_adapter.yaw))
+		var cpitch:=float(command.get("pitch",input_adapter.pitch))
+		if not AIM_ASSIST.eligible(camera.global_position,cyaw,cpitch,point):continue
+		if not _aim_assist_line_clear(point):continue
+		var angle:=AIM_ASSIST.angle_degrees(camera.global_position,cyaw,cpitch,point)
+		if angle<best_angle:
+			best_angle=angle;best_point=point
+	return best_point
+
+func _apply_online_aim_assist(command: Dictionary,dt: float) -> void:
+	aim_assist_active=false
+	if not bool(command.get("aim",false)):return
+	command.sprint=false
+	var point:=_best_online_aim_assist_target(command)
+	if not point.is_finite():return
+	var cyaw:=float(command.get("yaw",input_adapter.yaw))
+	var cpitch:=float(command.get("pitch",input_adapter.pitch))
+	var before:=AIM_ASSIST.angle_degrees(camera.global_position,cyaw,cpitch,point)
+	var assisted:=AIM_ASSIST.step(cyaw,cpitch,camera.global_position,point,dt)
+	command.yaw=wrapf(assisted.x,-PI,PI)
+	command.pitch=clampf(assisted.y,deg_to_rad(-48.0),deg_to_rad(30.0))
+	input_adapter.yaw=command.yaw;input_adapter.pitch=command.pitch
+	var after:=AIM_ASSIST.angle_degrees(camera.global_position,float(command.yaw),float(command.pitch),point)
+	aim_assist_active=after+0.0001<before
 
 func _fire_physics_ball() -> void:
 	if not session.connected or combat.is_game_over() or shot_cooldown>0.00001:return
@@ -308,10 +349,7 @@ func _make_replica(state: Dictionary) -> void:
 				mat.set_shader_parameter("comic_enabled",comic_enabled);mat.set_shader_parameter("pixel_enabled",pixel_enabled)
 				gun_materials[key]=mat;pixel_materials.append(weakref(mat))
 			part.material_override=gun_materials[key]
-		var outline =MeshInstance3D.new();outline.name="WorldInkOutline";outline.mesh=AK_INK_HULL
-		var ink =ShaderMaterial.new();ink.shader=load("res://scripts/prototypes/kw_comic_ink.gdshader");ink.set_shader_parameter("width_pixels",1.6)
-		outline.material_override=ink;outline.visible=comic_enabled;outline.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		ak_body.add_child(outline);outline.add_to_group("kw_world_ink")
+			_add_scene_outline(part,1.15)
 		shotgun_body=Node3D.new();shotgun_body.name="RemoteShotgunBody";shotgun_body.rotation.y=PI*0.5;shotgun_body.position=Vector3(0.10,0,-0.30);gun.add_child(shotgun_body)
 		_add_weapon_box(shotgun_body,"SG_Stock",Vector3(-0.36,-0.02,0),Vector3(0.62,0.22,0.24),Color("6d4030"))
 		_add_weapon_box(shotgun_body,"SG_Receiver",Vector3(0.18,0.01,0),Vector3(0.62,0.25,0.22),Color("30343b"))

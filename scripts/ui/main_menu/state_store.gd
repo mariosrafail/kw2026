@@ -89,7 +89,7 @@ func load_state_or_defaults(path: String, defaults: Dictionary, required_weapon_
 	state["selected_weapon_skin"] = maxi(0, int(d.get("selected_weapon_skin", int(state.get("selected_weapon_skin", 0)))))
 	state["username"] = str(d.get("username", str(state.get("username", "Player")))).strip_edges()
 	state["music_volume"] = clampf(float(d.get("music_volume", float(state.get("music_volume", 0.8)))), 0.0, 1.0)
-	state["sfx_volume"] = clampf(float(d.get("sfx_volume", float(state.get("sfx_volume", 0.4)))), 0.0, 1.0)
+	state["sfx_volume"] = clampf(float(d.get("sfx_volume", float(state.get("sfx_volume", 0.7)))), 0.0, 1.0)
 	state["particles_enabled"] = bool(d.get("particles_enabled", bool(state.get("particles_enabled", true))))
 	state["screen_shake_enabled"] = bool(d.get("screen_shake_enabled", bool(state.get("screen_shake_enabled", true))))
 
@@ -127,7 +127,7 @@ func apply_menu_state(host: Control, path: String) -> void:
 		"coins": 1000000,
 		"clk": 50000,
 		"music_volume": 0.8,
-		"sfx_volume": 0.4,
+		"sfx_volume": 0.7,
 		"particles_enabled": true,
 		"screen_shake_enabled": true,
 		"username": fallback_username,
@@ -149,7 +149,7 @@ func apply_menu_state(host: Control, path: String) -> void:
 		music_slider.value = clampf(float(st.get("music_volume", 0.8)), 0.0, 1.0)
 	var sfx_slider := host.get("sfx_slider") as HSlider
 	if sfx_slider != null:
-		sfx_slider.value = clampf(float(st.get("sfx_volume", 0.4)), 0.0, 1.0)
+		sfx_slider.value = clampf(float(st.get("sfx_volume", 0.7)), 0.0, 1.0)
 	host.call("_set_particles_enabled", bool(st.get("particles_enabled", true)), false)
 	host.call("_set_screen_shake_enabled", bool(st.get("screen_shake_enabled", true)), false)
 

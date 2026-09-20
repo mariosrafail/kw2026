@@ -166,9 +166,9 @@ func rumble(strength: float,duration: float=0.08) -> void:
 		Input.start_joy_vibration(pad_id,strength*float(settings.vibration),strength*float(settings.vibration)*0.55,duration)
 
 func prompt() -> String:
-	if last_device!="pad":return "WASD move  |  LMB / RMB fire / aim  |  R reload  |  G grenade  |  Y edges  |  Esc menu"
+	if last_device!="pad":return "WASD move  |  LMB fire  |  RMB aim+magnet (slow)  |  R reload  |  G grenade  |  Y edges  |  Esc menu"
 	var sony =pad_id>=0 and ("Dual" in Input.get_joy_name(pad_id) or "PS" in Input.get_joy_name(pad_id))
-	return "Sticks move / look  |  R2 / L2 fire / aim  |  Square reload  |  R1 grenade  |  Options menu" if sony else "Sticks move / look  |  RT / LT fire / aim  |  X reload  |  RB grenade  |  Menu"
+	return "Sticks move / look  |  R2 fire  |  L2 aim+magnet (slow)  |  Square reload  |  R1 grenade  |  Options menu" if sony else "Sticks move / look  |  RT fire  |  LT aim+magnet (slow)  |  X reload  |  RB grenade  |  Menu"
 
 func _replace_binding(action: String,event: InputEvent) -> void:
 	if event is InputEventJoypadButton and event.button_index in [JOY_BUTTON_START,JOY_BUTTON_BACK]:return

@@ -15,6 +15,9 @@ func _combat_script() -> Script:
 func _open_menu_on_death() -> bool:
 	return false
 
+func _aim_assist_is_hostile(state: Dictionary) -> bool:
+	return int(state.get("id",0))!=session.actor_id and float(state.get("hp",0.0))>0.0
+
 func _welcome(payload: Dictionary) -> void:
 	room_state = payload.get("room",{})
 	if menu != null and menu.has_method("hide_loading"):
@@ -148,7 +151,7 @@ func open_controls_menu() -> void:
 	if menu == null:
 		return
 	var pad: String = input_adapter.prompt()
-	menu.message.text = "CONTROLS: "+pad+"\nA/Cross jump • L3 sprint • R3 shoulder • Esc/Start room menu. Settings are saved per device profile."
+	menu.message.text = "CONTROLS: "+pad+"\nA/Cross jump • L3 sprint • RMB/LT aim assist slows movement • Esc/Start room menu. Settings are saved per device profile."
 
 func lan_address() -> String:
 	var candidates: Array[String] = []

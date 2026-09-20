@@ -277,27 +277,54 @@ const VOXELS: Array = [
 ]
 
 static func build(parent: Node3D) -> void:
-	var materials: Dictionary = {}
-	var index := 0
-	for data in VOXELS:
-		var color := Color8(int(data[5]), int(data[6]), int(data[7]), 255)
-		var key := color.to_html(false)
-		var material: StandardMaterial3D
-		if materials.has(key):
-			material = materials[key] as StandardMaterial3D
-		else:
-			material = StandardMaterial3D.new()
-			material.albedo_color = color
-			material.metallic = 0.08
-			material.roughness = 0.72
-			materials[key] = material
+	var materials: Dictionary={}
+	var navy:=Color("263a52")
+	var navy_light:=Color("35516e")
+	var navy_dark:=Color("17283b")
+	var steel:=Color("7389a0")
+	var sight:=Color("a9bfd2")
+	_part(parent,materials,"StockBody",Vector3(-0.57,0.00,0),Vector3(0.54,0.24,0.30),navy_dark)
+	_part(parent,materials,"StockShoulder",Vector3(-0.83,0.00,0),Vector3(0.16,0.34,0.36),navy)
+	_part(parent,materials,"StockNeck",Vector3(-0.29,0.01,0),Vector3(0.22,0.18,0.24),navy_light)
+	_part(parent,materials,"Receiver",Vector3(0.05,0.03,0),Vector3(0.54,0.30,0.32),navy)
+	_part(parent,materials,"TopCover",Vector3(0.08,0.20,0),Vector3(0.48,0.10,0.28),navy_light)
+	_part(parent,materials,"LowerReceiver",Vector3(0.12,-0.12,0),Vector3(0.42,0.10,0.29),navy_dark)
+	_part(parent,materials,"Handguard",Vector3(0.49,0.02,0),Vector3(0.38,0.25,0.30),navy_light)
+	_part(parent,materials,"GasTube",Vector3(0.55,0.20,0),Vector3(0.42,0.09,0.16),navy)
+	_part(parent,materials,"Barrel",Vector3(0.87,0.08,0),Vector3(0.40,0.09,0.10),steel)
+	_part(parent,materials,"MuzzleBrake",Vector3(1.10,0.08,0),Vector3(0.16,0.13,0.14),navy_dark)
+	_part(parent,materials,"FrontSightPost",Vector3(0.91,0.20,0),Vector3(0.08,0.20,0.12),navy_dark)
+	_part(parent,materials,"FrontSightTip",Vector3(0.91,0.32,0),Vector3(0.055,0.07,0.06),sight)
+	_part(parent,materials,"RearSight",Vector3(0.24,0.30,0),Vector3(0.12,0.08,0.16),navy_dark)
+	_part(parent,materials,"RearSightNotch",Vector3(0.24,0.35,0),Vector3(0.05,0.045,0.07),sight)
+	_part(parent,materials,"PistolGrip",Vector3(-0.02,-0.29,0.02),Vector3(0.20,0.36,0.25),navy_dark,Vector3(0,0,-0.16))
+	_part(parent,materials,"TriggerGuard",Vector3(0.16,-0.23,0),Vector3(0.24,0.08,0.20),navy)
+	# Chunky three-piece curved AK magazine.
+	_part(parent,materials,"MagazineTop",Vector3(0.24,-0.25,0),Vector3(0.22,0.24,0.26),navy,Vector3(0,0,-0.10))
+	_part(parent,materials,"MagazineMid",Vector3(0.30,-0.43,0),Vector3(0.22,0.25,0.25),navy_light,Vector3(0,0,-0.22))
+	_part(parent,materials,"MagazineBottom",Vector3(0.40,-0.60,0),Vector3(0.20,0.22,0.23),navy_dark,Vector3(0,0,-0.34))
+	_part(parent,materials,"Selector",Vector3(0.08,0.06,-0.18),Vector3(0.22,0.045,0.055),steel)
+	_part(parent,materials,"ChargingHandle",Vector3(0.00,0.16,-0.19),Vector3(0.12,0.06,0.08),steel)
 
-		var voxel := MeshInstance3D.new()
-		voxel.name = "AKPixel_%03d" % index
-		var box := BoxMesh.new()
-		box.size = Vector3(float(data[3]) * 1.02, float(data[3]) * 1.02, float(data[4]))
-		voxel.mesh = box
-		voxel.position = Vector3(float(data[0]), float(data[1]), float(data[2]))
-		voxel.material_override = material
-		parent.add_child(voxel)
-		index += 1
+static func _part(parent: Node3D,materials: Dictionary,title: String,pos: Vector3,size: Vector3,color: Color,rotation: Vector3=Vector3.ZERO) -> MeshInstance3D:
+	var mesh:=MeshInstance3D.new()
+	mesh.name=title
+	var box:=BoxMesh.new()
+	box.size=size
+	mesh.mesh=box
+	mesh.position=pos
+	mesh.rotation=rotation
+	mesh.material_override=_material(materials,color)
+	mesh.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mesh)
+	return mesh
+
+static func _material(materials: Dictionary,color: Color) -> StandardMaterial3D:
+	var key:=color.to_html(false)
+	if materials.has(key):return materials[key] as StandardMaterial3D
+	var mat:=StandardMaterial3D.new()
+	mat.albedo_color=color
+	mat.metallic=0.10
+	mat.roughness=0.74
+	materials[key]=mat
+	return mat
