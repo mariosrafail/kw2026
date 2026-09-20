@@ -34,6 +34,10 @@ var bar_texture: ImageTexture
 var records: Array[Dictionary] = []
 var rigs: Array[Dictionary] = []
 var hit_shapes: Array[Dictionary] = []
+var body_bridge: CollisionShape3D
+const BODY_BRIDGE_RADIUS := 0.24
+const BODY_BRIDGE_HEAD_CLEARANCE := 0.46
+const BODY_BRIDGE_TORSO_DROP := 0.48
 var seen_shots: Dictionary = {}
 var flash_material: StandardMaterial3D
 var recoil := Vector3.ZERO
@@ -61,6 +65,7 @@ func _ready() -> void:
 	flash_material.albedo_color = Color.WHITE
 	flash_material.render_priority = 2
 	_build_visuals()
+	_build_body_bridge()
 	_build_healthbar()
 	_build_enemy_weapon()
 	_setup_roaming()
@@ -90,6 +95,30 @@ func _record_mesh(mesh: MeshInstance3D, color: Color, hurtbox: bool = true) -> v
 	shape.set_meta("hit_region","head" if mesh.get_parent()!=null and str(mesh.get_parent().name)=="HeadRig" else "body")
 	add_child(shape)
 	hit_shapes.append({"shape": shape, "mesh": mesh})
+
+func _build_body_bridge() -> void:
+	body_bridge=CollisionShape3D.new()
+	body_bridge.name="BodyBridgeHurtbox"
+	var cylinder:=CylinderShape3D.new()
+	cylinder.radius=BODY_BRIDGE_RADIUS
+	cylinder.height=1.0
+	body_bridge.shape=cylinder
+	body_bridge.set_meta("hit_region","body")
+	add_child(body_bridge)
+	_update_body_bridge()
+
+func _update_body_bridge() -> void:
+	if body_bridge==null or visuals==null:return
+	var torso:=visuals.get_node_or_null("TorsoRig") as Node3D
+	var head:=visuals.get_node_or_null("HeadRig") as Node3D
+	if torso==null or head==null:return
+	var top_y:=head.global_position.y-BODY_BRIDGE_HEAD_CLEARANCE
+	var bottom_y:=torso.global_position.y-BODY_BRIDGE_TORSO_DROP
+	var height:=maxf(0.58,top_y-bottom_y)
+	var centre:=Vector3(lerpf(torso.global_position.x,head.global_position.x,0.30),(top_y+bottom_y)*0.5,lerpf(torso.global_position.z,head.global_position.z,0.30))
+	var cylinder:=body_bridge.shape as CylinderShape3D
+	cylinder.radius=BODY_BRIDGE_RADIUS;cylinder.height=height
+	body_bridge.transform=global_transform.affine_inverse()*Transform3D(Basis.IDENTITY,centre)
 
 func _box(parent: Node3D, title: String, pos: Vector3, size: Vector3, color: Color, hurtbox: bool = true) -> MeshInstance3D:
 	var mesh := MeshInstance3D.new()
@@ -323,6 +352,7 @@ func _update_shapes() -> void:
 		var box := shape.shape as BoxShape3D
 		if not box.size.is_equal_approx(wanted_size): box.size = wanted_size
 		shape.transform = Transform3D(relative.basis.orthonormalized(), relative.origin)
+	_update_body_bridge()
 
 func set_style(comic: bool, pixels: bool) -> void:
 	comic_enabled = comic
@@ -338,8 +368,8 @@ func set_style(comic: bool, pixels: bool) -> void:
 	for shell in find_children("WorldInkOutline","MeshInstance3D",true,false): shell.visible=comic
 
 func _setup_roaming() -> void:
-	# The capsule is physical layer 8, not a shot hitbox. Exact mesh boxes stay
-	# on this StaticBody layer 4, so shots still pass through the floating gaps.
+	# The movement capsule is physical layer 8, not a shot hitbox. Animated mesh
+	# boxes plus a thin body bridge cylinder stay on StaticBody layer 4.
 	movement_body = CharacterBody3D.new()
 	movement_body.name = "MovementBody"
 	movement_body.top_level = true

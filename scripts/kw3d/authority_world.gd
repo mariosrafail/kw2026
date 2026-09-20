@@ -204,9 +204,10 @@ func _shoot(a: Node3D) -> void:
 	if a.ammo<=0:_request_reload(a)
 
 func _shoot_ak(a: Node3D,profile: Dictionary) -> void:
-	var hit=ray(a.weapon_anchor(),a.muzzle)
+	var exclusions: Array[RID]=[a.get_rid(),a.hit_body.get_rid()]
+	var hit=ray(a.weapon_anchor(),a.muzzle,5,exclusions)
 	var blocked: bool=not hit.is_empty()
-	if hit.is_empty():hit=ray(a.muzzle,a.aim_target+(a.aim_target-a.muzzle).normalized()*0.035)
+	if hit.is_empty():hit=ray(a.muzzle,a.aim_target+(a.aim_target-a.muzzle).normalized()*0.035,5,exclusions)
 	var endpoint: Vector3=hit.get("position",a.aim_target)
 	var headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
 	emit("shot",{"actor":a.actor_id,"input":a.ack,"weapon":0,"from":a.muzzle,"to":endpoint,"blocked":blocked,"ammo":a.ammo,
@@ -215,7 +216,8 @@ func _shoot_ak(a: Node3D,profile: Dictionary) -> void:
 		damage(int(hit.collider.get_meta("actor_id")),WEAPON_RULES.damage(profile,headshot),(endpoint-a.muzzle).normalized(),a.actor_id,endpoint,headshot,"ak")
 
 func _shoot_shotgun(a: Node3D,profile: Dictionary) -> void:
-	var guard:=ray(a.weapon_anchor(),a.muzzle)
+	var exclusions: Array[RID]=[a.get_rid(),a.hit_body.get_rid()]
+	var guard:=ray(a.weapon_anchor(),a.muzzle,5,exclusions)
 	var centre: Vector3=(a.aim_target-a.muzzle).normalized()
 	var right:=centre.cross(Vector3.UP).normalized()
 	if right.length_squared()<0.01:right=Vector3.RIGHT
@@ -226,7 +228,7 @@ func _shoot_shotgun(a: Node3D,profile: Dictionary) -> void:
 		var angle:=shot_rng.randf_range(0.0,TAU)
 		var radius:=sqrt(shot_rng.randf())*tan(deg_to_rad(float(profile.spread_deg)))
 		var direction: Vector3=(centre+right*cos(angle)*radius+up*sin(angle)*radius).normalized()
-		var hit: Dictionary=guard if not guard.is_empty() else ray(a.muzzle,a.muzzle+direction*float(profile.range))
+		var hit: Dictionary=guard if not guard.is_empty() else ray(a.muzzle,a.muzzle+direction*float(profile.range),5,exclusions)
 		var endpoint: Vector3=hit.get("position",a.muzzle+direction*float(profile.range))
 		var headshot:=HIT_REGIONS.is_headshot(hit) if not hit.is_empty() else false
 		pellets.append({"to":endpoint,"normal":hit.get("normal",Vector3.UP),"hit":not hit.is_empty(),"headshot":headshot})

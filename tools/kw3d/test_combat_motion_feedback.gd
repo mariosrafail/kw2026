@@ -43,7 +43,7 @@ func run() -> void:
 	for effect in stage.combat.hit_effects:
 		if is_instance_valid(effect.node) and effect.node is MeshInstance3D and (effect.node as MeshInstance3D).mesh is BoxMesh:
 			largest_blood=maxf(largest_blood,((effect.node as MeshInstance3D).mesh as BoxMesh).size.length())
-	check(largest_blood>0.16,"blood_particles_are_visibly_large")
+	check(largest_blood>0.30,"blood_particles_are_extra_large")
 	if not stage.combat.hit_effects.is_empty():
 		var chip: MeshInstance3D = stage.combat.hit_effects[0].node
 		var material := chip.material_override as StandardMaterial3D

@@ -26,15 +26,27 @@ func run() -> void:
 	p1.velocity=Vector3.ZERO;p2.velocity=Vector3.ZERO
 	p1.update_shapes();p2.update_shapes()
 	for i in range(2): await physics_frame
+	# Resolve a real aim pitch against the opponent instead of relying on one
+	# hardcoded camera pitch that becomes brittle when hurtbox coverage changes.
+	var target_point: Vector3=p2.body_bridge.global_position
+	# The fixture places P2 exactly on P1 camera shoulder ray: yaw 0 keeps the
+	# authored +1.2 m camera shoulder aligned with P2.x.
 	p1.aim_yaw=0.0
-	p1.aim_pitch=-0.38
-	p1.command=load("res://scripts/kw3d/actor_motor.gd").empty(0.0,-0.38)
+	var best_pitch:=0.0
+	var best_error:=INF
+	for step in range(61):
+		var candidate: float=lerpf(-0.85,0.15,float(step)/60.0)
+		p1.aim_pitch=candidate
+		p1.command=load("res://scripts/kw3d/actor_motor.gd").empty(p1.aim_yaw,candidate)
+		p1.command["aim"]=true
+		p1.build_aim(world.get_world_3d().direct_space_state,0.0)
+		var error: float=p1.aim_target.distance_to(target_point)
+		if error<best_error:best_error=error;best_pitch=candidate
+	p1.aim_pitch=best_pitch
+	p1.command=load("res://scripts/kw3d/actor_motor.gd").empty(p1.aim_yaw,best_pitch)
 	p1.command["aim"]=true
 	p1.build_aim(world.get_world_3d().direct_space_state,0.0)
-	print("DUEL_AIM muzzle=",p1.muzzle," target=",p1.aim_target," cam=",p1.camera_origin," dir=",p1.camera_direction," p2_torso=",p2.rigs.TorsoRig.global_position," layer=",p2.hit_body.collision_layer)
-	var exclusions: Array[RID]=[p1.get_rid(),p1.hit_body.get_rid()]
-	var probe_hit=world.ray(p1.muzzle,p1.aim_target,5,exclusions)
-	print("DUEL_RAY ",probe_hit)
+	check(best_error<0.8,"duel_fixture_resolves_real_target")
 	world._shoot(p1)
 	check(p2.health==95.0,"real_hitscan_player_damage_5")
 	p2.health=5.0;p2.damage_grace=0.0

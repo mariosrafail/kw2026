@@ -40,6 +40,10 @@ var visual: Node3D
 var rigs: Dictionary={}
 var hit_body: StaticBody3D
 var hit_records: Array[Dictionary]=[]
+var body_bridge: CollisionShape3D
+const BODY_BRIDGE_RADIUS:=0.24
+const BODY_BRIDGE_HEAD_CLEARANCE:=0.46
+const BODY_BRIDGE_TORSO_DROP:=0.48
 var locomotion: RefCounted
 var brain: RefCounted
 var input_queue: Dictionary={}
@@ -79,6 +83,9 @@ func configure(id: int,bot: bool,profile: Dictionary,appearance: String) -> void
 			var hs =CollisionShape3D.new();var b =BoxShape3D.new();b.size=LEVEL.vec(part.s)
 			hs.shape=b;hs.set_meta("hit_region","head" if title=="HeadRig" else "body");hit_body.add_child(hs)
 			hit_records.append({"shape":hs,"rig":rig,"part":Transform3D(Basis.from_euler(LEVEL.vec(part.r)),LEVEL.vec(part.p)),"size":b.size,"region":"head" if title=="HeadRig" else "body"})
+	body_bridge=CollisionShape3D.new();body_bridge.name="BodyBridgeHurtbox"
+	var bridge_shape:=CylinderShape3D.new();bridge_shape.radius=BODY_BRIDGE_RADIUS;bridge_shape.height=1.0
+	body_bridge.shape=bridge_shape;body_bridge.set_meta("hit_region","body");hit_body.add_child(body_bridge)
 	base_head=rigs.HeadRig.position;base_torso=rigs.TorsoRig.position
 	probe.radius=0.18
 	command=MOTOR.empty()
@@ -148,6 +155,19 @@ func update_shapes() -> void:
 	for record in hit_records:
 		var relative: Transform3D=global_transform.affine_inverse()*(record.rig as Node3D).global_transform*record.part
 		(record.shape as CollisionShape3D).transform=relative
+	_update_body_bridge()
+
+func _update_body_bridge() -> void:
+	if body_bridge==null or hit_body==null:return
+	var torso: Node3D=rigs.TorsoRig
+	var head: Node3D=rigs.HeadRig
+	var top_y:=head.global_position.y-BODY_BRIDGE_HEAD_CLEARANCE
+	var bottom_y:=torso.global_position.y-BODY_BRIDGE_TORSO_DROP
+	var height:=maxf(0.58,top_y-bottom_y)
+	var centre:=Vector3(lerpf(torso.global_position.x,head.global_position.x,0.30),(top_y+bottom_y)*0.5,lerpf(torso.global_position.z,head.global_position.z,0.30))
+	var cylinder:=body_bridge.shape as CylinderShape3D
+	cylinder.radius=BODY_BRIDGE_RADIUS;cylinder.height=height
+	body_bridge.transform=hit_body.global_transform.affine_inverse()*Transform3D(Basis.IDENTITY,centre)
 
 func build_aim(space: PhysicsDirectSpaceState3D,dt: float) -> void:
 	var aim: bool=command.get("aim",false)

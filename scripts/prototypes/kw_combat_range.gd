@@ -553,7 +553,7 @@ func _spawn_damage_feedback(point: Vector3,direction: Vector3,amount: float,leth
 	for i in range(count):
 		var chip := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		var base_size := fx_rng.randf_range(0.075,0.145) * (1.90 if lethal and i < 7 else 1.0)
+		var base_size := fx_rng.randf_range(0.115,0.205) * (2.05 if lethal and i < 7 else 1.0)
 		box.size = Vector3(base_size*fx_rng.randf_range(0.85,1.25),base_size,base_size*fx_rng.randf_range(0.85,2.10))
 		chip.mesh = box
 		chip.material_override = blood_hot if i % 4 == 0 else blood_material

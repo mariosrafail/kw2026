@@ -27,6 +27,17 @@ func run()->void:
 	check(REGIONS.is_headshot(head_hit),"head_shape_maps_head")
 	check(not body_hit.is_empty() and body_hit.collider==target,"real_body_ray_hits_target")
 	check(not REGIONS.is_headshot(body_hit),"torso_shape_maps_body")
+	var bridge: CollisionShape3D=target.body_bridge
+	var bridge_shape:=bridge.shape as CylinderShape3D
+	check(bridge_shape!=null and bridge_shape.radius<=0.25,"offline_body_bridge_is_thin_cylinder")
+	var gap_point:=bridge.global_position+Vector3.UP*(bridge_shape.height*0.46)
+	var bridge_hit: Dictionary=stage.combat._ray(gap_point+Vector3(0,0,3.0),gap_point+Vector3(0,0,-3.0))
+	check(not bridge_hit.is_empty() and bridge_hit.collider==target,"offline_neck_gap_is_covered")
+	check(not REGIONS.is_headshot(bridge_hit),"offline_bridge_counts_as_body")
+	if not bridge_hit.is_empty():
+		var bridge_owner_id: int=target.shape_find_owner(int(bridge_hit.shape))
+		var bridge_owner: Object=target.shape_owner_get_owner(bridge_owner_id)
+		check(bridge_owner==bridge,"offline_gap_ray_hits_body_bridge_shape")
 	check(is_equal_approx(RULES.damage(RULES.AK,false),5.0),"ak_body_5")
 	check(is_equal_approx(RULES.damage(RULES.AK,true),7.5),"headshot_multiplier_1_5")
 	check(is_equal_approx(RULES.damage(RULES.SHOTGUN,true),7.5),"shotgun_pellet_headshot_multiplier_1_5")
@@ -65,6 +76,17 @@ func run()->void:
 		for record in bot.hit_records:
 			if str(record.get("region",""))=="head":head_shape=record.shape;break
 		check(head_shape!=null,"authority_head_shape_exists")
+		var authority_bridge: CollisionShape3D=bot.body_bridge
+		var authority_cylinder:=authority_bridge.shape as CylinderShape3D
+		check(authority_cylinder!=null and authority_cylinder.radius<=0.25,"authority_body_bridge_is_thin_cylinder")
+		var authority_gap:=authority_bridge.global_position+Vector3.UP*(authority_cylinder.height*0.46)
+		var authority_gap_hit: Dictionary=world.ray(authority_gap+Vector3(0,0,3.0),authority_gap+Vector3(0,0,-3.0),4)
+		check(not authority_gap_hit.is_empty() and authority_gap_hit.collider==bot.hit_body,"authority_neck_gap_is_covered")
+		check(not REGIONS.is_headshot(authority_gap_hit),"authority_bridge_counts_as_body")
+		if not authority_gap_hit.is_empty():
+			var auth_owner_id: int=bot.hit_body.shape_find_owner(int(authority_gap_hit.shape))
+			var auth_owner: Object=bot.hit_body.shape_owner_get_owner(auth_owner_id)
+			check(auth_owner==authority_bridge,"authority_gap_ray_hits_body_bridge_shape")
 		if head_shape!=null:
 			var hfrom:=head_shape.global_position+Vector3(0,0,2.0)
 			var hhit: Dictionary=world.ray(hfrom,head_shape.global_position-Vector3(0,0,0.2),4)
