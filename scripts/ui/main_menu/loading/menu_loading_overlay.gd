@@ -1,6 +1,8 @@
 extends RefCounted
 
 const OUTRAGE_HEAD_TEXTURE := preload("res://assets/warriors/outrage/head.png")
+const PIXEL_FONT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
+const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
 const HEAD_FRAME_SIZE := Vector2(64, 64)
 const FACE_FILL_MAX_TILES := 760
 const FACE_FILL_DENSITY := 0.00048
@@ -97,7 +99,7 @@ func _ensure_overlay() -> void:
 	dim.name = "Dim"
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	dim.color = Color(0.34, 0.58, 0.98, 0.78)
+	dim.color = Color(0.035, 0.115, 0.175, 0.92)
 	overlay.add_child(dim)
 	_dim = dim
 
@@ -111,7 +113,8 @@ func _ensure_overlay() -> void:
 	head.texture = OUTRAGE_HEAD_TEXTURE
 	head.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	head.centered = true
-	head.scale = Vector2.ONE * 4.0
+	head.scale = Vector2.ONE * 3.45
+	head.modulate = Color(1.0, 0.86, 0.90, 0.96)
 	overlay.add_child(head)
 	_head = head
 
@@ -119,8 +122,12 @@ func _ensure_overlay() -> void:
 	label.name = "LoadingLabel"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 20)
-	label.add_theme_color_override("font_color", Color(0.1, 0.1, 0.12, 1.0))
+	label.add_theme_font_override("font", PIXEL_FONT_BOLD)
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color("4CEBFF"))
+	label.add_theme_color_override("font_shadow_color", Color(1.0,0.08,0.30,0.34))
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
 	label.text = "LOADING..."
 	label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	label.custom_minimum_size = Vector2(420, 28)
@@ -146,13 +153,13 @@ func _start_idle_anim() -> void:
 		return
 	_stop_idle_anim()
 	_head.rotation = -0.16
-	_head.scale = Vector2.ONE * 3.95
+	_head.scale = Vector2.ONE * 3.35
 	_anim_tween = _host.create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_anim_tween.parallel().tween_property(_head, "rotation", 0.16, 0.48)
-	_anim_tween.parallel().tween_property(_head, "scale", Vector2.ONE * 4.15, 0.48)
+	_anim_tween.parallel().tween_property(_head, "scale", Vector2.ONE * 3.58, 0.48)
 	_anim_tween.tween_interval(0.02)
 	_anim_tween.parallel().tween_property(_head, "rotation", -0.16, 0.48)
-	_anim_tween.parallel().tween_property(_head, "scale", Vector2.ONE * 3.95, 0.48)
+	_anim_tween.parallel().tween_property(_head, "scale", Vector2.ONE * 3.35, 0.48)
 
 func _stop_idle_anim() -> void:
 	if _anim_tween != null:
@@ -194,7 +201,9 @@ func _prepare_face_fill() -> void:
 		sprite.centered = true
 		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		sprite.texture = _face_textures[_rng.randi_range(0, _face_textures.size() - 1)]
-		sprite.modulate = Color(1, 1, 1, 0.0)
+		var tint := Color("4CEBFF") if _rng.randf() > 0.32 else Color("FF247F")
+		tint.a = 0.0
+		sprite.modulate = tint
 		sprite.position = grid_positions[i]
 		var tile_scale := _rng.randf_range(1.22, 1.52)
 		sprite.scale = Vector2.ONE * (tile_scale * 0.2)
