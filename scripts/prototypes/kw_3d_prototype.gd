@@ -93,6 +93,9 @@ var aim_recoil = AK_RECOIL_MODEL.new()
 var weapon_visual_side_kick := 0.0
 var weapon_visual_lift_kick := 0.0
 var weapon_visual_twist_kick := 0.0
+var sniper_sway_offset:=Vector2.ZERO
+var sniper_sway_velocity:=Vector2.ZERO
+var sniper_sway_phase:=0.0
 
 var anim_time := 0.0
 var walk_phase := 0.0
@@ -123,6 +126,10 @@ const WEAPON_HOLD_SIDE := 0.74
 const MOVE_SPEED := 7.5
 const SPRINT_SPEED := 11.0
 const SNIPER_AIM_MOVE_SPEED := 0.6
+const SNIPER_SWAY_YAW_DEG:=0.82
+const SNIPER_SWAY_PITCH_DEG:=0.46
+const SNIPER_SWAY_SPRING:=34.0
+const SNIPER_SWAY_DAMPING:=9.2
 const ACCEL := 28.0
 const TURN_SPEED := 10.0
 const JUMP_SPEED := 8.8
@@ -316,6 +323,8 @@ func _physics_process(delta: float) -> void:
 	yaw = wrapf(yaw + recoil_recovery.x, -PI, PI)
 	pitch = clampf(pitch + recoil_recovery.y, deg_to_rad(-48.0), deg_to_rad(30.0))
 	_apply_offline_aim_assist(delta)
+	var sway_delta:=_step_sniper_scope_sway(delta,input_vec.length(),aiming and weapon_slot==2)
+	yaw=wrapf(yaw+sway_delta.x,-PI,PI);pitch=clampf(pitch+sway_delta.y,deg_to_rad(-48.0),deg_to_rad(30.0))
 	camera_yaw.rotation.y = yaw
 	camera_pitch.rotation.x = pitch
 
@@ -670,6 +679,24 @@ func _apply_offline_aim_assist(delta: float) -> void:
 	pitch=clampf(assisted.y,deg_to_rad(-48.0),deg_to_rad(30.0))
 	var after:=AIM_ASSIST.angle_degrees(camera.global_position,yaw,pitch,point)
 	aim_assist_active=after+0.0001<before
+
+func _step_sniper_scope_sway(delta: float,movement_factor: float,scoped: bool) -> Vector2:
+	var previous:=sniper_sway_offset
+	if not scoped:
+		sniper_sway_offset=Vector2.ZERO;sniper_sway_velocity=Vector2.ZERO;sniper_sway_phase=0.0
+		return -previous
+	var movement:=clampf(movement_factor,0.0,1.0)
+	if movement>0.015:sniper_sway_phase=fposmod(sniper_sway_phase+delta*lerpf(4.6,6.4,movement),TAU)
+	var target:=Vector2(
+		deg_to_rad(SNIPER_SWAY_YAW_DEG)*sin(sniper_sway_phase),
+		deg_to_rad(SNIPER_SWAY_PITCH_DEG)*sin(sniper_sway_phase*1.73+0.65))*movement
+	# Underdamped spring: movement creates sway; releasing movement eases back instead of snapping still.
+	var acceleration: Vector2=(target-sniper_sway_offset)*SNIPER_SWAY_SPRING-sniper_sway_velocity*SNIPER_SWAY_DAMPING
+	sniper_sway_velocity+=acceleration*delta
+	sniper_sway_offset+=sniper_sway_velocity*delta
+	sniper_sway_offset.x=clampf(sniper_sway_offset.x,deg_to_rad(-1.15),deg_to_rad(1.15))
+	sniper_sway_offset.y=clampf(sniper_sway_offset.y,deg_to_rad(-0.72),deg_to_rad(0.72))
+	return sniper_sway_offset-previous
 
 func _update_third_person_camera(delta: float) -> void:
 	if camera == null:return

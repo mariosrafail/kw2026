@@ -58,6 +58,22 @@ func run()->void:
 	stage.aiming=false;stage._update_third_person_camera(0.25)
 	check(not stage.sniper_scope_layer.visible and stage.weapon_aim_pivot.visible,"scope_restores_normal_view")
 
+	# Scoped movement sway is real aim motion: visible while moving, then damped to rest.
+	stage.aiming=true;stage._set_weapon_slot(2,false)
+	stage.sniper_sway_offset=Vector2.ZERO;stage.sniper_sway_velocity=Vector2.ZERO;stage.sniper_sway_phase=0.0
+	var max_sway_deg:=0.0
+	for i in range(120):
+		stage._step_sniper_scope_sway(1.0/60.0,1.0,true)
+		max_sway_deg=maxf(max_sway_deg,rad_to_deg(stage.sniper_sway_offset.length()))
+	check(max_sway_deg>0.28 and max_sway_deg<1.25,"moving_scope_has_bounded_sway")
+	var moving_before_stop: float=stage.sniper_sway_offset.length()
+	stage._step_sniper_scope_sway(1.0/60.0,0.0,true)
+	var first_still: float=stage.sniper_sway_offset.length()
+	check(first_still>0.0005 and absf(first_still-moving_before_stop)<deg_to_rad(0.20),"scope_does_not_snap_still")
+	for i in range(120):stage._step_sniper_scope_sway(1.0/60.0,0.0,true)
+	check(rad_to_deg(stage.sniper_sway_offset.length())<0.035,"scope_sway_settles_gradually")
+	stage.aiming=false;stage._step_sniper_scope_sway(1.0/60.0,0.0,false)
+
 	var ammo_before: int=stage.ammo_in_mag
 	stage._start_weapon_inspect()
 	check(stage.inspect_time>1.5,"inspect_starts")

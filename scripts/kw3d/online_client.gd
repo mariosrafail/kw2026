@@ -156,6 +156,7 @@ func _physics_process(delta: float) -> void:
 	var command: Dictionary=input_adapter.sample(dt)
 	if options.has("qa-client"):_qa_command(command)
 	_apply_online_aim_assist(command,dt)
+	_apply_online_sniper_sway(command,dt)
 	command.ct=maxi(0,session.last_snapshot_tick-3)
 	_tick_reload(dt)
 	if bool(command.get("reload",false)):_start_reload()
@@ -225,6 +226,15 @@ func _apply_online_aim_assist(command: Dictionary,dt: float) -> void:
 	input_adapter.yaw=command.yaw;input_adapter.pitch=command.pitch
 	var after:=AIM_ASSIST.angle_degrees(camera.global_position,float(command.yaw),float(command.pitch),point)
 	aim_assist_active=after+0.0001<before
+
+func _apply_online_sniper_sway(command: Dictionary,dt: float) -> void:
+	var scoped:=bool(command.get("aim",false)) and int(command.get("weapon",weapon_slot))==2
+	var movement:=minf(1.0,(command.get("move",Vector2.ZERO) as Vector2).length())
+	var sway_delta:=_step_sniper_scope_sway(dt,movement,scoped)
+	if sway_delta.length_squared()<=0.0000000001:return
+	command.yaw=wrapf(float(command.get("yaw",input_adapter.yaw))+sway_delta.x,-PI,PI)
+	command.pitch=clampf(float(command.get("pitch",input_adapter.pitch))+sway_delta.y,deg_to_rad(-48.0),deg_to_rad(30.0))
+	input_adapter.yaw=float(command.yaw);input_adapter.pitch=float(command.pitch)
 
 func _fire_physics_ball() -> void:
 	if not session.connected or combat.is_game_over() or shot_cooldown>0.00001:return
