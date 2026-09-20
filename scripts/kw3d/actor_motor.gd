@@ -17,4 +17,4 @@ static func step(body: CharacterBody3D, command: Dictionary, dt: float=DT) -> vo
 		body.velocity.y-=19.5*dt
 	body.move_and_slide()
 static func empty(yaw: float=0.0,pitch: float=-0.174533) -> Dictionary:
-	return {"move":Vector2.ZERO,"yaw":yaw,"pitch":pitch,"fire":false,"aim":false,"sprint":false,"jump":false,"grenade":false,"reload":false,"side":-1.0,"weapon":0}
+	return {"move":Vector2.ZERO,"yaw":yaw,"pitch":pitch,"fire":false,"aim":false,"sprint":false,"jump":false,"grenade":false,"reload":false,"side":1.0,"weapon":0}

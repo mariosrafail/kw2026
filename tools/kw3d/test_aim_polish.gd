@@ -33,8 +33,8 @@ func run() -> void:
 			max_drift = maxf(max_drift,stage.camera.unproject_position(point).distance_to(centre))
 	check(max_drift<0.02,"ads_optical_ray_stays_fixed")
 	print("ADS_STABILITY_PASS drift_px=",max_drift)
-	# Hit what the dot points at, with either weapon side, from near to far.
-	for side in [-1.0,1.0]:
+	# Hit what the centered dot points at from the fixed right-shoulder hold, near to far.
+	for side in [1.0]:
 		for distance in [1.8,4.0,9.0,18.0]:
 			stage.combat.reset_targets()
 			for i in range(2): await physics_frame
@@ -57,11 +57,11 @@ func run() -> void:
 			if bot.health != 95.0: print("AIM_DIAGNOSTIC ",[side,distance]," health=",bot.health," before=",before," actual=",stage.combat.last_shot," wanted=",bot.name)
 			check(bot.health == 95.0,"crosshair_hit_"+str([side,distance]))
 			check(before.end.distance_to(stage.combat.last_shot.end)<0.001,"preview_shot_match")
-			if side < 0.0 and distance == 9.0:
+			if distance == 9.0:
 				await capture("aim_hit_confirmation")
 				for i in range(12): await physics_frame
 				await capture("aim_target_clear")
-	print("NEAR_FAR_BOTH_SIDES_PASS")
+	print("NEAR_FAR_FIXED_RIGHT_PASS")
 	# Gun blocked at the holder while the camera can still see the victim.
 	stage.combat.reset_targets()
 	for i in range(3): await physics_frame
@@ -70,8 +70,8 @@ func run() -> void:
 	place_for_target(target)
 	stage.camera.global_position=stage.player.global_position+Vector3(stage.CAMERA_SHOULDER_X,1.35,3.8)
 	stage.camera.look_at(target.global_position+Vector3(0,0.30,0),Vector3.UP)
-	stage.weapon_side = -1.0
-	stage.smoothed_weapon_side = -1.0
+	stage.weapon_side = 1.0
+	stage.smoothed_weapon_side = 1.0
 	stage._update_weapon_pose(0.0)
 	var chest: Vector3 = stage._weapon_anchor()
 	var muzzle: Vector3 = stage.weapon_muzzle.global_position

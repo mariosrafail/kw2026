@@ -12,7 +12,7 @@ var last_device ="keyboard"
 var pad_id =-1
 var yaw =0.0
 var pitch =-0.174533
-var side =-1.0
+var side =1.0
 var weapon_slot =0
 var jump_serial =0
 var grenade_serial =0
@@ -108,7 +108,7 @@ func _input(event: InputEvent) -> void:
 			match action:
 				"jump":jump_serial+=1
 				"grenade":grenade_serial+=1
-				"shoulder":side*=-1.0
+				"shoulder":side=1.0
 				"sprint":sprint_latched=not sprint_latched
 				"aim":aim_latched=not aim_latched
 				_:action_requested.emit(action)
@@ -138,6 +138,7 @@ func sample(dt: float) -> Dictionary:
 		sprint=sprint_latched if settings.sprint_toggle and last_device=="pad" else Input.is_action_pressed(PREFIX+"sprint")
 		if move.length()<0.05:sprint_latched=false;sprint=false
 	yaw=wrapf(yaw,-PI,PI);pitch=clampf(pitch,-0.837758,0.523599)
+	side=1.0
 	sequence+=1
 	return {"seq":sequence,"ct":sequence,"js":jump_serial,"gs":grenade_serial,"move":move,"yaw":yaw,"pitch":pitch,"side":side,"fire":firing,"aim":aiming,"sprint":sprint,"reload":reloading,"weapon":weapon_slot}
 

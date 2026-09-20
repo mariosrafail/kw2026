@@ -553,19 +553,27 @@ func _spawn_damage_feedback(point: Vector3,direction: Vector3,amount: float,leth
 	for i in range(count):
 		var chip := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		var base_size := fx_rng.randf_range(0.115,0.205) * (2.05 if lethal and i < 7 else 1.0)
-		box.size = Vector3(base_size*fx_rng.randf_range(0.85,1.25),base_size,base_size*fx_rng.randf_range(0.85,2.10))
+		var base_size:=fx_rng.randf_range(0.15,0.27)*(2.15 if lethal and i<7 else 1.0)
+		var shape_roll:=fx_rng.randf()
+		if shape_roll<0.42:
+			box.size=Vector3(base_size*fx_rng.randf_range(0.75,1.35),base_size*fx_rng.randf_range(0.65,1.25),base_size*fx_rng.randf_range(0.75,1.55))
+		elif shape_roll<0.78:
+			box.size=Vector3(base_size*fx_rng.randf_range(0.35,0.65),base_size*fx_rng.randf_range(0.45,0.85),base_size*fx_rng.randf_range(1.7,3.0))
+		else:
+			box.size=Vector3(base_size*fx_rng.randf_range(1.4,2.3),base_size*fx_rng.randf_range(0.25,0.55),base_size*fx_rng.randf_range(0.55,1.15))
 		chip.mesh = box
 		chip.material_override = blood_hot if i % 4 == 0 else blood_material
 		chip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(chip)
 		if i < 4:
 			stage._add_scene_outline(chip,0.75)
-		chip.global_position = point + Vector3(fx_rng.randf_range(-0.11,0.11),fx_rng.randf_range(-0.06,0.14),fx_rng.randf_range(-0.11,0.11))
-		var speed := direction * fx_rng.randf_range(1.2,3.8) + Vector3(fx_rng.randf_range(-3.4,3.4),fx_rng.randf_range(1.6,4.8),fx_rng.randf_range(-3.4,3.4))
-		if bonk and i == 0:
-			speed *= 1.7
-		hit_effects.append({"node":chip,"age":0.0,"duration":fx_rng.randf_range(0.78,1.15) if lethal else fx_rng.randf_range(0.52,0.82),"velocity":speed,"number":false,"kind":"blood_pixel","spin":fx_rng.randf_range(-14.0,14.0)})
+		chip.global_position=point+Vector3(fx_rng.randf_range(-0.14,0.14),fx_rng.randf_range(-0.08,0.16),fx_rng.randf_range(-0.14,0.14))
+		var radial:=Vector3(fx_rng.randf_range(-1.0,1.0),fx_rng.randf_range(-0.20,1.0),fx_rng.randf_range(-1.0,1.0)).normalized()
+		var spray_sign:=1.0 if fx_rng.randf()>0.18 else -0.35
+		var speed:=direction.normalized()*fx_rng.randf_range(1.0,4.4)*spray_sign+radial*fx_rng.randf_range(0.8,4.0)+Vector3.UP*fx_rng.randf_range(0.2,2.6)
+		if bonk and i==0:speed*=1.7
+		var angular:=Vector3(fx_rng.randf_range(-13.0,13.0),fx_rng.randf_range(-13.0,13.0),fx_rng.randf_range(-13.0,13.0))
+		hit_effects.append({"node":chip,"age":0.0,"duration":fx_rng.randf_range(0.95,1.45) if lethal else fx_rng.randf_range(0.68,1.12),"velocity":speed,"number":false,"kind":"blood_chunk","gravity":fx_rng.randf_range(8.8,14.0),"drag":fx_rng.randf_range(0.20,0.85),"angular":angular})
 
 func _update_feedback_effects(delta: float) -> void:
 	score_pulse = maxf(0.0, score_pulse - delta)
@@ -585,11 +593,15 @@ func _update_feedback_effects(delta: float) -> void:
 		if effect.number:
 			(node as Label3D).modulate.a = minf(1.0, (float(effect.duration) - float(effect.age)) * 6.0)
 		else:
-			effect.velocity.y -= (5.6 if str(effect.get("kind","")) == "blood_pixel" else 4.0) * delta
+			var velocity: Vector3=effect.velocity
+			velocity*=exp(-float(effect.get("drag",0.35))*delta)
+			velocity.y-=float(effect.get("gravity",9.8))*delta
+			effect.velocity=velocity
 			if node is MeshInstance3D:
-				(node as MeshInstance3D).rotation += Vector3(float(effect.get("spin",0.0))*0.45,float(effect.get("spin",0.0))*0.7,float(effect.get("spin",0.0))) * delta
-			var life := maxf(0.0,1.0 - float(effect.age) / float(effect.duration))
-			node.scale = Vector3.ONE * maxf(0.05,life * (1.0 + sin(life * PI) * 0.16))
+				(node as MeshInstance3D).rotation+=(effect.get("angular",Vector3.ZERO) as Vector3)*delta
+			var ratio:=clampf(float(effect.age)/maxf(0.001,float(effect.duration)),0.0,1.0)
+			var scale_factor:=1.0 if ratio<0.72 else lerpf(1.0,0.05,(ratio-0.72)/0.28)
+			node.scale=Vector3.ONE*scale_factor
 		if float(effect.age) >= float(effect.duration):
 			node.queue_free()
 			hit_effects.remove_at(i)

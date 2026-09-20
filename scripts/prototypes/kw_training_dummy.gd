@@ -241,6 +241,7 @@ func _build_healthbar() -> void:
 	health_bar.pixel_size = 0.016
 	health_bar.position = Vector3(0,2.13,0)
 	health_bar.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	health_bar.render_priority=127
 	add_child(health_bar)
 	name_label = Label3D.new()
 	name_label.name = "TargetName"
@@ -250,6 +251,7 @@ func _build_healthbar() -> void:
 	name_label.outline_size = 6
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_label.position = Vector3(0,2.48,0)
+	name_label.render_priority=126
 	add_child(name_label)
 	_refresh_bar()
 

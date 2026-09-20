@@ -67,7 +67,7 @@ func _ready() -> void:
 	network_status=Label.new();network_status.position=Vector2(12,108);network_status.add_theme_font_size_override("font_size",10)
 	help_panel.add_child(network_status)
 	for c in help_panel.get_children():
-		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim   R / X reload   WHEEL weapon   G / RB grenade\nSpace / A jump   Q / R3 shoulder   Y Borderlands edges   Esc / Start menu"
+		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim   R / X reload   WHEEL weapon   G / RB grenade\nSpace / A jump   Y Borderlands edges   Esc / Start menu"
 	set_menu(true)
 	if options.has("connect") or options.has("qa-client"):
 		connect_server(str(options.get("host","127.0.0.1")),int(options.get("port","18886")))
@@ -159,7 +159,7 @@ func _physics_process(delta: float) -> void:
 	if options.has("qa-client"):_qa_command(command)
 	if combat.is_game_over():command.move=Vector2.ZERO;command.fire=false
 	if int(command.get("weapon",weapon_slot))!=weapon_slot:_set_weapon_slot(int(command.weapon),false)
-	yaw=command.yaw;pitch=command.pitch;aiming=command.aim;fire_held=command.fire;weapon_side=command.side
+	yaw=command.yaw;pitch=command.pitch;aiming=command.aim;fire_held=command.fire;weapon_side=1.0;command.side=1.0
 	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
 	var simulation =command.duplicate()
 	simulation.jump=int(command.js)>local_jump;local_jump=command.js
@@ -285,7 +285,7 @@ func _make_replica(state: Dictionary) -> void:
 		visual=Node3D.new();node.add_child(visual)
 		style=OUTRAGE_FULLBODY.instantiate();visual.add_child(style)
 		for title in RIG_NAMES:rig_nodes[title]=style.get_node(title)
-		var tag =Label3D.new();tag.text="ALLY / OUTRAGE %d"%state.id;tag.font_size=36;tag.outline_size=6;tag.modulate=Color("8ef1de");tag.billboard=BaseMaterial3D.BILLBOARD_ENABLED;tag.position=Vector3(0,2.1,0);node.add_child(tag)
+		var tag =Label3D.new();tag.text="ALLY / OUTRAGE %d"%state.id;tag.font_size=36;tag.outline_size=6;tag.modulate=Color("8ef1de");tag.billboard=BaseMaterial3D.BILLBOARD_ENABLED;tag.position=Vector3(0,2.1,0);tag.render_priority=126;node.add_child(tag)
 		gun=Node3D.new();gun.name="RemoteAK";visual.add_child(gun);gun.position=Vector3(-1.10,torso_rest.y+0.88,-0.98)
 		ak_body=Node3D.new();ak_body.name="RemoteAKBody";ak_body.rotation.y=PI*0.5;ak_body.position=Vector3(0.10,0,-0.30);gun.add_child(ak_body)
 		AK47_VOXEL_BUILDER.build(ak_body)

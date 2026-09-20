@@ -27,7 +27,7 @@ var reload_clock: float:
 var grenade_clock =0.0
 var death_clock =0.0
 var body_yaw =0.0
-var smoothed_weapon_side=-1.0
+var smoothed_weapon_side=1.0
 var aim_yaw =0.0
 var aim_pitch =-0.174533
 var camera_boom =6.4
@@ -190,9 +190,9 @@ func build_aim(space: PhysicsDirectSpaceState3D,dt: float) -> void:
 	var chest =weapon_anchor()
 	var front: Vector3=(aim_target-chest).normalized()
 	var right =front.cross(Vector3.UP).normalized()
-	var side: float=command.get("side",-1.0)
-	smoothed_weapon_side=move_toward(smoothed_weapon_side,side,maxf(0,dt)*7.0)
-	var clearance: float=(1.0-absf(smoothed_weapon_side))*1.80
+	var side: float=1.0
+	smoothed_weapon_side=move_toward(smoothed_weapon_side,side,maxf(0,dt)*10.0)
+	var clearance: float=0.0
 	var pivot =chest+front*(0.64+clearance)+right*smoothed_weapon_side
 	var distance =pivot.distance_to(aim_target)
 	var muzzle_length:=1.58 if weapon_slot==0 else 1.78

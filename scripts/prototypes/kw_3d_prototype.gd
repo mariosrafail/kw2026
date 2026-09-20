@@ -14,8 +14,8 @@ var offline_test_mode := "waves"
 @export_range(0.0, 2.0, 0.05) var ragdoll_playfulness := 1.2
 var locomotion: RefCounted
 var combat: Node3D
-var weapon_side := -1.0
-var smoothed_weapon_side := -1.0
+var weapon_side := 1.0
+var smoothed_weapon_side := 1.0
 const CAMERA_SHOULDER_X := 1.20
 const AIM_RETICLE := preload("res://scripts/prototypes/kw_aim_reticle.gd")
 var camera_boom_z := 6.4
@@ -55,8 +55,8 @@ var reload_remaining: float:
 var reload_mag_serial := 0
 var ak_visual_root: Node3D
 var shotgun_visual_root: Node3D
-var pixel_enabled := true
-var borderlands_enabled := false
+var pixel_enabled := false
+var borderlands_enabled := true
 var pixel_materials: Array[WeakRef] = []
 var pixel_post_layer: CanvasLayer
 var borderlands_quad: MeshInstance3D
@@ -109,7 +109,7 @@ var head_motion_initialized := false
 const PIXEL_MATERIALS := preload("res://scripts/prototypes/kw_pixel_materials.gd")
 const PIXEL_SCREEN := preload("res://scripts/prototypes/kw_pixel_screen.gdshader")
 const WEAPON_HOLD_DISTANCE := 0.92
-const WEAPON_HOLD_SIDE := 0.90
+const WEAPON_HOLD_SIDE := 0.74
 const MOVE_SPEED := 7.5
 const SPRINT_SPEED := 11.0
 const ACCEL := 28.0
@@ -226,8 +226,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.physical_keycode == KEY_G:
 			if grenade_skill != null and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED: grenade_skill.requested = true
 		elif event.physical_keycode == KEY_Q:
-			weapon_side *= -1.0
-			if arena_audio != null: arena_audio.play_event("switch", Vector3.ZERO, -22.0)
+			# Fixed right-shoulder hold: no side swap.
+			weapon_side=1.0;smoothed_weapon_side=1.0
 		elif event.physical_keycode == KEY_P:
 			_set_pixel_enabled(not pixel_enabled)
 		elif event.physical_keycode == KEY_O:
@@ -420,6 +420,7 @@ func _build_player_healthbar() -> void:
 	player_health_bar.pixel_size = 0.013
 	player_health_bar.position = Vector3(0,2.52,0)
 	player_health_bar.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	player_health_bar.render_priority=127
 	player.add_child(player_health_bar)
 	player_ammo_label=Label3D.new()
 	player_ammo_label.name="PlayerAmmoUI"
@@ -430,6 +431,7 @@ func _build_player_healthbar() -> void:
 	player_ammo_label.outline_size=7
 	player_ammo_label.modulate=Color("fff2c7")
 	player_ammo_label.outline_modulate=Color("141520")
+	player_ammo_label.render_priority=127
 	player.add_child(player_ammo_label)
 	_set_player_healthbar(100.0,100.0)
 	_refresh_ammo_hud()
@@ -615,22 +617,23 @@ func _update_weapon_pose(delta: float) -> void:
 	if weapon_aim_pivot == null or weapon_root == null or camera == null:
 		return
 	aim_target = _get_aim_target()
-	# A floating two-hand hold to the LEFT of the torso, rather than a pole in front.
-	# During shoulder swapping the rifle follows an arc in front, not through the body.
-	smoothed_weapon_side = move_toward(smoothed_weapon_side, weapon_side, maxf(0.0,delta)*7.0)
+	# Fixed right-shoulder hold: keeps the weapon near the camera/crosshair side and
+	# removes lateral shoulder swapping as a source of visual aim instability.
+	weapon_side=1.0
+	smoothed_weapon_side=move_toward(smoothed_weapon_side,1.0,maxf(0.0,delta)*10.0)
 	var chest := _weapon_anchor()
 	var forward := (aim_target - chest).normalized()
 	var right := forward.cross(Vector3.UP).normalized()
 	if right.length_squared() < 0.01: right = camera.global_basis.x.normalized()
-	var swap_clearance := (1.0-absf(smoothed_weapon_side))*1.80
-	var loose_amount := ragdoll_playfulness * (0.35 + move_blend * 0.65)
-	var hand_bob := sin(anim_time * 8.2 + walk_phase * 0.18) * 0.055 * move_blend * loose_amount
-	var hand_lag := sin(anim_time * 4.1 + 0.7) * 0.035 * loose_amount
+	var swap_clearance := 0.0
+	var loose_amount := ragdoll_playfulness * (0.28 + move_blend * 0.45)
+	var hand_bob := sin(anim_time*8.2+walk_phase*0.18)*0.032*move_blend*loose_amount
+	var hand_lag := sin(anim_time*4.1+0.7)*0.014*loose_amount
 	weapon_aim_pivot.global_position = chest + forward*(WEAPON_HOLD_DISTANCE+swap_clearance + 0.08*move_blend) + right*(WEAPON_HOLD_SIDE*smoothed_weapon_side + hand_lag) + Vector3.UP*hand_bob
 	weapon_recoil = move_toward(weapon_recoil, 0.0, delta*9.5)
-	weapon_visual_side_kick = move_toward(weapon_visual_side_kick,0.0,delta*1.8)
-	weapon_visual_lift_kick = move_toward(weapon_visual_lift_kick,0.0,delta*1.8)
-	weapon_visual_twist_kick = move_toward(weapon_visual_twist_kick,0.0,delta*2.2)
+	weapon_visual_side_kick = move_toward(weapon_visual_side_kick,0.0,delta*3.4)
+	weapon_visual_lift_kick = move_toward(weapon_visual_lift_kick,0.0,delta*2.8)
+	weapon_visual_twist_kick = move_toward(weapon_visual_twist_kick,0.0,delta*3.6)
 	var distance := weapon_aim_pivot.global_position.distance_to(aim_target)
 	# Retract the hold at close cover so the barrel cannot extend past its target.
 	var retraction := maxf(0.0,1.72-distance)
@@ -646,7 +649,7 @@ func _update_weapon_pose(delta: float) -> void:
 	# The weapon is visually held by one floating hand. A bounded local wobble makes it funny
 	# without changing the camera target or server-side hit direction.
 	var one_hand_pitch := sin(anim_time*6.3+0.4)*0.045*loose_amount + weapon_recoil*0.055
-	var one_hand_roll := sin(anim_time*4.8+1.6)*(0.075+0.045*move_blend)*loose_amount - weapon_recoil*0.14
+	var one_hand_roll := sin(anim_time*4.8+1.6)*(0.042+0.025*move_blend)*loose_amount - weapon_recoil*0.11
 	var active_profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
 	var reload_progress := 0.0 if reload_remaining<=0.0 else 1.0-clampf(reload_remaining/float(active_profile.reload),0.0,1.0)
 	var reload_arc := pow(maxf(0.0,sin(PI*reload_progress)),0.72)
@@ -746,7 +749,7 @@ func _build_hud() -> void:
 	title.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
 	help_panel.add_child(title)
 	var help := Label.new()
-	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire   R reload\nWHEEL weapon   G grenade   Q shoulder   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
+	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim   LMB fire   R reload\nWHEEL weapon   G grenade   O comic   P pixels   Y Borderlands   M music\nMOUSE look   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
 	help.position = Vector2(12, 28)
 	help.add_theme_font_size_override("font_size", 11)
 	help.add_theme_color_override("font_color", Color(0.86, 0.86, 0.92))
@@ -1064,6 +1067,7 @@ func _build_pixel_pass() -> void:
 	pixel_post_layer = CanvasLayer.new()
 	pixel_post_layer.name = "PixelWorldPass"
 	pixel_post_layer.layer = 1
+	pixel_post_layer.visible=pixel_enabled
 	add_child(pixel_post_layer)
 	var rect := ColorRect.new()
 	rect.name = "PixelWorldOnly"
@@ -1085,7 +1089,8 @@ func _build_borderlands_pass() -> void:
 	borderlands_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := ShaderMaterial.new()
 	mat.shader = BORDERLANDS_EDGE
-	mat.render_priority = 127
+	# Leave the final transparent/world-UI priority range free for health/name/ammo UI.
+	mat.render_priority = 90
 	borderlands_quad.material_override = mat
 	borderlands_quad.visible = borderlands_enabled
 	add_child(borderlands_quad)
