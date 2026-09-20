@@ -3,7 +3,7 @@ extends Control
 ## The legacy main_menu.tscn remains untouched underneath and still owns all game/menu flows.
 ## This scene only replaces the main-screen presentation and renders the real 3D Outrage model.
 
-const LEGACY_SCENE := preload("res://scenes/ui/main_menu.tscn")
+const LEGACY_SCENE := preload("res://scenes/ui/main_menu_legacy.tscn")
 const OUTRAGE_SCENE := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
 const PIXEL_FONT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
 const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
