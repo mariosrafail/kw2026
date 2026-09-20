@@ -13,6 +13,7 @@ var initial_position =Vector3.ZERO
 var maximum_travel =0.0
 var first_health =100.0
 var max_ads_horizontal_speed=0.0
+var max_sniper_ads_horizontal_speed=0.0
 func _welcome(payload: Dictionary) -> void:
 	super._welcome(payload)
 	joined_slots.append(payload.slot)
@@ -33,6 +34,8 @@ func _qa_tick(_delta: float) -> void:
 		maximum_travel=maxf(maximum_travel,player.global_position.distance_to(initial_position))
 		if age>0.65 and age<1.75:
 			max_ads_horizontal_speed=maxf(max_ads_horizontal_speed,Vector2(player.velocity.x,player.velocity.z).length())
+		if role==2 and age>6.35 and age<7.20:
+			max_sniper_ads_horizontal_speed=maxf(max_sniper_ads_horizontal_speed,Vector2(player.velocity.x,player.velocity.z).length())
 		if role==2:
 			axis(JOY_AXIS_LEFT_X,0.55 if age<1.8 else 0.0)
 			axis(JOY_AXIS_TRIGGER_RIGHT,1.0 if age>2.1 and age<7.2 else 0.0)
@@ -67,8 +70,8 @@ func _qa_tick(_delta: float) -> void:
 		if present_humans!=2:failures.append("two_real_players_missing")
 		if maximum_travel<0.4:failures.append("no_movement")
 		if steady_max_correction>0.55:failures.append("prediction_correction_over_budget")
-		if max_ads_horizontal_speed>5.15:failures.append("ads_slowdown_not_authoritative")
-		if max_ads_horizontal_speed<1.5:failures.append("ads_slowdown_not_exercised")
+		if max_ads_horizontal_speed>4.5 or max_ads_horizontal_speed<3.0:failures.append("regular_ads_speed_regression")
+		if role==2 and (max_sniper_ads_horizontal_speed>0.75 or max_sniper_ads_horizontal_speed<0.12):failures.append("kar_scope_speed_not_near_zero")
 		if int(qa_events.get("damage",0))<1:failures.append("no_authority_damage")
 		if int(qa_events.get("explosion",0))<1:failures.append("no_shared_explosion")
 		if int(qa_events.get("reload",0))<1:failures.append("no_authority_reload")
@@ -81,7 +84,7 @@ func _qa_tick(_delta: float) -> void:
 		for id in state_records:
 			var s: Dictionary=state_records[id]
 			actors[str(id)]={"hp":s.hp,"kills":s.kills,"bot":s.bot,"gcd":s.gcd,"ammo":s.get("ammo",-1),"reload":s.get("reload",-1.0),"p":s.p}
-		var result: Dictionary={"failures":failures,"slot":session.actor_id,"joined_slots":joined_slots,"snapshots":session.snapshot_count,"rtt_ms":session.rtt_ms,"max_correction":max_correction,"steady_max_correction":steady_max_correction,"large_corrections":corrections_over_half_meter,"maximum_travel":maximum_travel,"max_ads_horizontal_speed":max_ads_horizontal_speed,"events":qa_events,"actors":actors,"synthetic_pad_move":gamepad_move_seen,"synthetic_pad_fire":gamepad_fire_seen,"physical_controllers":Input.get_connected_joypads()}
+		var result: Dictionary={"failures":failures,"slot":session.actor_id,"joined_slots":joined_slots,"snapshots":session.snapshot_count,"rtt_ms":session.rtt_ms,"max_correction":max_correction,"steady_max_correction":steady_max_correction,"large_corrections":corrections_over_half_meter,"maximum_travel":maximum_travel,"max_ads_horizontal_speed":max_ads_horizontal_speed,"max_sniper_ads_horizontal_speed":max_sniper_ads_horizontal_speed,"events":qa_events,"actors":actors,"synthetic_pad_move":gamepad_move_seen,"synthetic_pad_fire":gamepad_fire_seen,"physical_controllers":Input.get_connected_joypads()}
 		var file =FileAccess.open(str(options.output).path_join("client_%d.json"%role),FileAccess.WRITE)
 		file.store_string(JSON.stringify(result,"\t"));file.close()
 		print("ONLINE_CLIENT_",role,"_", "PASS" if failures.is_empty() else "FAIL", " ",JSON.stringify(result))
@@ -93,6 +96,8 @@ func _qa_command(command: Dictionary) -> void:
 		if command.move.x>0.2:gamepad_move_seen=true
 		if command.fire:gamepad_fire_seen=true
 		command.weapon=1 if age>5.0 and age<6.0 else 2 if age>6.15 and age<7.35 else 0
+		if command.weapon==2:
+			command.move=Vector2(0.5,0.0);command.sprint=true
 	else:
 		command.move=Vector2(-0.5,0) if age<1.8 else Vector2.ZERO
 		command.fire=age>1.7 and age<7.2

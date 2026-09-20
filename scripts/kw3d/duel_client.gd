@@ -151,7 +151,7 @@ func open_controls_menu() -> void:
 	if menu == null:
 		return
 	var pad: String = input_adapter.prompt()
-	menu.message.text = "CONTROLS: "+pad+"\nA/Cross jump • L3 sprint • RMB/LT aim assist slows movement • Esc/Start room menu. Settings are saved per device profile."
+	menu.message.text = "CONTROLS: "+pad+"\nA/Cross jump • L3 sprint • AK/Shotgun keep aim assist; KAR scope has no magnet and near-zero movement • Esc/Start room menu."
 
 func lan_address() -> String:
 	var candidates: Array[String] = []

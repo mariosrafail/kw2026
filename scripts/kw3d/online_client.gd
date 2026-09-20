@@ -67,7 +67,7 @@ func _ready() -> void:
 	network_status=Label.new();network_status.position=Vector2(12,108);network_status.add_theme_font_size_override("font_size",10)
 	help_panel.add_child(network_status)
 	for c in help_panel.get_children():
-		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim+magnet (slow)   R / X reload   WHEEL weapon   H inspect\nKAR: RMB/LT sniper scope   G / RB grenade   Y Borderlands edges   Esc / Start menu"
+		if c is Label and "WASD" in c.text:c.text="WASD / left stick move   MOUSE / right stick look\nLMB / RT fire   RMB / LT aim+magnet   R / X reload   WHEEL weapon   H inspect\nKAR: RMB/LT scope, NO magnet, near-still movement   G / RB grenade   Y edges   Esc / Start menu"
 	set_menu(true)
 	if options.has("connect") or options.has("qa-client"):
 		connect_server(str(options.get("host","127.0.0.1")),int(options.get("port","18886")))
@@ -154,15 +154,15 @@ func _physics_process(delta: float) -> void:
 	var dt =1.0/60.0
 	input_adapter.fov=camera.fov
 	var command: Dictionary=input_adapter.sample(dt)
+	if options.has("qa-client"):_qa_command(command)
 	_apply_online_aim_assist(command,dt)
 	command.ct=maxi(0,session.last_snapshot_tick-3)
 	_tick_reload(dt)
 	if bool(command.get("reload",false)):_start_reload()
-	if options.has("qa-client"):_qa_command(command)
 	if combat.is_game_over():command.move=Vector2.ZERO;command.fire=false
 	if int(command.get("weapon",weapon_slot))!=weapon_slot:_set_weapon_slot(int(command.weapon),false)
 	yaw=command.yaw;pitch=command.pitch;aiming=command.aim;fire_held=command.fire;weapon_side=1.0;command.side=1.0
-	if aiming:command.sprint=false
+	if aiming and weapon_slot==2:command.sprint=false
 	camera_yaw.rotation.y=yaw;camera_pitch.rotation.x=pitch
 	var simulation =command.duplicate()
 	simulation.jump=int(command.js)>local_jump;local_jump=command.js
@@ -211,7 +211,9 @@ func _best_online_aim_assist_target(command: Dictionary) -> Vector3:
 func _apply_online_aim_assist(command: Dictionary,dt: float) -> void:
 	aim_assist_active=false
 	if not bool(command.get("aim",false)):return
-	command.sprint=false
+	if int(command.get("weapon",weapon_slot))==2:
+		command.sprint=false
+		return
 	var point:=_best_online_aim_assist_target(command)
 	if not point.is_finite():return
 	var cyaw:=float(command.get("yaw",input_adapter.yaw))

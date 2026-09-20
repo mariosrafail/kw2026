@@ -23,10 +23,13 @@ func run()->void:
 	var outside:=ASSIST.step(outside_yaw,wanted.y,origin,target,1.0/60.0)
 	check(absf(wrapf(outside.x-outside_yaw,-PI,PI))<0.000001,"outside_cone_no_pull")
 	check(not ASSIST.eligible(origin,wanted.x,wanted.y,Vector3(0,0,-60)),"range_cap")
-	check(is_equal_approx(MOTOR.speed_for({"aim":false,"sprint":false}),7.5),"walk_speed")
-	check(is_equal_approx(MOTOR.speed_for({"aim":false,"sprint":true}),11.0),"sprint_speed")
-	check(is_equal_approx(MOTOR.speed_for({"aim":true,"sprint":false}),4.8),"ads_slow_speed")
-	check(is_equal_approx(MOTOR.speed_for({"aim":true,"sprint":true}),4.8),"ads_blocks_sprint_speed")
+	check(is_equal_approx(MOTOR.speed_for({"aim":false,"sprint":false,"weapon":0}),7.5),"walk_speed")
+	check(is_equal_approx(MOTOR.speed_for({"aim":false,"sprint":true,"weapon":0}),11.0),"sprint_speed")
+	check(is_equal_approx(MOTOR.speed_for({"aim":true,"sprint":false,"weapon":0}),7.5),"ak_ads_keeps_walk_speed")
+	check(is_equal_approx(MOTOR.speed_for({"aim":true,"sprint":true,"weapon":0}),11.0),"ak_ads_keeps_sprint_speed")
+	check(is_equal_approx(MOTOR.speed_for({"aim":true,"sprint":false,"weapon":1}),7.5),"shotgun_ads_keeps_walk_speed")
+	check(is_equal_approx(MOTOR.speed_for({"aim":true,"sprint":false,"weapon":2}),0.6),"kar_scope_near_zero_speed")
+	check(is_equal_approx(MOTOR.speed_for({"aim":true,"sprint":true,"weapon":2}),0.6),"kar_scope_blocks_sprint")
 	ProjectSettings.set_setting("kw3d/offline_test_mode","sandbox")
 	var stage=load("res://scenes/prototypes/kw_3d_prototype.tscn").instantiate()
 	root.add_child(stage)
@@ -44,6 +47,13 @@ func run()->void:
 		stage._apply_offline_aim_assist(1.0/60.0)
 		var a1:=ASSIST.angle_degrees(stage.camera.global_position,stage.yaw,stage.pitch,chosen)
 		check(stage.aim_assist_active and a1<a0,"offline_runtime_magnet")
+		stage._set_weapon_slot(2,false)
+		stage.yaw=desired.x+deg_to_rad(3.6);stage.pitch=desired.y;stage.aiming=true
+		var sniper_yaw_before: float=stage.yaw;var sniper_pitch_before: float=stage.pitch
+		stage._apply_offline_aim_assist(1.0/60.0)
+		check(not stage.aim_assist_active,"kar_has_no_magnet")
+		check(absf(wrapf(stage.yaw-sniper_yaw_before,-PI,PI))<0.000001 and absf(stage.pitch-sniper_pitch_before)<0.000001,"kar_aim_not_modified")
+		stage._set_weapon_slot(0,false)
 		var blocker:=StaticBody3D.new();blocker.collision_layer=1;blocker.collision_mask=0
 		var shape:=CollisionShape3D.new();var box:=BoxShape3D.new();box.size=Vector3(3.0,3.0,3.0);shape.shape=box;blocker.add_child(shape)
 		stage.add_child(blocker);blocker.global_position=stage.camera.global_position.lerp(chosen,0.45)
@@ -51,5 +61,5 @@ func run()->void:
 		check(not stage._aim_assist_line_clear(chosen),"cover_blocks_magnet")
 		blocker.queue_free()
 	print("AIM_ASSIST_","PASS" if failures.is_empty() else "FAIL",failures,
-		" before_deg=",before," after_deg=",after," ads_speed=",MOTOR.AIM_SPEED)
+		" before_deg=",before," after_deg=",after," kar_scope_speed=",MOTOR.SNIPER_AIM_SPEED)
 	stage.queue_free();quit(0 if failures.is_empty() else 1)

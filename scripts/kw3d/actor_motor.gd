@@ -3,10 +3,11 @@ extends RefCounted
 const DT := 1.0/60.0
 const WALK_SPEED := 7.5
 const SPRINT_SPEED := 11.0
-const AIM_SPEED := 4.8
+const SNIPER_AIM_SPEED := 0.6
 
 static func speed_for(command: Dictionary) -> float:
-	if bool(command.get("aim",false)):return AIM_SPEED
+	var sniper_scoped:=bool(command.get("aim",false)) and int(command.get("weapon",0))==2
+	if sniper_scoped:return SNIPER_AIM_SPEED
 	return SPRINT_SPEED if bool(command.get("sprint",false)) else WALK_SPEED
 
 static func step(body: CharacterBody3D, command: Dictionary, dt: float=DT) -> void:

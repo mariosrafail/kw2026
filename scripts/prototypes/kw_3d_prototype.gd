@@ -122,7 +122,7 @@ const WEAPON_HOLD_DISTANCE := 0.92
 const WEAPON_HOLD_SIDE := 0.74
 const MOVE_SPEED := 7.5
 const SPRINT_SPEED := 11.0
-const AIM_MOVE_SPEED := 4.8
+const SNIPER_AIM_MOVE_SPEED := 0.6
 const ACCEL := 28.0
 const TURN_SPEED := 10.0
 const JUMP_SPEED := 8.8
@@ -285,8 +285,9 @@ func _physics_process(delta: float) -> void:
 	forward.y = 0.0
 	right.y = 0.0
 	var direction := (right.normalized() * input_vec.x + forward.normalized() * input_vec.y).normalized()
-	var sprinting := Input.is_physical_key_pressed(KEY_SHIFT) and not aiming
-	var move_speed := AIM_MOVE_SPEED if aiming else SPRINT_SPEED if sprinting else MOVE_SPEED
+	var sniper_scoped:=aiming and weapon_slot==2
+	var sprinting:=Input.is_physical_key_pressed(KEY_SHIFT) and not sniper_scoped
+	var move_speed:=SNIPER_AIM_MOVE_SPEED if sniper_scoped else SPRINT_SPEED if sprinting else MOVE_SPEED
 	var target_x := direction.x * move_speed
 	var target_z := direction.z * move_speed
 	player.velocity.x = move_toward(player.velocity.x, target_x, ACCEL * delta)
@@ -660,7 +661,7 @@ func _aim_assist_line_clear(point: Vector3) -> bool:
 
 func _apply_offline_aim_assist(delta: float) -> void:
 	aim_assist_active=false
-	if not aiming:return
+	if not aiming or weapon_slot==2:return
 	var point:=_best_offline_aim_assist_target()
 	if not point.is_finite():return
 	var before:=AIM_ASSIST.angle_degrees(camera.global_position,yaw,pitch,point)
@@ -851,7 +852,7 @@ func _build_hud() -> void:
 	title.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
 	help_panel.add_child(title)
 	var help := Label.new()
-	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim+magnet (slow)   LMB fire   R reload\nWHEEL weapon   H inspect   G grenade   O comic   P pixels   Y Borderlands   M music\nKAR: RMB sniper scope   C chaos   F low gravity   TAB help   ESC cursor   F10 test rooms"
+	help.text = "WASD move   SHIFT sprint   SPACE jump   RMB aim+magnet   LMB fire   R reload\nWHEEL weapon   H inspect   G grenade   O comic   P pixels   Y Borderlands   M music\nKAR: RMB scope // NO magnet // near-still movement   TAB help   ESC cursor   F10 test rooms"
 	help.position = Vector2(12, 28)
 	help.add_theme_font_size_override("font_size", 11)
 	help.add_theme_color_override("font_color", Color(0.86, 0.86, 0.92))
