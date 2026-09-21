@@ -1198,6 +1198,7 @@ func _add_static_box(node_name: String, pos: Vector3, size: Vector3, color: Colo
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = pos
+	body.set_meta("surface_color", color)
 	add_child(body)
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
@@ -1218,6 +1219,7 @@ func _add_ramp(node_name: String, pos: Vector3, size: Vector3, rot: Vector3, col
 	body.name = node_name
 	body.position = pos
 	body.rotation_degrees = rot
+	body.set_meta("surface_color", color)
 	add_child(body)
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
@@ -1254,6 +1256,7 @@ func _add_neon_light(pos: Vector3, color: Color, radius: float) -> void:
 func _add_bounce_pad(pos: Vector3, color: Color) -> void:
 	var pad := StaticBody3D.new()
 	pad.position = pos
+	pad.set_meta("surface_color", color)
 	add_child(pad)
 	var mesh := MeshInstance3D.new()
 	var cylinder := CylinderMesh.new()

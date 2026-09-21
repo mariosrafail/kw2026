@@ -37,6 +37,7 @@ var tracer_material: Material
 var tracer_halo_material: Material
 var tracer_hot_materials: Array[Material] = []
 var projectile_material_cache: Dictionary = {}
+var surface_material_cache: Dictionary = {}
 var impact_material: Material
 var impact_hot_material: Material
 var hit_material: Material
@@ -102,6 +103,52 @@ func _projectile_style(weapon_id: String) -> Dictionary:
 		if style is Dictionary:
 			return style as Dictionary
 	return {"color": Color("fff1a8"), "inferno": false}
+
+func _surface_material(color: Color, lightness: float = 0.0) -> StandardMaterial3D:
+	var resolved := color.lightened(lightness) if lightness >= 0.0 else color.darkened(-lightness)
+	var key := "%s|%.2f" % [resolved.to_html(false), lightness]
+	if surface_material_cache.has(key):
+		return surface_material_cache[key] as StandardMaterial3D
+	var material := StandardMaterial3D.new()
+	material.albedo_color = resolved
+	material.metallic = 0.04
+	material.roughness = 0.84
+	surface_material_cache[key] = material
+	return material
+
+func _surface_color_from_collider(collider: Object, fallback: Color = Color("8b98a8")) -> Color:
+	if collider == null:
+		return fallback
+	if collider.has_meta("surface_color"):
+		var stored: Variant = collider.get_meta("surface_color")
+		if stored is Color:
+			return stored as Color
+	if collider is Node:
+		var node := collider as Node
+		for candidate in node.find_children("*", "MeshInstance3D", true, false):
+			var mesh := candidate as MeshInstance3D
+			var material := mesh.material_override
+			if material is StandardMaterial3D:
+				return (material as StandardMaterial3D).albedo_color
+			if material is ShaderMaterial:
+				var base: Variant = (material as ShaderMaterial).get_shader_parameter("base_color")
+				if base is Color:
+					return base as Color
+	return fallback
+
+func _surface_color_at(point: Vector3, normal: Vector3, collider: Object = null) -> Color:
+	if collider != null:
+		return _surface_color_from_collider(collider)
+	var safe_normal := normal.normalized() if normal.length_squared() > 0.0001 else Vector3.UP
+	var query := PhysicsRayQueryParameters3D.create(
+		point + safe_normal * 0.08,
+		point - safe_normal * 0.12,
+		SHOT_MASK,
+		[stage.player.get_rid()] if stage != null and stage.player != null else []
+	)
+	query.hit_from_inside = true
+	var sampled := get_world_3d().direct_space_state.intersect_ray(query)
+	return _surface_color_from_collider(sampled.get("collider"))
 
 func _build_hud() -> void:
 	counter = Label.new()
@@ -170,10 +217,16 @@ func fire(muzzle: Vector3,target: Vector3,chest: Vector3,profile: Dictionary=WEA
 	var shot_damage:=WEAPON_RULES.damage(profile,headshot)
 	if not hit.is_empty():
 		var object: Object=hit.get("collider")
+		var environment_hit := object == null or not object.has_method("receive_hit")
 		if object!=null and object.has_method("receive_hit"):
 			applied=object.receive_hit(shot_damage,direction,shots_fired,endpoint);target_name=str(object.name)
 		elif object is RigidBody3D:object.apply_impulse(direction*1.6,endpoint-object.global_position)
-		_spawn_impact(endpoint,hit.get("normal",Vector3.UP))
+		_spawn_impact(
+			endpoint,
+			hit.get("normal",Vector3.UP),
+			_surface_color_at(endpoint, hit.get("normal",Vector3.UP), object),
+			environment_hit
+		)
 		if applied:
 			var victim_skin:=str(object.get("warrior_id")) if object!=null else "outrage"
 			_spawn_damage_feedback(endpoint,direction,shot_damage,object.dead,blood_color_for_skin(victim_skin),true)
@@ -203,6 +256,7 @@ func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
 		var applied:=false
 		if not hit.is_empty():
 			var object: Object=hit.get("collider")
+			var environment_hit := object == null or not object.has_method("receive_hit")
 			if object!=null and object.has_method("receive_hit"):
 				applied=object.receive_hit(pellet_damage,direction,shots_fired*100+pellet,endpoint)
 				if applied:
@@ -212,7 +266,7 @@ func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
 					_spawn_damage_feedback(endpoint,direction,pellet_damage,object.dead,blood_color_for_skin(victim_skin),pellet==0)
 			elif object is RigidBody3D:
 				object.apply_impulse(direction*2.6,endpoint-object.global_position)
-			_spawn_impact(endpoint,normal)
+			_spawn_impact(endpoint,normal,_surface_color_at(endpoint,normal,object),environment_hit)
 		_spawn_tracer(muzzle,endpoint,"shotgun")
 		pellet_results.append({"to":endpoint,"normal":normal,"hit":not hit.is_empty(),"headshot":pellet_headshot})
 	if reticle!=null:
@@ -338,7 +392,12 @@ func _spawn_world_muzzle_flash(point: Vector3, direction: Vector3) -> void:
 	tween.tween_property(root,"scale",Vector3.ONE*1.45,0.05).from(Vector3.ONE*0.7)
 	tween.chain().tween_callback(root.queue_free)
 
-func _spawn_impact(point: Vector3, normal: Vector3 = Vector3.UP) -> void:
+func _spawn_impact(
+		point: Vector3,
+		normal: Vector3 = Vector3.UP,
+		surface_color: Color = Color("fff5c2"),
+		surface_debris: bool = false
+	) -> void:
 	for i in range(impacts.size()-1,-1,-1):
 		if not is_instance_valid(impacts[i]):
 			impacts.remove_at(i)
@@ -352,7 +411,7 @@ func _spawn_impact(point: Vector3, normal: Vector3 = Vector3.UP) -> void:
 	sphere.radius = 0.065
 	sphere.height = 0.13
 	flash.mesh = sphere
-	flash.material_override = impact_material
+	flash.material_override = _surface_material(surface_color, 0.20) if surface_debris else impact_material
 	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(flash)
 	stage._add_scene_outline(flash,0.75)
@@ -362,18 +421,50 @@ func _spawn_impact(point: Vector3, normal: Vector3 = Vector3.UP) -> void:
 	tween.tween_property(flash,"scale",Vector3.ONE * 1.9,0.055).from(Vector3.ONE * 0.45)
 	tween.tween_property(flash,"scale",Vector3.ONE * 0.08,0.07)
 	tween.tween_callback(flash.queue_free)
-	for i in range(fx_rng.randi_range(4,7)):
+	var particle_count := fx_rng.randi_range(7,11) if surface_debris else fx_rng.randi_range(4,7)
+	for i in range(particle_count):
 		var chip := MeshInstance3D.new()
+		chip.name = "SurfaceDebrisParticle" if surface_debris else "ImpactSpark"
 		var box := BoxMesh.new()
-		box.size = Vector3(fx_rng.randf_range(0.018,0.035),fx_rng.randf_range(0.018,0.035),fx_rng.randf_range(0.07,0.16))
+		var debris_scale := fx_rng.randf_range(0.85,1.35) if surface_debris else 1.0
+		box.size = Vector3(
+			fx_rng.randf_range(0.018,0.035) * debris_scale,
+			fx_rng.randf_range(0.018,0.035) * debris_scale,
+			fx_rng.randf_range(0.07,0.16) * debris_scale
+		)
 		chip.mesh = box
-		chip.material_override = impact_hot_material if i % 2 == 0 else impact_material
+		if surface_debris:
+			var variation := 0.16 if i % 3 == 0 else (-0.10 if i % 3 == 1 else 0.0)
+			chip.material_override = _surface_material(surface_color, variation)
+		else:
+			chip.material_override = impact_hot_material if i % 2 == 0 else impact_material
 		chip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(chip)
 		chip.global_position = point + normal * 0.025
 		var tangent := Vector3(fx_rng.randf_range(-1.0,1.0),fx_rng.randf_range(-0.2,1.0),fx_rng.randf_range(-1.0,1.0)).normalized()
-		var speed := (normal * fx_rng.randf_range(1.2,2.8) + tangent * fx_rng.randf_range(0.8,2.2))
-		hit_effects.append({"node":chip,"age":0.0,"duration":fx_rng.randf_range(0.18,0.34),"velocity":speed,"number":false,"kind":"spark","spin":fx_rng.randf_range(-11.0,11.0)})
+		var speed := (
+			normal * fx_rng.randf_range(0.65,1.65)
+			+ tangent * fx_rng.randf_range(0.45,1.45)
+		) if surface_debris else (
+			normal * fx_rng.randf_range(1.2,2.8)
+			+ tangent * fx_rng.randf_range(0.8,2.2)
+		)
+		hit_effects.append({
+			"node":chip,
+			"age":0.0,
+			"duration":fx_rng.randf_range(0.28,0.48) if surface_debris else fx_rng.randf_range(0.18,0.34),
+			"velocity":speed,
+			"number":false,
+			"kind":"surface_debris" if surface_debris else "spark",
+			"spin":fx_rng.randf_range(-11.0,11.0),
+			"gravity":fx_rng.randf_range(3.5,6.5) if surface_debris else 9.8,
+			"angular":Vector3(
+				fx_rng.randf_range(-9.0,9.0),
+				fx_rng.randf_range(-9.0,9.0),
+				fx_rng.randf_range(-9.0,9.0)
+			),
+			"shrink_from":0.38 if surface_debris else 0.72,
+		})
 
 func _on_target_damaged(_target: Node3D, lethal: bool) -> void:
 	hit_timer = 0.13
@@ -623,7 +714,8 @@ func _update_feedback_effects(delta: float) -> void:
 			if node is MeshInstance3D:
 				(node as MeshInstance3D).rotation+=(effect.get("angular",Vector3.ZERO) as Vector3)*delta
 			var ratio:=clampf(float(effect.age)/maxf(0.001,float(effect.duration)),0.0,1.0)
-			var scale_factor:=1.0 if ratio<0.72 else lerpf(1.0,0.05,(ratio-0.72)/0.28)
+			var shrink_from:=clampf(float(effect.get("shrink_from",0.72)),0.0,0.96)
+			var scale_factor:=1.0 if ratio<shrink_from else lerpf(1.0,0.05,(ratio-shrink_from)/maxf(0.04,1.0-shrink_from))
 			node.scale=Vector3.ONE*scale_factor
 		if float(effect.age) >= float(effect.duration):
 			node.queue_free()
