@@ -39,12 +39,16 @@ var hero_strap: Label
 var submenu_layer: Control
 var submenu_panel: PanelContainer
 var submenu_title: Label
+var submenu_header_meta: Label
+var submenu_body: HBoxContainer
+var submenu_selector_panel: PanelContainer
 var submenu_selector: VBoxContainer
 var submenu_showroom_panel: PanelContainer
 var submenu_info_panel: PanelContainer
 var submenu_info_title: Label
 var submenu_info_body: Label
 var submenu_settings_panel: PanelContainer
+var submenu_settings_grid: GridContainer
 var submenu_back_button: Button
 var active_submenu := ""
 
@@ -930,14 +934,14 @@ void fragment() {
 	submenu_title.add_theme_constant_override("shadow_offset_y", 2)
 	header.add_child(submenu_title)
 
-	var header_meta := Label.new()
-	header_meta.text = "KW // LIVE INTERFACE\nDRAG 3D VIEW TO ROTATE"
-	header_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	header_meta.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header_meta.add_theme_font_override("font", PIXEL_FONT)
-	header_meta.add_theme_font_size_override("font_size", 6)
-	header_meta.add_theme_color_override("font_color", Color(CLR_CYAN, 0.56))
-	header.add_child(header_meta)
+	submenu_header_meta = Label.new()
+	submenu_header_meta.text = "KW // LIVE INTERFACE\nDRAG 3D VIEW TO ROTATE"
+	submenu_header_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	submenu_header_meta.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	submenu_header_meta.add_theme_font_override("font", PIXEL_FONT)
+	submenu_header_meta.add_theme_font_size_override("font_size", 6)
+	submenu_header_meta.add_theme_color_override("font_color", Color(CLR_CYAN, 0.56))
+	header.add_child(submenu_header_meta)
 
 	var divider := ColorRect.new()
 	divider.custom_minimum_size = Vector2(0, 2)
@@ -945,23 +949,28 @@ void fragment() {
 	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	outer.add_child(divider)
 
-	var body := HBoxContainer.new()
-	body.name = "SubmenuBody"
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 6)
-	outer.add_child(body)
+	submenu_body = HBoxContainer.new()
+	submenu_body.name = "SubmenuBody"
+	submenu_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	submenu_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	submenu_body.add_theme_constant_override("separation", 5)
+	outer.add_child(submenu_body)
 
-	var selector_panel := PanelContainer.new()
-	selector_panel.name = "SelectorPanel"
-	selector_panel.custom_minimum_size = Vector2(104, 0)
-	selector_panel.add_theme_stylebox_override("panel", _glass_panel_style(CLR_CYAN, 0.68))
-	body.add_child(selector_panel)
+	submenu_selector_panel = PanelContainer.new()
+	submenu_selector_panel.name = "SelectorPanel"
+	submenu_selector_panel.custom_minimum_size = Vector2(96, 0)
+	submenu_selector_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	submenu_selector_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	submenu_selector_panel.size_flags_stretch_ratio = 0.86
+	submenu_selector_panel.clip_contents = true
+	submenu_selector_panel.add_theme_stylebox_override("panel", _glass_panel_style(CLR_CYAN, 0.68))
+	submenu_body.add_child(submenu_selector_panel)
 	var selector_margin := MarginContainer.new()
 	selector_margin.add_theme_constant_override("margin_left", 6)
 	selector_margin.add_theme_constant_override("margin_top", 6)
 	selector_margin.add_theme_constant_override("margin_right", 6)
 	selector_margin.add_theme_constant_override("margin_bottom", 6)
-	selector_panel.add_child(selector_margin)
+	submenu_selector_panel.add_child(selector_margin)
 	submenu_selector = VBoxContainer.new()
 	submenu_selector.name = "Selector"
 	submenu_selector.add_theme_constant_override("separation", 7)
@@ -969,18 +978,24 @@ void fragment() {
 
 	submenu_showroom_panel = PanelContainer.new()
 	submenu_showroom_panel.name = "ShowroomPanel"
-	submenu_showroom_panel.custom_minimum_size = Vector2(305, 0)
+	submenu_showroom_panel.custom_minimum_size = Vector2(205, 0)
 	submenu_showroom_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	submenu_showroom_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	submenu_showroom_panel.size_flags_stretch_ratio = 2.35
+	submenu_showroom_panel.clip_contents = true
 	submenu_showroom_panel.add_theme_stylebox_override("panel", _glass_panel_style(Color("6CCFFF"), 0.48))
-	body.add_child(submenu_showroom_panel)
+	submenu_body.add_child(submenu_showroom_panel)
 	_build_showroom_view()
 
 	submenu_info_panel = PanelContainer.new()
 	submenu_info_panel.name = "InfoPanel"
-	submenu_info_panel.custom_minimum_size = Vector2(142, 0)
+	submenu_info_panel.custom_minimum_size = Vector2(106, 0)
+	submenu_info_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	submenu_info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	submenu_info_panel.size_flags_stretch_ratio = 1.06
+	submenu_info_panel.clip_contents = true
 	submenu_info_panel.add_theme_stylebox_override("panel", _glass_panel_style(CLR_MAGENTA, 0.62))
-	body.add_child(submenu_info_panel)
+	submenu_body.add_child(submenu_info_panel)
 	var info_margin := MarginContainer.new()
 	info_margin.add_theme_constant_override("margin_left", 8)
 	info_margin.add_theme_constant_override("margin_top", 8)
@@ -1001,8 +1016,11 @@ void fragment() {
 	info_line.color = Color(CLR_MAGENTA, 0.55)
 	info_box.add_child(info_line)
 	submenu_info_body = Label.new()
+	submenu_info_body.custom_minimum_size = Vector2(0, 0)
+	submenu_info_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	submenu_info_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	submenu_info_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	submenu_info_body.clip_text = true
 	submenu_info_body.add_theme_font_override("font", PIXEL_FONT)
 	submenu_info_body.add_theme_font_size_override("font_size", 7)
 	submenu_info_body.add_theme_color_override("font_color", Color(CLR_TEXT, 0.78))
@@ -1018,7 +1036,7 @@ void fragment() {
 	settings_style.border_color = Color(CLR_CYAN, 0.78)
 	settings_style.shadow_color = Color(0.0, 0.18, 0.32, 0.32)
 	submenu_settings_panel.add_theme_stylebox_override("panel", settings_style)
-	body.add_child(submenu_settings_panel)
+	submenu_body.add_child(submenu_settings_panel)
 
 	var footer := Label.new()
 	footer.text = "PEOPLE // HEROES // FIGHT        KW SYSTEM REV 02"
@@ -1034,13 +1052,28 @@ void fragment() {
 func _layout_submenu_frame() -> void:
 	if submenu_layer == null or submenu_panel == null:
 		return
-	var available := submenu_layer.size - Vector2(16.0, 16.0)
+	var edge := 6.0 if submenu_layer.size.x < 700.0 else 8.0
+	var available := submenu_layer.size - Vector2(edge * 2.0, edge * 2.0)
 	if available.x <= 1.0 or available.y <= 1.0:
 		return
 	submenu_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	submenu_panel.position = Vector2(8.0, 8.0)
+	submenu_panel.position = Vector2(edge, edge)
 	submenu_panel.size = available
 	submenu_panel.pivot_offset = available * 0.5
+	var compact := available.x < 700.0
+	var very_compact := available.x < 560.0
+	if submenu_body != null:
+		submenu_body.add_theme_constant_override("separation", 4 if compact else 6)
+	if submenu_selector_panel != null:
+		submenu_selector_panel.custom_minimum_size.x = 82.0 if very_compact else (96.0 if compact else 118.0)
+	if submenu_showroom_panel != null:
+		submenu_showroom_panel.custom_minimum_size.x = 170.0 if very_compact else (205.0 if compact else 285.0)
+	if submenu_info_panel != null:
+		submenu_info_panel.custom_minimum_size.x = 92.0 if very_compact else (106.0 if compact else 136.0)
+	if submenu_header_meta != null:
+		submenu_header_meta.visible = available.x >= 510.0
+	if submenu_settings_grid != null:
+		submenu_settings_grid.columns = 1 if very_compact else 2
 
 func _build_showroom_view() -> void:
 	showroom_surface = TextureRect.new()
@@ -1204,6 +1237,8 @@ func _glass_panel_style(accent: Color, alpha: float) -> StyleBoxFlat:
 func _make_submenu_button(text_value: String, accent: Color, active: bool) -> Button:
 	var button := Button.new()
 	button.text = text_value
+	button.clip_text = true
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.custom_minimum_size = Vector2(0, 30)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.add_theme_font_override("font", PIXEL_FONT_BOLD)
@@ -1395,7 +1430,7 @@ func _populate_warriors_submenu() -> void:
 		var id := str(warrior_id)
 		var accent := CLR_MAGENTA if id == "outrage" else Color("df7126")
 		var active := id == selected_showroom_warrior
-		var label := "%s // OFFLINE SELECTED" % id.to_upper() if active else id.to_upper()
+		var label := "%s // SELECTED" % id.to_upper() if active else id.to_upper()
 		var button := _make_submenu_button(label, accent, active)
 		button.name = "Warrior_%s" % id.capitalize()
 		button.pressed.connect(func() -> void:
@@ -1431,17 +1466,17 @@ func _populate_settings_submenu() -> void:
 	note.add_theme_font_size_override("font_size", 7)
 	note.add_theme_color_override("font_color", Color(CLR_MAGENTA, 0.72))
 	box.add_child(note)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	box.add_child(grid)
-	settings_music_slider = _make_settings_slider_row(grid, "MUSIC")
-	settings_sfx_slider = _make_settings_slider_row(grid, "SOUNDS")
-	settings_particles_button = _make_settings_toggle_row(grid, "PARTICLES")
-	settings_shake_button = _make_settings_toggle_row(grid, "SCREEN SHAKE")
+	submenu_settings_grid = GridContainer.new()
+	submenu_settings_grid.columns = 2
+	submenu_settings_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	submenu_settings_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	submenu_settings_grid.add_theme_constant_override("h_separation", 8)
+	submenu_settings_grid.add_theme_constant_override("v_separation", 8)
+	box.add_child(submenu_settings_grid)
+	settings_music_slider = _make_settings_slider_row(submenu_settings_grid, "MUSIC")
+	settings_sfx_slider = _make_settings_slider_row(submenu_settings_grid, "SOUNDS")
+	settings_particles_button = _make_settings_toggle_row(submenu_settings_grid, "PARTICLES")
+	settings_shake_button = _make_settings_toggle_row(submenu_settings_grid, "SCREEN SHAKE")
 	settings_music_slider.value_changed.connect(func(value: float) -> void:
 		var target := legacy.get_node_or_null("%MusicSlider") as HSlider
 		if target != null:
@@ -1465,6 +1500,7 @@ func _populate_settings_submenu() -> void:
 		_sync_v2_settings_from_legacy()
 	)
 	_sync_v2_settings_from_legacy()
+	_layout_submenu_frame()
 
 func _make_settings_slider_row(parent: Container, label_text: String) -> HSlider:
 	var panel := PanelContainer.new()
