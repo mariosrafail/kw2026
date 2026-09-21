@@ -18,6 +18,7 @@ Run `build_windows.cmd` to rebuild it after changing `app.py`.
    - Batch filenames must contain `front`, `back`, `right`, `left`, `top`, and `bottom`.
    - Imported images are converted to RGBA and resized to 64x64 with nearest-neighbor scaling when needed.
    - PNG alpha and RGB colors are preserved by default. The optional near-white-to-transparent toggle is intended for old references with white backgrounds.
+   - Faces are reconstructed exactly in the orientation shown in the editor. The builder does not silently mirror `BACK` / `LEFT` or flip `BOTTOM`; use the visible **FLIP H/V** controls only when a source image actually needs it.
 4. Press **EXPORT TO BLOCKBENCH**.
 5. The app generates:
    - a `.bbmodel`

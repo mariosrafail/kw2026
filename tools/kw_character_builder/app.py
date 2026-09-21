@@ -777,24 +777,27 @@ class CharacterBuilderApp(tk.Tk):
 
     @staticmethod
     def _mapped_alpha(alpha: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        # Treat every editor face exactly as it is drawn/imported. Older builds
+        # silently mirrored BACK/LEFT and flipped BOTTOM, which made matching
+        # six-view PNG sets diverge during reconstruction.
         return {
             "front": alpha["front"][::-1, :][:, None, :],
-            "back": alpha["back"][::-1, ::-1][:, None, :],
+            "back": alpha["back"][::-1, :][:, None, :],
             "right": alpha["right"][::-1, :][:, :, None],
-            "left": alpha["left"][::-1, ::-1][:, :, None],
+            "left": alpha["left"][::-1, :][:, :, None],
             "top": alpha["top"][None, :, :],
-            "bottom": alpha["bottom"][::-1, :][None, :, :],
+            "bottom": alpha["bottom"][None, :, :],
         }
 
     @staticmethod
     def _mapped_color(packed: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
         return {
             "front": packed["front"][::-1, :][:, None, :],
-            "back": packed["back"][::-1, ::-1][:, None, :],
+            "back": packed["back"][::-1, :][:, None, :],
             "right": packed["right"][::-1, :][:, :, None],
-            "left": packed["left"][::-1, ::-1][:, :, None],
+            "left": packed["left"][::-1, :][:, :, None],
             "top": packed["top"][None, :, :],
-            "bottom": packed["bottom"][::-1, :][None, :, :],
+            "bottom": packed["bottom"][None, :, :],
         }
 
     def _visual_hull(self, part_id: str):
@@ -913,11 +916,11 @@ class CharacterBuilderApp(tk.Tk):
     def _mapped_pixel(face: str, x: int, y: int, z: int) -> Tuple[int, int]:
         sy = SIZE - 1 - y
         if face == "front": return x, sy
-        if face == "back": return SIZE - 1 - x, sy
+        if face == "back": return x, sy
         if face == "right": return z, sy
-        if face == "left": return SIZE - 1 - z, sy
+        if face == "left": return z, sy
         if face == "top": return x, z
-        return x, SIZE - 1 - z
+        return x, z
 
     def _atlas_uv_for_face(self, part_index: int, part_id: str, face: str, x: int, y: int, z: int) -> Tuple[int, int]:
         image = self.store.images[part_id][face]
