@@ -1207,7 +1207,11 @@ class CuboidEditorWindow(tk.Toplevel):
             bg="#7a1b62", fg="white", font=("Consolas", 9, "bold"),
         ).pack(side="left", padx=3)
         self.owner._button(
-            source_bar, "FROM 6 VIEWS", self._from_six_views,
+            source_bar, "SMART HEAD SHEET", self._smart_head_sheet_dialog,
+            bg="#0d7785", fg="white", font=("Consolas", 9, "bold"),
+        ).pack(side="left", padx=3)
+        self.owner._button(
+            source_bar, "VOXEL 6 VIEWS", self._from_six_views,
             bg="#15576c", fg="white", font=("Consolas", 9, "bold"),
         ).pack(side="left", padx=3)
         self.owner._button(
@@ -1553,6 +1557,470 @@ class CuboidEditorWindow(tk.Toplevel):
                 img = None
             out.append(img)
         return out
+
+    @staticmethod
+    def _smart_mask_components(mask: np.ndarray) -> List[Tuple[int, int, int, int, int]]:
+        """Return 4-connected component bboxes as (area, x0, y0, x1_excl, y1_excl)."""
+        h, w = mask.shape
+        visited = np.zeros_like(mask, dtype=bool)
+        found: List[Tuple[int, int, int, int, int]] = []
+        for y in range(h):
+            for x in range(w):
+                if not mask[y, x] or visited[y, x]:
+                    continue
+                stack = [(y, x)]
+                visited[y, x] = True
+                area = 0
+                min_x = max_x = x
+                min_y = max_y = y
+                while stack:
+                    cy, cx = stack.pop()
+                    area += 1
+                    min_x = min(min_x, cx)
+                    max_x = max(max_x, cx)
+                    min_y = min(min_y, cy)
+                    max_y = max(max_y, cy)
+                    for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        ny, nx = cy + dy, cx + dx
+                        if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not visited[ny, nx]:
+                            visited[ny, nx] = True
+                            stack.append((ny, nx))
+                found.append((area, min_x, min_y, max_x + 1, max_y + 1))
+        return found
+
+    @staticmethod
+    def _smart_row_rects(mask: np.ndarray) -> List[Tuple[int, int, int, int]]:
+        """Compress identical horizontal runs across rows into 2D rectangles."""
+        h, _w = mask.shape
+        rows: List[Tuple[int, Tuple[Tuple[int, int], ...]]] = []
+        for y in range(h):
+            xs = np.flatnonzero(mask[y])
+            if xs.size == 0:
+                continue
+            runs: List[Tuple[int, int]] = []
+            start = prev = int(xs[0])
+            for raw_x in xs[1:]:
+                x = int(raw_x)
+                if x == prev + 1:
+                    prev = x
+                else:
+                    runs.append((start, prev + 1))
+                    start = prev = x
+            runs.append((start, prev + 1))
+            rows.append((y, tuple(runs)))
+
+        rects: List[Tuple[int, int, int, int]] = []
+        if not rows:
+            return rects
+        start_y = prev_y = rows[0][0]
+        current_runs = rows[0][1]
+        for y, runs in rows[1:]:
+            if y == prev_y + 1 and runs == current_runs:
+                prev_y = y
+                continue
+            for x0, x1 in current_runs:
+                rects.append((x0, start_y, x1, prev_y + 1))
+            start_y = prev_y = y
+            current_runs = runs
+        for x0, x1 in current_runs:
+            rects.append((x0, start_y, x1, prev_y + 1))
+        return rects
+
+    @staticmethod
+    def _smart_row_span_rects(mask: np.ndarray) -> List[Tuple[int, int, int, int]]:
+        """Treat non-background detail holes as part of the base head silhouette."""
+        filled = np.zeros_like(mask, dtype=bool)
+        for y in range(mask.shape[0]):
+            xs = np.flatnonzero(mask[y])
+            if xs.size:
+                filled[y, int(xs.min()):int(xs.max()) + 1] = True
+        return CuboidEditorWindow._smart_row_rects(filled)
+
+    @staticmethod
+    def _smart_color_mask(arr: np.ndarray, rgb: Tuple[int, int, int], tolerance: int = 8) -> np.ndarray:
+        target = np.asarray(rgb, dtype=np.int16)
+        delta = np.abs(arr[..., :3].astype(np.int16) - target)
+        return (arr[..., 3] > 8) & (delta.max(axis=2) <= tolerance)
+
+    @staticmethod
+    def _smart_bbox(mask: np.ndarray) -> Tuple[int, int, int, int]:
+        ys, xs = np.where(mask)
+        if xs.size == 0:
+            raise ValueError("Empty silhouette.")
+        return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+
+    @staticmethod
+    def _smart_interval(start: float, end: float, center: float, unit: float) -> Tuple[float, float]:
+        width = max(1, int(round((end - start) / max(unit, 1e-6))))
+        center_units = round((((start + end) * 0.5 - center) / max(unit, 1e-6)) * 2.0) / 2.0
+        return center_units - width / 2.0, center_units + width / 2.0
+
+    @staticmethod
+    def _smart_faces(texture_index: int, uv: List[int]) -> dict:
+        return {
+            face: {"uv": list(uv), "texture": texture_index}
+            for face in CuboidEditorWindow.FACE_KEYS
+        }
+
+    @staticmethod
+    def _smart_cube(name: str, frm: List[float], to: List[float], uv: List[int], anchor: List[float]) -> dict:
+        return {
+            "name": name,
+            "box_uv": False,
+            "render_order": "default",
+            "locked": False,
+            "export": True,
+            "scope": 0,
+            "allow_mirror_modeling": True,
+            "from": [float(v) for v in frm],
+            "to": [float(v) for v in to],
+            "autouv": 0,
+            "origin": list(anchor),
+            "faces": CuboidEditorWindow._smart_faces(0, uv),
+            "type": "cube",
+            "uuid": str(uuid.uuid4()),
+        }
+
+    @staticmethod
+    def _smart_estimate_unit(
+        front_body_rects: List[Tuple[int, int, int, int]],
+        right_body_rects: List[Tuple[int, int, int, int]],
+        detail_rects: List[Tuple[int, int, int, int]],
+        front_bbox: Tuple[int, int, int, int],
+    ) -> float:
+        fx0, fy0, fx1, fy1 = front_bbox
+        body_w = fx1 - fx0
+        body_h = fy1 - fy0
+        threshold = max(2.0, min(body_w, body_h) * 0.03)
+        candidates: List[float] = []
+        for rects in (front_body_rects, right_body_rects):
+            if not rects:
+                continue
+            widest = max(r[2] - r[0] for r in rects)
+            for x0, y0, x1, y1 in rects:
+                h = y1 - y0
+                w = x1 - x0
+                if threshold <= h <= body_h * 0.35:
+                    candidates.append(float(h))
+                inset = (widest - w) * 0.5
+                if threshold <= inset <= body_w * 0.35:
+                    candidates.append(float(inset))
+        for x0, y0, x1, y1 in detail_rects:
+            for value in (x1 - x0, y1 - y0):
+                if threshold <= value <= max(body_w, body_h) * 0.40:
+                    candidates.append(float(value))
+        if not candidates:
+            return max(1.0, body_h / 8.0)
+        smallest = min(candidates)
+        cluster = [v for v in candidates if v <= smallest * 1.30]
+        return float(sum(cluster) / len(cluster))
+
+    @staticmethod
+    def _smart_palette(colors: List[Tuple[int, int, int]]) -> Tuple[Image.Image, Dict[Tuple[int, int, int], List[int]]]:
+        palette = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(palette)
+        uv_by_color: Dict[Tuple[int, int, int], List[int]] = {}
+        for index, rgb in enumerate(colors[:16]):
+            col = index % 4
+            row = index // 4
+            x0, y0 = col * 4, row * 4
+            draw.rectangle((x0, y0, x0 + 3, y0 + 3), fill=tuple(rgb) + (255,))
+            uv_by_color[rgb] = [x0, y0, x0 + 4, y0 + 4]
+        return palette, uv_by_color
+
+    @staticmethod
+    def _smart_sheet_views(image: Image.Image) -> Tuple[Dict[str, np.ndarray], Tuple[int, int, int]]:
+        rgba = np.asarray(image.convert("RGBA"), dtype=np.uint8)
+        corners = np.asarray([
+            rgba[0, 0, :3],
+            rgba[0, -1, :3],
+            rgba[-1, 0, :3],
+            rgba[-1, -1, :3],
+        ], dtype=np.int16)
+        background = tuple(int(v) for v in np.median(corners, axis=0))
+        bg_delta = np.abs(rgba[..., :3].astype(np.int16) - np.asarray(background, dtype=np.int16))
+        foreground = (rgba[..., 3] > 8) & (bg_delta.max(axis=2) > 8)
+        components = CuboidEditorWindow._smart_mask_components(foreground)
+        if len(components) < 3:
+            raise ValueError(
+                "SMART HEAD SHEET needs three separated views on one flat background: FRONT, RIGHT, BACK."
+            )
+        largest = sorted(components, key=lambda item: item[0], reverse=True)[:3]
+        largest.sort(key=lambda item: item[1])
+        views: Dict[str, np.ndarray] = {}
+        for face, (_area, x0, y0, x1, y1) in zip(("front", "right", "back"), largest):
+            crop = rgba[y0:y1, x0:x1].copy()
+            delta = np.abs(crop[..., :3].astype(np.int16) - np.asarray(background, dtype=np.int16))
+            crop[(crop[..., 3] <= 8) | (delta.max(axis=2) <= 8), 3] = 0
+            views[face] = crop
+        return views, background
+
+    def _smart_model_from_sheet(self, image: Image.Image) -> Tuple[dict, dict]:
+        views, background = self._smart_sheet_views(image)
+        front = views["front"]
+        right = views["right"]
+
+        pixels = []
+        for arr in views.values():
+            mask = arr[..., 3] > 8
+            if mask.any():
+                pixels.append(arr[..., :3][mask])
+        if not pixels:
+            raise ValueError("No head pixels were found after removing the background.")
+        all_rgb = np.concatenate(pixels, axis=0)
+        unique, counts = np.unique(all_rgb, axis=0, return_counts=True)
+        order = np.argsort(counts)[::-1]
+        main_color = tuple(int(v) for v in unique[order[0]])
+
+        main_front = self._smart_color_mask(front, main_color)
+        main_right = self._smart_color_mask(right, main_color)
+        if not main_front.any() or not main_right.any():
+            raise ValueError("Could not find the main head color in both FRONT and RIGHT views.")
+
+        front_body_rects = self._smart_row_span_rects(main_front)
+        right_body_rects = self._smart_row_span_rects(main_right)
+        front_bbox = self._smart_bbox(main_front)
+        right_bbox = self._smart_bbox(main_right)
+
+        front_fg_count = int((front[..., 3] > 8).sum())
+        color_threshold = max(4, int(front_fg_count * 0.001))
+        detail_colors: List[Tuple[int, int, int]] = []
+        detail_rects_all: List[Tuple[int, int, int, int]] = []
+        for raw_index in order:
+            rgb = tuple(int(v) for v in unique[raw_index])
+            if rgb == main_color or int(counts[raw_index]) < color_threshold:
+                continue
+            if max(abs(rgb[i] - main_color[i]) for i in range(3)) <= 12:
+                continue
+            if any(max(abs(rgb[i] - existing[i]) for i in range(3)) <= 12 for existing in detail_colors):
+                continue
+            front_mask = self._smart_color_mask(front, rgb)
+            if not front_mask.any():
+                continue
+            detail_colors.append(rgb)
+            for _area, cx0, cy0, cx1, cy1 in self._smart_mask_components(front_mask):
+                component_mask = np.zeros_like(front_mask, dtype=bool)
+                component_mask[cy0:cy1, cx0:cx1] = front_mask[cy0:cy1, cx0:cx1]
+                detail_rects_all.extend(self._smart_row_rects(component_mask))
+            if len(detail_colors) >= 15:
+                break
+
+        unit = self._smart_estimate_unit(
+            front_body_rects,
+            right_body_rects,
+            detail_rects_all,
+            front_bbox,
+        )
+        fx0, fy0, fx1, fy1 = front_bbox
+        rx0, ry0, rx1, ry1 = right_bbox
+        front_cx = (fx0 + fx1) * 0.5
+        front_cy = (fy0 + fy1) * 0.5
+        right_cx = (rx0 + rx1) * 0.5
+        anchor = [0.0, 40.0, 0.0]
+
+        palette_colors = [main_color] + detail_colors
+        palette, uv_by_color = self._smart_palette(palette_colors)
+        elements: List[dict] = []
+        base_ids: List[str] = []
+        detail_ids: List[str] = []
+
+        def row_span_for_right(relative_y: float) -> Tuple[int, int]:
+            sample_y = int(round(ry0 + relative_y * max(1, ry1 - ry0 - 1)))
+            sample_y = max(0, min(right.shape[0] - 1, sample_y))
+            for radius in range(0, max(2, right.shape[0] // 8) + 1):
+                for y in ({sample_y} if radius == 0 else {sample_y - radius, sample_y + radius}):
+                    if not (0 <= y < right.shape[0]):
+                        continue
+                    xs = np.flatnonzero(main_right[y])
+                    if xs.size:
+                        return int(xs.min()), int(xs.max()) + 1
+            return rx0, rx1
+
+        for index, (x0, y0, x1, y1) in enumerate(front_body_rects, 1):
+            wx0, wx1 = self._smart_interval(x0, x1, front_cx, unit)
+            wy0_local, wy1_local = self._smart_interval(y0, y1, front_cy, unit)
+            relative_y = (((y0 + y1) * 0.5) - fy0) / max(1.0, fy1 - fy0)
+            sx0, sx1 = row_span_for_right(relative_y)
+            sz0_local, sz1_local = self._smart_interval(sx0, sx1, right_cx, unit)
+            frm = [
+                anchor[0] + wx0,
+                anchor[1] - wy1_local,
+                anchor[2] - sz1_local,
+            ]
+            to = [
+                anchor[0] + wx1,
+                anchor[1] - wy0_local,
+                anchor[2] - sz0_local,
+            ]
+            element = self._smart_cube(
+                f"Head_Base_{index:02d}",
+                frm,
+                to,
+                uv_by_color[main_color],
+                anchor,
+            )
+            elements.append(element)
+            base_ids.append(element["uuid"])
+
+        widest_right_x1 = max(r[2] for r in right_body_rects) if right_body_rects else rx1
+        widest_right_x0 = min(r[0] for r in right_body_rects) if right_body_rects else rx0
+        _body_back_local, body_front_local = self._smart_interval(
+            widest_right_x0,
+            widest_right_x1,
+            right_cx,
+            unit,
+        )
+        default_front_z = anchor[2] - body_front_local
+
+        detail_counter = 0
+        for detail_color in detail_colors:
+            front_mask = self._smart_color_mask(front, detail_color)
+            right_mask = self._smart_color_mask(right, detail_color)
+            if right_mask.any():
+                dzx0, _dzy0, dzx1, _dzy1 = self._smart_bbox(right_mask)
+                dz0_local, dz1_local = self._smart_interval(dzx0, dzx1, right_cx, unit)
+                detail_z0 = anchor[2] - dz1_local
+                detail_z1 = anchor[2] - dz0_local
+            else:
+                detail_z0 = default_front_z - 1.0
+                detail_z1 = default_front_z
+
+            for area, cx0, cy0, cx1, cy1 in self._smart_mask_components(front_mask):
+                if area < max(2, int(unit * unit * 0.20)):
+                    continue
+                component = np.zeros_like(front_mask, dtype=bool)
+                component[cy0:cy1, cx0:cx1] = front_mask[cy0:cy1, cx0:cx1]
+                for x0, y0, x1, y1 in self._smart_row_rects(component):
+                    detail_counter += 1
+                    wx0, wx1 = self._smart_interval(x0, x1, front_cx, unit)
+                    wy0_local, wy1_local = self._smart_interval(y0, y1, front_cy, unit)
+                    element = self._smart_cube(
+                        f"Detail_{detail_color[0]:02X}{detail_color[1]:02X}{detail_color[2]:02X}_{detail_counter:02d}",
+                        [anchor[0] + wx0, anchor[1] - wy1_local, detail_z0],
+                        [anchor[0] + wx1, anchor[1] - wy0_local, detail_z1],
+                        uv_by_color[detail_color],
+                        anchor,
+                    )
+                    elements.append(element)
+                    detail_ids.append(element["uuid"])
+
+        if not elements:
+            raise ValueError("Smart cuboid inference did not produce any geometry.")
+
+        texture_uuid = str(uuid.uuid4())
+        texture = {
+            "name": "Smart_Head_Palette.png",
+            "path": "",
+            "folder": "",
+            "namespace": "",
+            "id": "0",
+            "group": "",
+            "scope": 0,
+            "width": 16,
+            "height": 16,
+            "uv_width": 16,
+            "uv_height": 16,
+            "particle": False,
+            "use_as_default": True,
+            "layers_enabled": False,
+            "sync_to_project": "",
+            "file_format": "png",
+            "render_mode": "default",
+            "render_sides": "auto",
+            "wrap_mode": "limited",
+            "pbr_channel": "color",
+            "fps": 7,
+            "frame_time": 1,
+            "frame_order_type": "loop",
+            "frame_order": "",
+            "frame_interpolate": False,
+            "visible": True,
+            "internal": True,
+            "saved": True,
+            "uuid": texture_uuid,
+            "source": image_to_data_uri(palette),
+        }
+
+        root_uuid = str(uuid.uuid4())
+        base_uuid = str(uuid.uuid4())
+        detail_uuid = str(uuid.uuid4())
+        groups = [
+            CharacterBuilderApp._group_record("SMART_HEAD", root_uuid, anchor),
+            CharacterBuilderApp._group_record("Head_Base", base_uuid, anchor),
+            CharacterBuilderApp._group_record("Details", detail_uuid, anchor),
+        ]
+        root_children = [{
+            "uuid": base_uuid,
+            "isOpen": True,
+            "name": "Head_Base",
+            "origin": anchor,
+            "export": True,
+            "children": base_ids,
+        }]
+        if detail_ids:
+            root_children.append({
+                "uuid": detail_uuid,
+                "isOpen": True,
+                "name": "Details",
+                "origin": anchor,
+                "export": True,
+                "children": detail_ids,
+            })
+        model = {
+            "meta": {"format_version": "5.0", "model_format": "free", "box_uv": False},
+            "name": "Smart_Head_From_Sheet",
+            "model_identifier": "kw.smart.head.sheet",
+            "resolution": {"width": 16, "height": 16},
+            "elements": elements,
+            "groups": groups,
+            "outliner": [{
+                "uuid": root_uuid,
+                "isOpen": True,
+                "name": "SMART_HEAD",
+                "origin": anchor,
+                "export": True,
+                "children": root_children,
+            }],
+            "textures": [texture],
+        }
+        info = {
+            "background": background,
+            "main_color": main_color,
+            "detail_colors": detail_colors,
+            "unit": unit,
+            "cuboids": len(elements),
+        }
+        return model, info
+
+    def _smart_head_sheet_dialog(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="Smart Head Sheet — FRONT / RIGHT / BACK",
+            filetypes=[("PNG", "*.png"), ("Images", "*.png;*.jpg;*.jpeg;*.webp")],
+        )
+        if not path:
+            return
+        temp_path = Path(tempfile.gettempdir()) / f"kwcb_smart_{uuid.uuid4().hex[:10]}.bbmodel"
+        try:
+            with Image.open(path) as source:
+                image = source.convert("RGBA")
+            model, info = self._smart_model_from_sheet(image)
+            temp_path.write_text(json.dumps(model, separators=(",", ":")), encoding="utf-8")
+            self._load_model(temp_path)
+            self.source_path = Path(path).with_name(Path(path).stem + "_smart_head.bbmodel")
+            main = info["main_color"]
+            self._set_status(
+                f"SMART HEAD // {info['cuboids']} clean cuboids // "
+                f"base #{main[0]:02X}{main[1]:02X}{main[2]:02X} // "
+                f"grid~{info['unit']:.1f}px // edit if needed, then EXPORT"
+            )
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Could not build smart head from sheet:\n{exc}", parent=self)
+        finally:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     def _from_six_views(self) -> None:
         temp_dir = Path(tempfile.gettempdir())

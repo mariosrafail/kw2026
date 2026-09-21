@@ -35,8 +35,9 @@ The standalone app supports PNG import/export per face, six-face batch PNG impor
 The six-view reconstruction is intended as a starting point, not as the final source of truth. The real current Outrage head is authored as 17 explicit Blockbench cuboids, so the app now includes a **3D BLOCK EDITOR** for finishing the shape manually.
 
 - **CURRENT OUTRAGE HEAD** loads the `Outrage_Head` subtree from the active player source: `art_source/blockbench/outrage/Outrage_FullBody_v11_slimmer_body_foot.bbmodel`.
+- **SMART HEAD SHEET** is the preferred workflow for new simple block heads. Give it one flat-background image containing `FRONT`, `RIGHT`, `BACK` from left to right. It removes the background automatically, detects the base head color and details, infers a shared pixel grid, turns stepped silhouettes into a few clean cuboids, and uses the right view for actual depth/protrusion. This is the workflow used to reproduce the approved Erebus head.
 - The built Windows EXE also bundles that source template, so the current-head button remains available outside the repo.
-- **FROM 6 VIEWS** reconstructs only the currently selected body part and loads the resulting cuboids into the editor.
+- **VOXEL 6 VIEWS** keeps the older visual-hull reconstruction as a fallback and loads only the currently selected body part.
 - **LOAD .BBMODEL** can load another cuboid-based Blockbench model.
 - Left click selects a cuboid. Right-drag orbits the camera. The mouse wheel zooms.
 - Selected blocks can be renamed, resized by editing `FROM X/Y/Z` and `TO X/Y/Z`, moved along each axis, duplicated, added, or deleted.
