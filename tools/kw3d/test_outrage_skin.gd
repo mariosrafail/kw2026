@@ -52,16 +52,27 @@ func run() -> void:
 	OUTRAGE_SKINS.apply(neon, 2)
 	check(str(neon.get_meta("warrior_skin_name", "")) == "NEON", "neon_skin_metadata")
 	check(color_matches(mesh_plain_color(neon, "HeadRig/Head_Solid"), OUTRAGE_SKINS.NEON_BODY), "neon_head_green")
+	check(color_matches(mesh_plain_color(neon, "HeadRig/Front_Panel"), OUTRAGE_SKINS.NEON_BODY), "neon_front_panel_green")
+	check(color_matches(mesh_plain_color(neon, "HeadRig/Left_Panel"), OUTRAGE_SKINS.NEON_BODY), "neon_left_panel_green")
+	check(color_matches(mesh_plain_color(neon, "HeadRig/Right_Panel"), OUTRAGE_SKINS.NEON_BODY), "neon_right_panel_green")
 	check(color_matches(mesh_plain_color(neon, "TorsoRig/Torso_Upper"), OUTRAGE_SKINS.NEON_BODY), "neon_torso_green")
 	check(color_matches(mesh_plain_color(neon, "HeadRig/Horn_Left_Root"), OUTRAGE_SKINS.NEON_HORN), "neon_left_horn_yellow")
 	check(color_matches(mesh_plain_color(neon, "HeadRig/Horn_Right_Tip"), OUTRAGE_SKINS.NEON_HORN), "neon_right_horn_yellow")
 	check(color_matches(mesh_plain_color(neon, "HeadRig/Eye_Left"), OUTRAGE_SKINS.NEON_EYE), "neon_left_eye_black")
 	check(color_matches(mesh_plain_color(neon, "HeadRig/Eye_Right"), OUTRAGE_SKINS.NEON_EYE), "neon_right_eye_black")
 	var neon_body_material := (neon.get_node("TorsoRig/Torso_Upper") as MeshInstance3D).get_meta("plain_material") as StandardMaterial3D
-	check(neon_body_material != null and neon_body_material.emission_enabled and neon_body_material.emission_energy_multiplier >= 3.0, "neon_body_emissive")
+	check(
+		neon_body_material != null
+		and neon_body_material.emission_enabled
+		and neon_body_material.emission_energy_multiplier >= 1.5
+		and neon_body_material.emission_energy_multiplier <= 2.0,
+		"neon_body_emissive_soft"
+	)
 	var neon_horn_y := (neon.get_node("HeadRig/Horn_Left_Root") as MeshInstance3D).position.y
 	check(absf((neon_horn_y - baseline_horn_y) - OUTRAGE_SKINS.HORN_RAISE_3PX) < 0.001, "neon_horns_three_pixels_higher")
+	check(neon.get_node_or_null("NeonHeadGlow") is OmniLight3D, "neon_head_light")
 	check(neon.get_node_or_null("NeonBodyGlow") is OmniLight3D, "neon_body_light")
+	check(neon.get_node_or_null("NeonLowerGlow") is OmniLight3D, "neon_lower_light")
 	check(neon.get_node_or_null("NeonHornGlow") is OmniLight3D, "neon_horn_light")
 	neon.free()
 
@@ -103,7 +114,9 @@ func run() -> void:
 		check(eye_mat != null and color_matches(eye_mat.albedo_color, OUTRAGE_SKINS.NEON_EYE), "showroom_black_eye")
 		check(body_mat != null and color_matches(body_mat.albedo_color, OUTRAGE_SKINS.NEON_BODY), "showroom_neon_green_body")
 		check(body_mat != null and body_mat.emission_enabled, "showroom_body_emission")
+		check(showroom_model.get_node_or_null("NeonHeadGlow") is OmniLight3D, "showroom_head_light")
 		check(showroom_model.get_node_or_null("NeonBodyGlow") is OmniLight3D, "showroom_neon_light")
+		check(showroom_model.get_node_or_null("NeonLowerGlow") is OmniLight3D, "showroom_lower_light")
 
 	menu._launch_offline_waves()
 	var stage: Variant = null
@@ -122,7 +135,10 @@ func run() -> void:
 		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Horn_Left_Root"), OUTRAGE_SKINS.NEON_HORN), "offline_yellow_horn")
 		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Eye_Left"), OUTRAGE_SKINS.NEON_EYE), "offline_black_eye")
 		check(color_matches(mesh_plain_color(stage.head_style, "TorsoRig/Torso_Upper"), OUTRAGE_SKINS.NEON_BODY), "offline_neon_body")
+		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Front_Panel"), OUTRAGE_SKINS.NEON_BODY), "offline_neon_head_panel")
+		check(stage.head_style.get_node_or_null("NeonHeadGlow") is OmniLight3D, "offline_neon_head_light")
 		check(stage.head_style.get_node_or_null("NeonBodyGlow") is OmniLight3D, "offline_neon_body_light")
+		check(stage.head_style.get_node_or_null("NeonLowerGlow") is OmniLight3D, "offline_neon_lower_light")
 
 	ProjectSettings.set_setting("kw3d/selected_warrior_id", old_warrior)
 	ProjectSettings.set_setting("kw3d/selected_outrage_skin", old_skin)

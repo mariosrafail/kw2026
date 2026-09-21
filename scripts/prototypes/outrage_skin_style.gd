@@ -13,7 +13,7 @@ const VOID_PANEL := Color("17181d")
 const VOID_HORN := Color("b31cff")
 const VOID_EYE := Color("ffffff")
 const NEON_BODY := Color("20ff00")
-const NEON_PANEL := Color("0a350d")
+const NEON_PANEL := Color("12b800")
 const NEON_HORN := Color("f4ff00")
 const NEON_EYE := Color("050505")
 const HORN_RAISE_3PX := 0.21
@@ -66,7 +66,11 @@ static func _color_for_part(part_name: String, skin_id: int) -> Color:
 			return NEON_HORN
 		if part_name.begins_with("Eye_"):
 			return NEON_EYE
-		if part_name in ["Front_Panel", "Back_Panel", "Left_Panel", "Right_Panel", "Torso_Step", "Torso_Tip"]:
+		# The head panels make up most of the visible shell.  Keep them bright
+		# green so the head never reads as black under the comic/menu lighting.
+		if part_name in ["Front_Panel", "Back_Panel", "Left_Panel", "Right_Panel"]:
+			return NEON_BODY
+		if part_name in ["Torso_Step", "Torso_Tip"]:
 			return NEON_PANEL
 		return NEON_BODY
 	if part_name.begins_with("Horn_"):
@@ -91,7 +95,7 @@ static func _apply_color(mesh: MeshInstance3D, color: Color, skin_id: int) -> vo
 	if skin_id == 2 and color != NEON_EYE:
 		plain.emission_enabled = true
 		plain.emission = color
-		plain.emission_energy_multiplier = 3.4 if color == NEON_BODY else 2.7
+		plain.emission_energy_multiplier = 1.85 if color == NEON_BODY else (1.55 if color == NEON_PANEL else 1.70)
 	elif color == VOID_HORN:
 		plain.emission_enabled = true
 		plain.emission = color
@@ -122,19 +126,38 @@ static func _apply_color(mesh: MeshInstance3D, color: Color, skin_id: int) -> vo
 
 
 static func _add_neon_lights(model: Node3D) -> void:
+	var head_light := OmniLight3D.new()
+	head_light.name = "NeonHeadGlow"
+	head_light.position = Vector3(0.0, 1.02, -0.04)
+	head_light.light_color = NEON_BODY
+	head_light.light_energy = 0.82
+	head_light.omni_range = 2.05
+	head_light.shadow_enabled = false
+	model.add_child(head_light)
+
 	var body_light := OmniLight3D.new()
 	body_light.name = "NeonBodyGlow"
-	body_light.position = Vector3(0.0, -0.15, 0.10)
+	body_light.position = Vector3(0.0, -0.15, 0.08)
 	body_light.light_color = NEON_BODY
-	body_light.light_energy = 2.2
-	body_light.omni_range = 3.4
+	body_light.light_energy = 0.95
+	body_light.omni_range = 2.55
 	body_light.shadow_enabled = false
 	model.add_child(body_light)
+
+	var lower_light := OmniLight3D.new()
+	lower_light.name = "NeonLowerGlow"
+	lower_light.position = Vector3(0.0, -1.18, 0.10)
+	lower_light.light_color = NEON_BODY
+	lower_light.light_energy = 0.62
+	lower_light.omni_range = 1.85
+	lower_light.shadow_enabled = false
+	model.add_child(lower_light)
+
 	var horn_light := OmniLight3D.new()
 	horn_light.name = "NeonHornGlow"
-	horn_light.position = Vector3(0.0, 1.30, 0.0)
+	horn_light.position = Vector3(0.0, 1.48, 0.0)
 	horn_light.light_color = NEON_HORN
-	horn_light.light_energy = 1.65
-	horn_light.omni_range = 2.6
+	horn_light.light_energy = 0.52
+	horn_light.omni_range = 1.75
 	horn_light.shadow_enabled = false
 	model.add_child(horn_light)
