@@ -5,6 +5,7 @@ extends Control
 
 const LEGACY_SCENE := preload("res://scenes/ui/main_menu_legacy.tscn")
 const OUTRAGE_SCENE := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
+const EREBUS_SCENE := preload("res://scenes/prototypes/characters/erebus_fullbody.tscn")
 const HERO_MATERIALS := preload("res://scripts/ui/main_menu/menu_hero_materials.gd")
 const CITY_STAGE := preload("res://scripts/ui/main_menu/menu_city_stage.gd")
 const WEAPON_SHOWROOM := preload("res://scripts/ui/main_menu/menu_weapon_showroom.gd")
@@ -32,6 +33,8 @@ var hero_camera: Camera3D
 var hero_surface: TextureRect
 var hero_panel: Control
 var main_rail: Panel
+var hero_tag: Label
+var hero_strap: Label
 
 var submenu_layer: Control
 var submenu_panel: PanelContainer
@@ -56,6 +59,7 @@ var showroom_yaw := -0.38
 var showroom_pitch := -0.05
 var selected_showroom_weapon := "ak47"
 var selected_kar_skin := 0
+var selected_showroom_warrior := "outrage"
 
 var settings_music_slider: HSlider
 var settings_sfx_slider: HSlider
@@ -96,6 +100,7 @@ func _ready() -> void:
 	set_process(true)
 
 func _finish_setup() -> void:
+	_sync_selected_warrior_from_legacy()
 	_sync_presentation_visibility()
 	if play_button != null and presentation.visible:
 		play_button.grab_focus()
@@ -298,12 +303,12 @@ func _build_left_panel() -> void:
 	online.add_theme_constant_override("letter_spacing", 4)
 	box.add_child(online)
 
-	var strap := Label.new()
-	strap.text = "OUTRAGE // LIVE COMBAT SYSTEM"
-	strap.add_theme_font_override("font", PIXEL_FONT)
-	strap.add_theme_font_size_override("font_size", 8)
-	strap.add_theme_color_override("font_color", CLR_MUTED)
-	box.add_child(strap)
+	hero_strap = Label.new()
+	hero_strap.text = "OUTRAGE // LIVE COMBAT SYSTEM"
+	hero_strap.add_theme_font_override("font", PIXEL_FONT)
+	hero_strap.add_theme_font_size_override("font_size", 8)
+	hero_strap.add_theme_color_override("font_color", CLR_MUTED)
+	box.add_child(hero_strap)
 
 	var divider := ColorRect.new()
 	divider.custom_minimum_size = Vector2(0, 2)
@@ -466,26 +471,8 @@ func _build_hero_view() -> void:
 
 	CITY_STAGE.build(world)
 
-	hero = OUTRAGE_SCENE.instantiate() as Node3D
-	hero.name = "OutrageMenuHero"
-	# Detach the presentation instance's gameplay style before _ready can apply it.
-	hero.set_script(null)
-	HERO_MATERIALS.apply_to(hero)
-	hero.position = Vector3(-1.05, -0.34, 0.15)
-	hero.rotation_degrees.y = -11.0
-	hero.scale = Vector3.ONE * 1.16
-	world.add_child(hero)
-
-	hero_head = hero.get_node_or_null("HeadRig") as Node3D
-	hero_torso = hero.get_node_or_null("TorsoRig") as Node3D
-	hero_left_leg = hero.get_node_or_null("LeftLegRig") as Node3D
-	hero_right_leg = hero.get_node_or_null("RightLegRig") as Node3D
-	hero_base_position = hero.position
-	hero_base_rotation = hero.rotation
-	if hero_head != null: head_base_rotation = hero_head.rotation
-	if hero_torso != null: torso_base_rotation = hero_torso.rotation
-	if hero_left_leg != null: left_leg_base_rotation = hero_left_leg.rotation
-	if hero_right_leg != null: right_leg_base_rotation = hero_right_leg.rotation
+	selected_showroom_warrior = _current_warrior_id()
+	_set_main_menu_hero(world, selected_showroom_warrior)
 
 	hero_camera = Camera3D.new()
 	hero_camera.name = "HeroCamera"
@@ -519,7 +506,7 @@ void fragment() {
 	fade.material = fade_material
 	hero_panel_node.add_child(fade)
 
-	var hero_tag := Label.new()
+	hero_tag = Label.new()
 	hero_tag.anchor_left = 0.73
 	hero_tag.anchor_top = 0.87
 	hero_tag.anchor_right = 0.97
@@ -531,6 +518,7 @@ void fragment() {
 	hero_tag.add_theme_font_size_override("font_size",9)
 	hero_tag.add_theme_color_override("font_color",Color(CLR_TEXT,0.58))
 	hero_panel_node.add_child(hero_tag)
+	_update_selected_warrior_labels()
 
 func _resize_hero_viewport() -> void:
 	if hero_viewport == null or hero_surface == null or not hero_surface.is_inside_tree():
@@ -1396,17 +1384,17 @@ func _populate_warriors_submenu() -> void:
 	_clear_submenu_selector()
 	submenu_selector.add_theme_constant_override("separation", 7)
 	submenu_title.text = "WARRIORS // LIVE ROSTER"
-	var button := _make_submenu_button("OUTRAGE", CLR_MAGENTA, true)
-	button.name = "Warrior_Outrage"
-	submenu_selector.add_child(button)
-	var locked := Label.new()
-	locked.text = "\nMORE WARRIORS\n// LINK OFFLINE"
-	locked.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	locked.add_theme_font_override("font", PIXEL_FONT)
-	locked.add_theme_font_size_override("font_size", 7)
-	locked.add_theme_color_override("font_color", Color(CLR_MUTED, 0.45))
-	submenu_selector.add_child(locked)
-	_show_showroom_warrior()
+	selected_showroom_warrior = _current_warrior_id()
+	for warrior_id in ["outrage", "erebus"]:
+		var id := str(warrior_id)
+		var accent := CLR_MAGENTA if id == "outrage" else Color("df7126")
+		var button := _make_submenu_button(id.to_upper(), accent, id == selected_showroom_warrior)
+		button.name = "Warrior_%s" % id.capitalize()
+		button.pressed.connect(func() -> void:
+			_select_v2_warrior(id)
+		)
+		submenu_selector.add_child(button)
+	_show_showroom_warrior(selected_showroom_warrior)
 
 func _populate_settings_submenu() -> void:
 	submenu_title.text = "SETTINGS // SYSTEM CONTROL"
@@ -1600,12 +1588,13 @@ func _show_showroom_weapon(weapon_id: String) -> void:
 	var skin_line := "\n\nSKIN // %s" % WEAPON_SHOWROOM.skin_name("kar", selected_kar_skin) if weapon_id == "kar" else ""
 	submenu_info_body.text = "%s%s\n\n3D MODEL PREVIEW\n\nDRAG THE MODEL TO INSPECT IT FROM ANY ANGLE.\n\nLIVE GAMEPLAY LOADOUT // CURRENT BUILD" % [WEAPON_SHOWROOM.descriptor(weapon_id), skin_line]
 
-func _show_showroom_warrior() -> void:
+func _show_showroom_warrior(warrior_id: String) -> void:
+	var id := _normalize_warrior_id(warrior_id)
 	_clear_showroom()
 	showroom_root = Node3D.new()
-	showroom_root.name = "WarriorPreview_Outrage"
+	showroom_root.name = "WarriorPreview_%s" % id.capitalize()
 	showroom_world.add_child(showroom_root)
-	var model := OUTRAGE_SCENE.instantiate() as Node3D
+	var model := _warrior_scene(id).instantiate() as Node3D
 	model.set_script(null)
 	HERO_MATERIALS.apply_to(model)
 	model.position = Vector3(0, -1.28, 0)
@@ -1618,8 +1607,92 @@ func _show_showroom_warrior() -> void:
 	showroom_camera.look_at(Vector3(0, 0.58, 0), Vector3.UP)
 	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(showroom_root, "scale", Vector3.ONE, 0.26)
-	submenu_info_title.text = "OUTRAGE"
-	submenu_info_body.text = "WARRIOR 01\n\nSKILL // BOMB BLAST\n\nTHROWS AN EXPLOSIVE BOMB.\n\nMORE SKILLS AND WARRIORS WILL BE LINKED TO THE 3D ROSTER LATER."
+	if id == "erebus":
+		submenu_info_title.text = "EREBUS"
+		submenu_info_body.text = "WARRIOR 02\n\nBODY // ORANGE HEAVY FRAME\n\nSKILL // VOID GUARD\n\nSHORT IMMUNITY WINDOW TO SURVIVE BURST DAMAGE.\n\nSELECTED WARRIOR LOADS INTO OFFLINE 3D GAMEPLAY."
+	else:
+		submenu_info_title.text = "OUTRAGE"
+		submenu_info_body.text = "WARRIOR 01\n\nBODY // STREET ZERO FRAME\n\nSKILL // BOMB BLAST\n\nTHROWS AN EXPLOSIVE BOMB.\n\nSELECTED WARRIOR LOADS INTO OFFLINE 3D GAMEPLAY."
+
+func _normalize_warrior_id(warrior_id: String) -> String:
+	var id := warrior_id.strip_edges().to_lower()
+	return id if id in ["outrage", "erebus"] else "outrage"
+
+func _current_warrior_id() -> String:
+	if legacy != null:
+		var legacy_id := _normalize_warrior_id(str(legacy.get("selected_warrior_id")))
+		if legacy_id in ["outrage", "erebus"]:
+			return legacy_id
+	return _normalize_warrior_id(str(ProjectSettings.get_setting("kw3d/selected_warrior_id", "outrage")))
+
+func _warrior_scene(warrior_id: String) -> PackedScene:
+	return EREBUS_SCENE if _normalize_warrior_id(warrior_id) == "erebus" else OUTRAGE_SCENE
+
+func _set_main_menu_hero(parent: Node3D, warrior_id: String) -> void:
+	var id := _normalize_warrior_id(warrior_id)
+	if hero != null and is_instance_valid(hero):
+		var old_hero := hero
+		old_hero.get_parent().remove_child(old_hero)
+		old_hero.queue_free()
+	hero = _warrior_scene(id).instantiate() as Node3D
+	hero.name = "%sMenuHero" % id.capitalize()
+	# Detach the presentation instance's gameplay style before _ready can apply it.
+	hero.set_script(null)
+	HERO_MATERIALS.apply_to(hero)
+	hero.position = Vector3(-1.05, -0.34, 0.15)
+	hero.rotation_degrees.y = -11.0
+	hero.scale = Vector3.ONE * 1.16
+	parent.add_child(hero)
+	hero_head = hero.get_node_or_null("HeadRig") as Node3D
+	hero_torso = hero.get_node_or_null("TorsoRig") as Node3D
+	hero_left_leg = hero.get_node_or_null("LeftLegRig") as Node3D
+	hero_right_leg = hero.get_node_or_null("RightLegRig") as Node3D
+	hero_base_position = hero.position
+	hero_base_rotation = hero.rotation
+	head_base_rotation = hero_head.rotation if hero_head != null else Vector3.ZERO
+	torso_base_rotation = hero_torso.rotation if hero_torso != null else Vector3.ZERO
+	left_leg_base_rotation = hero_left_leg.rotation if hero_left_leg != null else Vector3.ZERO
+	right_leg_base_rotation = hero_right_leg.rotation if hero_right_leg != null else Vector3.ZERO
+
+func _update_selected_warrior_labels() -> void:
+	var id := _normalize_warrior_id(selected_showroom_warrior)
+	var display := id.to_upper()
+	if hero_tag != null:
+		hero_tag.text = "%s // SELECTED" % display
+	if hero_strap != null:
+		hero_strap.text = "%s // LIVE COMBAT SYSTEM" % display
+
+func _sync_selected_warrior_from_legacy() -> void:
+	selected_showroom_warrior = _current_warrior_id()
+	ProjectSettings.set_setting("kw3d/selected_warrior_id", selected_showroom_warrior)
+	if hero != null and is_instance_valid(hero):
+		_set_main_menu_hero(hero.get_parent() as Node3D, selected_showroom_warrior)
+	_update_selected_warrior_labels()
+
+func _select_v2_warrior(warrior_id: String) -> void:
+	var id := _normalize_warrior_id(warrior_id)
+	selected_showroom_warrior = id
+	ProjectSettings.set_setting("kw3d/selected_warrior_id", id)
+	if legacy != null:
+		var owned := legacy.get("owned_warriors") as PackedStringArray
+		if not owned.has(id):
+			owned.append(id)
+			legacy.set("owned_warriors", owned)
+		legacy.set("selected_warrior_id", id)
+		legacy.set("selected_warrior_skin", 0)
+		legacy.set("_pending_warrior_id", id)
+		legacy.set("_pending_warrior_skin", 0)
+		if legacy.has_method("_set_equipped_warrior_skin"):
+			legacy.call("_set_equipped_warrior_skin", id, 0)
+		if legacy.has_method("_save_state"):
+			legacy.call("_save_state")
+		if legacy.has_method("_sync_active_lobby_loadout_selection"):
+			legacy.call("_sync_active_lobby_loadout_selection")
+	if hero != null and is_instance_valid(hero):
+		_set_main_menu_hero(hero.get_parent() as Node3D, id)
+	_update_selected_warrior_labels()
+	if active_submenu == "warriors":
+		call_deferred("_populate_warriors_submenu")
 
 func _clear_showroom() -> void:
 	if showroom_root != null and is_instance_valid(showroom_root):

@@ -5,3 +5,4 @@
 [node name="KW3DErebusPreview" type="Node3D"]
 script = ExtResource("1_kw3d")
 player_warrior_id = "erebus"
+use_menu_warrior_selection = false

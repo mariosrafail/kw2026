@@ -155,9 +155,14 @@ const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
 const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd")
 const PORTABLE_INPUT := preload("res://scripts/kw3d/portable_input.gd")
 @export_enum("outrage", "erebus") var player_warrior_id: String = "outrage"
+@export var use_menu_warrior_selection := true
 
 func _ready() -> void:
 	# The baked preview exists only for the editor; runtime builds the same arena.
+	if use_menu_warrior_selection:
+		var requested_warrior := str(ProjectSettings.get_setting("kw3d/selected_warrior_id", player_warrior_id)).strip_edges().to_lower()
+		if requested_warrior in ["outrage", "erebus"]:
+			player_warrior_id = requested_warrior
 	var preview := get_node_or_null("EditorPreview")
 	if preview != null:
 		remove_child(preview)

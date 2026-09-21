@@ -8,6 +8,8 @@ func _initialize() -> void:
 	run.call_deferred()
 func run() -> void:
 	stage = load("res://scenes/prototypes/kw_3d_prototype.tscn").instantiate()
+	stage.use_menu_warrior_selection = false
+	stage.player_warrior_id = "outrage"
 	root.add_child(stage)
 	stage.combat.set_training_mode(true)
 	# Freeze target travel for deterministic aim/terrain fixtures; roaming has its own test.
