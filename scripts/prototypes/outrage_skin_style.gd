@@ -41,7 +41,7 @@ static func main_color(skin_id: int) -> Color:
 		_: return Color("8f1d27")
 
 
-static func apply(model: Node3D, skin_id: int) -> void:
+static func apply(model: Node3D, skin_id: int, glow_scale: float = 1.0) -> void:
 	var resolved := clampi(skin_id, 0, SKIN_NAMES.size() - 1)
 	model.set_meta("warrior_skin_id", resolved)
 	model.set_meta("warrior_skin_name", skin_name(resolved))
@@ -57,7 +57,7 @@ static func apply(model: Node3D, skin_id: int) -> void:
 		if resolved == 2 and part_name.begins_with("Horn_"):
 			mesh.position.y += HORN_RAISE_3PX
 	if resolved == 2:
-		_add_neon_lights(model)
+		_add_neon_lights(model, glow_scale)
 
 
 static func _color_for_part(part_name: String, skin_id: int) -> Color:
@@ -125,13 +125,14 @@ static func _apply_color(mesh: MeshInstance3D, color: Color, skin_id: int) -> vo
 		mesh.material_override = plain
 
 
-static func _add_neon_lights(model: Node3D) -> void:
+static func _add_neon_lights(model: Node3D, glow_scale: float) -> void:
+	var strength := maxf(0.0, glow_scale)
 	var head_light := OmniLight3D.new()
 	head_light.name = "NeonHeadGlow"
 	head_light.position = Vector3(0.0, 1.02, -0.04)
 	head_light.light_color = NEON_BODY
-	head_light.light_energy = 0.82
-	head_light.omni_range = 2.05
+	head_light.light_energy = 1.85 * strength
+	head_light.omni_range = 3.15 * maxf(0.55, strength)
 	head_light.shadow_enabled = false
 	model.add_child(head_light)
 
@@ -139,8 +140,8 @@ static func _add_neon_lights(model: Node3D) -> void:
 	body_light.name = "NeonBodyGlow"
 	body_light.position = Vector3(0.0, -0.15, 0.08)
 	body_light.light_color = NEON_BODY
-	body_light.light_energy = 0.95
-	body_light.omni_range = 2.55
+	body_light.light_energy = 2.35 * strength
+	body_light.omni_range = 4.10 * maxf(0.55, strength)
 	body_light.shadow_enabled = false
 	model.add_child(body_light)
 
@@ -148,8 +149,8 @@ static func _add_neon_lights(model: Node3D) -> void:
 	lower_light.name = "NeonLowerGlow"
 	lower_light.position = Vector3(0.0, -1.18, 0.10)
 	lower_light.light_color = NEON_BODY
-	lower_light.light_energy = 0.62
-	lower_light.omni_range = 1.85
+	lower_light.light_energy = 1.30 * strength
+	lower_light.omni_range = 2.65 * maxf(0.55, strength)
 	lower_light.shadow_enabled = false
 	model.add_child(lower_light)
 
@@ -157,7 +158,7 @@ static func _add_neon_lights(model: Node3D) -> void:
 	horn_light.name = "NeonHornGlow"
 	horn_light.position = Vector3(0.0, 1.48, 0.0)
 	horn_light.light_color = NEON_HORN
-	horn_light.light_energy = 0.52
-	horn_light.omni_range = 1.75
+	horn_light.light_energy = 0.90 * strength
+	horn_light.omni_range = 2.20 * maxf(0.55, strength)
 	horn_light.shadow_enabled = false
 	model.add_child(horn_light)

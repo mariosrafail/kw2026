@@ -1736,7 +1736,7 @@ func _show_showroom_warrior(warrior_id: String) -> void:
 	showroom_world.add_child(showroom_root)
 	var model := _warrior_scene(id).instantiate() as Node3D
 	if id == "outrage":
-		OUTRAGE_SKINS.apply(model, selected_outrage_skin)
+		OUTRAGE_SKINS.apply(model, selected_outrage_skin, 0.42)
 	model.set_script(null)
 	_apply_menu_warrior_materials(model, id)
 	# The authored character origin is near the middle of the body.  Place the
@@ -1790,7 +1790,7 @@ func _set_main_menu_hero(parent: Node3D, warrior_id: String) -> void:
 	hero = _warrior_scene(id).instantiate() as Node3D
 	hero.name = "%sMenuHero" % id.capitalize()
 	if id == "outrage":
-		OUTRAGE_SKINS.apply(hero, selected_outrage_skin)
+		OUTRAGE_SKINS.apply(hero, selected_outrage_skin, 0.38)
 	# Detach the presentation instance's gameplay style before _ready can apply it.
 	hero.set_script(null)
 	_apply_menu_warrior_materials(hero, id)

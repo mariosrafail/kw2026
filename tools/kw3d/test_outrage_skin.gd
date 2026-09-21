@@ -74,6 +74,9 @@ func run() -> void:
 	check(neon.get_node_or_null("NeonBodyGlow") is OmniLight3D, "neon_body_light")
 	check(neon.get_node_or_null("NeonLowerGlow") is OmniLight3D, "neon_lower_light")
 	check(neon.get_node_or_null("NeonHornGlow") is OmniLight3D, "neon_horn_light")
+	var direct_body_light := neon.get_node("NeonBodyGlow") as OmniLight3D
+	check(direct_body_light.light_energy >= 2.2 and direct_body_light.omni_range >= 4.0, "gameplay_strength_neon_light")
+	var direct_body_light_energy := direct_body_light.light_energy
 	neon.free()
 
 	var old_warrior := str(ProjectSettings.get_setting("kw3d/selected_warrior_id", "outrage"))
@@ -117,6 +120,8 @@ func run() -> void:
 		check(showroom_model.get_node_or_null("NeonHeadGlow") is OmniLight3D, "showroom_head_light")
 		check(showroom_model.get_node_or_null("NeonBodyGlow") is OmniLight3D, "showroom_neon_light")
 		check(showroom_model.get_node_or_null("NeonLowerGlow") is OmniLight3D, "showroom_lower_light")
+		var showroom_light := showroom_model.get_node("NeonBodyGlow") as OmniLight3D
+		check(showroom_light.light_energy < direct_body_light_energy, "showroom_glow_stays_softer")
 
 	menu._launch_offline_waves()
 	var stage: Variant = null
@@ -139,6 +144,8 @@ func run() -> void:
 		check(stage.head_style.get_node_or_null("NeonHeadGlow") is OmniLight3D, "offline_neon_head_light")
 		check(stage.head_style.get_node_or_null("NeonBodyGlow") is OmniLight3D, "offline_neon_body_light")
 		check(stage.head_style.get_node_or_null("NeonLowerGlow") is OmniLight3D, "offline_neon_lower_light")
+		var offline_body_light := stage.head_style.get_node("NeonBodyGlow") as OmniLight3D
+		check(offline_body_light.light_energy >= 2.2 and offline_body_light.omni_range >= 4.0, "offline_real_neon_light")
 
 	ProjectSettings.set_setting("kw3d/selected_warrior_id", old_warrior)
 	ProjectSettings.set_setting("kw3d/selected_outrage_skin", old_skin)
