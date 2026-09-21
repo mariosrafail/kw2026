@@ -2,6 +2,14 @@ extends RefCounted
 
 # Generated from frame 0 of the real gameplay AK reload strip.
 # Each visible AK pixel becomes a real 3D voxel.
+const SKIN_NAMES := [
+	"CLASSIC",
+	"CRIMSON",
+	"ARCTIC",
+	"NEON",
+	"INFERNO",
+]
+
 const VOXELS: Array = [
 	[-0.700000, 0.220000, 0.000000, 0.040000, 0.200000, 0, 0, 0],
 	[-0.660000, 0.220000, 0.000000, 0.040000, 0.200000, 0, 0, 0],
@@ -276,13 +284,14 @@ const VOXELS: Array = [
 	[0.460000, -0.220000, 0.000000, 0.040000, 0.200000, 0, 0, 0],
 ]
 
-static func build(parent: Node3D) -> void:
+static func build(parent: Node3D, skin_id: int = 0) -> void:
 	var materials: Dictionary={}
-	var navy:=Color("263a52")
-	var navy_light:=Color("35516e")
-	var navy_dark:=Color("17283b")
-	var steel:=Color("7389a0")
-	var sight:=Color("a9bfd2")
+	var palette := _skin_palette(skin_id)
+	var navy: Color = palette["body"]
+	var navy_light: Color = palette["body_light"]
+	var navy_dark: Color = palette["body_dark"]
+	var steel: Color = palette["steel"]
+	var sight: Color = palette["sight"]
 	_part(parent,materials,"StockBody",Vector3(-0.57,0.00,0),Vector3(0.54,0.24,0.30),navy_dark)
 	_part(parent,materials,"StockShoulder",Vector3(-0.83,0.00,0),Vector3(0.16,0.34,0.36),navy)
 	_part(parent,materials,"StockNeck",Vector3(-0.29,0.01,0),Vector3(0.22,0.18,0.24),navy_light)
@@ -305,6 +314,94 @@ static func build(parent: Node3D) -> void:
 	_part(parent,materials,"MagazineBottom",Vector3(0.40,-0.60,0),Vector3(0.20,0.22,0.23),navy_dark,Vector3(0,0,-0.34))
 	_part(parent,materials,"Selector",Vector3(0.08,0.06,-0.18),Vector3(0.22,0.045,0.055),steel)
 	_part(parent,materials,"ChargingHandle",Vector3(0.00,0.16,-0.19),Vector3(0.12,0.06,0.08),steel)
+	if clampi(skin_id, 0, SKIN_NAMES.size() - 1) == 4:
+		_add_inferno_flames(parent, materials, palette)
+
+static func skin_name(skin_id: int) -> String:
+	return SKIN_NAMES[clampi(skin_id, 0, SKIN_NAMES.size() - 1)]
+
+static func skin_count() -> int:
+	return SKIN_NAMES.size()
+
+static func skin_accent(skin_id: int) -> Color:
+	return _skin_palette(skin_id)["accent"] as Color
+
+static func _skin_palette(skin_id: int) -> Dictionary:
+	match clampi(skin_id, 0, SKIN_NAMES.size() - 1):
+		1:
+			return {
+				"body": Color("8f2030"),
+				"body_light": Color("c43a4d"),
+				"body_dark": Color("3a1018"),
+				"steel": Color("706168"),
+				"sight": Color("ff96a5"),
+				"accent": Color("ff405a"),
+			}
+		2:
+			return {
+				"body": Color("d5e7ef"),
+				"body_light": Color("f2fbff"),
+				"body_dark": Color("7897a7"),
+				"steel": Color("5d8399"),
+				"sight": Color("a8f5ff"),
+				"accent": Color("78eaff"),
+			}
+		3:
+			return {
+				"body": Color("493481"),
+				"body_light": Color("7955c7"),
+				"body_dark": Color("1d1739"),
+				"steel": Color("267b91"),
+				"sight": Color("59f4ff"),
+				"accent": Color("4cefff"),
+			}
+		4:
+			return {
+				"body": Color("2c1712"),
+				"body_light": Color("6f2418"),
+				"body_dark": Color("100b0a"),
+				"steel": Color("5d4438"),
+				"sight": Color("ffd35a"),
+				"accent": Color("ff6a18"),
+				"flame_hot": Color("fff176"),
+				"flame_mid": Color("ff9d20"),
+				"flame_dark": Color("e53b18"),
+			}
+		_:
+			return {
+				"body": Color("263a52"),
+				"body_light": Color("35516e"),
+				"body_dark": Color("17283b"),
+				"steel": Color("7389a0"),
+				"sight": Color("a9bfd2"),
+				"accent": Color("55a8d0"),
+			}
+
+static func _add_inferno_flames(parent: Node3D, materials: Dictionary, palette: Dictionary) -> void:
+	var hot: Color = palette["flame_hot"]
+	var mid: Color = palette["flame_mid"]
+	var dark: Color = palette["flame_dark"]
+	# Raised flame tongues change the actual silhouette instead of acting as a flat recolor.
+	_flame_part(parent,materials,"InfernoFlame_Base",Vector3(0.05,0.365,0),Vector3(0.38,0.07,0.25),dark)
+	_flame_part(parent,materials,"InfernoFlame_Left",Vector3(-0.07,0.445,0),Vector3(0.12,0.18,0.20),mid,Vector3(0,0,-0.18))
+	_flame_part(parent,materials,"InfernoFlame_LeftTip",Vector3(-0.12,0.555,0),Vector3(0.07,0.12,0.15),hot,Vector3(0,0,-0.10))
+	_flame_part(parent,materials,"InfernoFlame_Mid",Vector3(0.08,0.475,0),Vector3(0.11,0.24,0.20),hot,Vector3(0,0,0.12))
+	_flame_part(parent,materials,"InfernoFlame_Right",Vector3(0.22,0.425,0),Vector3(0.12,0.16,0.20),mid,Vector3(0,0,0.24))
+	_flame_part(parent,materials,"InfernoFlame_Handguard",Vector3(0.52,0.335,0),Vector3(0.28,0.06,0.22),dark)
+	_flame_part(parent,materials,"InfernoFlame_HandguardTip",Vector3(0.52,0.415,0),Vector3(0.09,0.16,0.16),mid,Vector3(0,0,-0.15))
+
+static func _flame_part(parent: Node3D,materials: Dictionary,title: String,pos: Vector3,size: Vector3,color: Color,rotation: Vector3=Vector3.ZERO) -> MeshInstance3D:
+	var mesh := _part(parent,materials,title,pos,size,color,rotation)
+	var mat := mesh.material_override as StandardMaterial3D
+	mat = mat.duplicate(true) as StandardMaterial3D
+	mat.resource_local_to_scene = true
+	mat.emission_enabled = true
+	mat.emission = color
+	mat.emission_energy_multiplier = 2.4
+	mat.metallic = 0.04
+	mat.roughness = 0.48
+	mesh.material_override = mat
+	return mesh
 
 static func _part(parent: Node3D,materials: Dictionary,title: String,pos: Vector3,size: Vector3,color: Color,rotation: Vector3=Vector3.ZERO) -> MeshInstance3D:
 	var mesh:=MeshInstance3D.new()

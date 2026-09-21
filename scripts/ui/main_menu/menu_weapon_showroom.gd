@@ -12,7 +12,7 @@ static func build_weapon(parent: Node3D, weapon_id: String, skin_id: int = 0) ->
 		"kar":
 			KAR_BUILDER.build(parent, skin_id)
 		_:
-			AK47_BUILDER.build(parent)
+			AK47_BUILDER.build(parent, skin_id)
 	_apply_showroom_finish(parent)
 
 
@@ -31,11 +31,26 @@ static func descriptor(weapon_id: String) -> String:
 
 
 static func skin_count(weapon_id: String) -> int:
-	return KAR_BUILDER.skin_count() if weapon_id == "kar" else 1
+	if weapon_id == "kar":
+		return KAR_BUILDER.skin_count()
+	if weapon_id == "ak47":
+		return AK47_BUILDER.skin_count()
+	return 1
 
 
 static func skin_name(weapon_id: String, skin_id: int) -> String:
-	return KAR_BUILDER.skin_name(skin_id) if weapon_id == "kar" else "DEFAULT"
+	if weapon_id == "kar":
+		return KAR_BUILDER.skin_name(skin_id)
+	if weapon_id == "ak47":
+		return AK47_BUILDER.skin_name(skin_id)
+	return "DEFAULT"
+
+static func skin_accent(weapon_id: String, skin_id: int) -> Color:
+	if weapon_id == "kar":
+		return KAR_BUILDER.skin_accent(skin_id)
+	if weapon_id == "ak47":
+		return AK47_BUILDER.skin_accent(skin_id)
+	return Color("6CCFFF")
 
 
 static func _build_shotgun(parent: Node3D) -> void:

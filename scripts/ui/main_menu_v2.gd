@@ -62,6 +62,7 @@ var showroom_last_mouse := Vector2.ZERO
 var showroom_yaw := -0.38
 var showroom_pitch := -0.05
 var selected_showroom_weapon := "ak47"
+var selected_ak_skin := 0
 var selected_kar_skin := 0
 var selected_showroom_warrior := "outrage"
 
@@ -106,6 +107,11 @@ func _ready() -> void:
 
 func _finish_setup() -> void:
 	_sync_selected_warrior_from_legacy()
+	selected_ak_skin = clampi(
+		int(ProjectSettings.get_setting("kw3d/selected_ak_skin", 0)),
+		0,
+		WEAPON_SHOWROOM.skin_count("ak47") - 1
+	)
 	_sync_presentation_visibility()
 	if play_button != null and presentation.visible:
 		play_button.grab_focus()
@@ -691,6 +697,7 @@ func _launch_offline_waves() -> void:
 	# after the user picked a warrior in the V2 roster.
 	selected_showroom_warrior = _current_warrior_id()
 	ProjectSettings.set_setting("kw3d/selected_warrior_id", selected_showroom_warrior)
+	ProjectSettings.set_setting("kw3d/selected_ak_skin", selected_ak_skin)
 	if status_label != null:
 		status_label.text = "LOADING // OFFLINE WAVES // %s" % selected_showroom_warrior.to_upper()
 	_show_v2_loading("LOADING // OFFLINE WAVES // %s" % selected_showroom_warrior.to_upper(), 0.82)
@@ -1346,11 +1353,11 @@ func _populate_guns_submenu() -> void:
 			call_deferred("_populate_guns_submenu")
 		)
 		submenu_selector.add_child(button)
-	if selected_showroom_weapon == "kar":
-		_add_kar_skin_selector()
+	if selected_showroom_weapon in ["ak47", "kar"]:
+		_add_weapon_skin_selector(selected_showroom_weapon)
 	_show_showroom_weapon(selected_showroom_weapon)
 
-func _add_kar_skin_selector() -> void:
+func _add_weapon_skin_selector(weapon_id: String) -> void:
 	var divider := ColorRect.new()
 	divider.custom_minimum_size = Vector2(0, 1)
 	divider.color = Color(CLR_MAGENTA, 0.46)
@@ -1358,32 +1365,43 @@ func _add_kar_skin_selector() -> void:
 	submenu_selector.add_child(divider)
 
 	var label := Label.new()
-	label.text = "KAR SKINS // 05"
+	label.text = "%s SKINS // %02d" % [
+		WEAPON_SHOWROOM.display_name(weapon_id),
+		WEAPON_SHOWROOM.skin_count(weapon_id)
+	]
 	label.add_theme_font_override("font", PIXEL_FONT_BOLD)
 	label.add_theme_font_size_override("font_size", 6)
 	label.add_theme_color_override("font_color", Color(CLR_MAGENTA, 0.86))
 	submenu_selector.add_child(label)
 
-	for skin_id in range(WEAPON_SHOWROOM.skin_count("kar")):
+	var current_skin := selected_ak_skin if weapon_id == "ak47" else selected_kar_skin
+	for skin_id in range(WEAPON_SHOWROOM.skin_count(weapon_id)):
 		var id := skin_id
-		var skin_button := _make_kar_skin_button(
-			WEAPON_SHOWROOM.skin_name("kar", id),
+		var skin_button := _make_weapon_skin_button(
+			weapon_id,
+			WEAPON_SHOWROOM.skin_name(weapon_id, id),
 			id,
-			id == selected_kar_skin
+			id == current_skin
 		)
-		skin_button.name = "KarSkin_%02d" % id
+		skin_button.name = "%sSkin_%02d" % [weapon_id.capitalize(), id]
 		skin_button.pressed.connect(func() -> void:
-			call_deferred("_select_kar_skin", id)
+			call_deferred("_select_weapon_skin", weapon_id, id)
 		)
 		submenu_selector.add_child(skin_button)
 
-func _select_kar_skin(skin_id: int) -> void:
-	selected_kar_skin = clampi(skin_id, 0, WEAPON_SHOWROOM.skin_count("kar") - 1)
-	if active_submenu == "guns" and selected_showroom_weapon == "kar":
+func _select_weapon_skin(weapon_id: String, skin_id: int) -> void:
+	var id := weapon_id.strip_edges().to_lower()
+	var resolved := clampi(skin_id, 0, WEAPON_SHOWROOM.skin_count(id) - 1)
+	if id == "ak47":
+		selected_ak_skin = resolved
+		ProjectSettings.set_setting("kw3d/selected_ak_skin", resolved)
+	elif id == "kar":
+		selected_kar_skin = resolved
+	if active_submenu == "guns" and selected_showroom_weapon == id:
 		_populate_guns_submenu()
 
-func _make_kar_skin_button(label_text: String, skin_id: int, active: bool) -> Button:
-	var accent := _kar_skin_accent(skin_id)
+func _make_weapon_skin_button(weapon_id: String, label_text: String, skin_id: int, active: bool) -> Button:
+	var accent := WEAPON_SHOWROOM.skin_accent(weapon_id, skin_id)
 	var button := Button.new()
 	button.text = ("> " if active else "  ") + label_text
 	button.custom_minimum_size = Vector2(0, 20)
@@ -1616,7 +1634,7 @@ func _show_showroom_weapon(weapon_id: String) -> void:
 	showroom_root = Node3D.new()
 	showroom_root.name = "WeaponPreview_%s" % weapon_id
 	showroom_world.add_child(showroom_root)
-	var skin_id := selected_kar_skin if weapon_id == "kar" else 0
+	var skin_id := selected_ak_skin if weapon_id == "ak47" else (selected_kar_skin if weapon_id == "kar" else 0)
 	WEAPON_SHOWROOM.build_weapon(showroom_root, weapon_id, skin_id)
 	showroom_root.position = Vector3(0, -0.02, 0)
 	var target_scale_value := 1.15 if weapon_id == "kar" else (1.30 if weapon_id == "shotgun" else 1.34)
@@ -1629,8 +1647,15 @@ func _show_showroom_weapon(weapon_id: String) -> void:
 	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(showroom_root, "scale", target_scale, 0.24)
 	submenu_info_title.text = WEAPON_SHOWROOM.display_name(weapon_id)
-	var skin_line := "\n\nSKIN // %s" % WEAPON_SHOWROOM.skin_name("kar", selected_kar_skin) if weapon_id == "kar" else ""
-	submenu_info_body.text = "%s%s\n\n3D MODEL PREVIEW\n\nDRAG THE MODEL TO INSPECT IT FROM ANY ANGLE.\n\nLIVE GAMEPLAY LOADOUT // CURRENT BUILD" % [WEAPON_SHOWROOM.descriptor(weapon_id), skin_line]
+	var skin_line := ""
+	if weapon_id in ["ak47", "kar"]:
+		skin_line = "\n\nSKIN // %s" % WEAPON_SHOWROOM.skin_name(weapon_id, skin_id)
+	var offline_line := "\n\nOFFLINE TESTING AK SKIN // %s" % WEAPON_SHOWROOM.skin_name("ak47", selected_ak_skin)
+	submenu_info_body.text = "%s%s\n\n3D MODEL PREVIEW\n\nDRAG THE MODEL TO INSPECT IT FROM ANY ANGLE.%s" % [
+		WEAPON_SHOWROOM.descriptor(weapon_id),
+		skin_line,
+		offline_line
+	]
 
 func _show_showroom_warrior(warrior_id: String) -> void:
 	var id := _normalize_warrior_id(warrior_id)

@@ -50,6 +50,14 @@ static func skin_name(skin_id: int) -> String:
 static func skin_count() -> int:
 	return SKIN_NAMES.size()
 
+static func skin_accent(skin_id: int) -> Color:
+	match clampi(skin_id, 0, SKIN_NAMES.size() - 1):
+		1: return Color("39F1FF")
+		2: return Color("FF244A")
+		3: return Color("9FF5FF")
+		4: return Color("FFCE5A")
+		_: return Color("C58B63")
+
 
 static func _skin_palette(skin_id: int) -> Dictionary:
 	match clampi(skin_id, 0, SKIN_NAMES.size() - 1):

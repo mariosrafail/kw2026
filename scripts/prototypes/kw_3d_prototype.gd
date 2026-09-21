@@ -156,6 +156,8 @@ const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd"
 const PORTABLE_INPUT := preload("res://scripts/kw3d/portable_input.gd")
 @export_enum("outrage", "erebus") var player_warrior_id: String = "outrage"
 @export var use_menu_warrior_selection := true
+@export_range(0, 4, 1) var ak_skin_id := 0
+@export var use_menu_weapon_skin_selection := true
 
 func _ready() -> void:
 	# The baked preview exists only for the editor; runtime builds the same arena.
@@ -163,6 +165,12 @@ func _ready() -> void:
 		var requested_warrior := str(ProjectSettings.get_setting("kw3d/selected_warrior_id", player_warrior_id)).strip_edges().to_lower()
 		if requested_warrior in ["outrage", "erebus"]:
 			player_warrior_id = requested_warrior
+	if use_menu_weapon_skin_selection:
+		ak_skin_id = clampi(
+			int(ProjectSettings.get_setting("kw3d/selected_ak_skin", ak_skin_id)),
+			0,
+			AK47_VOXEL_BUILDER.skin_count() - 1
+		)
 	var preview := get_node_or_null("EditorPreview")
 	if preview != null:
 		remove_child(preview)
@@ -587,7 +595,7 @@ func _build_held_ak() -> void:
 	weapon_root.position = Vector3(0.10, 0.0, -0.24)
 	weapon_root.rotation.y = PI * 0.5
 	weapon_aim_pivot.add_child(weapon_root)
-	AK47_VOXEL_BUILDER.build(weapon_root)
+	AK47_VOXEL_BUILDER.build(weapon_root, ak_skin_id)
 	_pixelize_weapon_materials()
 	for ak_part in weapon_root.get_children():
 		if ak_part is MeshInstance3D:_add_scene_outline(ak_part,1.15)

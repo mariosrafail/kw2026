@@ -42,6 +42,14 @@ func run() -> void:
 		]:
 			if panel.visible and panel.is_visible_in_tree():
 				check(inside(frame, panel.get_global_rect()), "%s_%s_inside" % [kind, panel.name])
+		if kind == "guns":
+			var selector_bounds: Rect2 = menu.submenu_selector_panel.get_global_rect()
+			for child in menu.submenu_selector.get_children():
+				if child is Control and child.visible:
+					check(
+						inside(selector_bounds, (child as Control).get_global_rect()),
+						"guns_%s_inside_selector" % child.name
+					)
 		menu._close_v2_submenu()
 		for i in range(12):
 			await process_frame
