@@ -142,6 +142,7 @@ const RIG_CENTER_X := 2.0
 const RIG_CENTER_Y := -4.0
 const OUTRAGE_FULLBODY := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
 const EREBUS_FULLBODY := preload("res://scenes/prototypes/characters/erebus_fullbody.tscn")
+const OUTRAGE_SKINS := preload("res://scripts/prototypes/outrage_skin_style.gd")
 const AK47_VOXEL_BUILDER := preload("res://scripts/prototypes/ak47_voxel_builder.gd")
 const KAR_VOXEL_BUILDER := preload("res://scripts/prototypes/kar_voxel_builder.gd")
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
@@ -156,6 +157,8 @@ const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd"
 const PORTABLE_INPUT := preload("res://scripts/kw3d/portable_input.gd")
 @export_enum("outrage", "erebus") var player_warrior_id: String = "outrage"
 @export var use_menu_warrior_selection := true
+@export_range(0, 1, 1) var outrage_skin_id := 0
+@export var use_menu_warrior_skin_selection := true
 @export_range(0, 4, 1) var ak_skin_id := 0
 @export_range(0, 4, 1) var kar_skin_id := 0
 @export var use_menu_weapon_skin_selection := true
@@ -166,6 +169,12 @@ func _ready() -> void:
 		var requested_warrior := str(ProjectSettings.get_setting("kw3d/selected_warrior_id", player_warrior_id)).strip_edges().to_lower()
 		if requested_warrior in ["outrage", "erebus"]:
 			player_warrior_id = requested_warrior
+	if use_menu_warrior_skin_selection and player_warrior_id == "outrage":
+		outrage_skin_id = clampi(
+			int(ProjectSettings.get_setting("kw3d/selected_outrage_skin", outrage_skin_id)),
+			0,
+			OUTRAGE_SKINS.skin_count() - 1
+		)
 	if use_menu_weapon_skin_selection:
 		ak_skin_id = clampi(
 			int(ProjectSettings.get_setting("kw3d/selected_ak_skin", ak_skin_id)),
@@ -576,6 +585,8 @@ func _build_outage_voxel_body() -> void:
 	# One authored source for geometry, UVs, rest positions and pivots.
 	var body_scene: PackedScene = EREBUS_FULLBODY if player_warrior_id == "erebus" else OUTRAGE_FULLBODY
 	head_style = body_scene.instantiate() as Node3D
+	if player_warrior_id == "outrage":
+		OUTRAGE_SKINS.apply(head_style, outrage_skin_id)
 	player_visual.add_child(head_style)
 	head_rig = head_style.get_node("HeadRig") as Node3D
 	torso_rig = head_style.get_node("TorsoRig") as Node3D
@@ -732,7 +743,7 @@ func _add_weapon_hand(node_name: String, pos: Vector3, size: Vector3) -> void:
 	hand.mesh = box
 	hand.position = pos
 	hand.set_meta("hold_rest",pos)
-	var hand_color := Color("df7126") if player_warrior_id == "erebus" else Color(0.56, 0.11, 0.15)
+	var hand_color := Color("df7126") if player_warrior_id == "erebus" else OUTRAGE_SKINS.main_color(outrage_skin_id)
 	hand.material_override = _material(hand_color, false, 0.0)
 	weapon_aim_pivot.add_child(hand)
 	_add_scene_outline(hand, 1.6)

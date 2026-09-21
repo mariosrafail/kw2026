@@ -6,6 +6,7 @@ extends Control
 const LEGACY_SCENE := preload("res://scenes/ui/main_menu_legacy.tscn")
 const OUTRAGE_SCENE := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
 const EREBUS_SCENE := preload("res://scenes/prototypes/characters/erebus_fullbody.tscn")
+const OUTRAGE_SKINS := preload("res://scripts/prototypes/outrage_skin_style.gd")
 const HERO_MATERIALS := preload("res://scripts/ui/main_menu/menu_hero_materials.gd")
 const CITY_STAGE := preload("res://scripts/ui/main_menu/menu_city_stage.gd")
 const WEAPON_SHOWROOM := preload("res://scripts/ui/main_menu/menu_weapon_showroom.gd")
@@ -65,6 +66,7 @@ var selected_showroom_weapon := "ak47"
 var selected_ak_skin := 0
 var selected_kar_skin := 0
 var selected_showroom_warrior := "outrage"
+var selected_outrage_skin := 0
 
 var settings_music_slider: HSlider
 var settings_sfx_slider: HSlider
@@ -106,6 +108,14 @@ func _ready() -> void:
 	set_process(true)
 
 func _finish_setup() -> void:
+	var legacy_skin := 0
+	if legacy != null and str(legacy.get("selected_warrior_id")).strip_edges().to_lower() == "outrage":
+		legacy_skin = int(legacy.get("selected_warrior_skin"))
+	selected_outrage_skin = clampi(
+		int(ProjectSettings.get_setting("kw3d/selected_outrage_skin", legacy_skin)),
+		0,
+		OUTRAGE_SKINS.skin_count() - 1
+	)
 	_sync_selected_warrior_from_legacy()
 	selected_ak_skin = clampi(
 		int(ProjectSettings.get_setting("kw3d/selected_ak_skin", 0)),
@@ -702,6 +712,7 @@ func _launch_offline_waves() -> void:
 	# after the user picked a warrior in the V2 roster.
 	selected_showroom_warrior = _current_warrior_id()
 	ProjectSettings.set_setting("kw3d/selected_warrior_id", selected_showroom_warrior)
+	ProjectSettings.set_setting("kw3d/selected_outrage_skin", selected_outrage_skin)
 	ProjectSettings.set_setting("kw3d/selected_ak_skin", selected_ak_skin)
 	ProjectSettings.set_setting("kw3d/selected_kar_skin", selected_kar_skin)
 	if status_label != null:
@@ -1462,7 +1473,60 @@ func _populate_warriors_submenu() -> void:
 			_select_v2_warrior(id)
 		)
 		submenu_selector.add_child(button)
+	if selected_showroom_warrior == "outrage":
+		_add_outage_skin_selector()
 	_show_showroom_warrior(selected_showroom_warrior)
+
+func _add_outage_skin_selector() -> void:
+	var divider := ColorRect.new()
+	divider.custom_minimum_size = Vector2(0, 1)
+	divider.color = Color(OUTRAGE_SKINS.skin_accent(selected_outrage_skin), 0.52)
+	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	submenu_selector.add_child(divider)
+	var heading := Label.new()
+	heading.text = "OUTRAGE SKINS // %02d" % OUTRAGE_SKINS.skin_count()
+	heading.add_theme_font_override("font", PIXEL_FONT_BOLD)
+	heading.add_theme_font_size_override("font_size", 6)
+	heading.add_theme_color_override("font_color", Color(OUTRAGE_SKINS.skin_accent(selected_outrage_skin), 0.92))
+	submenu_selector.add_child(heading)
+	for skin_id in range(OUTRAGE_SKINS.skin_count()):
+		var id := skin_id
+		var active := id == selected_outrage_skin
+		var accent: Color = OUTRAGE_SKINS.skin_accent(id)
+		var button := Button.new()
+		button.name = "OutrageSkin_%02d" % id
+		button.text = ("> " if active else "  ") + OUTRAGE_SKINS.skin_name(id)
+		button.custom_minimum_size = Vector2(0, 20)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.clip_text = true
+		button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		button.add_theme_font_override("font", PIXEL_FONT_BOLD)
+		button.add_theme_font_size_override("font_size", 7)
+		button.add_theme_color_override("font_color", Color.WHITE if active else Color(CLR_TEXT, 0.84))
+		button.add_theme_stylebox_override("normal", _button_style(Color(accent.r * 0.11, accent.g * 0.11, accent.b * 0.11, 0.94), Color(accent, 0.72 if active else 0.34), 2))
+		button.add_theme_stylebox_override("hover", _button_style(Color(accent.r * 0.18, accent.g * 0.18, accent.b * 0.18, 0.98), accent, 4))
+		button.add_theme_stylebox_override("focus", _button_style(Color(accent.r * 0.18, accent.g * 0.18, accent.b * 0.18, 0.98), accent, 4))
+		button.add_theme_stylebox_override("pressed", _button_style(Color(accent.r * 0.14, accent.g * 0.14, accent.b * 0.14, 1.0), accent, 1))
+		button.pressed.connect(func() -> void:
+			_select_outage_skin(id)
+		)
+		submenu_selector.add_child(button)
+
+func _select_outage_skin(skin_id: int) -> void:
+	selected_outrage_skin = clampi(skin_id, 0, OUTRAGE_SKINS.skin_count() - 1)
+	ProjectSettings.set_setting("kw3d/selected_outrage_skin", selected_outrage_skin)
+	if legacy != null and selected_showroom_warrior == "outrage":
+		legacy.set("selected_warrior_skin", selected_outrage_skin)
+		legacy.set("_pending_warrior_skin", selected_outrage_skin)
+		if legacy.has_method("_set_equipped_warrior_skin"):
+			legacy.call("_set_equipped_warrior_skin", "outrage", selected_outrage_skin)
+		if legacy.has_method("_save_state"):
+			legacy.call("_save_state")
+	if hero != null and is_instance_valid(hero) and selected_showroom_warrior == "outrage":
+		_set_main_menu_hero(hero.get_parent() as Node3D, "outrage")
+	_update_selected_warrior_labels()
+	if active_submenu == "warriors" and selected_showroom_warrior == "outrage":
+		call_deferred("_populate_warriors_submenu")
 
 func _populate_settings_submenu() -> void:
 	submenu_title.text = "SETTINGS // SYSTEM CONTROL"
@@ -1671,6 +1735,8 @@ func _show_showroom_warrior(warrior_id: String) -> void:
 	showroom_root.name = "WarriorPreview_%s" % id.capitalize()
 	showroom_world.add_child(showroom_root)
 	var model := _warrior_scene(id).instantiate() as Node3D
+	if id == "outrage":
+		OUTRAGE_SKINS.apply(model, selected_outrage_skin)
 	model.set_script(null)
 	_apply_menu_warrior_materials(model, id)
 	# The authored character origin is near the middle of the body.  Place the
@@ -1691,7 +1757,7 @@ func _show_showroom_warrior(warrior_id: String) -> void:
 		submenu_info_body.text = "WARRIOR 02\n\nBODY // ORANGE HEAVY FRAME\n\nSKILL // VOID GUARD\n\nSHORT IMMUNITY WINDOW TO SURVIVE BURST DAMAGE.\n\nOFFLINE TESTING LOADOUT // EREBUS."
 	else:
 		submenu_info_title.text = "OUTRAGE"
-		submenu_info_body.text = "WARRIOR 01\n\nBODY // STREET ZERO FRAME\n\nSKILL // BOMB BLAST\n\nTHROWS AN EXPLOSIVE BOMB.\n\nOFFLINE TESTING LOADOUT // OUTRAGE."
+		submenu_info_body.text = "WARRIOR 01\n\nSKIN // %s\n\nBODY // STREET ZERO FRAME\n\nSKILL // BOMB BLAST\n\nTHROWS AN EXPLOSIVE BOMB.\n\nOFFLINE TESTING LOADOUT // OUTRAGE." % OUTRAGE_SKINS.skin_name(selected_outrage_skin)
 
 func _normalize_warrior_id(warrior_id: String) -> String:
 	var id := warrior_id.strip_edges().to_lower()
@@ -1721,6 +1787,8 @@ func _set_main_menu_hero(parent: Node3D, warrior_id: String) -> void:
 		old_hero.queue_free()
 	hero = _warrior_scene(id).instantiate() as Node3D
 	hero.name = "%sMenuHero" % id.capitalize()
+	if id == "outrage":
+		OUTRAGE_SKINS.apply(hero, selected_outrage_skin)
 	# Detach the presentation instance's gameplay style before _ready can apply it.
 	hero.set_script(null)
 	_apply_menu_warrior_materials(hero, id)
@@ -1742,6 +1810,8 @@ func _set_main_menu_hero(parent: Node3D, warrior_id: String) -> void:
 func _update_selected_warrior_labels() -> void:
 	var id := _normalize_warrior_id(selected_showroom_warrior)
 	var display := id.to_upper()
+	if id == "outrage":
+		display += " // " + OUTRAGE_SKINS.skin_name(selected_outrage_skin)
 	if hero_tag != null:
 		hero_tag.text = "%s // SELECTED" % display
 	if hero_strap != null:
@@ -1766,11 +1836,12 @@ func _select_v2_warrior(warrior_id: String) -> void:
 			owned.append(id)
 			legacy.set("owned_warriors", owned)
 		legacy.set("selected_warrior_id", id)
-		legacy.set("selected_warrior_skin", 0)
+		var warrior_skin := selected_outrage_skin if id == "outrage" else 0
+		legacy.set("selected_warrior_skin", warrior_skin)
 		legacy.set("_pending_warrior_id", id)
-		legacy.set("_pending_warrior_skin", 0)
+		legacy.set("_pending_warrior_skin", warrior_skin)
 		if legacy.has_method("_set_equipped_warrior_skin"):
-			legacy.call("_set_equipped_warrior_skin", id, 0)
+			legacy.call("_set_equipped_warrior_skin", id, warrior_skin)
 		if legacy.has_method("_save_state"):
 			legacy.call("_save_state")
 		if legacy.has_method("_sync_active_lobby_loadout_selection"):

@@ -10,6 +10,8 @@ func run() -> void:
 	stage = load("res://scenes/prototypes/kw_3d_prototype.tscn").instantiate()
 	stage.use_menu_warrior_selection = false
 	stage.player_warrior_id = "outrage"
+	stage.use_menu_warrior_skin_selection = false
+	stage.outrage_skin_id = 0
 	stage.use_menu_weapon_skin_selection = false
 	stage.ak_skin_id = 0
 	stage.kar_skin_id = 0
