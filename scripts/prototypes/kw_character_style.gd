@@ -32,6 +32,9 @@ func _apply_style() -> void:
 			if mesh.name == "ShaderInkOutline":
 				mesh.visible = enabled
 			elif mesh.has_meta("plain_material"):
+				if mesh.has_meta("force_plain_emissive"):
+					mesh.material_override = mesh.get_meta("plain_material")
+					continue
 				var toon: ShaderMaterial = mesh.get_meta("toon_material")
 				toon.set_shader_parameter("pixel_enabled", pixel_enabled)
 				if enabled:

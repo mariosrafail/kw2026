@@ -1776,6 +1776,8 @@ func _warrior_scene(warrior_id: String) -> PackedScene:
 func _apply_menu_warrior_materials(model: Node3D, warrior_id: String) -> void:
 	if _normalize_warrior_id(warrior_id) == "erebus":
 		HERO_MATERIALS.apply_flat_to(model)
+	elif _normalize_warrior_id(warrior_id) == "outrage" and selected_outrage_skin == 2:
+		HERO_MATERIALS.apply_flat_to(model)
 	else:
 		HERO_MATERIALS.apply_to(model)
 
