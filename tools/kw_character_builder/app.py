@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import base64
+import copy
 import io
 import json
+import math
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass
@@ -119,6 +122,22 @@ def find_blockbench() -> Path | None:
     return None
 
 
+def repo_root() -> Path:
+    if getattr(sys, "frozen", False):
+        # dist/KW Character Builder.exe -> kw_character_builder -> tools -> repo
+        return Path(sys.executable).resolve().parents[3]
+    return Path(__file__).resolve().parents[2]
+
+
+def current_outrage_template_path() -> Path:
+    filename = "Outrage_FullBody_v11_slimmer_body_foot.bbmodel"
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        bundled = Path(getattr(sys, "_MEIPASS")) / "kw_templates" / filename
+        if bundled.exists():
+            return bundled
+    return repo_root() / "art_source" / "blockbench" / "outrage" / filename
+
+
 class PixelStore:
     def __init__(self) -> None:
         self.images: Dict[str, Dict[str, Image.Image]] = {
@@ -151,6 +170,7 @@ class CharacterBuilderApp(tk.Tk):
         self.painting = False
         self.last_cell: Tuple[int, int] | None = None
         self.preview_photo: ImageTk.PhotoImage | None = None
+        self.cuboid_editor: CuboidEditorWindow | None = None
 
         self.mode_var = tk.StringVar(value="forgiving")
         self.voxel_var = tk.DoubleVar(value=1.0)
@@ -210,6 +230,15 @@ class CharacterBuilderApp(tk.Tk):
             fg=MAGENTA,
             font=("Consolas", 9, "bold"),
         ).pack(side="right", padx=18)
+        self._button(
+            title_bar,
+            "3D BLOCK EDITOR",
+            self._open_cuboid_editor,
+            bg="#15576c",
+            fg="white",
+            width=16,
+            font=("Consolas", 9, "bold"),
+        ).pack(side="right", padx=(0, 2), pady=8)
 
         part_bar = tk.Frame(self, bg=BG)
         part_bar.pack(fill="x", padx=12, pady=(10, 4))
@@ -418,6 +447,13 @@ class CharacterBuilderApp(tk.Tk):
         self.bind("p", lambda _e: self._select_tool("picker"))
         self.bind("<Control-s>", lambda _e: self._save_project())
         self.bind("<Control-o>", lambda _e: self._load_project())
+
+    def _open_cuboid_editor(self) -> None:
+        if self.cuboid_editor is not None and self.cuboid_editor.winfo_exists():
+            self.cuboid_editor.deiconify()
+            self.cuboid_editor.lift()
+            return
+        self.cuboid_editor = CuboidEditorWindow(self)
 
     # ---------------- drawing ----------------
 
@@ -955,7 +991,7 @@ class CharacterBuilderApp(tk.Tk):
             "primary_selected": False,
         }
 
-    def _generate_bbmodel(self, output_path: Path) -> Tuple[Path, Path, int]:
+    def _generate_bbmodel(self, output_path: Path, part_ids: set[str] | None = None) -> Tuple[Path, Path, int]:
         self._anchor_changed()
         voxel_size = max(0.1, float(self.voxel_var.get()))
         atlas = self._build_atlas()
@@ -968,6 +1004,8 @@ class CharacterBuilderApp(tk.Tk):
         total_boxes = 0
 
         for part_index, part in enumerate(PARTS):
+            if part_ids is not None and part.id not in part_ids:
+                continue
             hull = self._visual_hull(part.id)
             if hull is None:
                 continue
@@ -1106,6 +1144,895 @@ class CharacterBuilderApp(tk.Tk):
         for child in self.winfo_children():
             if isinstance(child, tk.Label) and str(child.cget("textvariable")) == str(self.status_var):
                 child.configure(fg=color)
+
+
+class CuboidEditorWindow(tk.Toplevel):
+    """Small Blockbench-style cuboid geometry editor.
+
+    The six-view workflow remains useful for producing a starting volume, but
+    the final geometry can be corrected here as explicit cuboids. This also
+    lets us load the game's real authored head instead of trying to infer it
+    from silhouettes.
+    """
+
+    FACE_KEYS = ("north", "south", "east", "west", "up", "down")
+
+    def __init__(self, owner: CharacterBuilderApp) -> None:
+        super().__init__(owner)
+        self.owner = owner
+        self.title("KW Character Builder // 3D Cuboid Editor")
+        self.geometry("1180x790")
+        self.minsize(980, 680)
+        self.configure(bg=BG)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self.model: dict | None = None
+        self.elements: List[dict] = []
+        self.source_path: Path | None = None
+        self.texture_images: List[Image.Image | None] = []
+        self.scope_group_name: str | None = None
+        self.scope_original_ids: set[str] = set()
+        self.default_add_group_uuid: str | None = None
+        self.selected_index: int | None = None
+        self.canvas_items: Dict[int, int] = {}
+
+        self.yaw = math.radians(-35.0)
+        self.pitch = math.radians(-22.0)
+        self.zoom = 1.0
+        self._orbit_last: Tuple[int, int] | None = None
+
+        self.status_3d_var = tk.StringVar(value="LOAD CURRENT HEAD or build a starting volume FROM 6 VIEWS")
+        self.name_var = tk.StringVar(value="")
+        self.coord_vars = [tk.DoubleVar(value=0.0) for _ in range(6)]
+        self.step_var = tk.DoubleVar(value=1.0)
+
+        self._build_ui()
+        self.after(50, self._render_3d)
+
+    def _build_ui(self) -> None:
+        top = tk.Frame(self, bg="#081018")
+        top.pack(fill="x")
+        tk.Label(
+            top,
+            text="3D CUBOID EDITOR",
+            bg="#081018",
+            fg=CYAN,
+            font=("Consolas", 17, "bold"),
+        ).pack(side="left", padx=14, pady=10)
+
+        source_bar = tk.Frame(self, bg=BG)
+        source_bar.pack(fill="x", padx=10, pady=(8, 5))
+        self.owner._button(
+            source_bar, "CURRENT OUTRAGE HEAD", self._load_current_head,
+            bg="#7a1b62", fg="white", font=("Consolas", 9, "bold"),
+        ).pack(side="left", padx=3)
+        self.owner._button(
+            source_bar, "FROM 6 VIEWS", self._from_six_views,
+            bg="#15576c", fg="white", font=("Consolas", 9, "bold"),
+        ).pack(side="left", padx=3)
+        self.owner._button(
+            source_bar, "LOAD .BBMODEL", self._load_dialog,
+            font=("Consolas", 9, "bold"),
+        ).pack(side="left", padx=3)
+        self.owner._button(
+            source_bar, "EXPORT + OPEN BLOCKBENCH", self._export_and_open,
+            bg="#0d7785", fg="white", font=("Consolas", 9, "bold"),
+        ).pack(side="right", padx=3)
+
+        body = tk.Frame(self, bg=BG)
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+
+        view_panel = tk.Frame(body, bg=PANEL, highlightthickness=1, highlightbackground="#2a6b80")
+        view_panel.pack(side="left", fill="both", expand=True, padx=(0, 8))
+
+        view_toolbar = tk.Frame(view_panel, bg=PANEL)
+        view_toolbar.pack(fill="x", padx=8, pady=7)
+        for label, yaw, pitch in [
+            ("ISO", -35, -22),
+            ("FRONT", 0, 0),
+            ("BACK", 180, 0),
+            ("LEFT", 90, 0),
+            ("RIGHT", -90, 0),
+            ("TOP", 0, -90),
+        ]:
+            self.owner._button(
+                view_toolbar,
+                label,
+                lambda y=yaw, p=pitch: self._set_view(y, p),
+                width=7,
+                font=("Consolas", 8, "bold"),
+            ).pack(side="left", padx=2)
+        self.owner._button(
+            view_toolbar, "FIT", self._fit_view, width=6, font=("Consolas", 8, "bold")
+        ).pack(side="right", padx=2)
+
+        self.canvas3d = tk.Canvas(
+            view_panel,
+            bg="#0b1117",
+            highlightthickness=1,
+            highlightbackground=CYAN_DARK,
+            cursor="arrow",
+        )
+        self.canvas3d.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.canvas3d.bind("<ButtonPress-1>", self._select_from_canvas)
+        self.canvas3d.bind("<ButtonPress-3>", self._orbit_start)
+        self.canvas3d.bind("<B3-Motion>", self._orbit_move)
+        self.canvas3d.bind("<ButtonRelease-3>", self._orbit_end)
+        self.canvas3d.bind("<MouseWheel>", self._zoom_wheel)
+        self.canvas3d.bind("<Configure>", lambda _e: self._render_3d())
+
+        side = tk.Frame(body, bg=PANEL, width=350, highlightthickness=1, highlightbackground="#2a6b80")
+        side.pack(side="right", fill="y")
+        side.pack_propagate(False)
+
+        tk.Label(
+            side,
+            text="BLOCKS",
+            bg=PANEL,
+            fg=MAGENTA,
+            font=("Consolas", 10, "bold"),
+        ).pack(anchor="w", padx=10, pady=(10, 3))
+        self.block_list = tk.Listbox(
+            side,
+            bg="#07141d",
+            fg=TEXT,
+            selectbackground=CYAN_DARK,
+            selectforeground="white",
+            relief="flat",
+            bd=0,
+            height=13,
+            activestyle="none",
+            font=("Consolas", 9),
+            exportselection=False,
+        )
+        self.block_list.pack(fill="x", padx=10)
+        self.block_list.bind("<<ListboxSelect>>", self._select_list)
+
+        name_row = tk.Frame(side, bg=PANEL)
+        name_row.pack(fill="x", padx=10, pady=(7, 3))
+        tk.Label(name_row, text="NAME", bg=PANEL, fg=MUTED, font=("Consolas", 8, "bold")).pack(side="left")
+        tk.Entry(
+            name_row,
+            textvariable=self.name_var,
+            bg="#07141d",
+            fg=TEXT,
+            insertbackground=TEXT,
+            relief="flat",
+        ).pack(side="left", fill="x", expand=True, padx=(7, 0))
+
+        coords = tk.Frame(side, bg=PANEL)
+        coords.pack(fill="x", padx=10, pady=4)
+        labels = ("FROM X", "FROM Y", "FROM Z", "TO X", "TO Y", "TO Z")
+        for i, label in enumerate(labels):
+            r, c = divmod(i, 3)
+            cell = tk.Frame(coords, bg=PANEL)
+            cell.grid(row=r, column=c, padx=2, pady=2, sticky="ew")
+            tk.Label(cell, text=label, bg=PANEL, fg=MUTED, font=("Consolas", 7, "bold")).pack(anchor="w")
+            tk.Entry(
+                cell,
+                textvariable=self.coord_vars[i],
+                width=8,
+                bg="#07141d",
+                fg=TEXT,
+                insertbackground=TEXT,
+                relief="flat",
+                font=("Consolas", 9),
+            ).pack(fill="x")
+            coords.grid_columnconfigure(c, weight=1)
+
+        self.owner._button(
+            side, "APPLY NAME + COORDS", self._apply_coords,
+            bg="#15576c", fg="white", font=("Consolas", 9, "bold"),
+        ).pack(fill="x", padx=10, pady=(3, 7))
+
+        step_row = tk.Frame(side, bg=PANEL)
+        step_row.pack(fill="x", padx=10, pady=(1, 3))
+        tk.Label(step_row, text="MOVE STEP", bg=PANEL, fg=MUTED, font=("Consolas", 8, "bold")).pack(side="left")
+        tk.Entry(
+            step_row,
+            textvariable=self.step_var,
+            width=7,
+            bg="#07141d",
+            fg=TEXT,
+            insertbackground=TEXT,
+            relief="flat",
+            font=("Consolas", 9),
+        ).pack(side="left", padx=7)
+
+        moves = tk.Frame(side, bg=PANEL)
+        moves.pack(fill="x", padx=10, pady=3)
+        for i, (label, axis, direction) in enumerate([
+            ("-X", 0, -1), ("+X", 0, 1),
+            ("-Y", 1, -1), ("+Y", 1, 1),
+            ("-Z", 2, -1), ("+Z", 2, 1),
+        ]):
+            self.owner._button(
+                moves,
+                label,
+                lambda a=axis, d=direction: self._nudge(a, d),
+                width=5,
+                font=("Consolas", 8, "bold"),
+            ).grid(row=i // 2, column=i % 2, padx=2, pady=2, sticky="ew")
+            moves.grid_columnconfigure(i % 2, weight=1)
+
+        edit_row = tk.Frame(side, bg=PANEL)
+        edit_row.pack(fill="x", padx=10, pady=(5, 2))
+        self.owner._button(
+            edit_row, "ADD CUBE", self._add_box, width=9, bg="#24576a"
+        ).pack(side="left", padx=2)
+        self.owner._button(
+            edit_row, "DUPLICATE +X", self._duplicate_selected, width=11, bg="#24576a"
+        ).pack(side="left", padx=2)
+        self.owner._button(
+            edit_row, "DELETE", self._delete_selected, width=8, bg="#5f2132"
+        ).pack(side="left", padx=2)
+
+        tk.Label(
+            side,
+            text="LEFT CLICK: select block\nRIGHT DRAG: orbit • WHEEL: zoom\n\nSix-view reconstruction is a starting point.\nFinish the real shape here with explicit cuboids.",
+            justify="left",
+            bg=PANEL,
+            fg="#9fc3cf",
+            font=("Segoe UI", 8),
+            wraplength=320,
+        ).pack(anchor="w", padx=11, pady=(8, 4))
+
+        status = tk.Label(
+            self,
+            textvariable=self.status_3d_var,
+            anchor="w",
+            bg="#071018",
+            fg=GREEN,
+            font=("Consolas", 8, "bold"),
+            padx=10,
+            pady=5,
+        )
+        status.pack(fill="x", side="bottom")
+
+    def _set_status(self, text: str) -> None:
+        self.status_3d_var.set(text)
+
+    def _on_close(self) -> None:
+        self.owner.cuboid_editor = None
+        self.destroy()
+
+    def _current_head_path(self) -> Path:
+        return current_outrage_template_path()
+
+    def _load_current_head(self) -> None:
+        path = self._current_head_path()
+        if not path.exists():
+            messagebox.showerror(APP_NAME, f"Current Outrage head was not found:\n{path}", parent=self)
+            return
+        self._load_model(path, group_name="Outrage_Head")
+
+    def _load_dialog(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="Load Blockbench cuboid model",
+            filetypes=[("Blockbench model", "*.bbmodel"), ("JSON", "*.json")],
+        )
+        if path:
+            self._load_model(Path(path))
+
+    @staticmethod
+    def _group_element_ids(data: dict, group_name: str) -> set[str]:
+        group_names = {
+            str(group.get("uuid")): str(group.get("name", ""))
+            for group in data.get("groups", [])
+            if group.get("uuid")
+        }
+        target_ids = {uuid_ for uuid_, name in group_names.items() if name == group_name}
+        if not target_ids:
+            return set()
+
+        def collect(node) -> set[str]:
+            if isinstance(node, str):
+                return {node}
+            if isinstance(node, dict):
+                found: set[str] = set()
+                for child in node.get("children", []):
+                    found.update(collect(child))
+                return found
+            return set()
+
+        def find_target(node) -> set[str]:
+            if not isinstance(node, dict):
+                return set()
+            if str(node.get("uuid")) in target_ids:
+                return collect(node)
+            for child in node.get("children", []):
+                found = find_target(child)
+                if found:
+                    return found
+            return set()
+
+        for node in data.get("outliner", []):
+            found = find_target(node)
+            if found:
+                return found
+        return set()
+
+    @staticmethod
+    def _element_group_map(data: dict) -> Dict[str, str]:
+        mapping: Dict[str, str] = {}
+
+        def walk(node, parent_group: str | None = None) -> None:
+            if isinstance(node, str):
+                if parent_group:
+                    mapping[node] = parent_group
+                return
+            if not isinstance(node, dict):
+                return
+            group_uuid = str(node.get("uuid") or parent_group or "")
+            for child in node.get("children", []):
+                walk(child, group_uuid or parent_group)
+
+        for node in data.get("outliner", []):
+            walk(node)
+        return mapping
+
+    def _load_model(self, path: Path, group_name: str | None = None) -> None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            rotated_groups = [
+                str(group.get("name", "Group"))
+                for group in data.get("groups", [])
+                if any(abs(float(v)) > 1e-6 for v in group.get("rotation", [0, 0, 0])[:3])
+            ]
+            rotated_elements = [
+                str(element.get("name", "Cube"))
+                for element in data.get("elements", [])
+                if any(abs(float(v)) > 1e-6 for v in element.get("rotation", [0, 0, 0])[:3])
+            ]
+            if rotated_groups or rotated_elements:
+                raise ValueError(
+                    "This 3D editor currently supports axis-aligned cuboids only. "
+                    "Remove Blockbench rotations first."
+                )
+            allowed_ids = self._group_element_ids(data, group_name) if group_name else set()
+            if group_name and not allowed_ids:
+                raise ValueError(f"Could not find Blockbench group '{group_name}'.")
+            elements = [
+                copy.deepcopy(e)
+                for e in data.get("elements", [])
+                if e.get("type", "cube") == "cube"
+                and isinstance(e.get("from"), list)
+                and isinstance(e.get("to"), list)
+                and len(e["from"]) >= 3
+                and len(e["to"]) >= 3
+                and (not allowed_ids or str(e.get("uuid")) in allowed_ids)
+            ]
+            if not elements:
+                raise ValueError("The model does not contain editable cuboids.")
+
+            self.model = copy.deepcopy(data)
+            group_map = self._element_group_map(data)
+            for element in elements:
+                group_uuid = group_map.get(str(element.get("uuid")))
+                if group_uuid:
+                    element["_kw_group_uuid"] = group_uuid
+            self.elements = elements
+            self.source_path = path
+            self.scope_group_name = group_name
+            self.scope_original_ids = set(allowed_ids)
+            self.default_add_group_uuid = None
+            if group_name:
+                group_names = {
+                    str(group.get("name", "")): str(group.get("uuid", ""))
+                    for group in data.get("groups", [])
+                }
+                self.default_add_group_uuid = group_names.get("Head_Core") or group_names.get(group_name)
+            self.texture_images = self._decode_textures(self.model, path)
+            self.selected_index = 0
+            self._reload_list()
+            self._fit_view()
+            scope = f" // {group_name}" if group_name else ""
+            self._set_status(f"LOADED // {path.name}{scope} // {len(self.elements)} cuboids")
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Could not load Blockbench model:\n{exc}", parent=self)
+
+    def _decode_textures(self, model: dict, model_path: Path) -> List[Image.Image | None]:
+        out: List[Image.Image | None] = []
+        for texture in model.get("textures", []):
+            img: Image.Image | None = None
+            try:
+                source = str(texture.get("source", ""))
+                if source.startswith("data:image"):
+                    img = image_from_data_uri(source)
+                else:
+                    raw_path = str(texture.get("path", "")).strip()
+                    if raw_path:
+                        tex_path = Path(raw_path)
+                        if not tex_path.is_absolute():
+                            tex_path = model_path.parent / tex_path
+                        if tex_path.exists():
+                            img = Image.open(tex_path).convert("RGBA")
+                            texture["source"] = image_to_data_uri(img)
+            except Exception:
+                img = None
+            out.append(img)
+        return out
+
+    def _from_six_views(self) -> None:
+        temp_dir = Path(tempfile.gettempdir())
+        stem = f"kwcb_edit_{uuid.uuid4().hex[:10]}"
+        bb_path = temp_dir / f"{stem}.bbmodel"
+        atlas_path: Path | None = None
+        try:
+            bb_path, atlas_path, cubes = self.owner._generate_bbmodel(
+                bb_path,
+                part_ids={self.owner.part_id},
+            )
+            self._load_model(bb_path)
+            self._set_status(
+                f"6-VIEW STARTING VOLUME // {PART_BY_ID[self.owner.part_id].label} // "
+                f"{cubes} cuboids // edit the shape manually"
+            )
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Could not build the six-view starting volume:\n{exc}", parent=self)
+        finally:
+            for path in (bb_path, atlas_path):
+                if path is not None:
+                    try:
+                        Path(path).unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
+    def _reload_list(self) -> None:
+        self.block_list.delete(0, "end")
+        for index, element in enumerate(self.elements):
+            self.block_list.insert("end", f"{index + 1:02d}  {element.get('name', 'Cube')}")
+        if self.elements:
+            if self.selected_index is None or self.selected_index >= len(self.elements):
+                self.selected_index = 0
+            self.block_list.selection_clear(0, "end")
+            self.block_list.selection_set(self.selected_index)
+            self.block_list.see(self.selected_index)
+            self._sync_fields()
+        else:
+            self.selected_index = None
+            self.name_var.set("")
+        self._render_3d()
+
+    def _select_list(self, _event=None) -> None:
+        selection = self.block_list.curselection()
+        if not selection:
+            return
+        self.selected_index = int(selection[0])
+        self._sync_fields()
+        self._render_3d()
+
+    def _select_index(self, index: int) -> None:
+        if not (0 <= index < len(self.elements)):
+            return
+        self.selected_index = index
+        self.block_list.selection_clear(0, "end")
+        self.block_list.selection_set(index)
+        self.block_list.see(index)
+        self._sync_fields()
+        self._render_3d()
+
+    def _sync_fields(self) -> None:
+        if self.selected_index is None or not (0 <= self.selected_index < len(self.elements)):
+            return
+        element = self.elements[self.selected_index]
+        self.name_var.set(str(element.get("name", "Cube")))
+        coords = [float(v) for v in element["from"][:3]] + [float(v) for v in element["to"][:3]]
+        for var, value in zip(self.coord_vars, coords):
+            var.set(value)
+
+    def _apply_coords(self) -> None:
+        if self.selected_index is None:
+            return
+        try:
+            values = [float(v.get()) for v in self.coord_vars]
+        except (ValueError, tk.TclError):
+            messagebox.showerror(APP_NAME, "Coordinates must be numeric.", parent=self)
+            return
+        for axis in range(3):
+            a, b = values[axis], values[axis + 3]
+            if math.isclose(a, b):
+                messagebox.showerror(APP_NAME, "A cuboid cannot have zero size on an axis.", parent=self)
+                return
+            if a > b:
+                values[axis], values[axis + 3] = b, a
+        element = self.elements[self.selected_index]
+        element["from"] = values[:3]
+        element["to"] = values[3:]
+        element["name"] = self.name_var.get().strip() or "Cube"
+        self._reload_list()
+        self._set_status(f"UPDATED // {element['name']}")
+
+    def _step(self) -> float:
+        try:
+            return max(0.1, abs(float(self.step_var.get())))
+        except (ValueError, tk.TclError):
+            return 1.0
+
+    def _nudge(self, axis: int, direction: int) -> None:
+        if self.selected_index is None:
+            return
+        delta = self._step() * direction
+        element = self.elements[self.selected_index]
+        element["from"][axis] = float(element["from"][axis]) + delta
+        element["to"][axis] = float(element["to"][axis]) + delta
+        origin = element.get("origin")
+        if isinstance(origin, list) and len(origin) >= 3:
+            origin[axis] = float(origin[axis]) + delta
+        self._sync_fields()
+        self._render_3d()
+
+    @staticmethod
+    def _default_faces() -> dict:
+        return {
+            face: {"uv": [0, 0, 1, 1], "texture": 0}
+            for face in CuboidEditorWindow.FACE_KEYS
+        }
+
+    def _add_box(self) -> None:
+        step = self._step()
+        if self.selected_index is not None and self.elements:
+            source = self.elements[self.selected_index]
+            style_faces = copy.deepcopy(source.get("faces", self._default_faces()))
+            group_uuid = source.get("_kw_group_uuid") or self.default_add_group_uuid
+            base = [float(v) for v in source.get("to", [0, 0, 0])[:3]]
+            base[1] = float(source.get("from", [0, 0, 0])[1])
+            base[2] = float(source.get("from", [0, 0, 0])[2])
+        else:
+            style_faces = self._default_faces()
+            group_uuid = self.default_add_group_uuid
+            base = [0.0, 0.0, 0.0]
+        element_uuid = str(uuid.uuid4())
+        element = {
+            "name": f"Cube_{len(self.elements) + 1:02d}",
+            "box_uv": False,
+            "render_order": "default",
+            "locked": False,
+            "export": True,
+            "from": list(base),
+            "to": [base[0] + step, base[1] + step, base[2] + step],
+            "autouv": 0,
+            "origin": [base[0] + step / 2, base[1] + step / 2, base[2] + step / 2],
+            "faces": style_faces,
+            "type": "cube",
+            "uuid": element_uuid,
+        }
+        if group_uuid:
+            element["_kw_group_uuid"] = str(group_uuid)
+        self.elements.append(element)
+        self.selected_index = len(self.elements) - 1
+        self._reload_list()
+        self._set_status("ADDED CUBE // edit FROM/TO or move it with the axis controls")
+
+    def _duplicate_selected(self) -> None:
+        if self.selected_index is None:
+            return
+        clone = copy.deepcopy(self.elements[self.selected_index])
+        clone["uuid"] = str(uuid.uuid4())
+        clone["name"] = str(clone.get("name", "Cube")) + "_copy"
+        delta = self._step()
+        clone["from"][0] = float(clone["from"][0]) + delta
+        clone["to"][0] = float(clone["to"][0]) + delta
+        if isinstance(clone.get("origin"), list) and len(clone["origin"]) >= 3:
+            clone["origin"][0] = float(clone["origin"][0]) + delta
+        self.elements.append(clone)
+        self.selected_index = len(self.elements) - 1
+        self._reload_list()
+        self._set_status(f"DUPLICATED // {clone['name']}")
+
+    def _delete_selected(self) -> None:
+        if self.selected_index is None:
+            return
+        element = self.elements[self.selected_index]
+        if not messagebox.askyesno(APP_NAME, f"Delete {element.get('name', 'this block')}?", parent=self):
+            return
+        del self.elements[self.selected_index]
+        self.selected_index = min(self.selected_index, len(self.elements) - 1) if self.elements else None
+        self._reload_list()
+        self._set_status("BLOCK DELETED")
+
+    def _set_view(self, yaw_deg: float, pitch_deg: float) -> None:
+        self.yaw = math.radians(yaw_deg)
+        self.pitch = math.radians(pitch_deg)
+        self._render_3d()
+
+    def _fit_view(self) -> None:
+        self.zoom = 1.0
+        self._render_3d()
+
+    def _orbit_start(self, event) -> None:
+        self._orbit_last = (event.x, event.y)
+
+    def _orbit_move(self, event) -> None:
+        if self._orbit_last is None:
+            return
+        dx = event.x - self._orbit_last[0]
+        dy = event.y - self._orbit_last[1]
+        self._orbit_last = (event.x, event.y)
+        self.yaw += dx * 0.012
+        self.pitch = max(math.radians(-89), min(math.radians(89), self.pitch + dy * 0.012))
+        self._render_3d()
+
+    def _orbit_end(self, _event) -> None:
+        self._orbit_last = None
+
+    def _zoom_wheel(self, event) -> None:
+        factor = 1.12 if event.delta > 0 else 1 / 1.12
+        self.zoom = max(0.15, min(8.0, self.zoom * factor))
+        self._render_3d()
+
+    def _select_from_canvas(self, event) -> None:
+        hits = self.canvas3d.find_overlapping(event.x, event.y, event.x, event.y)
+        for item in reversed(hits):
+            if item in self.canvas_items:
+                self._select_index(self.canvas_items[item])
+                return
+
+    @staticmethod
+    def _rotate_point(point: Tuple[float, float, float], yaw: float, pitch: float) -> Tuple[float, float, float]:
+        x, y, z = point
+        cy, sy = math.cos(yaw), math.sin(yaw)
+        x1 = x * cy + z * sy
+        z1 = -x * sy + z * cy
+        cp, sp = math.cos(pitch), math.sin(pitch)
+        y2 = y * cp - z1 * sp
+        z2 = y * sp + z1 * cp
+        return x1, y2, z2
+
+    def _model_bounds(self) -> Tuple[List[float], List[float]]:
+        if not self.elements:
+            return [-1, -1, -1], [1, 1, 1]
+        mins = [float("inf")] * 3
+        maxs = [float("-inf")] * 3
+        for element in self.elements:
+            for axis in range(3):
+                mins[axis] = min(mins[axis], float(element["from"][axis]), float(element["to"][axis]))
+                maxs[axis] = max(maxs[axis], float(element["from"][axis]), float(element["to"][axis]))
+        return mins, maxs
+
+    def _texture_index(self, face: dict) -> int:
+        tex = face.get("texture", 0)
+        try:
+            return int(tex)
+        except (TypeError, ValueError):
+            if self.model:
+                for index, texture in enumerate(self.model.get("textures", [])):
+                    if str(texture.get("uuid", "")) == str(tex):
+                        return index
+            return 0
+
+    def _texture_for_face(self, face: dict) -> Image.Image | None:
+        index = self._texture_index(face)
+        if 0 <= index < len(self.texture_images):
+            return self.texture_images[index]
+        return None
+
+    def _element_color(self, element: dict) -> Tuple[int, int, int]:
+        faces = element.get("faces", {})
+        for key in ("north", "east", "up", "south", "west", "down"):
+            face = faces.get(key)
+            if not isinstance(face, dict):
+                continue
+            img = self._texture_for_face(face)
+            uv = face.get("uv")
+            if img is None or not isinstance(uv, list) or len(uv) < 4:
+                continue
+            texture_index = self._texture_index(face)
+            textures = self.model.get("textures", []) if self.model else []
+            texture = textures[texture_index] if 0 <= texture_index < len(textures) else {}
+            uv_w = max(1.0, float(texture.get("uv_width", texture.get("width", img.width))))
+            uv_h = max(1.0, float(texture.get("uv_height", texture.get("height", img.height))))
+            u = (float(uv[0]) + float(uv[2])) / 2.0
+            v = (float(uv[1]) + float(uv[3])) / 2.0
+            px = max(0, min(img.width - 1, int(u / uv_w * img.width)))
+            py = max(0, min(img.height - 1, int(v / uv_h * img.height)))
+            pixel = img.getpixel((px, py))
+            if pixel[3] > 0:
+                return int(pixel[0]), int(pixel[1]), int(pixel[2])
+        name = str(element.get("name", "")).lower()
+        if "eye" in name:
+            return 8, 12, 16
+        if "horn" in name:
+            return 245, 22, 45
+        return 132, 10, 22
+
+    @staticmethod
+    def _shade(rgb: Tuple[int, int, int], factor: float) -> str:
+        r = max(0, min(255, int(rgb[0] * factor)))
+        g = max(0, min(255, int(rgb[1] * factor)))
+        b = max(0, min(255, int(rgb[2] * factor)))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _render_3d(self) -> None:
+        if not hasattr(self, "canvas3d"):
+            return
+        canvas = self.canvas3d
+        canvas.delete("all")
+        self.canvas_items.clear()
+        w = max(2, canvas.winfo_width())
+        h = max(2, canvas.winfo_height())
+        if not self.elements:
+            canvas.create_text(
+                w / 2,
+                h / 2,
+                text="NO 3D MODEL\n\nLoad the current head, load a .bbmodel,\nor generate a starting volume from the six views.",
+                fill=MUTED,
+                justify="center",
+                font=("Consolas", 11, "bold"),
+            )
+            return
+
+        mins, maxs = self._model_bounds()
+        center = [(mins[i] + maxs[i]) / 2.0 for i in range(3)]
+        span = max(maxs[i] - mins[i] for i in range(3))
+        scale = min(w, h) * 0.62 / max(1.0, span) * self.zoom
+        cx, cy = w / 2.0, h / 2.0
+
+        face_defs = [
+            ("north", (0, 1, 2, 3), 1.00),
+            ("south", (4, 5, 6, 7), 0.78),
+            ("west", (0, 4, 7, 3), 0.72),
+            ("east", (1, 5, 6, 2), 0.90),
+            ("down", (0, 1, 5, 4), 0.62),
+            ("up", (3, 2, 6, 7), 1.12),
+        ]
+        draw_faces = []
+        for index, element in enumerate(self.elements):
+            x0, y0, z0 = [float(v) for v in element["from"][:3]]
+            x1, y1, z1 = [float(v) for v in element["to"][:3]]
+            vertices = [
+                (x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
+                (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1),
+            ]
+            transformed = []
+            for vx, vy, vz in vertices:
+                rx, ry, rz = self._rotate_point((vx - center[0], vy - center[1], vz - center[2]), self.yaw, self.pitch)
+                transformed.append((cx + rx * scale, cy - ry * scale, rz))
+            base_color = self._element_color(element)
+            for face_key, ids, shade in face_defs:
+                pts = [(transformed[i][0], transformed[i][1]) for i in ids]
+                depth = sum(transformed[i][2] for i in ids) / len(ids)
+                draw_faces.append((depth, index, face_key, pts, self._shade(base_color, shade)))
+
+        draw_faces.sort(key=lambda item: item[0])
+        for _depth, index, _face_key, pts, fill in draw_faces:
+            flat = [coord for pt in pts for coord in pt]
+            selected = index == self.selected_index
+            item = canvas.create_polygon(
+                *flat,
+                fill=fill,
+                outline=CYAN if selected else "#274550",
+                width=2 if selected else 1,
+            )
+            self.canvas_items[item] = index
+
+        # Screen-space origin axes provide orientation without altering geometry.
+        origin = self._rotate_point((-center[0], -center[1], -center[2]), self.yaw, self.pitch)
+        ox, oy = cx + origin[0] * scale, cy - origin[1] * scale
+        for axis, label, color in [
+            ((2.5, 0, 0), "X", "#ff586d"),
+            ((0, 2.5, 0), "Y", "#62f5b9"),
+            ((0, 0, 2.5), "Z", "#5deeff"),
+        ]:
+            end = self._rotate_point(
+                (axis[0] - center[0], axis[1] - center[1], axis[2] - center[2]),
+                self.yaw,
+                self.pitch,
+            )
+            ex, ey = cx + end[0] * scale, cy - end[1] * scale
+            canvas.create_line(ox, oy, ex, ey, fill=color, width=2)
+            canvas.create_text(ex, ey, text=label, fill=color, font=("Consolas", 8, "bold"))
+
+        if self.selected_index is not None:
+            element = self.elements[self.selected_index]
+            canvas.create_text(
+                10,
+                10,
+                anchor="nw",
+                text=f"{element.get('name', 'Cube')}  //  {len(self.elements)} blocks",
+                fill=CYAN,
+                font=("Consolas", 9, "bold"),
+            )
+
+    def _export_and_open(self) -> None:
+        if not self.model or not self.elements:
+            messagebox.showerror(APP_NAME, "Load or generate a 3D model first.", parent=self)
+            return
+        initial = (self.source_path.stem + "_edited.bbmodel") if self.source_path else "KW_edited_model.bbmodel"
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export edited Blockbench model",
+            defaultextension=".bbmodel",
+            initialfile=initial,
+            filetypes=[("Blockbench model", "*.bbmodel")],
+        )
+        if not path:
+            return
+        try:
+            output = Path(path)
+            model = copy.deepcopy(self.model)
+            edited_elements = copy.deepcopy(self.elements)
+            for element in edited_elements:
+                element["uuid"] = str(element.get("uuid") or uuid.uuid4())
+            edited_ids = {str(element["uuid"]) for element in edited_elements}
+
+            if self.scope_group_name and self.scope_original_ids:
+                untouched = [
+                    copy.deepcopy(element)
+                    for element in model.get("elements", [])
+                    if str(element.get("uuid")) not in self.scope_original_ids
+                ]
+                model["elements"] = untouched + [
+                    {key: value for key, value in element.items() if not key.startswith("_kw_")}
+                    for element in edited_elements
+                ]
+
+                deleted_ids = self.scope_original_ids - edited_ids
+                new_by_group: Dict[str, List[str]] = {}
+                for element in edited_elements:
+                    element_uuid = str(element["uuid"])
+                    if element_uuid in self.scope_original_ids:
+                        continue
+                    group_uuid = str(element.get("_kw_group_uuid") or self.default_add_group_uuid or "")
+                    if group_uuid:
+                        new_by_group.setdefault(group_uuid, []).append(element_uuid)
+
+                def rebuild_node(node):
+                    if isinstance(node, str):
+                        return None if node in deleted_ids else node
+                    if not isinstance(node, dict):
+                        return node
+                    rebuilt = copy.deepcopy(node)
+                    children = []
+                    for child in node.get("children", []):
+                        value = rebuild_node(child)
+                        if value is not None:
+                            children.append(value)
+                    group_uuid = str(node.get("uuid", ""))
+                    for element_uuid in new_by_group.get(group_uuid, []):
+                        if element_uuid not in children:
+                            children.append(element_uuid)
+                    rebuilt["children"] = children
+                    return rebuilt
+
+                model["outliner"] = [
+                    rebuilt for rebuilt in (rebuild_node(node) for node in model.get("outliner", []))
+                    if rebuilt is not None
+                ]
+                # Keep the source groups and pivots exactly as authored. This
+                # preserves the Outrage_Head rig expected by the game bake.
+            else:
+                elements = [
+                    {key: value for key, value in element.items() if not key.startswith("_kw_")}
+                    for element in edited_elements
+                ]
+                model["elements"] = elements
+                group_uuid = str(uuid.uuid4())
+                group = CharacterBuilderApp._group_record("KW_EDITED_CUBOIDS", group_uuid, [0.0, 0.0, 0.0])
+                child_ids = [element["uuid"] for element in elements]
+                model["groups"] = [group]
+                model["outliner"] = [{
+                    "uuid": group_uuid,
+                    "isOpen": True,
+                    "name": "KW_EDITED_CUBOIDS",
+                    "origin": [0.0, 0.0, 0.0],
+                    "export": True,
+                    "children": child_ids,
+                }]
+
+            model["name"] = output.stem
+            model["model_identifier"] = "kw.edited." + re.sub(r"[^a-z0-9_]+", "_", output.stem.lower())
+            output.write_text(json.dumps(model, separators=(",", ":")), encoding="utf-8")
+
+            exe = find_blockbench()
+            if exe:
+                subprocess.Popen([str(exe), str(output)], cwd=str(output.parent))
+            else:
+                os.startfile(str(output))
+            self._set_status(f"EXPORTED // {len(model['elements'])} total cuboids // opened in Blockbench")
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Could not export edited model:\n{exc}", parent=self)
 
 
 def main() -> None:
