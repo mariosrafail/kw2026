@@ -14,7 +14,10 @@ Run `build_windows.cmd` to rebuild it after changing `app.py`.
 
 1. Open **KW Character Builder**.
 2. Select a body part (`HEAD`, `TORSO`, arms, legs).
-3. Paint the six transparent 64x64 views: `FRONT / BACK / RIGHT / LEFT / TOP / BOTTOM`.
+3. Paint the six transparent 64x64 views, import a PNG into the current face, or use **IMPORT 6 NAMED PNGs** to load a complete part at once.
+   - Batch filenames must contain `front`, `back`, `right`, `left`, `top`, and `bottom`.
+   - Imported images are converted to RGBA and resized to 64x64 with nearest-neighbor scaling when needed.
+   - PNG alpha and RGB colors are preserved by default. The optional near-white-to-transparent toggle is intended for old references with white backgrounds.
 4. Press **EXPORT TO BLOCKBENCH**.
 5. The app generates:
    - a `.bbmodel`
@@ -24,6 +27,6 @@ Run `build_windows.cmd` to rebuild it after changing `app.py`.
 
 Transparent pixels become empty 3D space. RGB colors from the painted pixels are retained in the generated atlas/UVs.
 
-The standalone app supports PNG import/export per face, white-to-alpha conversion for old references, brush/eraser/picker, a visible 64x64 grid, flip H/V, part positioning, forgiving/strict reconstruction, and save/load `.kwchar.json` projects.
+The standalone app supports PNG import/export per face, six-face batch PNG import, optional white-to-alpha conversion for old references, brush/eraser/picker, a live 0–100% grid-opacity control, flip H/V, part positioning, forgiving/strict reconstruction, and save/load `.kwchar.json` projects.
 
 The older `tools/blockbench/kw_character_builder` Blockbench plugin can remain as an experimental bridge, but the standalone builder is the intended UI.

@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -153,7 +154,8 @@ class CharacterBuilderApp(tk.Tk):
 
         self.mode_var = tk.StringVar(value="forgiving")
         self.voxel_var = tk.DoubleVar(value=1.0)
-        self.white_alpha_var = tk.BooleanVar(value=True)
+        self.white_alpha_var = tk.BooleanVar(value=False)
+        self.grid_opacity_var = tk.IntVar(value=45)
         self.status_var = tk.StringVar(value="READY // transparent pixels become empty 3D space")
         self.color_var = tk.StringVar(value=self.color)
         self.anchor_vars = [tk.DoubleVar(), tk.DoubleVar(), tk.DoubleVar()]
@@ -248,6 +250,44 @@ class CharacterBuilderApp(tk.Tk):
         self.brush_spin.insert(0, "1")
         self.brush_spin.pack(side="left")
 
+        grid_controls = tk.Frame(tool_bar, bg=PANEL)
+        grid_controls.pack(side="right", padx=(10, 0))
+        tk.Label(
+            grid_controls,
+            text="GRID",
+            bg=PANEL,
+            fg=MUTED,
+            font=("Consolas", 8, "bold"),
+        ).pack(side="left", padx=(0, 4))
+        self.grid_scale = tk.Scale(
+            grid_controls,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=self.grid_opacity_var,
+            command=self._grid_opacity_changed,
+            showvalue=False,
+            length=120,
+            bg=PANEL,
+            fg=TEXT,
+            troughcolor="#07141d",
+            activebackground=CYAN,
+            highlightthickness=0,
+            bd=0,
+            sliderrelief="flat",
+        )
+        self.grid_scale.pack(side="left")
+        self.grid_opacity_label = tk.Label(
+            grid_controls,
+            text="45%",
+            width=4,
+            anchor="e",
+            bg=PANEL,
+            fg=CYAN,
+            font=("Consolas", 8, "bold"),
+        )
+        self.grid_opacity_label.pack(side="left", padx=(3, 0))
+
         canvas_holder = tk.Frame(canvas_panel, bg="#0b1720")
         canvas_holder.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.canvas = tk.Canvas(
@@ -274,6 +314,14 @@ class CharacterBuilderApp(tk.Tk):
         row.pack(fill="x", padx=10, pady=4)
         self._button(row, "IMPORT PNG", self._import_face, width=12).pack(side="left", padx=2)
         self._button(row, "EXPORT PNG", self._export_face_png, width=12).pack(side="left", padx=2)
+        self._button(
+            side,
+            "IMPORT 6 NAMED PNGs",
+            self._import_six_faces,
+            bg="#15576c",
+            fg="white",
+            font=("Consolas", 9, "bold"),
+        ).pack(fill="x", padx=12, pady=(3, 4))
         row = tk.Frame(side, bg=PANEL)
         row.pack(fill="x", padx=10, pady=4)
         self._button(row, "FLIP H", lambda: self._flip_face(True), width=8).pack(side="left", padx=2)
@@ -416,6 +464,18 @@ class CharacterBuilderApp(tk.Tk):
         except ValueError:
             self.brush_size = 1
 
+    def _grid_opacity_changed(self, value=None) -> None:
+        try:
+            opacity = int(round(float(value))) if value is not None else int(self.grid_opacity_var.get())
+        except (TypeError, ValueError, tk.TclError):
+            opacity = 45
+        opacity = max(0, min(100, opacity))
+        self.grid_opacity_var.set(opacity)
+        if hasattr(self, "grid_opacity_label"):
+            self.grid_opacity_label.configure(text=f"{opacity}%")
+        if hasattr(self, "canvas"):
+            self._refresh_preview()
+
     def _canvas_cell(self, event) -> Tuple[int, int]:
         w = max(1, self.canvas.winfo_width())
         h = max(1, self.canvas.winfo_height())
@@ -509,14 +569,21 @@ class CharacterBuilderApp(tk.Tk):
         scaled = self._current_image().resize((DISPLAY_SIZE, DISPLAY_SIZE), Image.Resampling.NEAREST)
         preview.alpha_composite(scaled)
 
-        # UI-only 64x64 grid.
-        d = ImageDraw.Draw(preview)
-        for i in range(SIZE + 1):
-            p = i * CELL
-            major = i % 8 == 0
-            color = (93, 222, 241, 115 if major else 42)
-            d.line([(p, 0), (p, DISPLAY_SIZE)], fill=color, width=1)
-            d.line([(0, p), (DISPLAY_SIZE, p)], fill=color, width=1)
+        # UI-only 64x64 grid. Draw it on a separate RGBA layer so the
+        # opacity slider affects only the visible overlay, never image data.
+        opacity = max(0, min(100, int(self.grid_opacity_var.get()))) / 100.0
+        if opacity > 0:
+            grid = Image.new("RGBA", (DISPLAY_SIZE, DISPLAY_SIZE), (0, 0, 0, 0))
+            gd = ImageDraw.Draw(grid)
+            major_alpha = int(round(255 * opacity))
+            minor_alpha = int(round(major_alpha * (42.0 / 115.0)))
+            for i in range(SIZE + 1):
+                p = min(DISPLAY_SIZE - 1, i * CELL)
+                major = i % 8 == 0
+                color = (93, 222, 241, major_alpha if major else minor_alpha)
+                gd.line([(p, 0), (p, DISPLAY_SIZE - 1)], fill=color, width=1)
+                gd.line([(0, p), (DISPLAY_SIZE - 1, p)], fill=color, width=1)
+            preview = Image.alpha_composite(preview, grid)
 
         self.preview_photo = ImageTk.PhotoImage(preview.convert("RGB"))
         self.canvas.delete("all")
@@ -533,19 +600,92 @@ class CharacterBuilderApp(tk.Tk):
         self.store.images[self.part_id][self.face] = self._current_image().transpose(method)
         self._refresh_preview()
 
-    def _import_face(self) -> None:
-        path = filedialog.askopenfilename(title="Import 64x64 PNG", filetypes=[("PNG", "*.png"), ("Images", "*.png;*.jpg;*.jpeg;*.webp")])
-        if not path:
-            return
-        img = Image.open(path).convert("RGBA").resize((SIZE, SIZE), Image.Resampling.NEAREST)
+    @staticmethod
+    def _face_from_filename(path: str | Path) -> str | None:
+        stem = Path(path).stem.lower()
+        tokens = {token for token in re.split(r"[^a-z0-9]+", stem) if token}
+        aliases = {
+            "front": {"front"},
+            "back": {"back", "rear"},
+            "right": {"right"},
+            "left": {"left"},
+            "top": {"top", "up"},
+            "bottom": {"bottom", "down", "bot"},
+        }
+        matches = [face for face, names in aliases.items() if tokens.intersection(names)]
+        return matches[0] if len(matches) == 1 else None
+
+    def _load_import_image(self, path: str | Path) -> Tuple[Image.Image, Tuple[int, int]]:
+        with Image.open(path) as source:
+            img = source.convert("RGBA")
+        original_size = img.size
+        if img.size != (SIZE, SIZE):
+            img = img.resize((SIZE, SIZE), Image.Resampling.NEAREST)
         if self.white_alpha_var.get():
             arr = np.array(img)
             mask = (arr[..., 0] > 248) & (arr[..., 1] > 248) & (arr[..., 2] > 248)
             arr[mask, 3] = 0
             img = Image.fromarray(arr, "RGBA")
-        self.store.images[self.part_id][self.face] = img
-        self._refresh_preview()
-        self._status(f"IMPORTED // {Path(path).name}")
+        return img, original_size
+
+    def _import_face(self) -> None:
+        path = filedialog.askopenfilename(
+            title=f"Import PNG for {PART_BY_ID[self.part_id].label} / {FACE_LABELS[self.face]}",
+            filetypes=[("PNG", "*.png"), ("Images", "*.png;*.jpg;*.jpeg;*.webp")],
+        )
+        if not path:
+            return
+        try:
+            img, original_size = self._load_import_image(path)
+            self.store.images[self.part_id][self.face] = img
+            self._refresh_preview()
+            resize_note = "" if original_size == (SIZE, SIZE) else f" // {original_size[0]}x{original_size[1]} -> {SIZE}x{SIZE}"
+            self._status(f"IMPORTED {FACE_LABELS[self.face]} // {Path(path).name}{resize_note}")
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Could not import image:\n{exc}")
+
+    def _import_six_faces(self) -> None:
+        paths = filedialog.askopenfilenames(
+            title=f"Import 6 named PNGs for {PART_BY_ID[self.part_id].label}",
+            filetypes=[("PNG", "*.png"), ("Images", "*.png;*.jpg;*.jpeg;*.webp")],
+        )
+        if not paths:
+            return
+
+        mapping: Dict[str, str] = {}
+        unknown: List[str] = []
+        duplicates: List[str] = []
+        for path in paths:
+            face = self._face_from_filename(path)
+            if face is None:
+                unknown.append(Path(path).name)
+            elif face in mapping:
+                duplicates.append(FACE_LABELS[face])
+            else:
+                mapping[face] = path
+
+        missing = [FACE_LABELS[face] for face in FACES if face not in mapping]
+        if unknown or duplicates or missing or len(paths) != len(FACES):
+            details = [
+                "Select exactly 6 images whose filenames contain one face name:",
+                "front, back, right, left, top, bottom.",
+            ]
+            if missing:
+                details.append("\nMissing: " + ", ".join(missing))
+            if unknown:
+                details.append("\nUnrecognized: " + ", ".join(unknown))
+            if duplicates:
+                details.append("\nDuplicate face names: " + ", ".join(sorted(set(duplicates))))
+            messagebox.showerror(APP_NAME, "\n".join(details))
+            return
+
+        try:
+            loaded = {face: self._load_import_image(mapping[face])[0] for face in FACES}
+            self.store.images[self.part_id].update(loaded)
+            self._refresh_preview()
+            self._status(f"IMPORTED 6 PNGs // {PART_BY_ID[self.part_id].label}")
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Could not import the six images:\n{exc}")
 
     def _export_face_png(self) -> None:
         default = f"kw_{self.part_id}_{self.face}.png"
