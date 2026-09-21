@@ -157,6 +157,7 @@ const PORTABLE_INPUT := preload("res://scripts/kw3d/portable_input.gd")
 @export_enum("outrage", "erebus") var player_warrior_id: String = "outrage"
 @export var use_menu_warrior_selection := true
 @export_range(0, 4, 1) var ak_skin_id := 0
+@export_range(0, 4, 1) var kar_skin_id := 0
 @export var use_menu_weapon_skin_selection := true
 
 func _ready() -> void:
@@ -170,6 +171,11 @@ func _ready() -> void:
 			int(ProjectSettings.get_setting("kw3d/selected_ak_skin", ak_skin_id)),
 			0,
 			AK47_VOXEL_BUILDER.skin_count() - 1
+		)
+		kar_skin_id = clampi(
+			int(ProjectSettings.get_setting("kw3d/selected_kar_skin", kar_skin_id)),
+			0,
+			KAR_VOXEL_BUILDER.skin_count() - 1
 		)
 	var preview := get_node_or_null("EditorPreview")
 	if preview != null:
@@ -604,7 +610,7 @@ func _build_held_ak() -> void:
 	weapon_root.add_child(weapon_visual_wobble)
 	ak_visual_root=Node3D.new();ak_visual_root.name="AKVisual";weapon_visual_wobble.add_child(ak_visual_root)
 	for child in weapon_root.get_children().duplicate():
-		if child is MeshInstance3D:
+		if child is MeshInstance3D or child is GPUParticles3D:
 			child.reparent(ak_visual_root,false)
 	shotgun_visual_root=Node3D.new();shotgun_visual_root.name="ShotgunVisual";weapon_visual_wobble.add_child(shotgun_visual_root)
 	_build_shotgun_visual()
@@ -656,7 +662,7 @@ func _build_held_ak() -> void:
 	_set_weapon_slot(0,false)
 
 func _build_kar_visual() -> void:
-	KAR_VOXEL_BUILDER.build(kar_visual_root)
+	KAR_VOXEL_BUILDER.build(kar_visual_root, kar_skin_id)
 	var cache: Dictionary={}
 	for part in kar_visual_root.get_children():
 		if not part is MeshInstance3D:continue
@@ -667,8 +673,23 @@ func _build_kar_visual() -> void:
 			var mat:=PIXEL_MATERIALS.from_standard(original,0.018)
 			mat.set_shader_parameter("comic_enabled",comic_enabled);mat.set_shader_parameter("pixel_enabled",pixel_enabled)
 			cache[key]=mat;pixel_materials.append(weakref(mat))
-		part.material_override=cache[key]
-		_add_scene_outline(part,1.10)
+			part.material_override=cache[key]
+			_add_scene_outline(part,1.10)
+
+func projectile_style_for_weapon(weapon_id: String) -> Dictionary:
+	var id := weapon_id.strip_edges().to_lower()
+	match id:
+		"ak", "ak47":
+			return {
+				"color": AK47_VOXEL_BUILDER.main_color(ak_skin_id),
+				"inferno": AK47_VOXEL_BUILDER.skin_name(ak_skin_id) == "INFERNO",
+			}
+		"shotgun":
+			return {"color": Color("6d4030"), "inferno": false}
+		"kar":
+			return {"color": KAR_VOXEL_BUILDER.main_color(kar_skin_id), "inferno": false}
+		_:
+			return {"color": Color("fff1a8"), "inferno": false}
 
 func _build_shotgun_visual() -> void:
 	_add_weapon_box(shotgun_visual_root,"SG_Stock",Vector3(-0.36,-0.02,0),Vector3(0.62,0.22,0.24),Color("6d4030"))

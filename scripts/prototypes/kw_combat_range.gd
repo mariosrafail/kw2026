@@ -4,6 +4,7 @@ const DUMMY := preload("res://scripts/prototypes/kw_training_dummy.gd")
 const WAVE_DIRECTOR := preload("res://scripts/prototypes/kw_wave_director.gd")
 const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
 const HIT_REGIONS := preload("res://scripts/kw3d/hit_regions.gd")
+const FLAME_PARTICLES := preload("res://scripts/prototypes/kw_flame_particles.gd")
 var director: RefCounted
 var wave_label: Label
 const DAMAGE := 5.0
@@ -35,6 +36,7 @@ var hit_marker: Label
 var tracer_material: Material
 var tracer_halo_material: Material
 var tracer_hot_materials: Array[Material] = []
+var projectile_material_cache: Dictionary = {}
 var impact_material: Material
 var impact_hot_material: Material
 var hit_material: Material
@@ -85,6 +87,21 @@ func _setup_shooting_fx_materials() -> void:
 	impact_material = _fx_material(Color("fff5c2"), 7.2)
 	impact_hot_material = _fx_material(Color("ff8b55"), 6.1)
 	hit_material = _fx_material(Color("ff4058"), 4.8)
+
+func _projectile_material(color: Color, emission_energy: float, alpha: float = 1.0) -> Material:
+	var key := "%s|%.2f|%.2f" % [color.to_html(false), emission_energy, alpha]
+	if projectile_material_cache.has(key):
+		return projectile_material_cache[key] as Material
+	var material := _fx_material(color, emission_energy, alpha)
+	projectile_material_cache[key] = material
+	return material
+
+func _projectile_style(weapon_id: String) -> Dictionary:
+	if stage != null and stage.has_method("projectile_style_for_weapon"):
+		var style: Variant = stage.call("projectile_style_for_weapon", weapon_id)
+		if style is Dictionary:
+			return style as Dictionary
+	return {"color": Color("fff1a8"), "inferno": false}
 
 func _build_hud() -> void:
 	counter = Label.new()
@@ -160,7 +177,7 @@ func fire(muzzle: Vector3,target: Vector3,chest: Vector3,profile: Dictionary=WEA
 		if applied:
 			var victim_skin:=str(object.get("warrior_id")) if object!=null else "outrage"
 			_spawn_damage_feedback(endpoint,direction,shot_damage,object.dead,blood_color_for_skin(victim_skin),true)
-	if guard_hit.is_empty():_spawn_tracer(muzzle,endpoint)
+	if guard_hit.is_empty():_spawn_tracer(muzzle,endpoint,weapon_id)
 	if reticle!=null:reticle.notify_shot()
 	last_shot={"id":shots_fired,"damage_applied":applied,"target":target_name,"start":start,"end":endpoint,
 		"blocked":not hit.is_empty(),"headshot":headshot,"damage":shot_damage if applied else 0.0,
@@ -196,7 +213,7 @@ func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
 			elif object is RigidBody3D:
 				object.apply_impulse(direction*2.6,endpoint-object.global_position)
 			_spawn_impact(endpoint,normal)
-		_spawn_tracer(muzzle,endpoint)
+		_spawn_tracer(muzzle,endpoint,"shotgun")
 		pellet_results.append({"to":endpoint,"normal":normal,"hit":not hit.is_empty(),"headshot":pellet_headshot})
 	if reticle!=null:
 		reticle.notify_shot()
@@ -204,7 +221,7 @@ func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
 	last_shot={"id":shots_fired,"weapon":"shotgun","pellets":pellet_results,"damage_applied":applied_damage>0.0,"damage":applied_damage,"headshots":headshots,"start":muzzle,"end":target,"guard_blocked":not guard_hit.is_empty()}
 	return last_shot
 
-func _spawn_tracer(start: Vector3, end: Vector3) -> void:
+func _spawn_tracer(start: Vector3, end: Vector3, weapon_id: String = "ak") -> void:
 	var length := start.distance_to(end)
 	if length < 0.03:
 		return
@@ -214,9 +231,12 @@ func _spawn_tracer(start: Vector3, end: Vector3) -> void:
 			oldest["node"].queue_free()
 	tracer_serial += 1
 	var root := Node3D.new()
-	root.name = "AKTracer%03d" % tracer_serial
+	root.name = "%sTracer%03d" % [weapon_id.capitalize(), tracer_serial]
 	add_child(root)
 	var direction := (end - start).normalized()
+	var style := _projectile_style(weapon_id)
+	var projectile_color: Color = style.get("color", Color("fff1a8"))
+	var inferno := bool(style.get("inferno", false))
 	var hot_round := fx_rng.randf() < 0.12
 	var chunky_round := fx_rng.randf() < 0.08
 	var width := fx_rng.randf_range(0.036,0.058) * (1.90 if chunky_round else 1.0)
@@ -226,7 +246,7 @@ func _spawn_tracer(start: Vector3, end: Vector3) -> void:
 	var core_box := BoxMesh.new()
 	core_box.size = Vector3(width,width,streak)
 	core.mesh = core_box
-	core.material_override = tracer_hot_materials[tracer_serial % tracer_hot_materials.size()] if hot_round else tracer_material
+	core.material_override = _projectile_material(projectile_color, 7.6 if hot_round else 6.5)
 	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(core)
 	stage._add_scene_outline(core,0.6)
@@ -235,7 +255,8 @@ func _spawn_tracer(start: Vector3, end: Vector3) -> void:
 	var halo_box := BoxMesh.new()
 	halo_box.size = Vector3(width * 4.2,width * 4.2,streak * 0.95)
 	halo.mesh = halo_box
-	halo.material_override = tracer_halo_material
+	var halo_color := projectile_color.lightened(0.30)
+	halo.material_override = _projectile_material(halo_color, 5.8 if inferno else 4.8, 0.48)
 	halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(halo)
 	var head := MeshInstance3D.new()
@@ -247,6 +268,8 @@ func _spawn_tracer(start: Vector3, end: Vector3) -> void:
 	head.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	head.position = Vector3(0,0,-streak * 0.52)
 	root.add_child(head)
+	if inferno:
+		FLAME_PARTICLES.add_bullet_flames(root, projectile_color)
 	root.global_position = start + direction * minf(streak * 0.5,length * 0.5)
 	root.look_at(root.global_position + direction, Vector3.RIGHT if absf(direction.y)>0.98 else Vector3.UP)
 	active_tracers.append({
@@ -255,10 +278,10 @@ func _spawn_tracer(start: Vector3, end: Vector3) -> void:
 		"duration":clampf(length / fx_rng.randf_range(235.0,285.0),0.028,0.12),
 		"streak":streak,"width":width,"wobble":fx_rng.randf_range(0.0,0.018),
 		"phase":fx_rng.randf_range(0.0,TAU),"spin":fx_rng.randf_range(-8.0,8.0),
-		"trail_timer":0.0,"hot":hot_round
+			"trail_timer":0.0,"hot":hot_round,"color":projectile_color,"inferno":inferno
 	})
 
-func _spawn_trail_echo(position: Vector3, direction: Vector3, width: float, hot: bool) -> void:
+func _spawn_trail_echo(position: Vector3, direction: Vector3, width: float, hot: bool, color: Color, inferno: bool) -> void:
 	if direction.length_squared() < 0.0001:
 		return
 	while trail_echoes.size() >= 96:
@@ -271,7 +294,8 @@ func _spawn_trail_echo(position: Vector3, direction: Vector3, width: float, hot:
 	var echo_len := fx_rng.randf_range(0.16,0.34) * (1.25 if hot else 1.0)
 	box.size = Vector3(width * fx_rng.randf_range(2.0,2.8),width * fx_rng.randf_range(2.0,2.8),echo_len)
 	echo.mesh = box
-	echo.material_override = tracer_hot_materials[tracer_serial % tracer_hot_materials.size()] if hot else tracer_halo_material
+	var trail_color := color.lightened(0.20 if inferno else 0.10)
+	echo.material_override = _projectile_material(trail_color, 5.6 if inferno else (4.8 if hot else 4.1), 0.42 if inferno else 0.34)
 	echo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(echo)
 	var jitter := Vector3(fx_rng.randf_range(-0.014,0.014),fx_rng.randf_range(-0.014,0.014),fx_rng.randf_range(-0.014,0.014))
@@ -429,7 +453,14 @@ func _process(delta: float) -> void:
 		while float(data["trail_timer"]) >= 0.008:
 			data["trail_timer"] = float(data["trail_timer"]) - 0.008
 			var trail_pos: Vector3 = node.global_position - (data["direction"] as Vector3) * float(data["streak"]) * 0.42
-			_spawn_trail_echo(trail_pos,data["direction"],float(data["width"]),bool(data.get("hot",false)))
+			_spawn_trail_echo(
+				trail_pos,
+				data["direction"],
+				float(data["width"]),
+				bool(data.get("hot",false)),
+				data.get("color", Color("fff1a8")) as Color,
+				bool(data.get("inferno",false))
+			)
 		node.rotate_object_local(Vector3.FORWARD,float(data["spin"]) * delta)
 		var halo: MeshInstance3D = data["halo"]
 		var head: MeshInstance3D = data["head"]

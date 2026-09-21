@@ -12,6 +12,7 @@ func run() -> void:
 	stage.player_warrior_id = "outrage"
 	stage.use_menu_weapon_skin_selection = false
 	stage.ak_skin_id = 0
+	stage.kar_skin_id = 0
 	root.add_child(stage)
 	stage.combat.set_training_mode(true)
 	# Freeze target travel for deterministic aim/terrain fixtures; roaming has its own test.

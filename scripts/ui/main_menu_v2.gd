@@ -112,6 +112,11 @@ func _finish_setup() -> void:
 		0,
 		WEAPON_SHOWROOM.skin_count("ak47") - 1
 	)
+	selected_kar_skin = clampi(
+		int(ProjectSettings.get_setting("kw3d/selected_kar_skin", 0)),
+		0,
+		WEAPON_SHOWROOM.skin_count("kar") - 1
+	)
 	_sync_presentation_visibility()
 	if play_button != null and presentation.visible:
 		play_button.grab_focus()
@@ -698,6 +703,7 @@ func _launch_offline_waves() -> void:
 	selected_showroom_warrior = _current_warrior_id()
 	ProjectSettings.set_setting("kw3d/selected_warrior_id", selected_showroom_warrior)
 	ProjectSettings.set_setting("kw3d/selected_ak_skin", selected_ak_skin)
+	ProjectSettings.set_setting("kw3d/selected_kar_skin", selected_kar_skin)
 	if status_label != null:
 		status_label.text = "LOADING // OFFLINE WAVES // %s" % selected_showroom_warrior.to_upper()
 	_show_v2_loading("LOADING // OFFLINE WAVES // %s" % selected_showroom_warrior.to_upper(), 0.82)
@@ -1397,6 +1403,7 @@ func _select_weapon_skin(weapon_id: String, skin_id: int) -> void:
 		ProjectSettings.set_setting("kw3d/selected_ak_skin", resolved)
 	elif id == "kar":
 		selected_kar_skin = resolved
+		ProjectSettings.set_setting("kw3d/selected_kar_skin", resolved)
 	if active_submenu == "guns" and selected_showroom_weapon == id:
 		_populate_guns_submenu()
 

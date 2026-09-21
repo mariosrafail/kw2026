@@ -1,4 +1,5 @@
 extends RefCounted
+const FLAME_PARTICLES := preload("res://scripts/prototypes/kw_flame_particles.gd")
 
 # Generated from frame 0 of the real gameplay AK reload strip.
 # Each visible AK pixel becomes a real 3D voxel.
@@ -326,6 +327,13 @@ static func skin_count() -> int:
 static func skin_accent(skin_id: int) -> Color:
 	return _skin_palette(skin_id)["accent"] as Color
 
+static func main_color(skin_id: int) -> Color:
+	var resolved := clampi(skin_id, 0, SKIN_NAMES.size() - 1)
+	var palette := _skin_palette(resolved)
+	if resolved == 4:
+		return palette["flame_mid"] as Color
+	return palette["body"] as Color
+
 static func _skin_palette(skin_id: int) -> Dictionary:
 	match clampi(skin_id, 0, SKIN_NAMES.size() - 1):
 		1:
@@ -389,6 +397,7 @@ static func _add_inferno_flames(parent: Node3D, materials: Dictionary, palette: 
 	_flame_part(parent,materials,"InfernoFlame_Right",Vector3(0.22,0.425,0),Vector3(0.12,0.16,0.20),mid,Vector3(0,0,0.24))
 	_flame_part(parent,materials,"InfernoFlame_Handguard",Vector3(0.52,0.335,0),Vector3(0.28,0.06,0.22),dark)
 	_flame_part(parent,materials,"InfernoFlame_HandguardTip",Vector3(0.52,0.415,0),Vector3(0.09,0.16,0.16),mid,Vector3(0,0,-0.15))
+	FLAME_PARTICLES.add_weapon_flames(parent)
 
 static func _flame_part(parent: Node3D,materials: Dictionary,title: String,pos: Vector3,size: Vector3,color: Color,rotation: Vector3=Vector3.ZERO) -> MeshInstance3D:
 	var mesh := _part(parent,materials,title,pos,size,color,rotation)

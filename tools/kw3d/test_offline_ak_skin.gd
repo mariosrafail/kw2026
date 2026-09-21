@@ -46,6 +46,7 @@ func run() -> void:
 			await physics_frame
 		check(stage.ak_skin_id == 4, "offline_skin_id")
 		check(stage.ak_visual_root.find_child("InfernoFlame_Mid", true, false) != null, "offline_inferno_geometry")
+		check(stage.ak_visual_root.find_child("InfernoWeaponParticles", true, false) is GPUParticles3D, "offline_inferno_weapon_particles")
 
 	ProjectSettings.set_setting("kw3d/selected_ak_skin", original)
 	print("OFFLINE_AK_SKIN_QA_", "PASS" if failures.is_empty() else "FAIL", failures)

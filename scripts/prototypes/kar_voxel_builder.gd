@@ -58,6 +58,9 @@ static func skin_accent(skin_id: int) -> Color:
 		4: return Color("FFCE5A")
 		_: return Color("C58B63")
 
+static func main_color(skin_id: int) -> Color:
+	return _skin_palette(skin_id)["wood"] as Color
+
 
 static func _skin_palette(skin_id: int) -> Dictionary:
 	match clampi(skin_id, 0, SKIN_NAMES.size() - 1):

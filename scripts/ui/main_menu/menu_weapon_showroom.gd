@@ -52,6 +52,15 @@ static func skin_accent(weapon_id: String, skin_id: int) -> Color:
 		return AK47_BUILDER.skin_accent(skin_id)
 	return Color("6CCFFF")
 
+static func main_color(weapon_id: String, skin_id: int = 0) -> Color:
+	if weapon_id == "kar":
+		return KAR_BUILDER.main_color(skin_id)
+	if weapon_id == "ak47":
+		return AK47_BUILDER.main_color(skin_id)
+	if weapon_id == "shotgun":
+		return Color("6d4030")
+	return Color("6CCFFF")
+
 
 static func _build_shotgun(parent: Node3D) -> void:
 	_add_part(parent,"SG_Stock",Vector3(-0.36,-0.02,0),Vector3(0.62,0.22,0.24),Color("6d4030"))

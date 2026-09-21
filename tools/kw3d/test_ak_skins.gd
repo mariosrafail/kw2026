@@ -32,6 +32,8 @@ func run() -> void:
 			if str(child.name).begins_with("InfernoFlame_"):
 				flame_count += 1
 		check(flame_count == (7 if skin_id == 4 else 0), "flame_geometry_%d" % skin_id)
+		var flame_particles := model.get_node_or_null("InfernoWeaponParticles") as GPUParticles3D
+		check((flame_particles != null) == (skin_id == 4), "flame_particles_%d" % skin_id)
 		model.queue_free()
 
 	check(receiver_colors[0] != receiver_colors[1], "crimson_recolor")
