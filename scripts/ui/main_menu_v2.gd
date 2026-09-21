@@ -81,6 +81,7 @@ var camera_target := Vector3(0.72, 0.72, 0.35)
 var hero_base_rotation := Vector3.ZERO
 
 var play_button: Button
+var offline_button: Button
 var wallet_label: Label
 var status_label: Label
 var time := 0.0
@@ -322,7 +323,7 @@ func _build_left_panel() -> void:
 
 	play_button = _make_voxel_button("FIGHT", "PlayButton", true, false, false, Color.TRANSPARENT, 1)
 	box.add_child(play_button)
-	var offline_button := _make_voxel_button("OFFLINE TESTING", "", false, false, false, CLR_BLUE, 2)
+	offline_button = _make_voxel_button("OFFLINE TESTING", "", false, false, false, CLR_BLUE, 2)
 	offline_button.pressed.connect(_launch_offline_waves)
 	box.add_child(offline_button)
 	var combat_spacer := Control.new()
@@ -681,9 +682,14 @@ func _launch_offline_waves() -> void:
 		if status_label != null:
 			status_label.text = "LINK ERROR // OFFLINE TESTING"
 		return
+	# Resolve the character again at the exact scene-transition boundary.  This
+	# makes Offline Testing deterministic even if legacy state was refreshed
+	# after the user picked a warrior in the V2 roster.
+	selected_showroom_warrior = _current_warrior_id()
+	ProjectSettings.set_setting("kw3d/selected_warrior_id", selected_showroom_warrior)
 	if status_label != null:
-		status_label.text = "LOADING // OFFLINE WAVES"
-	_show_v2_loading("LOADING // OFFLINE WAVES", 0.82)
+		status_label.text = "LOADING // OFFLINE WAVES // %s" % selected_showroom_warrior.to_upper()
+	_show_v2_loading("LOADING // OFFLINE WAVES // %s" % selected_showroom_warrior.to_upper(), 0.82)
 	hide_until = time + 1.0
 	legacy.call("_launch_offline_test_room", "waves")
 
@@ -1388,7 +1394,9 @@ func _populate_warriors_submenu() -> void:
 	for warrior_id in ["outrage", "erebus"]:
 		var id := str(warrior_id)
 		var accent := CLR_MAGENTA if id == "outrage" else Color("df7126")
-		var button := _make_submenu_button(id.to_upper(), accent, id == selected_showroom_warrior)
+		var active := id == selected_showroom_warrior
+		var label := "%s // OFFLINE SELECTED" % id.to_upper() if active else id.to_upper()
+		var button := _make_submenu_button(label, accent, active)
 		button.name = "Warrior_%s" % id.capitalize()
 		button.pressed.connect(func() -> void:
 			_select_v2_warrior(id)
@@ -1596,23 +1604,26 @@ func _show_showroom_warrior(warrior_id: String) -> void:
 	showroom_world.add_child(showroom_root)
 	var model := _warrior_scene(id).instantiate() as Node3D
 	model.set_script(null)
-	HERO_MATERIALS.apply_to(model)
-	model.position = Vector3(0, -1.28, 0)
-	model.scale = Vector3.ONE * 1.08
+	_apply_menu_warrior_materials(model, id)
+	# The authored character origin is near the middle of the body.  Place the
+	# feet on the showroom floor instead of pushing the lower body below frame.
+	model.position = Vector3(0, 0.10, 0)
+	model.scale = Vector3.ONE * 0.92
 	showroom_root.add_child(model)
-	showroom_root.scale = Vector3.ONE * 0.88
+	showroom_root.scale = Vector3.ONE * 0.92
 	showroom_yaw = -0.18
 	showroom_pitch = 0.0
-	showroom_camera.position = Vector3(0.26, 0.86, -4.45)
-	showroom_camera.look_at(Vector3(0, 0.58, 0), Vector3.UP)
+	showroom_camera.position = Vector3(0.20, 0.10, -5.60)
+	showroom_camera.fov = 34.0
+	showroom_camera.look_at(Vector3(0, 0.05, 0), Vector3.UP)
 	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(showroom_root, "scale", Vector3.ONE, 0.26)
 	if id == "erebus":
 		submenu_info_title.text = "EREBUS"
-		submenu_info_body.text = "WARRIOR 02\n\nBODY // ORANGE HEAVY FRAME\n\nSKILL // VOID GUARD\n\nSHORT IMMUNITY WINDOW TO SURVIVE BURST DAMAGE.\n\nSELECTED WARRIOR LOADS INTO OFFLINE 3D GAMEPLAY."
+		submenu_info_body.text = "WARRIOR 02\n\nBODY // ORANGE HEAVY FRAME\n\nSKILL // VOID GUARD\n\nSHORT IMMUNITY WINDOW TO SURVIVE BURST DAMAGE.\n\nOFFLINE TESTING LOADOUT // EREBUS."
 	else:
 		submenu_info_title.text = "OUTRAGE"
-		submenu_info_body.text = "WARRIOR 01\n\nBODY // STREET ZERO FRAME\n\nSKILL // BOMB BLAST\n\nTHROWS AN EXPLOSIVE BOMB.\n\nSELECTED WARRIOR LOADS INTO OFFLINE 3D GAMEPLAY."
+		submenu_info_body.text = "WARRIOR 01\n\nBODY // STREET ZERO FRAME\n\nSKILL // BOMB BLAST\n\nTHROWS AN EXPLOSIVE BOMB.\n\nOFFLINE TESTING LOADOUT // OUTRAGE."
 
 func _normalize_warrior_id(warrior_id: String) -> String:
 	var id := warrior_id.strip_edges().to_lower()
@@ -1620,13 +1631,19 @@ func _normalize_warrior_id(warrior_id: String) -> String:
 
 func _current_warrior_id() -> String:
 	if legacy != null:
-		var legacy_id := _normalize_warrior_id(str(legacy.get("selected_warrior_id")))
-		if legacy_id in ["outrage", "erebus"]:
-			return legacy_id
+		var raw_legacy_id := str(legacy.get("selected_warrior_id")).strip_edges().to_lower()
+		if raw_legacy_id in ["outrage", "erebus"]:
+			return raw_legacy_id
 	return _normalize_warrior_id(str(ProjectSettings.get_setting("kw3d/selected_warrior_id", "outrage")))
 
 func _warrior_scene(warrior_id: String) -> PackedScene:
 	return EREBUS_SCENE if _normalize_warrior_id(warrior_id) == "erebus" else OUTRAGE_SCENE
+
+func _apply_menu_warrior_materials(model: Node3D, warrior_id: String) -> void:
+	if _normalize_warrior_id(warrior_id) == "erebus":
+		HERO_MATERIALS.apply_flat_to(model)
+	else:
+		HERO_MATERIALS.apply_to(model)
 
 func _set_main_menu_hero(parent: Node3D, warrior_id: String) -> void:
 	var id := _normalize_warrior_id(warrior_id)
@@ -1638,7 +1655,7 @@ func _set_main_menu_hero(parent: Node3D, warrior_id: String) -> void:
 	hero.name = "%sMenuHero" % id.capitalize()
 	# Detach the presentation instance's gameplay style before _ready can apply it.
 	hero.set_script(null)
-	HERO_MATERIALS.apply_to(hero)
+	_apply_menu_warrior_materials(hero, id)
 	hero.position = Vector3(-1.05, -0.34, 0.15)
 	hero.rotation_degrees.y = -11.0
 	hero.scale = Vector3.ONE * 1.16
@@ -1661,6 +1678,8 @@ func _update_selected_warrior_labels() -> void:
 		hero_tag.text = "%s // SELECTED" % display
 	if hero_strap != null:
 		hero_strap.text = "%s // LIVE COMBAT SYSTEM" % display
+	if offline_button != null:
+		offline_button.text = "OFFLINE TESTING // %s" % display
 
 func _sync_selected_warrior_from_legacy() -> void:
 	selected_showroom_warrior = _current_warrior_id()
@@ -1696,6 +1715,8 @@ func _select_v2_warrior(warrior_id: String) -> void:
 
 func _clear_showroom() -> void:
 	if showroom_root != null and is_instance_valid(showroom_root):
+		if showroom_root.get_parent() != null:
+			showroom_root.get_parent().remove_child(showroom_root)
 		showroom_root.queue_free()
 	showroom_root = null
 

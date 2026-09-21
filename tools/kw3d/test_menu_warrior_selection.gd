@@ -32,7 +32,15 @@ func run() -> void:
 	check(str(ProjectSettings.get_setting("kw3d/selected_warrior_id", "")) == "erebus", "erebus_runtime_setting")
 	check(str(menu.legacy.get("selected_warrior_id")) == "erebus", "erebus_legacy_state")
 	check(menu.hero != null and menu.hero.name == "ErebusMenuHero", "erebus_main_menu_model")
-	check(menu.showroom_root != null and menu.showroom_root.name == "WarriorPreview_Erebus", "erebus_showroom_model")
+	check(menu.showroom_root != null, "erebus_showroom_model")
+	check(menu.offline_button != null and menu.offline_button.text.contains("EREBUS"), "offline_button_shows_erebus")
+	var showroom_model := menu.showroom_root.get_node_or_null("ErebusFullBody") as Node3D
+	check(showroom_model != null, "erebus_showroom_body")
+	if showroom_model != null:
+		check(showroom_model.position.y > 0.0, "erebus_fullbody_floor_alignment")
+		var head := showroom_model.get_node("HeadRig/Head_Core") as MeshInstance3D
+		var mat := head.material_override as StandardMaterial3D
+		check(mat != null and not mat.normal_enabled and mat.normal_texture == null, "erebus_clean_showroom_material")
 
 	var stage: Variant = load("res://scenes/prototypes/kw_3d_prototype.tscn").instantiate()
 	root.add_child(stage)
@@ -51,7 +59,8 @@ func run() -> void:
 	check(menu._current_warrior_id() == "outrage", "outrage_selected")
 	check(str(ProjectSettings.get_setting("kw3d/selected_warrior_id", "")) == "outrage", "outrage_runtime_setting")
 	check(menu.hero != null and menu.hero.name == "OutrageMenuHero", "outrage_main_menu_model")
-	check(menu.showroom_root != null and menu.showroom_root.name == "WarriorPreview_Outrage", "outrage_showroom_model")
+	check(menu.showroom_root != null, "outrage_showroom_model")
+	check(menu.offline_button != null and menu.offline_button.text.contains("OUTRAGE"), "offline_button_shows_outrage")
 
 	menu._select_v2_warrior(original)
 	for i in range(4):

@@ -49,6 +49,35 @@ static func apply_to(hero: Node3D) -> void:
 				mesh.remove_meta(key)
 
 
+static func apply_flat_to(hero: Node3D) -> void:
+	# Erebus uses a deliberately tiny solid-color atlas.  Keep it literal in the
+	# menu instead of adding the procedural portrait normal map, which can make
+	# the solid authored colors look like a failed/noisy texture.
+	for node in hero.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		if str(mesh.name).contains("Outline"):
+			mesh.get_parent().remove_child(mesh)
+			mesh.free()
+			continue
+		var source := mesh.get_meta("plain_material", mesh.material_override) as StandardMaterial3D
+		if source == null:
+			continue
+		var material := source.duplicate(true) as StandardMaterial3D
+		material.resource_name = "Menu Flat %s" % str(mesh.name)
+		material.resource_local_to_scene = true
+		material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		material.normal_enabled = false
+		material.normal_texture = null
+		material.clearcoat_enabled = false
+		material.metallic = 0.0
+		material.roughness = 0.82
+		mesh.material_overlay = null
+		mesh.material_override = material
+		for key in ["plain_material", "toon_material", "pixel_material"]:
+			if mesh.has_meta(key):
+				mesh.remove_meta(key)
+
+
 static func _surface_normal() -> NoiseTexture2D:
 	var texture := NoiseTexture2D.new()
 	texture.width = 512
