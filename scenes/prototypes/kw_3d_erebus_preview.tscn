@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/prototypes/kw_3d_prototype.gd" id="1_kw3d"]
+
+[node name="KW3DErebusPreview" type="Node3D"]
+script = ExtResource("1_kw3d")
+player_warrior_id = "erebus"

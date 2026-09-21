@@ -141,6 +141,7 @@ const VOXEL_UNIT := 0.082
 const RIG_CENTER_X := 2.0
 const RIG_CENTER_Y := -4.0
 const OUTRAGE_FULLBODY := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
+const EREBUS_FULLBODY := preload("res://scenes/prototypes/characters/erebus_fullbody.tscn")
 const AK47_VOXEL_BUILDER := preload("res://scripts/prototypes/ak47_voxel_builder.gd")
 const KAR_VOXEL_BUILDER := preload("res://scripts/prototypes/kar_voxel_builder.gd")
 const AK47_SHOT_SFX := preload("res://assets/sounds/sfx/guns/ak47/ak_shoot.wav")
@@ -153,6 +154,7 @@ const AK_RECOIL_MODEL := preload("res://scripts/kw3d/ak_recoil.gd")
 const WEAPON_RULES := preload("res://scripts/kw3d/weapon_rules.gd")
 const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd")
 const PORTABLE_INPUT := preload("res://scripts/kw3d/portable_input.gd")
+@export_enum("outrage", "erebus") var player_warrior_id: String = "outrage"
 
 func _ready() -> void:
 	# The baked preview exists only for the editor; runtime builds the same arena.
@@ -443,7 +445,8 @@ func _build_arena() -> void:
 	_add_kw_sign()
 func _build_player() -> void:
 	player = CharacterBody3D.new()
-	player.name = "Outrage3D"
+	var is_erebus := player_warrior_id == "erebus"
+	player.name = "Erebus3D" if is_erebus else "Outrage3D"
 	player.collision_layer = 2
 	player.collision_mask = 9 # world and clone movement capsules; exact hitboxes are shot-only
 	player.position = Vector3(0, 2.2, 6.0)
@@ -457,7 +460,7 @@ func _build_player() -> void:
 	player.add_child(collision)
 
 	player_visual = Node3D.new()
-	player_visual.name = "OutrageVisual"
+	player_visual.name = "ErebusVisual" if is_erebus else "OutrageVisual"
 	player.add_child(player_visual)
 	_build_outage_voxel_body()
 	player_damage_visual=VOXEL_DAMAGE_VISUAL.new()
@@ -468,7 +471,7 @@ func _build_player() -> void:
 	player_visual.rotation.y = body_yaw
 
 	var name_tag := Label3D.new()
-	name_tag.text = "OUTRAGE // STREET ZERO"
+	name_tag.text = "EREBUS // NIGHT CORE" if is_erebus else "OUTRAGE // STREET ZERO"
 	# Own-player name is not needed in the aiming lane.
 	name_tag.visible = false
 	name_tag.position = Vector3(0, 1.9, 0)
@@ -552,7 +555,8 @@ func _apply_body_fire_recoil(_shot_yaw: float) -> void:
 
 func _build_outage_voxel_body() -> void:
 	# One authored source for geometry, UVs, rest positions and pivots.
-	head_style = OUTRAGE_FULLBODY.instantiate() as Node3D
+	var body_scene: PackedScene = EREBUS_FULLBODY if player_warrior_id == "erebus" else OUTRAGE_FULLBODY
+	head_style = body_scene.instantiate() as Node3D
 	player_visual.add_child(head_style)
 	head_rig = head_style.get_node("HeadRig") as Node3D
 	torso_rig = head_style.get_node("TorsoRig") as Node3D
@@ -694,7 +698,8 @@ func _add_weapon_hand(node_name: String, pos: Vector3, size: Vector3) -> void:
 	hand.mesh = box
 	hand.position = pos
 	hand.set_meta("hold_rest",pos)
-	hand.material_override = _material(Color(0.56, 0.11, 0.15), false, 0.0)
+	var hand_color := Color("df7126") if player_warrior_id == "erebus" else Color(0.56, 0.11, 0.15)
+	hand.material_override = _material(hand_color, false, 0.0)
 	weapon_aim_pivot.add_child(hand)
 	_add_scene_outline(hand, 1.6)
 

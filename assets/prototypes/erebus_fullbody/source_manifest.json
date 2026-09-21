@@ -1,0 +1,8 @@
+{
+  "source_sha256": "3e799cc9770cf904ef8366326e9adfc97ae4d844f207a792e19cc5e97f73aca0",
+  "source_file": "art_source/blockbench/erebus/Erebus_FullBody_v01.bbmodel",
+  "part_count": 15,
+  "approved_head_source": "art_source/blockbench/erebus/Erebus_Head_v01.bbmodel",
+  "base_body_source": "art_source/blockbench/outrage/Outrage_FullBody_v11_slimmer_body_foot.bbmodel",
+  "generated_by": "tools/kw3d/build_erebus_fullbody_source.py"
+}
