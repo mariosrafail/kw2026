@@ -48,6 +48,7 @@ var aim_solution: Dictionary = {}
 var active_tracers: Array[Dictionary] = []
 var trail_echoes: Array[Dictionary] = []
 var impacts: Array[Node3D] = []
+var bullet_holes: Array[MeshInstance3D] = []
 var confirm_audio: AudioStreamPlayer
 var confirm_hit: AudioStreamWAV
 var confirm_kill: AudioStreamWAV
@@ -421,12 +422,14 @@ func _spawn_impact(
 	tween.tween_property(flash,"scale",Vector3.ONE * 1.9,0.055).from(Vector3.ONE * 0.45)
 	tween.tween_property(flash,"scale",Vector3.ONE * 0.08,0.07)
 	tween.tween_callback(flash.queue_free)
-	var particle_count := fx_rng.randi_range(7,11) if surface_debris else fx_rng.randi_range(4,7)
+	if surface_debris and absf(normal.normalized().y) < 0.58:
+		_spawn_bullet_hole(point, normal)
+	var particle_count := fx_rng.randi_range(10,15) if surface_debris else fx_rng.randi_range(4,7)
 	for i in range(particle_count):
 		var chip := MeshInstance3D.new()
 		chip.name = "SurfaceDebrisParticle" if surface_debris else "ImpactSpark"
 		var box := BoxMesh.new()
-		var debris_scale := fx_rng.randf_range(0.85,1.35) if surface_debris else 1.0
+		var debris_scale := fx_rng.randf_range(1.10,1.65) if surface_debris else 1.0
 		box.size = Vector3(
 			fx_rng.randf_range(0.018,0.035) * debris_scale,
 			fx_rng.randf_range(0.018,0.035) * debris_scale,
@@ -465,6 +468,43 @@ func _spawn_impact(
 			),
 			"shrink_from":0.38 if surface_debris else 0.72,
 		})
+
+func _spawn_bullet_hole(point: Vector3, normal: Vector3) -> MeshInstance3D:
+	for i in range(bullet_holes.size()-1,-1,-1):
+		if not is_instance_valid(bullet_holes[i]):
+			bullet_holes.remove_at(i)
+	while bullet_holes.size() >= 48:
+		var oldest: MeshInstance3D = bullet_holes.pop_front() as MeshInstance3D
+		if is_instance_valid(oldest):
+			oldest.queue_free()
+	var safe_normal := normal.normalized() if normal.length_squared() > 0.0001 else Vector3.FORWARD
+	var hole := MeshInstance3D.new()
+	hole.name = "BulletHole"
+	var quad := QuadMesh.new()
+	var diameter := fx_rng.randf_range(0.075,0.105)
+	quad.size = Vector2(diameter, diameter)
+	hole.mesh = quad
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.albedo_color = Color(0.008,0.006,0.006,0.92)
+	material.roughness = 1.0
+	hole.material_override = material
+	hole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(hole)
+	hole.global_position = point + safe_normal * 0.012
+	var up := Vector3.UP if absf(safe_normal.dot(Vector3.UP)) < 0.96 else Vector3.RIGHT
+	hole.look_at(hole.global_position + safe_normal, up)
+	hole.rotate_object_local(Vector3.FORWARD, fx_rng.randf_range(-PI, PI))
+	hole.transparency = 0.02
+	bullet_holes.append(hole)
+	var tween := hole.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_interval(0.95)
+	tween.tween_property(hole, "transparency", 1.0, 0.72)
+	tween.parallel().tween_property(hole, "scale", Vector3.ONE * 0.72, 0.72)
+	tween.tween_callback(hole.queue_free)
+	return hole
 
 func _on_target_damaged(_target: Node3D, lethal: bool) -> void:
 	hit_timer = 0.13
