@@ -264,7 +264,7 @@ func fire_shotgun(muzzle: Vector3,target: Vector3,chest: Vector3) -> Dictionary:
 					applied_damage+=pellet_damage
 					if pellet_headshot:headshots+=1
 					var victim_skin:=str(object.get("warrior_id")) if object!=null else "outrage"
-					_spawn_damage_feedback(endpoint,direction,pellet_damage,object.dead,blood_color_for_skin(victim_skin),pellet==0)
+					_spawn_damage_feedback(endpoint,direction,pellet_damage,object.dead,blood_color_for_skin(victim_skin),true)
 			elif object is RigidBody3D:
 				object.apply_impulse(direction*2.6,endpoint-object.global_position)
 			_spawn_impact(endpoint,normal,_surface_color_at(endpoint,normal,object),environment_hit)

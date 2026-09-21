@@ -40,7 +40,8 @@ func run()->void:
 		check(bridge_owner==bridge,"offline_gap_ray_hits_body_bridge_shape")
 	check(is_equal_approx(RULES.damage(RULES.AK,false),5.0),"ak_body_5")
 	check(is_equal_approx(RULES.damage(RULES.AK,true),7.5),"headshot_multiplier_1_5")
-	check(is_equal_approx(RULES.damage(RULES.SHOTGUN,true),7.5),"shotgun_pellet_headshot_multiplier_1_5")
+	check(is_equal_approx(RULES.damage(RULES.SHOTGUN,false),6.0),"shotgun_pellet_body_6")
+	check(is_equal_approx(RULES.damage(RULES.SHOTGUN,true),9.0),"shotgun_pellet_headshot_multiplier_1_5")
 	check(is_equal_approx(RULES.damage(RULES.KAR,false),50.0),"kar_body_50")
 	check(RULES.damage(RULES.KAR,true)>=100.0,"kar_headshot_instant_kill_damage")
 
@@ -69,10 +70,19 @@ func run()->void:
 	check(stage.ammo_in_mag==2 and int(RULES.SHOTGUN.pellets)==10,"shotgun_two_shell_ten_pellet")
 	check(stage.player_ammo_label.position.y>stage.player_health_bar.position.y,"ammo_ui_above_healthbar")
 	check("SHOTGUN" in stage.player_ammo_label.text,"ammo_ui_weapon_name")
-	target.health=100.0;target.dead=false;target.collision_layer=4
-	var sg: Dictionary=stage.combat.fire_shotgun(body_from,torso.global_position,body_from+Vector3(0,0,0.05))
+	target.health=100.0;target.dead=false;target.collision_layer=4;target.seen_shots.clear()
+	stage.aiming=true
+	var sg_from:=torso.global_position+Vector3(0,0,1.6)
+	var damage_labels_before: int=stage.combat.director.hud.damage_labels.size()
+	var sg: Dictionary=stage.combat.fire_shotgun(sg_from,torso.global_position,sg_from+Vector3(0,0,0.05))
 	check(sg.weapon=="shotgun" and sg.pellets.size()==10,"shotgun_fires_ten_real_rays")
 	check(float(sg.damage)>=0.0,"shotgun_damage_finite")
+	var sg_body_damage:=RULES.damage(RULES.SHOTGUN,false)
+	var sg_head_damage:=RULES.damage(RULES.SHOTGUN,true)
+	var expected_sg_numbers:=int(round((float(sg.damage)-float(sg.headshots)*sg_head_damage)/sg_body_damage))+int(sg.headshots)
+	var damage_labels_after: int=stage.combat.director.hud.damage_labels.size()
+	check(expected_sg_numbers>=2,"shotgun_test_applies_multiple_pellets")
+	check(damage_labels_after-damage_labels_before==expected_sg_numbers,"shotgun_each_applied_pellet_has_damage_number")
 	stage.queue_free();for i in range(3):await process_frame
 
 	var world=load("res://scripts/kw3d/authority_world.gd").new();root.add_child(world);world.attacks_enabled=false;world.add_player(1)

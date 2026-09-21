@@ -6,6 +6,7 @@ const SKIN_NAMES := [
 	"CLASSIC",
 	"VOID",
 	"NEON",
+	"HEART",
 ]
 
 const VOID_BODY := Color("292a31")
@@ -16,7 +17,24 @@ const NEON_BODY := Color("20ff00")
 const NEON_PANEL := Color("12b800")
 const NEON_HORN := Color("f4ff00")
 const NEON_EYE := Color("050505")
+const HEART_BODY := Color("a126ff")
+const HEART_PANEL := Color("58118a")
+const HEART_HORN := Color("ff2948")
+const HEART_EYE := Color("050505")
 const HORN_RAISE_3PX := 0.21
+
+const HEART_HORN_POSITIONS := {
+	"Horn_Left_Root": Vector3(-0.56, 0.10, 0.0),
+	"Horn_Left_Lower": Vector3(-0.72, 0.27, 0.0),
+	"Horn_Left_Middle": Vector3(-0.72, 0.48, 0.0),
+	"Horn_Left_Upper": Vector3(-0.48, 0.69, 0.0),
+	"Horn_Left_Tip": Vector3(-0.07, 0.57, 0.0),
+	"Horn_Right_Root": Vector3(0.56, 0.10, 0.0),
+	"Horn_Right_Lower": Vector3(0.72, 0.27, 0.0),
+	"Horn_Right_Middle": Vector3(0.72, 0.48, 0.0),
+	"Horn_Right_Upper": Vector3(0.48, 0.69, 0.0),
+	"Horn_Right_Tip": Vector3(0.07, 0.57, 0.0),
+}
 
 
 static func skin_count() -> int:
@@ -31,6 +49,7 @@ static func skin_accent(skin_id: int) -> Color:
 	match clampi(skin_id, 0, SKIN_NAMES.size() - 1):
 		1: return VOID_HORN
 		2: return NEON_HORN
+		3: return HEART_HORN
 		_: return Color("9b2635")
 
 
@@ -38,6 +57,7 @@ static func main_color(skin_id: int) -> Color:
 	match clampi(skin_id, 0, SKIN_NAMES.size() - 1):
 		1: return VOID_BODY
 		2: return NEON_BODY
+		3: return HEART_BODY
 		_: return Color("8f1d27")
 
 
@@ -56,11 +76,23 @@ static func apply(model: Node3D, skin_id: int, glow_scale: float = 1.0) -> void:
 		_apply_color(mesh, color, resolved)
 		if resolved == 2 and part_name.begins_with("Horn_"):
 			mesh.position.y += HORN_RAISE_3PX
+		elif resolved == 3 and part_name.begins_with("Horn_"):
+			_apply_heart_horn_shape(mesh, part_name)
 	if resolved == 2:
 		_add_neon_lights(model, glow_scale)
 
 
 static func _color_for_part(part_name: String, skin_id: int) -> Color:
+	if skin_id == 3:
+		if part_name.begins_with("Horn_"):
+			return HEART_HORN
+		if part_name.begins_with("Eye_"):
+			return HEART_EYE
+		if part_name in ["Back_Panel", "Left_Panel", "Right_Panel", "Torso_Step", "Torso_Tip"]:
+			return HEART_PANEL
+		if part_name.begins_with("Foot_"):
+			return HEART_PANEL
+		return HEART_BODY
 	if skin_id == 2:
 		if part_name.begins_with("Horn_"):
 			return NEON_HORN
@@ -90,8 +122,8 @@ static func _apply_color(mesh: MeshInstance3D, color: Color, skin_id: int) -> vo
 	plain.resource_local_to_scene = true
 	plain.albedo_texture = null
 	plain.albedo_color = color
-	plain.metallic = 0.08 if color != VOID_HORN and color != NEON_HORN else 0.24
-	plain.roughness = 0.84 if color in [VOID_BODY, VOID_PANEL, NEON_PANEL] else 0.52
+	plain.metallic = 0.08 if color not in [VOID_HORN, NEON_HORN, HEART_HORN] else 0.24
+	plain.roughness = 0.84 if color in [VOID_BODY, VOID_PANEL, NEON_PANEL, HEART_PANEL] else 0.52
 	if skin_id == 2 and color != NEON_EYE:
 		plain.emission_enabled = true
 		plain.emission = color
@@ -123,6 +155,18 @@ static func _apply_color(mesh: MeshInstance3D, color: Color, skin_id: int) -> vo
 		mesh.material_override = toon
 	else:
 		mesh.material_override = plain
+
+
+static func _apply_heart_horn_shape(mesh: MeshInstance3D, part_name: String) -> void:
+	if not HEART_HORN_POSITIONS.has(part_name):
+		return
+	mesh.position = HEART_HORN_POSITIONS[part_name]
+	# Keep the authored blocky look, but lengthen the inner tips so both horn
+	# halves visibly join into the centre notch of a heart above the head.
+	if part_name.ends_with("_Tip"):
+		mesh.scale = Vector3(2.0, 1.0, 1.0)
+	elif part_name.ends_with("_Upper"):
+		mesh.scale = Vector3(1.35, 1.0, 1.0)
 
 
 static func _add_neon_lights(model: Node3D, glow_scale: float) -> void:

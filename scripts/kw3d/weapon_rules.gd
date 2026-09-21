@@ -8,7 +8,7 @@ const AK := {
 	"body_recoil":1.25,"muzzle_x":1.34
 }
 const SHOTGUN := {
-	"id":"shotgun","label":"SHOTGUN","base_damage":5.0,"magazine":2,"reload":1.2,
+	"id":"shotgun","label":"SHOTGUN","base_damage":6.0,"magazine":2,"reload":1.2,
 	"fire_interval":0.20,"pellets":10,"spread_deg":11.0,"hip_spread_deg":13.5,"ads_spread_deg":9.0,"range":62.0,
 	"body_recoil":2.7,"muzzle_x":1.52
 }
