@@ -55,6 +55,7 @@ var death_camera_anchor := Vector3.ZERO
 var death_camera_position := Vector3.ZERO
 var death_camera_side := 1.0
 var canonical_human_profile: Dictionary = {}
+var network_pose_profiles: Dictionary = {}
 
 func _menu_script() -> Script:
 	return load("res://scripts/kw3d/online_menu.gd")
@@ -68,6 +69,7 @@ func _open_menu_on_death() -> bool:
 func _ready() -> void:
 	var level_data: Dictionary = LEVEL.read()
 	var level_profiles: Dictionary = level_data.get("profiles", {}) as Dictionary
+	network_pose_profiles = level_profiles
 	canonical_human_profile = level_profiles.get("outrage", {}) as Dictionary
 	var requested_warrior := _initial_online_warrior_id()
 	if requested_warrior in ["outrage","erebus","kosas","aevilok","loker"]:
@@ -334,16 +336,22 @@ func _ensure_local_network_warrior(state: Dictionary) -> void:
 	if old_style != null and is_instance_valid(old_style):
 		old_style.queue_free()
 
-func _canonical_rig_position(title: String) -> Vector3:
-	if not canonical_human_profile.has(title):
+func _pose_profile_for_state(state: Dictionary) -> Dictionary:
+	var profile_id:=str(state.get("skin",state.get("hero","outrage"))).strip_edges().to_lower()
+	if network_pose_profiles.has(profile_id):
+		return network_pose_profiles[profile_id] as Dictionary
+	return canonical_human_profile
+
+func _profile_rig_position(profile: Dictionary,title: String) -> Vector3:
+	if not profile.has(title):
 		return Vector3.ZERO
-	var data: Dictionary = canonical_human_profile[title] as Dictionary
+	var data: Dictionary = profile[title] as Dictionary
 	return LEVEL.vec(data.get("p", [0.0,0.0,0.0]) as Array)
 
-func _canonical_rig_rotation(title: String) -> Quaternion:
-	if not canonical_human_profile.has(title):
+func _profile_rig_rotation(profile: Dictionary,title: String) -> Quaternion:
+	if not profile.has(title):
 		return Quaternion.IDENTITY
-	var data: Dictionary = canonical_human_profile[title] as Dictionary
+	var data: Dictionary = profile[title] as Dictionary
 	return Quaternion.from_euler(LEVEL.vec(data.get("r", [0.0,0.0,0.0]) as Array))
 
 func _start_death_camera(killer_id: int,death_point: Vector3) -> void:
@@ -674,19 +682,20 @@ func _make_replica(state: Dictionary) -> void:
 	var source_rig_positions: Array=[]
 	var source_rig_rotations: Array=[]
 	if not state.bot:
+		var source_profile:=_pose_profile_for_state(state)
 		for title in RIG_NAMES:
 			var target_rig:=rig_nodes[title] as Node3D
 			target_rig_positions.append(target_rig.position)
 			target_rig_rotations.append(target_rig.quaternion)
 			target_rig_scales.append(target_rig.scale)
-			source_rig_positions.append(_canonical_rig_position(title))
-			source_rig_rotations.append(_canonical_rig_rotation(title))
+			source_rig_positions.append(_profile_rig_position(source_profile,title))
+			source_rig_rotations.append(_profile_rig_rotation(source_profile,title))
 	var record: Dictionary={"node":node,"visual":visual,"style":style,"rigs":rig_nodes,"next":state,"prev_p":state.p,"prev_yaw":float(state.get("yaw",0.0)),"prev_rig_positions":[],"prev_rig_rotations":[],"prev_rig_scales":[],"age":0.05,"bot":state.bot,"steps":state.steps,"grounded":bool(state.get("ground",true)),"dead":false,
 			"gun":gun,"ak_body":ak_body,"shotgun_body":shotgun_body,"kar_body":kar_body,"launcher_body":launcher_body,"damage_visual":damage_visual,
 			"weapon_bodies":[null,null,null,null],
 			"health":float(state.get("hp",100.0)),"weapon":clampi(int(state.get("weapon",0)),0,3),"tag":tag,
 			"lod_phase":int(node.get_instance_id()%12),"is_aevilok":str(state.get("skin","")).strip_edges().to_lower()=="aevilok",
-			"retarget_pose":not state.bot,"target_rig_positions":target_rig_positions,"target_rig_rotations":target_rig_rotations,"target_rig_scales":target_rig_scales,
+				"retarget_pose":not state.bot,"authoritative_pose":state.has("hero"),"target_rig_positions":target_rig_positions,"target_rig_rotations":target_rig_rotations,"target_rig_scales":target_rig_scales,
 			"source_rig_positions":source_rig_positions,"source_rig_rotations":source_rig_rotations,
 			"left_hand":style.get_node_or_null("LeftHandRig") if style != null else null,
 			"right_hand":style.get_node_or_null("RightHandRig") if style != null else null,
@@ -726,12 +735,14 @@ func _apply_replica(r: Dictionary,alpha: float) -> void:
 			if name_label.text!=desired_name:name_label.text=desired_name
 	r.node.global_position=(r.prev_p as Vector3).lerp(b.p,alpha)
 	r.visual.rotation.y=lerp_angle(float(r.prev_yaw),b.yaw,alpha)
+	if not r.bot:r.visual.position=Vector3.ZERO
 	var remote_distance: float=r.node.global_position.distance_to(player.global_position) if player!=null else 0.0
 	r.remote_distance=remote_distance
 	var pose_stride:=1 if remote_distance<=REMOTE_FULL_ANIM_DISTANCE else (2 if remote_distance<=REMOTE_REDUCED_ANIM_DISTANCE else 3)
 	var pose_phase:=int(r.get("lod_phase",0))%pose_stride if pose_stride>1 else 0
 	var update_pose:=pose_stride==1 or int(Engine.get_process_frames()%pose_stride)==pose_phase
 	if update_pose:
+		var pose_alpha:=1.0 if bool(r.get("authoritative_pose",false)) else alpha
 		var second: PackedFloat32Array=b.pose
 		var prev_positions:=r.prev_rig_positions as Array
 		var prev_rotations:=r.prev_rig_rotations as Array
@@ -752,9 +763,9 @@ func _apply_replica(r: Dictionary,alpha: float) -> void:
 				var rotation_delta: Quaternion=(source_rotations[index] as Quaternion).inverse()*next_rotation
 				next_rotation=(target_rotations[index] as Quaternion)*rotation_delta
 				next_scale=(target_scales[index] as Vector3)*next_scale
-			rig.position=(prev_positions[index] as Vector3).lerp(next_position,alpha)
-			rig.quaternion=(prev_rotations[index] as Quaternion).slerp(next_rotation,alpha)
-			rig.scale=(prev_scales[index] as Vector3).lerp(next_scale,alpha)
+			rig.position=(prev_positions[index] as Vector3).lerp(next_position,pose_alpha)
+			rig.quaternion=(prev_rotations[index] as Quaternion).slerp(next_rotation,pose_alpha)
+			rig.scale=(prev_scales[index] as Vector3).lerp(next_scale,pose_alpha)
 	var replica_health:=float(b.get("hp",100.0))
 	if r.damage_visual!=null and not is_equal_approx(replica_health,float(r.get("health",replica_health))):
 		r.damage_visual.set_health(replica_health,100.0)
@@ -973,7 +984,7 @@ func _process(delta: float) -> void:
 				torso.rotation.x += sin(seed + punch * 5.0) * kick * 0.12
 				head.rotation.z -= sign * kick * 0.38
 				head.rotation.x += kick * 0.18
-				r.visual.position += Vector3(sign * 0.025 * kick,0.018 * sin(punch*PI),-0.045 * kick)
+				r.visual.position = Vector3(sign * 0.025 * kick,0.018 * sin(punch*PI),-0.045 * kick)
 				r.hit_punch = maxf(0.0,punch-delta*7.6)
 	if menu!=null and menu.visible:
 		menu_refresh_clock-=delta

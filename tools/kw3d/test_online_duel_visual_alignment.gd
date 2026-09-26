@@ -13,9 +13,9 @@ func check(value: bool, label: String) -> void:
 	failures.append(label)
 	push_error("ONLINE_DUEL_VISUAL_FAIL " + label)
 
-func _canonical_pose() -> PackedFloat32Array:
+func _profile_pose(profile_id: String) -> PackedFloat32Array:
 	var data: Dictionary = LEVEL.read()
-	var profile: Dictionary = (data.get("profiles", {}) as Dictionary).get("outrage", {}) as Dictionary
+	var profile: Dictionary = (data.get("profiles", {}) as Dictionary).get(profile_id, {}) as Dictionary
 	var result := PackedFloat32Array()
 	for title in RIG_NAMES:
 		var rig: Dictionary = profile[title] as Dictionary
@@ -23,6 +23,16 @@ func _canonical_pose() -> PackedFloat32Array:
 		var rot := LEVEL.vec(rig.r)
 		result.append_array([p.x,p.y,p.z,rot.x,rot.y,rot.z,1.0,1.0,1.0])
 	return result
+
+func _visual_min_y(root_node: Node3D) -> float:
+	var minimum:=INF
+	for child in root_node.find_children("*","MeshInstance3D",true,false):
+		var mesh:=child as MeshInstance3D
+		if mesh.mesh==null:continue
+		var box:=mesh.mesh.get_aabb()
+		for index in range(8):
+			minimum=minf(minimum,(mesh.global_transform*box.get_endpoint(index)).y)
+	return minimum
 
 func _initialize() -> void:
 	run.call_deferred()
@@ -41,9 +51,9 @@ func run() -> void:
 
 	var remote_state := {
 		"id":77,"bot":false,"skin":"erebus","hero":"erebus","name":"KW BOT",
-		"p":Vector3(0,2.2,-6),"v":Vector3.ZERO,"yaw":0.0,"ay":0.0,"ap":0.0,
+		"p":Vector3(0,1.715,-6),"v":Vector3.ZERO,"yaw":0.0,"ay":0.0,"ap":0.0,
 		"hp":100.0,"kills":0,"gcd":0.0,"fcd":0.0,"weapon":0,"ammo":25,"reload":0.0,
-		"pose":_canonical_pose(),"steps":0,"ground":true,"phase":0.0,"connected":true
+		"pose":_profile_pose("erebus"),"steps":0,"ground":true,"phase":0.0,"connected":true
 	}
 	client._make_replica(remote_state)
 	var record: Dictionary = client.replicas[77]
@@ -52,6 +62,7 @@ func run() -> void:
 	var torso := record.rigs.TorsoRig as Node3D
 	var gun := record.gun as Node3D
 	check(str(style.get_meta("warrior_id", "")) == "erebus", "remote_uses_real_erebus_model")
+	check(absf(_visual_min_y(style))<0.10, "remote_erebus_feet_touch_floor")
 	check(gun.global_position.distance_to(torso.global_position) < 2.0, "remote_weapon_stays_with_torso")
 	check(gun.global_position.x > torso.global_position.x, "remote_weapon_on_aiming_side")
 	var ak := record.ak_body as Node3D

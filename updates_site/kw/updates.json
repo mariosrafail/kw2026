@@ -1,6 +1,17 @@
 {
   "updates": [
     {
+      "version": "alpha-0.1.56",
+      "date": "2026-09-26",
+      "title": "ONLINE 1V1 // TRUE EREBUS HITBOX ALIGNMENT",
+      "items": [
+        "Erebus now has its own exported server collision profile generated from the exact 3D model used by the client instead of inheriting Outrage hurtboxes.",
+        "Duel pose replication now uses the matching source profile and applies authoritative limb poses without the extra smoothing lag that made the visible body float above its collider.",
+        "The duel bot plants an authoritative support foot while grounded, keeping server soles and rendered soles within a few centimetres of the arena floor.",
+        "Remote hit reactions no longer accumulate visual position offsets, preventing repeated hits from drifting the rendered opponent away from its network collider."
+      ]
+    },
+    {
       "version": "alpha-0.1.55",
       "date": "2026-09-26",
       "title": "BOT BALANCE // BURST FIRE & GROUNDED GAIT",

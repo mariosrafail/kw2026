@@ -1,4 +1,5 @@
 extends SceneTree
+const EREBUS_FULLBODY := preload("res://scenes/prototypes/characters/erebus_fullbody.tscn")
 func _initialize() -> void:
 	export_seed.call_deferred()
 func v3(v: Vector3) -> Array:
@@ -37,6 +38,17 @@ func export_seed() -> void:
 			else: assert(false,"unsupported collision shape")
 			world.append(row)
 	var profiles: Dictionary={"outrage":describe(stage.head_style)}
+	# Duel Player 2 uses the authored Erebus full-body asset.  Export the same
+	# adjusted rig rest pose used by online_client so authority hurtboxes, soles
+	# and replicated poses are generated from the model players actually see.
+	var erebus: Node3D=EREBUS_FULLBODY.instantiate()
+	stage.add_child(erebus)
+	var erebus_head:=erebus.get_node("HeadRig") as Node3D
+	var erebus_torso:=erebus.get_node("TorsoRig") as Node3D
+	erebus_head.position+=Vector3(0.0,0.10,-0.20)
+	erebus_torso.position+=Vector3(0.0,-0.12,0.12)
+	profiles["erebus"]=describe(erebus)
+	erebus.free()
 	for skin in ["tasko","gan","celler","nova","m4","crashout"]:
 		var bot: Node3D=load("res://scripts/prototypes/kw_training_dummy.gd").new()
 		bot.warrior_id=skin;bot.roaming_enabled=false

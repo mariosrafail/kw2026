@@ -171,9 +171,30 @@ func tick(dt: float) -> void:
 		speed *= 1.15
 	command["speed_multiplier"] = speed
 	super.tick(dt)
+	if duel_ai and is_on_floor():
+		_plant_duel_ai_support_foot()
 	command.erase("speed_multiplier")
 	if health > 0.0:
 		ARENA.apply_jump_pad(self)
+
+func _plant_duel_ai_support_foot() -> void:
+	if locomotion==null or locomotion.feet.is_empty():return
+	var best_node: Node3D=null
+	var best_y:=INF
+	for foot in locomotion.feet:
+		var foot_min:=INF
+		for corner in foot.corners:
+			foot_min=minf(foot_min,(foot.node.global_transform*(corner as Vector3)).y)
+		if foot_min<best_y:
+			best_y=foot_min
+			best_node=foot.node as Node3D
+	if best_node==null:return
+	var desired_y:=0.045
+	if best_y>desired_y+0.005:
+		var planted: Transform3D=best_node.global_transform
+		planted.origin.y-=best_y-desired_y
+		best_node.global_transform=planted
+		update_shapes()
 
 func packet() -> Dictionary:
 	var result: Dictionary = super.packet()

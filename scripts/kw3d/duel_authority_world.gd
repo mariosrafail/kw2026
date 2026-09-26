@@ -97,7 +97,7 @@ func _spawn_duel_bot() -> bool:
 	var hero := RULES.EREBUS if human.hero_id == RULES.OUTRAGE else RULES.OUTRAGE
 	var bot := DUEL_ACTOR.new()
 	add_child(bot)
-	bot.configure(DUEL_BOT_ID,false,data.profiles.outrage,hero)
+	bot.configure(DUEL_BOT_ID,false,data.profiles.get(hero,data.profiles.outrage),hero)
 	bot.setup_duel(hero)
 	bot.duel_ai = true
 	bot.locomotion.grounded_lift_scale = 0.08
@@ -147,7 +147,7 @@ func add_player(id: int) -> void:
 	var hero := _hero_for_new_player()
 	var a := DUEL_ACTOR.new()
 	add_child(a)
-	a.configure(id,false,data.profiles.outrage,hero)
+	a.configure(id,false,data.profiles.get(hero,data.profiles.outrage),hero)
 	a.setup_duel(hero)
 	a.global_position = ARENA.spawn_for_index(0 if hero == RULES.OUTRAGE else 1)
 	a.hit_body.collision_layer = 4
