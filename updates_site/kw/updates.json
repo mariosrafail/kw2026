@@ -1,6 +1,17 @@
 {
   "updates": [
     {
+      "version": "alpha-0.1.57",
+      "date": "2026-09-26",
+      "title": "ONLINE 1V1 // DRAFT HUD, BOT HP & AUDIO MIX",
+      "items": [
+        "The augment draft layout now adapts to small viewports so skill cards stay fully inside the screen instead of dropping below the bottom edge.",
+        "The bot health bar is now fixed-size, depth-independent and always synced to authoritative network HP, with a clear KW BOT / hero label.",
+        "The active camera now owns an explicit AudioListener3D for stable spatial positioning.",
+        "Local player weapon, reload, jump, land and footstep sounds use a non-spatial mix, while bot and remote-player sounds remain true 3D positional audio."
+      ]
+    },
+    {
       "version": "alpha-0.1.56",
       "date": "2026-09-26",
       "title": "ONLINE 1V1 // TRUE EREBUS HITBOX ALIGNMENT",

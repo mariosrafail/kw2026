@@ -20,6 +20,7 @@ var music_enabled := true
 var qa_muted := false
 var spatial_pool: Array[AudioStreamPlayer3D] = []
 var ui_pool: Array[AudioStreamPlayer] = []
+var local_player_non_spatial := false
 var foot_states: Dictionary = {}
 var track_combat_targets := true
 var was_grounded := false
@@ -58,12 +59,25 @@ func setup(owner_stage: Node3D) -> void:
 		player.unit_size = 6.0
 		add_child(player)
 		spatial_pool.append(player)
-	for i in range(3):
+	for i in range(12):
 		var player := AudioStreamPlayer.new()
 		player.name = "UISFX%02d" % i
 		player.bus="SFX"
 		add_child(player)
 		ui_pool.append(player)
+
+func _play_local(stream: AudioStream, volume: float, pitch_value: float = 1.0) -> void:
+	if qa_muted or stream==null:return
+	var chosen: AudioStreamPlayer
+	for player in ui_pool:
+		if not player.playing:
+			chosen=player
+			break
+	if chosen==null:return
+	chosen.stream=stream
+	chosen.volume_db=volume
+	chosen.pitch_scale=pitch_value
+	chosen.play()
 
 func _apply_saved_mix() -> void:
 	var state: Dictionary={}
@@ -121,14 +135,17 @@ func _play_spatial(stream: AudioStream, point: Vector3, volume: float, pitch_val
 	chosen.unit_size = 10.0 if volume >= -11.0 else 6.0
 	chosen.play()
 
-func _feet(key: int, motion: RefCounted, volume: float) -> void:
+func _feet(key: int, motion: RefCounted, volume: float, local_sound: bool = false) -> void:
 	if motion == null: return
 	var prior: Array = foot_states.get(key, [false, false])
 	for i in range(motion.feet.size()):
 		var foot = motion.feet[i]
 		if prior[i] and not foot.swinging and foot.phase != "AIR" and motion.actor.is_on_floor():
 			event_counts["step"] = int(event_counts.get("step", 0)) + 1
-			_play_spatial(STEPS[rng.randi_range(0, STEPS.size()-1)], foot.node.global_position, volume, rng.randf_range(0.92,1.08))
+			var step_stream: AudioStream=STEPS[rng.randi_range(0, STEPS.size()-1)]
+			var pitch_value:=rng.randf_range(0.92,1.08)
+			if local_sound:_play_local(step_stream,volume,pitch_value)
+			else:_play_spatial(step_stream,foot.node.global_position,volume,pitch_value)
 		prior[i] = foot.swinging
 	foot_states[key] = prior
 
@@ -140,12 +157,14 @@ func _physics_process(delta: float) -> void:
 	var grounded: bool = stage.player.is_on_floor()
 	if initialized:
 		if was_grounded and not grounded and stage.player.velocity.y > 1.0:
-			play_event("jump", stage.player.global_position, -12.0)
+			if local_player_non_spatial:_play_local(SOUNDS.jump,-12.0)
+			else:play_event("jump", stage.player.global_position, -12.0)
 		elif grounded and not was_grounded:
-			play_event("land", stage.player.global_position, -10.0)
+			if local_player_non_spatial:_play_local(SOUNDS.land,-10.0)
+			else:play_event("land", stage.player.global_position, -10.0)
 	initialized = true
 	was_grounded = grounded
-	_feet(0, stage.locomotion, -13.0)
+	_feet(0, stage.locomotion, -13.0, local_player_non_spatial)
 	var live_keys: Dictionary = {0:true}
 	if track_combat_targets and stage.combat != null:
 		for bot in stage.combat.targets:

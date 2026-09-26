@@ -88,7 +88,7 @@ func _ready() -> void:
 	add_child(input_adapter)
 	input_adapter.action_requested.connect(_control_action)
 	input_adapter.device_lost.connect(func():set_menu(true))
-	arena_audio=ARENA_AUDIO.new();add_child(arena_audio);arena_audio.setup(self)
+	arena_audio=ARENA_AUDIO.new();add_child(arena_audio);arena_audio.setup(self);arena_audio.local_player_non_spatial=true
 	# Remote actors are driven by authoritative snapshots below, so their movement
 	# sounds are emitted here from their replicated feet instead of the offline bot loop.
 	arena_audio.track_combat_targets=false
@@ -771,7 +771,19 @@ func _apply_replica(r: Dictionary,alpha: float) -> void:
 		r.damage_visual.set_health(replica_health,100.0)
 		r.health=replica_health
 	if r.bot:
-		if b.hp<r.node.health:r.node.health=b.hp;r.node._refresh_bar()
+		var old_hp:=float(r.node.health)
+		var next_hp:=float(b.get("hp",old_hp))
+		var next_max_hp:=float(b.get("max_hp",r.node.max_health))
+		if not is_equal_approx(next_max_hp,float(r.node.max_health)):r.node.max_health=next_max_hp
+		if not is_equal_approx(next_hp,old_hp):
+			r.node.health=next_hp
+			if next_hp<old_hp:r.node.trail_health=maxf(next_hp,float(r.node.trail_health))
+			else:r.node.trail_health=next_hp
+			r.node._refresh_bar()
+		if r.node.health_bar!=null:r.node.health_bar.visible=next_hp>0.0
+		if r.node.name_label!=null:
+			r.node.name_label.text="KW BOT  //  %s"%str(b.get("hero",b.get("skin","erebus"))).to_upper()
+			r.node.name_label.visible=next_hp>0.0
 	else:
 		var gun: Node3D=r.gun
 		var selected_weapon:=clampi(int(b.get("weapon",0)),0,3)
@@ -1085,6 +1097,38 @@ func _visible_muzzle_for_actor(actor_id: int,fallback: Vector3,weapon_override: 
 	var profile: Dictionary=WEAPON_RULES.by_slot(slot)
 	return body.to_global(Vector3(float(profile.get("muzzle_x",1.34)),0.02,0.0))
 
+func _play_weapon_fire_audio() -> void:
+	if arena_audio==null:
+		super._play_weapon_fire_audio()
+		return
+	var stream: AudioStream=AK47_SHOT_SFX
+	var volume:=shooting_volume_db
+	var pitch_value:=randf_range(0.96,1.04)
+	match weapon_slot:
+		1:
+			stream=SHOTGUN_FIRE_SFX;volume=shooting_volume_db+1.0;pitch_value=randf_range(0.78,0.86)
+		2:
+			stream=KAR_FIRE_SFX;volume=shooting_volume_db+1.5;pitch_value=randf_range(0.96,1.02)
+		3:
+			stream=GRENADE_LAUNCHER_FIRE_SFX;volume=shooting_volume_db+1.0;pitch_value=randf_range(0.96,1.02)
+	arena_audio._play_local(stream,volume,pitch_value)
+
+func _play_weapon_reload_audio() -> void:
+	if arena_audio==null:
+		super._play_weapon_reload_audio()
+		return
+	var stream: AudioStream=AK47_RELOAD_SFX
+	var volume:=shooting_volume_db-3.0
+	var pitch_value:=1.0
+	match weapon_slot:
+		1:
+			stream=SHOTGUN_RELOAD_SFX;volume=shooting_volume_db-2.0;pitch_value=0.92
+		2:
+			stream=KAR_RELOAD_SFX;volume=shooting_volume_db-1.0
+		3:
+			stream=GRENADE_LAUNCHER_RELOAD_SFX;volume=shooting_volume_db-1.0
+	arena_audio._play_local(stream,volume,pitch_value)
+
 func _event(e: Dictionary) -> void:
 	qa_events[e.type]=int(qa_events.get(e.type,0))+1
 	match str(e.type):
@@ -1212,11 +1256,12 @@ func _event(e: Dictionary) -> void:
 				ammo_by_weapon[reload_slot]=int(e.get("ammo",ammo_by_weapon[reload_slot]))
 				reload_by_weapon[reload_slot]=float(e.get("duration",WEAPON_RULES.by_slot(reload_slot).reload))
 				if reload_slot==weapon_slot:
-					var reload_audio:=ak_reload_audio if reload_slot==0 else shotgun_reload_audio if reload_slot==1 else kar_reload_audio if reload_slot==2 else grenade_launcher_reload_audio
-					if reload_audio!=null:reload_audio.play()
+					_play_weapon_reload_audio()
 					if reload_slot in [0,1]:_spawn_reload_magazine()
 					_refresh_ammo_hud()
-		"throw":arena_audio.play_event("throw",e.p,-14)
+		"throw":
+			if int(e.get("actor",0))==session.actor_id:arena_audio._play_local(arena_audio.SOUNDS.throw,-14.0)
+			else:arena_audio.play_event("throw",e.p,-14)
 		"bounce":arena_audio.play_event("bounce",e.p,-19)
 		"wave":combat.director.hud.announce("WAVE %02d"%e.wave,"ONLINE CO-OP  /  %d ENEMIES"%e.budget);arena_audio.play_event("wave")
 		"clear":combat.director.hud.announce("WAVE CLEAR","NEXT WAVE IN 4 SECONDS");arena_audio.play_event("wave")

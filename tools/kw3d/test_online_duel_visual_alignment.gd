@@ -48,6 +48,22 @@ func run() -> void:
 	root.add_child(client)
 	for i in range(12):
 		await process_frame
+	check(client.audio_listener!=null and client.audio_listener.is_current(),"camera_audio_listener_current")
+	check(client.audio_listener.get_parent()==client.camera,"audio_listener_attached_to_camera")
+	check(bool(client.arena_audio.local_player_non_spatial),"online_local_audio_is_non_spatial")
+	client.weapon_slot=0
+	client._play_weapon_fire_audio()
+	var local_weapon_routed:=false
+	for audio in client.arena_audio.ui_pool:
+		if audio.stream==client.AK47_SHOT_SFX:local_weapon_routed=true;break
+	check(local_weapon_routed,"local_weapon_uses_2d_audio")
+	var remote_audio_point:=Vector3(7.0,1.0,-4.0)
+	client.arena_audio._play_spatial(client.AK47_SHOT_SFX,remote_audio_point,-14.0,1.0)
+	var remote_weapon_routed:=false
+	for audio in client.arena_audio.spatial_pool:
+		if audio.stream==client.AK47_SHOT_SFX and audio.global_position.distance_to(remote_audio_point)<0.001:
+			remote_weapon_routed=true;break
+	check(remote_weapon_routed,"remote_weapon_uses_3d_audio")
 
 	var remote_state := {
 		"id":77,"bot":false,"skin":"erebus","hero":"erebus","name":"KW BOT",
@@ -73,6 +89,23 @@ func run() -> void:
 	var visible_muzzle: Vector3 = client._visible_muzzle_for_actor(77,Vector3(99,99,99))
 	var expected_muzzle := ak.to_global(Vector3(float(WEAPON_RULES.by_slot(0).muzzle_x),0.02,0.0))
 	check(visible_muzzle.distance_to(expected_muzzle) < 0.002, "remote_fx_use_visible_muzzle")
+
+	var bot_state := {
+		"id":78,"bot":true,"skin":"erebus","hero":"erebus","name":"KW BOT",
+		"p":Vector3(0,1.715,-5),"v":Vector3.ZERO,"yaw":0.0,"ay":0.0,"ap":0.0,
+		"hp":100.0,"max_hp":100.0,"kills":0,"gcd":0.0,"fcd":0.0,"weapon":0,"ammo":25,"reload":0.0,
+		"pose":_profile_pose("erebus"),"steps":0,"ground":true,"phase":0.0,"connected":true
+	}
+	client._make_replica(bot_state)
+	var bot_record: Dictionary=client.replicas[78]
+	var bot_node: Node=bot_record.node
+	check(bot_node.health_bar!=null and bot_node.health_bar.visible,"bot_health_bar_visible")
+	check(bool(bot_node.health_bar.no_depth_test) and bool(bot_node.health_bar.fixed_size),"bot_health_bar_screen_readable")
+	bot_state.hp=65.0
+	bot_record.next=bot_state
+	client._apply_replica(bot_record,1.0)
+	check(is_equal_approx(float(bot_node.health),65.0),"bot_health_tracks_network_hp")
+	check(str(bot_node.name_label.text).contains("KW BOT"),"bot_name_label_visible")
 
 	client._ensure_local_network_warrior({"hero":"erebus","skin":"erebus"})
 	check(client.player_warrior_id == "erebus", "local_role_switches_to_erebus")

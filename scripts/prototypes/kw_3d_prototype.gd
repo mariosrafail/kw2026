@@ -38,6 +38,7 @@ var player_visual: Node3D
 var camera_yaw: Node3D
 var camera_pitch: Node3D
 var camera: Camera3D
+var audio_listener: AudioListener3D
 var status_label: Label
 var warrior_skill_label: Label
 var warrior_skill_bar: ProgressBar
@@ -618,6 +619,10 @@ func _build_player() -> void:
 	camera.fov = 74.0
 	camera.current = true
 	camera_pitch.add_child(camera)
+	audio_listener=AudioListener3D.new()
+	audio_listener.name="PlayerAudioListener"
+	camera.add_child(audio_listener)
+	audio_listener.make_current()
 
 	camera_yaw.rotation.y = yaw
 	camera_pitch.rotation.x = pitch
@@ -1349,11 +1354,14 @@ func _start_reload(play_fx: bool = true) -> bool:
 	reload_remaining=float(profile.reload)*skill_reload_duration_multiplier()
 	aim_recoil.reset()
 	if play_fx:
-		var audio:=ak_reload_audio if weapon_slot==0 else shotgun_reload_audio if weapon_slot==1 else kar_reload_audio if weapon_slot==2 else grenade_launcher_reload_audio
-		if audio!=null:audio.play()
+		_play_weapon_reload_audio()
 		if weapon_slot in [0,1]:_spawn_reload_magazine()
 	_refresh_ammo_hud()
 	return true
+
+func _play_weapon_reload_audio() -> void:
+	var audio:=ak_reload_audio if weapon_slot==0 else shotgun_reload_audio if weapon_slot==1 else kar_reload_audio if weapon_slot==2 else grenade_launcher_reload_audio
+	if audio!=null:audio.play()
 
 func _spawn_reload_magazine() -> void:
 	if weapon_root==null:return

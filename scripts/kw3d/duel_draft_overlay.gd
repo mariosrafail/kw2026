@@ -59,20 +59,31 @@ func setup(view: Node3D) -> void:
 
 func _layout_overlay() -> void:
 	if root_box == null:return
+	var safe_margin := 18.0
 	var target := Vector2(
-		minf(610.0,maxf(300.0,size.x-24.0)),
-		minf(330.0,maxf(220.0,size.y-20.0))
+		minf(610.0,maxf(280.0,size.x-safe_margin*2.0)),
+		minf(320.0,maxf(200.0,size.y-safe_margin*2.0))
 	)
 	root_box.size = target
 	root_box.position = (size-target)*0.5
-	var compact := size.x < 560.0 or size.y < 330.0
+	root_box.position.x = clampf(root_box.position.x,safe_margin,maxf(safe_margin,size.x-target.x-safe_margin))
+	root_box.position.y = clampf(root_box.position.y,safe_margin,maxf(safe_margin,size.y-target.y-safe_margin))
+	var compact := size.x < 620.0 or size.y < 420.0
+	var card_count:=maxi(1,cards.get_child_count())
+	cards.columns=1 if target.x<430.0 else 2
+	var rows:=int(ceil(float(card_count)/float(cards.columns)))
+	var overhead:=86.0 if compact else 96.0
+	var available_cards:=maxf(92.0,target.y-overhead)
+	var card_height:=clampf((available_cards-float(maxi(0,rows-1))*6.0)/float(rows),44.0,82.0 if compact else 92.0)
 	title.add_theme_font_size_override("font_size",22 if compact else 26)
 	status.add_theme_font_size_override("font_size",12 if compact else 14)
 	hint.add_theme_font_size_override("font_size",9 if compact else 10)
+	cards.add_theme_constant_override("v_separation",6 if compact else 8)
 	for child in cards.get_children():
 		if child is Button:
-			child.custom_minimum_size = Vector2(0,78 if compact else 94)
+			child.custom_minimum_size = Vector2(0,card_height)
 			child.add_theme_font_size_override("font_size",9 if compact else 10)
+			child.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _local_hero(room: Dictionary) -> String:
 	for p in room.get("players",[]):
@@ -107,6 +118,7 @@ func _rebuild(room: Dictionary) -> void:
 		button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		button.text = str(data.label)+"\n"+str(data.desc)
 		button.clip_text = true
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		button.disabled = not mine
 		button.focus_mode = Control.FOCUS_ALL if mine else Control.FOCUS_NONE
 		button.add_theme_font_size_override("font_size",10)

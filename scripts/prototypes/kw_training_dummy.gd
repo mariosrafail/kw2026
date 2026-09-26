@@ -92,6 +92,18 @@ func set_network_replica_mode(value: bool) -> void:
 		var shape:=data.get("shape") as CollisionShape3D
 		if shape!=null:shape.disabled=true
 	if body_bridge!=null:body_bridge.disabled=true
+	if health_bar!=null:
+		health_bar.no_depth_test=true
+		health_bar.fixed_size=true
+		health_bar.pixel_size=0.012
+		health_bar.position=Vector3(0,2.52,0)
+		health_bar.visible=true
+	if name_label!=null:
+		name_label.no_depth_test=true
+		name_label.fixed_size=true
+		name_label.pixel_size=0.0055
+		name_label.position=Vector3(0,2.82,0)
+		name_label.visible=true
 
 func _ensure_damage_visual() -> Node:
 	if damage_visual!=null:return damage_visual
