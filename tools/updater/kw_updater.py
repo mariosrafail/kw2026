@@ -8,6 +8,7 @@ STALE_MANIFEST_HOSTS = (
     "portal-fresh-pleasant-peoples.trycloudflare.com",
     "jimmy-kate-default-consolidation.trycloudflare.com",
     "innovations-carried-society-roster.trycloudflare.com",
+    "justifier-exclusive-riches.ngrok-free.dev",
 )
 FILES = (
     ("kw.exe", "exe_url", "exe_sha256"),

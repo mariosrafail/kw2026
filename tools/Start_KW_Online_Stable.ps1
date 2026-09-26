@@ -3,6 +3,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
 $compose = "docker-compose.kw3d-lan.yml"
 $stableDomain = "justifier-exclusive-riches.ngrok-free.dev"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $ngrok = (Get-Command ngrok -ErrorAction SilentlyContinue).Source
 if (-not $ngrok) {
@@ -98,12 +99,12 @@ $project = [regex]::Replace($project,'public_ws_url="[^"]*"','public_ws_url="' +
 $project = [regex]::Replace($project,'public_udp_host="[^"]*"','public_udp_host="' + $publicIp + '"')
 $project = [regex]::Replace($project,'public_udp_port=[0-9]+','public_udp_port=' + $udpPort)
 $project = [regex]::Replace($project,'public_lan_host="[^"]*"','public_lan_host="' + $lanIp + '"')
-Set-Content $projectPath $project -Encoding UTF8 -NoNewline
+[System.IO.File]::WriteAllText($projectPath, $project, $utf8NoBom)
 
 $versionText = Get-Content (Join-Path $root "scripts\main.gd") -Raw
 $versionMatch = [regex]::Match($versionText,'CLIENT_VERSION := "([^"]+)"')
 $version = if($versionMatch.Success){$versionMatch.Groups[1].Value}else{"dev"}
-[ordered]@{
+$onlineJson = [ordered]@{
     portal_url=$publicBaseUrl
     game_ws_url=$wss
     game_transport="enet_udp"
@@ -113,7 +114,8 @@ $version = if($versionMatch.Success){$versionMatch.Groups[1].Value}else{"dev"}
     mode="direct_udp_gameplay"
     version=$version
     updated=(Get-Date).ToString("o")
-} | ConvertTo-Json | Set-Content (Join-Path $root "updates_site\kw\online_config.json") -Encoding UTF8
+} | ConvertTo-Json
+[System.IO.File]::WriteAllText((Join-Path $root "updates_site\kw\online_config.json"), $onlineJson, $utf8NoBom)
 
 try {
     $response=Invoke-WebRequest -UseBasicParsing -Uri ($publicBaseUrl+"/") -TimeoutSec 12

@@ -1,6 +1,17 @@
 {
   "updates": [
     {
+      "version": "alpha-0.1.51",
+      "date": "2026-09-26",
+      "title": "MENU HERO // OUTRAGE STATUE PASS",
+      "items": [
+        "The large Outrage hero on the main menu now uses a menu-only aged silver/stone-metal statue treatment.",
+        "The statue adds dark patina, procedural surface grain, rough metallic highlights and darker polished eyes.",
+        "The horns use a slightly warmer bronze tone and menu-only comic outline/glow effects are removed from the statue.",
+        "Warrior showroom skins and gameplay appearances remain unchanged."
+      ]
+    },
+    {
       "version": "KW Client 1.4.0",
       "date": "2026-09-26",
       "title": "SHOWROOM CLIENT // YOUR WARRIOR ON THE RIGHT",

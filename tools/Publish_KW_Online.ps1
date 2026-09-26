@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $godot = "C:\Program Files (x86)\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe"
 if (-not (Test-Path $godot)) { throw "Godot 4.7.2 console executable not found." }
@@ -26,9 +27,9 @@ $project = [regex]::Replace($project, 'public_ws_url="[^"]*"', 'public_ws_url="'
 $project = [regex]::Replace($project, 'public_udp_host="[^"]*"', 'public_udp_host="' + $PublicUdpHost + '"')
 $project = [regex]::Replace($project, 'public_udp_port=[0-9]+', 'public_udp_port=' + $PublicUdpPort)
 $project = [regex]::Replace($project, 'public_lan_host="[^"]*"', 'public_lan_host="' + $LanUdpHost + '"')
-Set-Content "project.godot" $project -Encoding UTF8 -NoNewline
+[System.IO.File]::WriteAllText((Join-Path $root "project.godot"), $project, $utf8NoBom)
 
-@{
+$onlineJson = @{
     portal_url = $PublicBaseUrl
     game_ws_url = $wss
     game_transport = "enet_udp"
@@ -38,7 +39,8 @@ Set-Content "project.godot" $project -Encoding UTF8 -NoNewline
     mode = "direct_udp_gameplay"
     version = $version
     updated = (Get-Date).ToString("o")
-} | ConvertTo-Json | Set-Content "updates_site/kw/online_config.json" -Encoding UTF8
+} | ConvertTo-Json
+[System.IO.File]::WriteAllText((Join-Path $root "updates_site/kw/online_config.json"), $onlineJson, $utf8NoBom)
 
 Write-Host "[KW] Ensuring Docker online stack is running..."
 docker compose -f "docker-compose.kw3d-lan.yml" up -d --build
@@ -50,17 +52,20 @@ if ($LASTEXITCODE -ne 0) { throw "Godot export failed." }
 
 $release = Join-Path $root "build/release"
 New-Item -ItemType Directory -Force -Path $release | Out-Null
-@{
+$launcherJson = @{
     update_manifest_url = "$PublicBaseUrl/kw/update_manifest.json"
     auth_api_base_url = "http://192.168.1.154:8090"
     default_host = "192.168.1.154"
     default_port = 18886
-} | ConvertTo-Json | Set-Content (Join-Path $release "launcher_config.json") -Encoding UTF8
+} | ConvertTo-Json
+[System.IO.File]::WriteAllText((Join-Path $release "launcher_config.json"), $launcherJson, $utf8NoBom)
 
 & powershell -ExecutionPolicy Bypass -File (Join-Path $root "tools/publish_update.ps1") -Version $version -PublicBaseUrl $PublicBaseUrl
 if ($LASTEXITCODE -ne 0) { throw "Update publishing failed." }
 
-if (Test-Path "build/updater/KWUpdater.exe") {
+if (Test-Path "build/client3d/KWUpdater.exe") {
+    Copy-Item "build/client3d/KWUpdater.exe" "updates_site/kw/KWUpdater.exe" -Force
+} elseif (Test-Path "build/updater/KWUpdater.exe") {
     Copy-Item "build/updater/KWUpdater.exe" "updates_site/kw/KWUpdater.exe" -Force
 }
 

@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 function Ensure-File {
     param([string]$Path)
@@ -67,15 +68,15 @@ $manifest = @{
 }
 
 $manifestJson = $manifest | ConvertTo-Json
-$manifestJson | Set-Content -Path $manifestTarget -Encoding UTF8
-$manifestJson | Set-Content -Path $repoManifestTarget -Encoding UTF8
+[System.IO.File]::WriteAllText($manifestTarget, $manifestJson, $utf8NoBom)
+[System.IO.File]::WriteAllText($repoManifestTarget, $manifestJson, $utf8NoBom)
 
 if (Test-Path (Split-Path $releaseManifestTarget -Parent)) {
-    $manifestJson | Set-Content -Path $releaseManifestTarget -Encoding UTF8
+    [System.IO.File]::WriteAllText($releaseManifestTarget, $manifestJson, $utf8NoBom)
 }
 
 if (Test-Path (Split-Path $launcherManifestTarget -Parent)) {
-    $manifestJson | Set-Content -Path $launcherManifestTarget -Encoding UTF8
+    [System.IO.File]::WriteAllText($launcherManifestTarget, $manifestJson, $utf8NoBom)
 }
 
 Write-Output "[publish] Published update files:"
