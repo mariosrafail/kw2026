@@ -5,7 +5,9 @@ const DUEL_ACTOR := preload("res://scripts/kw3d/duel_actor.gd")
 const RULES := preload("res://scripts/kw3d/duel_rules.gd")
 const ARENA := preload("res://scripts/kw3d/duel_arena.gd")
 const DUEL_MOTOR := preload("res://scripts/kw3d/actor_motor.gd")
+const AIM_ASSIST := preload("res://scripts/kw3d/aim_assist.gd")
 const DUEL_BOT_ID := 900001
+const DUEL_BOT_FIRE_INTERVAL := 0.18
 
 var ready_state: Dictionary = {}
 var host_id := 0
@@ -388,12 +390,19 @@ func _update_duel_bot_ai() -> void:
 	var target: Node3D = actors[humans[0]]
 	if bot.health <= 0.0 or target.health <= 0.0:
 		bot.command = DUEL_MOTOR.empty(bot.aim_yaw,bot.aim_pitch)
+		bot.clear_duel_aim_point()
 		return
 	var delta := target.global_position-bot.global_position
 	var flat := Vector3(delta.x,0.0,delta.z)
 	var distance := flat.length()
-	var desired_yaw: float = float(bot.aim_yaw)
-	if distance > 0.001:desired_yaw = atan2(-flat.x,-flat.z)
+	var target_point: Vector3 = target.rigs.TorsoRig.global_position+Vector3.UP*0.18
+	# Tiny deterministic sway keeps the AI readable without making it spray a
+	# parallel line beside the player. The aim point remains on the torso.
+	target_point += Vector3(sin(float(tick_id)*0.037)*0.11,sin(float(tick_id)*0.029+1.7)*0.06,cos(float(tick_id)*0.031)*0.09)
+	bot.set_duel_aim_point(target_point)
+	var aim_angles := AIM_ASSIST.target_angles(bot.weapon_anchor(),target_point)
+	var desired_yaw: float = aim_angles.x
+	var desired_pitch: float = aim_angles.y
 	var move := Vector2.ZERO
 	if distance > 12.0:
 		move.y = 1.0
@@ -403,9 +412,8 @@ func _update_duel_bot_ai() -> void:
 		move.x = sin(float(tick_id)*0.026)*0.78
 		move.y = 0.18
 	var eye := bot.global_position+Vector3(0,1.15,0)
-	var target_point := target.global_position+Vector3(0,1.05,0)
 	var clear_line := ray(eye,target_point,1,[bot.get_rid(),bot.hit_body.get_rid()]).is_empty()
-	bot.command = DUEL_MOTOR.empty(desired_yaw+sin(float(tick_id)*0.041)*0.018,-0.03+sin(float(tick_id)*0.029+1.7)*0.012)
+	bot.command = DUEL_MOTOR.empty(desired_yaw,desired_pitch)
 	bot.command["move"] = move
 	bot.command["aim"] = clear_line
 	bot.command["fire"] = clear_line and distance < 34.0 and fight_time > 0.45
@@ -427,6 +435,8 @@ func _tick_duel_bot_skill() -> void:
 
 func _shoot(a: Node3D) -> void:
 	super._shoot(a)
+	if bool(a.get("duel_ai")):
+		a.fire_clock = maxf(a.fire_clock,DUEL_BOT_FIRE_INTERVAL)
 	if a.has_augment("heavy_rounds"):a.fire_clock *= 1.20
 	if a.has_augment("feather_trigger"):a.fire_clock *= 0.72
 

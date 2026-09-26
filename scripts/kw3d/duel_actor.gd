@@ -12,6 +12,9 @@ var guard_time := 0.0
 var haste_time := 0.0
 var vamp_lock := 0.0
 var duel_ai := false
+var duel_has_aim_point := false
+var duel_aim_point := Vector3.ZERO
+const ROUND_AIM_PITCH := -0.174533
 
 func setup_duel(hero: String) -> void:
 	hero_id = hero
@@ -43,6 +46,7 @@ func reset_for_round(spawn: Vector3, facing: float) -> void:
 	global_position = spawn
 	velocity = Vector3.ZERO
 	aim_yaw = facing
+	aim_pitch = ROUND_AIM_PITCH
 	body_yaw = facing
 	command = MOTOR.empty(aim_yaw,aim_pitch)
 	input_queue.clear()
@@ -56,6 +60,13 @@ func reset_for_round(spawn: Vector3, facing: float) -> void:
 	vamp_lock = 0.0
 	skill_charges = skill_max_charges
 	skill_recharge = 0.0
+	duel_has_aim_point = false
+	head_rotation = Vector3.ZERO
+	head_velocity = Vector3.ZERO
+	recoil = Vector3.ZERO
+	recoil_velocity = Vector3.ZERO
+	camera_fraction = 1.0
+	smoothed_weapon_side = 1.0
 	locomotion.reset()
 	collision_layer = 2
 	collision_mask = 9
@@ -63,6 +74,40 @@ func reset_for_round(spawn: Vector3, facing: float) -> void:
 		hit_body.collision_layer = 4
 		hit_body.collision_mask = 0
 	update_shapes()
+
+func set_duel_aim_point(point: Vector3) -> void:
+	duel_aim_point = point
+	duel_has_aim_point = true
+
+func clear_duel_aim_point() -> void:
+	duel_has_aim_point = false
+
+func build_aim(space: PhysicsDirectSpaceState3D,dt: float) -> void:
+	if not duel_ai or not duel_has_aim_point:
+		super.build_aim(space,dt)
+		return
+	# Duel AI already has an authoritative world-space target. Do not route its
+	# shot through the human right-shoulder camera, otherwise the 1.2 m camera
+	# offset makes an apparently correct bot fire a parallel line beside the rival.
+	aim_target = duel_aim_point
+	var anchor: Vector3 = global_position+Vector3(0,1.05,0)
+	camera_direction = (aim_target-anchor).normalized()
+	camera_origin = anchor
+	var chest: Vector3 = weapon_anchor()
+	var front: Vector3 = (aim_target-chest).normalized()
+	if front.length_squared()<0.0001:
+		front = -visual.global_basis.z
+	var right: Vector3 = front.cross(Vector3.UP).normalized()
+	if right.length_squared()<0.01:
+		right = visual.global_basis.x.normalized()
+	smoothed_weapon_side = move_toward(smoothed_weapon_side,1.0,maxf(0.0,dt)*10.0)
+	var pivot: Vector3 = chest+front*0.64+right*smoothed_weapon_side
+	var distance: float = pivot.distance_to(aim_target)
+	var muzzle_length: float=1.58 if weapon_slot==0 else 1.78 if weapon_slot==1 else 2.08 if weapon_slot==2 else 1.88
+	var m: Vector3 = Vector3(0.10,0.02,-muzzle_length+maxf(0.0,1.92-distance))
+	var local_target: Vector3 = Vector3(m.x,m.y,-sqrt(maxf(0.00001,distance*distance-m.x*m.x-m.y*m.y))).normalized()
+	var gun_basis: Basis = Basis.looking_at(aim_target-pivot,Vector3.UP)*Basis(Quaternion(local_target,Vector3.FORWARD))
+	muzzle = pivot+gun_basis*m
 
 func skill_cooldown() -> float:
 	var value := RULES.skill_base_cooldown(hero_id)

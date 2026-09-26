@@ -359,12 +359,42 @@ func _start_death_camera(killer_id: int,death_point: Vector3) -> void:
 	if combat!=null and combat.director!=null and combat.director.hud!=null:
 		combat.director.hud.announce("ELIMINATED BY  "+killer_name.to_upper(),"FOLLOWING THE ACTION",1.9)
 
-func _stop_death_camera() -> void:
+func _stop_death_camera(resume_input: bool = true) -> void:
 	death_camera_active=false
 	death_camera_target_id=0
 	death_camera_age=0.0
-	if input_adapter!=null and session!=null and session.connected and (menu==null or not menu.visible):
+	# Death camera uses Camera3D.look_at(), which writes a local rotation directly
+	# onto the camera. Restore the normal parent-driven camera transform before
+	# gameplay resumes or the centre ray may point back through the local player.
+	if camera!=null:
+		camera.rotation=Vector3.ZERO
+		camera.position=Vector3(CAMERA_SHOULDER_X,1.35,camera_boom_z)
+	if resume_input and input_adapter!=null and session!=null and session.connected and (menu==null or not menu.visible):
 		input_adapter.enabled=true
+
+func _sync_local_round_view(state: Dictionary) -> void:
+	if input_adapter==null:return
+	var server_yaw:=float(state.get("ay",state.get("yaw",yaw)))
+	var server_pitch:=float(state.get("ap",pitch))
+	var server_body_yaw:=float(state.get("yaw",server_yaw))
+	yaw=server_yaw;pitch=server_pitch;body_yaw=server_body_yaw
+	input_adapter.yaw=server_yaw;input_adapter.pitch=server_pitch
+	input_adapter.reset_weapon_recoil();input_adapter.suspend()
+	aiming=false;fire_held=false;visual_sprinting=false
+	weapon_recoil=0.0;weapon_visual_side_kick=0.0;weapon_visual_lift_kick=0.0;weapon_visual_twist_kick=0.0
+	weapon_sprint_blend=0.0;weapon_swap_time=0.0;inspect_time=0.0
+	sniper_sway_offset=Vector2.ZERO;sniper_sway_velocity=Vector2.ZERO
+	correction=Vector3.ZERO;player_visual.position=Vector3.ZERO
+	camera_boom_z=6.4;camera_safe_fraction=1.0
+	camera_yaw.position=Vector3(0,1.05,0);camera_yaw.rotation.y=server_yaw;camera_pitch.rotation.x=server_pitch
+	if camera!=null:
+		camera.rotation=Vector3.ZERO
+		camera.position=Vector3(CAMERA_SHOULDER_X,1.35,camera_boom_z)
+		camera.fov=74.0
+	_pending_clear()
+	local_tracer_predictions.clear()
+	_set_weapon_slot(clampi(int(state.get("weapon",weapon_slot)),0,3),false)
+	_pose_weapon_hands()
 
 func _death_camera_target() -> Vector3:
 	if death_camera_target_id==session.actor_id and head_rig!=null:

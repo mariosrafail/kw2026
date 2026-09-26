@@ -17,12 +17,21 @@ var qa_bot_mode := false
 var qa_bot_enabled_sent := false
 var qa_hold_seconds := 9.0
 var qa_static_visual := false
+var qa_multiround := false
+var qa_round_peak := 0
+var qa_round2_seen := false
+var qa_round2_seen_at := -1.0
+var qa_round2_camera_bad := false
+var qa_round2_self_aim := false
+var qa_damage_taken := 0.0
 
 func _ready() -> void:
 	qa_index = int(options.get("qa-duel","0"))
 	qa_bot_mode = str(options.get("qa-bot","false")).to_lower() in ["1","true","yes"]
 	qa_hold_seconds = maxf(9.0, float(options.get("qa-visual-hold","9")))
 	qa_static_visual = str(options.get("qa-static","false")).to_lower() in ["1","true","yes"]
+	qa_multiround = str(options.get("qa-multiround","false")).to_lower() in ["1","true","yes"]
+	if qa_multiround:qa_hold_seconds=maxf(qa_hold_seconds,28.0)
 	super._ready()
 
 func _welcome(payload: Dictionary) -> void:
@@ -37,6 +46,9 @@ func _welcome(payload: Dictionary) -> void:
 func _apply_snapshot(snapshot: Dictionary) -> void:
 	super._apply_snapshot(snapshot)
 	var players: Array = room_state.get("players",[])
+	qa_round_peak=maxi(qa_round_peak,int(room_state.get("round",0)))
+	if qa_round_peak>=2 and not qa_round2_seen:
+		qa_round2_seen=true;qa_round2_seen_at=qa_age
 	qa_player_peak = maxi(qa_player_peak,players.size())
 	var all_ready := players.size() == 2
 	for p in players:
@@ -49,7 +61,15 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		if not qa_started:
 			qa_started_at = qa_age
 			qa_snapshot_start = session.snapshot_count
-		qa_started = true
+			qa_started = true
+	if qa_bot_mode and str(room_state.get("phase",""))=="MATCH" and str(room_state.get("round_phase",""))=="DRAFT" and int(room_state.get("draft_chooser",0))==session.actor_id:
+		var pool:=room_state.get("draft_pool",[]) as Array
+		if not pool.is_empty():choose_augment(str(pool[0]))
+
+func _event(e: Dictionary) -> void:
+	super._event(e)
+	if str(e.get("type",""))=="damage" and int(e.get("actor",0))==session.actor_id:
+		qa_damage_taken+=float(e.get("amount",0.0))
 
 func _physics_process(delta: float) -> void:
 	# Same deterministic strafe on both A/B tests so prediction/correction numbers are comparable.
@@ -67,13 +87,22 @@ func _physics_process(delta: float) -> void:
 		Input.action_release("kw3d_right")
 	super._physics_process(delta)
 	qa_age += delta
+	if qa_round2_seen and not death_camera_active and str(room_state.get("round_phase","")) in ["COUNTDOWN","FIGHT","OVERLOAD"]:
+		if camera!=null and camera.rotation.length()>0.01:qa_round2_camera_bad=true
+		if weapon_muzzle!=null and player!=null:
+			var shot_direction: Vector3=(aim_target-weapon_muzzle.global_position).normalized()
+			var self_direction: Vector3=(player.global_position+Vector3.UP*0.9-weapon_muzzle.global_position).normalized()
+			if shot_direction.length_squared()>0.01 and self_direction.length_squared()>0.01 and shot_direction.dot(self_direction)>0.80:
+				qa_round2_self_aim=true
 	qa_pending_peak = maxi(qa_pending_peak,pending.size())
 	if session.connected and session.rtt_ms > 0.0:
 		qa_rtt_min = minf(qa_rtt_min,session.rtt_ms)
 		qa_rtt_max = maxf(qa_rtt_max,session.rtt_ms)
 		qa_rtt_sum += session.rtt_ms
 		qa_rtt_samples += 1
-	if qa_started and qa_started_at >= 0.0 and qa_age-qa_started_at > qa_hold_seconds:
+	if qa_multiround and qa_round2_seen and qa_round2_seen_at>=0.0 and qa_age-qa_round2_seen_at>3.0:
+		_finish_qa()
+	elif qa_started and qa_started_at >= 0.0 and qa_age-qa_started_at > qa_hold_seconds:
 		_finish_qa()
 	elif qa_age > 40.0:
 		_finish_qa()
@@ -112,6 +141,11 @@ func _finish_qa() -> void:
 	out["own_hero"] = own_hero
 	out["local_warrior"] = str(player_warrior_id)
 	out["local_body_matches_role"] = own_hero.is_empty() or own_hero == str(player_warrior_id)
+	out["round_peak"] = qa_round_peak
+	out["round2_seen"] = qa_round2_seen
+	out["round2_camera_bad"] = qa_round2_camera_bad
+	out["round2_self_aim"] = qa_round2_self_aim
+	out["damage_taken"] = qa_damage_taken
 	var folder := str(options.get("output",""))
 	if not folder.is_empty():
 		DirAccess.make_dir_recursive_absolute(folder)
@@ -123,6 +157,8 @@ func _finish_qa() -> void:
 	var passed: bool = session.connected and qa_started and qa_player_peak==2
 	passed = passed and bool(out.local_body_matches_role)
 	if qa_bot_mode:
-		passed = passed and bot_seen
+		passed = passed and bot_seen and qa_damage_taken>0.0
+	if qa_multiround:
+		passed = passed and qa_round2_seen and not qa_round2_camera_bad and not qa_round2_self_aim
 	get_tree().quit(0 if passed else 1)
 	set_physics_process(false)

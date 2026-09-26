@@ -75,6 +75,20 @@ func run() -> void:
 	var fill_style:=client.warrior_skill_bar.get_theme_stylebox("fill") as StyleBoxFlat
 	check(fill_style!=null and fill_style.bg_color.is_equal_approx(SKILL_RULES.color("erebus")), "skill_bar_tracks_assigned_hero")
 
+	# Death camera writes a world-space look_at() directly on the Camera3D.  A
+	# round reset must restore the normal parent-driven local camera transform or
+	# the next centre ray can point back through the player model.
+	client.camera.rotation = Vector3(0.42,1.1,-0.18)
+	client.camera.global_position = Vector3(9.0,5.0,-8.0)
+	client.death_camera_active = true
+	client._stop_death_camera(false)
+	check(client.camera.rotation.length() < 0.0001, "round_reset_clears_death_camera_rotation")
+	check(not client.input_adapter.enabled, "countdown_camera_reset_keeps_input_frozen")
+	client._sync_local_round_view({"ay":PI,"ap":deg_to_rad(-10.0),"yaw":PI,"ack":0,"js":0,"gs":0})
+	check(absf(wrapf(client.input_adapter.yaw-PI,-PI,PI))<0.0001, "round_reset_syncs_authority_yaw")
+	check(absf(client.input_adapter.pitch-deg_to_rad(-10.0))<0.0001, "round_reset_syncs_authority_pitch")
+	check(client.camera.rotation.length() < 0.0001, "round_reset_camera_stays_parent_aligned")
+
 	client.queue_free()
 	session.queue_free()
 	for i in range(4):await process_frame

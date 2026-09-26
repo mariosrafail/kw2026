@@ -7,6 +7,7 @@ const OVERDRIVE_COMBAT := preload("res://scripts/kw3d/overdrive_duel_combat_view
 var arena_nodes: Dictionary = {}
 var draft_overlay: Control
 var countdown_mark := -1
+var round_view_reset_round := 0
 
 func _combat_script() -> Script:
 	return OVERDRIVE_COMBAT
@@ -44,7 +45,16 @@ func _room_player(id: int) -> Dictionary:
 		if int(p.get("id",0)) == id:return p
 	return {}
 func _apply_snapshot(snapshot: Dictionary) -> void:
+	var incoming_room:=snapshot.get("room",{}) as Dictionary
+	var incoming_round:=int(incoming_room.get("round",0))
+	var incoming_phase:=str(incoming_room.get("round_phase",""))
+	var reset_round_view:=incoming_round>0 and incoming_phase=="COUNTDOWN" and incoming_round!=round_view_reset_round
+	if reset_round_view:
+		_stop_death_camera(false)
 	super._apply_snapshot(snapshot)
+	if reset_round_view and not local_state.is_empty():
+		_sync_local_round_view(local_state)
+		round_view_reset_round=incoming_round
 	_sync_rival_labels()
 	_refresh_overdrive_ui()
 	_sync_core_visual()
@@ -153,6 +163,10 @@ func _apply_hero_style(root: Node3D,hero: String) -> void:
 func _event(e: Dictionary) -> void:
 	super._event(e)
 	match str(e.get("type","")):
+		"round_prepare":
+			if e.has("room"):room_state=e.room
+			_stop_death_camera(false)
+			if input_adapter!=null:input_adapter.suspend()
 		"round_start":
 			_stop_death_camera()
 			combat.director.hud.hide_round_result()
@@ -168,9 +182,9 @@ func _event(e: Dictionary) -> void:
 			if e.has("room"):room_state=e.room
 			var winner := int(e.get("winner",0))
 			var loser := int(e.get("loser",0))
-			var player:=_room_player(winner)
-			var winner_name:=str(player.get("name",player.get("hero","PLAYER"))).to_upper()
-			var winner_score:=int(player.get("rounds",0))
+			var winner_player:=_room_player(winner)
+			var winner_name:=str(winner_player.get("name",winner_player.get("hero","PLAYER"))).to_upper()
+			var winner_score:=int(winner_player.get("rounds",0))
 			var target:=int(room_state.get("round_target",RULES.ROUND_TARGET))
 			var players: Array=room_state.get("players",[]) as Array
 			var left_score:=int((players[0] as Dictionary).get("rounds",0)) if players.size()>0 else 0

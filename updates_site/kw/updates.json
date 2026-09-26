@@ -1,6 +1,17 @@
 {
   "updates": [
     {
+      "version": "alpha-0.1.54",
+      "date": "2026-09-26",
+      "title": "ONLINE 1V1 // ROUND RESET & BOT AIM FIX",
+      "items": [
+        "Round transitions now fully reset the death-camera transform and resync local yaw/pitch to the server spawn facing, preventing the weapon from aiming back through the player on Round 2.",
+        "The duel bot now aims its authoritative muzzle directly at the rival torso instead of inheriting the human shoulder-camera parallax offset.",
+        "Bot fire cadence was retuned so it lands meaningful hits without using the old off-axis spray path.",
+        "Fixed a Round Over client variable-shadowing crash exposed by the new multi-round bot QA."
+      ]
+    },
+    {
       "version": "alpha-0.1.53",
       "date": "2026-09-26",
       "title": "ONLINE 1V1 // VISUAL & REPLICATION FIX PASS",

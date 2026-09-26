@@ -161,11 +161,21 @@ func run() -> void:
 	for i in range(260):bot_world.step()
 	check(bot_world.round_phase=="FIGHT","bot_match_reaches_fight")
 	var bot_shot := false
+	var bot_damage := false
+	var bot_shot_count := 0
+	var bot_damage_count := 0
 	for event in bot_events:
 		if str(event.get("type","")) in ["shot","shotgun"] and int(event.get("actor",0))==bot_world.duel_bot_id:
 			bot_shot = true
-			break
+			bot_shot_count += 1
+		if str(event.get("type",""))=="damage" and int(event.get("owner",0))==bot_world.duel_bot_id and int(event.get("actor",0))==11:
+			bot_damage = true
+			bot_damage_count += 1
 	check(bot_shot,"authority_bot_fires")
+	check(bot_damage,"authority_bot_hits_human")
+	check(float((bot_world.actors[11] as Node3D).health)<100.0,"authority_bot_reduces_human_hp")
+	check(bot_damage_count>=3,"authority_bot_has_meaningful_accuracy")
+	print("DUEL_BOT_ACCURACY shots=",bot_shot_count," hits=",bot_damage_count)
 	bot_world.round_phase="FIGHT"
 	bot_world._finish_round(11,bot_world.duel_bot_id)
 	check(bot_world.round_phase=="DRAFT","bot_round_enters_draft")
