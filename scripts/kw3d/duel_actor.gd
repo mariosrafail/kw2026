@@ -14,6 +14,9 @@ var vamp_lock := 0.0
 var duel_ai := false
 var duel_has_aim_point := false
 var duel_aim_point := Vector3.ZERO
+var duel_burst_shots_remaining := 5
+var duel_burst_pause := 0.0
+var duel_aim_error := Vector3.ZERO
 const ROUND_AIM_PITCH := -0.174533
 
 func setup_duel(hero: String) -> void:
@@ -61,6 +64,9 @@ func reset_for_round(spawn: Vector3, facing: float) -> void:
 	skill_charges = skill_max_charges
 	skill_recharge = 0.0
 	duel_has_aim_point = false
+	duel_burst_shots_remaining = 5
+	duel_burst_pause = 0.0
+	duel_aim_error = Vector3.ZERO
 	head_rotation = Vector3.ZERO
 	head_velocity = Vector3.ZERO
 	recoil = Vector3.ZERO
@@ -140,6 +146,8 @@ func apply_duel_push(direction: Vector3, distance: float) -> void:
 		move_and_collide(flat.normalized()*distance*scale)
 
 func tick(dt: float) -> void:
+	if duel_ai:
+		duel_burst_pause=maxf(0.0,duel_burst_pause-dt)
 	guard_time = maxf(0.0,guard_time-dt)
 	haste_time = maxf(0.0,haste_time-dt)
 	vamp_lock = maxf(0.0,vamp_lock-dt)

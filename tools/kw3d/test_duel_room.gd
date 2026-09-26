@@ -158,24 +158,52 @@ func run() -> void:
 	check(bot_room.players.size()==2,"bot_fills_second_slot")
 	check(bool((bot_room.players[1] as Dictionary).get("bot",false)),"second_slot_marked_bot")
 	check(str((bot_room.players[1] as Dictionary).get("hero",""))=="erebus","bot_is_erebus")
-	for i in range(260):bot_world.step()
+	var bot_max_nearest_sole_y := 0.0
+	for i in range(380):
+		bot_world.step()
+		if bot_world.round_phase=="FIGHT" and bot_world.actors.has(bot_world.duel_bot_id):
+			var walking_bot: Node3D=bot_world.actors[bot_world.duel_bot_id]
+			if walking_bot.is_on_floor():
+				var nearest_sole_y:=INF
+				for foot in walking_bot.locomotion.feet:
+					for corner in foot.corners:
+						nearest_sole_y=minf(nearest_sole_y,(foot.node.global_transform*(corner as Vector3)).y)
+				bot_max_nearest_sole_y=maxf(bot_max_nearest_sole_y,nearest_sole_y)
 	check(bot_world.round_phase=="FIGHT","bot_match_reaches_fight")
 	var bot_shot := false
 	var bot_damage := false
 	var bot_shot_count := 0
 	var bot_damage_count := 0
+	var bot_shot_ticks: Array[int] = []
 	for event in bot_events:
 		if str(event.get("type","")) in ["shot","shotgun"] and int(event.get("actor",0))==bot_world.duel_bot_id:
 			bot_shot = true
 			bot_shot_count += 1
+			bot_shot_ticks.append(int(event.get("tick",0)))
 		if str(event.get("type",""))=="damage" and int(event.get("owner",0))==bot_world.duel_bot_id and int(event.get("actor",0))==11:
 			bot_damage = true
 			bot_damage_count += 1
 	check(bot_shot,"authority_bot_fires")
 	check(bot_damage,"authority_bot_hits_human")
 	check(float((bot_world.actors[11] as Node3D).health)<100.0,"authority_bot_reduces_human_hp")
-	check(bot_damage_count>=3,"authority_bot_has_meaningful_accuracy")
-	print("DUEL_BOT_ACCURACY shots=",bot_shot_count," hits=",bot_damage_count)
+	check(bot_damage_count>=1 and bot_damage_count<bot_shot_count,"authority_bot_accuracy_is_imperfect")
+	var max_burst_run := 1
+	var current_burst_run := 1
+	var pause_seen := false
+	for index in range(1,bot_shot_ticks.size()):
+		var gap:=bot_shot_ticks[index]-bot_shot_ticks[index-1]
+		if gap>=40:
+			pause_seen=true
+			current_burst_run=1
+		else:
+			current_burst_run+=1
+			max_burst_run=maxi(max_burst_run,current_burst_run)
+	check(max_burst_run<=5,"authority_bot_burst_capped_at_five")
+	check(pause_seen,"authority_bot_pauses_between_bursts")
+	var duel_bot: Node3D=bot_world.actors[bot_world.duel_bot_id]
+	check(float(duel_bot.locomotion.grounded_lift_scale)<=0.08,"authority_bot_uses_grounded_gait")
+	check(bot_max_nearest_sole_y<=0.10,"authority_bot_keeps_a_foot_near_floor")
+	print("DUEL_BOT_TUNING shots=",bot_shot_count," hits=",bot_damage_count," max_burst=",max_burst_run," pause=",pause_seen," lift=",duel_bot.locomotion.grounded_lift_scale," sole_max=",bot_max_nearest_sole_y)
 	bot_world.round_phase="FIGHT"
 	bot_world._finish_round(11,bot_world.duel_bot_id)
 	check(bot_world.round_phase=="DRAFT","bot_round_enters_draft")

@@ -1,6 +1,17 @@
 {
   "updates": [
     {
+      "version": "alpha-0.1.55",
+      "date": "2026-09-26",
+      "title": "BOT BALANCE // BURST FIRE & GROUNDED GAIT",
+      "items": [
+        "The duel bot now fires the AK in five-shot bursts with a clear pause before the next burst.",
+        "Each burst uses a shuffled fair-accuracy pattern: only two or three of five shots intentionally track the player, while the rest miss cleanly to either side.",
+        "Bot reaction and grenade timing are less oppressive, giving the player room to reposition between bursts.",
+        "The bot-specific walk cycle now keeps its feet much closer to the floor instead of using the high floating stride used by the normal stylized locomotion."
+      ]
+    },
+    {
       "version": "alpha-0.1.54",
       "date": "2026-09-26",
       "title": "ONLINE 1V1 // ROUND RESET & BOT AIM FIX",

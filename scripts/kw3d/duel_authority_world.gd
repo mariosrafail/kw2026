@@ -7,7 +7,10 @@ const ARENA := preload("res://scripts/kw3d/duel_arena.gd")
 const DUEL_MOTOR := preload("res://scripts/kw3d/actor_motor.gd")
 const AIM_ASSIST := preload("res://scripts/kw3d/aim_assist.gd")
 const DUEL_BOT_ID := 900001
-const DUEL_BOT_FIRE_INTERVAL := 0.18
+const DUEL_BOT_FIRE_INTERVAL := 0.14
+const DUEL_BOT_BURST_SIZE := 5
+const DUEL_BOT_BURST_PAUSE_MIN := 1.05
+const DUEL_BOT_BURST_PAUSE_MAX := 1.40
 
 var ready_state: Dictionary = {}
 var host_id := 0
@@ -31,6 +34,8 @@ var grenade_context_owner := 0
 var grenade_scale := 1.0
 var bot_fallback_enabled := false
 var duel_bot_id := 0
+var duel_bot_burst_pattern: Array[bool] = []
+var duel_bot_burst_pattern_index := 0
 
 func max_players() -> int:
 	return 2
@@ -95,6 +100,7 @@ func _spawn_duel_bot() -> bool:
 	bot.configure(DUEL_BOT_ID,false,data.profiles.outrage,hero)
 	bot.setup_duel(hero)
 	bot.duel_ai = true
+	bot.locomotion.grounded_lift_scale = 0.08
 	bot.display_name = "KW BOT"
 	bot.connected = true
 	bot.global_position = ARENA.spawn_for_index(1)
@@ -228,6 +234,9 @@ func _begin_round() -> void:
 	for index in range(ids.size()):
 		var a: Node3D = actors[ids[index]]
 		a.reset_for_round(ARENA.spawn_for_index(index),_facing_for(ids[index]))
+		if bool(a.get("duel_ai")):
+			a.locomotion.grounded_lift_scale = 0.08
+			_prepare_duel_bot_burst(a)
 	emit("round_prepare",{"round":round_number,"room":room_packet()})
 
 func _player_packet(id: int) -> Dictionary:
@@ -392,13 +401,17 @@ func _update_duel_bot_ai() -> void:
 		bot.command = DUEL_MOTOR.empty(bot.aim_yaw,bot.aim_pitch)
 		bot.clear_duel_aim_point()
 		return
+	if bot.duel_burst_pause <= 0.0 and bot.duel_burst_shots_remaining <= 0:
+		_prepare_duel_bot_burst(bot)
 	var delta := target.global_position-bot.global_position
 	var flat := Vector3(delta.x,0.0,delta.z)
 	var distance := flat.length()
-	var target_point: Vector3 = target.rigs.TorsoRig.global_position+Vector3.UP*0.18
-	# Tiny deterministic sway keeps the AI readable without making it spray a
-	# parallel line beside the player. The aim point remains on the torso.
-	target_point += Vector3(sin(float(tick_id)*0.037)*0.11,sin(float(tick_id)*0.029+1.7)*0.06,cos(float(tick_id)*0.031)*0.09)
+	var torso_point: Vector3 = target.rigs.TorsoRig.global_position+Vector3.UP*0.18
+	var aim_line: Vector3 = (torso_point-bot.weapon_anchor()).normalized()
+	var aim_right: Vector3 = aim_line.cross(Vector3.UP).normalized()
+	if aim_right.length_squared()<0.01:aim_right=Vector3.RIGHT
+	var aim_up: Vector3 = aim_right.cross(aim_line).normalized()
+	var target_point: Vector3 = torso_point+aim_right*bot.duel_aim_error.x+aim_up*bot.duel_aim_error.y+aim_line*bot.duel_aim_error.z
 	bot.set_duel_aim_point(target_point)
 	var aim_angles := AIM_ASSIST.target_angles(bot.weapon_anchor(),target_point)
 	var desired_yaw: float = aim_angles.x
@@ -416,12 +429,31 @@ func _update_duel_bot_ai() -> void:
 	bot.command = DUEL_MOTOR.empty(desired_yaw,desired_pitch)
 	bot.command["move"] = move
 	bot.command["aim"] = clear_line
-	bot.command["fire"] = clear_line and distance < 34.0 and fight_time > 0.45
+	bot.command["fire"] = clear_line and distance < 34.0 and fight_time > 0.75 and bot.duel_burst_pause <= 0.0 and bot.duel_burst_shots_remaining > 0
 	bot.command["sprint"] = distance > 15.0
 	bot.command["weapon"] = 0
 	bot.command["ct"] = tick_id
-	if clear_line and distance > 7.0 and distance < 18.0 and tick_id % 540 == 0:
+	if clear_line and distance > 7.0 and distance < 18.0 and tick_id % 900 == 0:
 		bot.command["grenade"] = true
+
+func _prepare_duel_bot_burst(bot: Node3D) -> void:
+	bot.duel_burst_shots_remaining = DUEL_BOT_BURST_SIZE
+	duel_bot_burst_pattern.clear()
+	var accurate_shots:=2+rng.randi_range(0,1)
+	for index in range(DUEL_BOT_BURST_SIZE):duel_bot_burst_pattern.append(index<accurate_shots)
+	for index in range(duel_bot_burst_pattern.size()-1,0,-1):
+		var swap_index:=rng.randi_range(0,index)
+		var tmp:=duel_bot_burst_pattern[index]
+		duel_bot_burst_pattern[index]=duel_bot_burst_pattern[swap_index]
+		duel_bot_burst_pattern[swap_index]=tmp
+	duel_bot_burst_pattern_index=0
+	bot.duel_aim_error=_roll_duel_bot_aim_error(duel_bot_burst_pattern[0])
+
+func _roll_duel_bot_aim_error(accurate: bool) -> Vector3:
+	if accurate:
+		return Vector3(rng.randf_range(-0.20,0.20),rng.randf_range(-0.14,0.14),rng.randf_range(-0.10,0.10))
+	var side := -1.0 if rng.randf()<0.5 else 1.0
+	return Vector3(side*rng.randf_range(2.20,3.00),rng.randf_range(-0.85,1.00),rng.randf_range(-0.30,0.30))
 
 func _tick_duel_bot_skill() -> void:
 	if duel_bot_id <= 0 or not actors.has(duel_bot_id):return
@@ -437,6 +469,12 @@ func _shoot(a: Node3D) -> void:
 	super._shoot(a)
 	if bool(a.get("duel_ai")):
 		a.fire_clock = maxf(a.fire_clock,DUEL_BOT_FIRE_INTERVAL)
+		a.duel_burst_shots_remaining = maxi(0,a.duel_burst_shots_remaining-1)
+		duel_bot_burst_pattern_index+=1
+		if a.duel_burst_shots_remaining <= 0:
+			a.duel_burst_pause = rng.randf_range(DUEL_BOT_BURST_PAUSE_MIN,DUEL_BOT_BURST_PAUSE_MAX)
+		elif duel_bot_burst_pattern_index<duel_bot_burst_pattern.size():
+			a.duel_aim_error = _roll_duel_bot_aim_error(duel_bot_burst_pattern[duel_bot_burst_pattern_index])
 	if a.has_augment("heavy_rounds"):a.fire_clock *= 1.20
 	if a.has_augment("feather_trigger"):a.fire_clock *= 0.72
 

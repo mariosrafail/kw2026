@@ -34,6 +34,7 @@ var feet: Array[FootState] = []
 var torso_rest := Vector3.ZERO
 var head_rest := Vector3.ZERO
 var playfulness := 1.2
+var grounded_lift_scale := 1.0
 var time := 0.0
 var cycle := 0.0
 var speed := 0.0
@@ -195,7 +196,7 @@ func _update_run_cycle_feet(ratio: float) -> void:
 	var high:=pow(absf(split),0.46)
 	var front:=Vector3(-sin(travel_yaw),0,-cos(travel_yaw))
 	var stride:=lerpf(0.58,1.08,ratio)
-	var max_lift:=lerpf(0.40,0.69,ratio)
+	var max_lift:=lerpf(0.40,0.69,ratio)*grounded_lift_scale
 	for i in range(feet.size()):
 		var f:=feet[i]
 		var side_sign:=1.0 if i==0 else -1.0
@@ -273,7 +274,7 @@ func _begin_swing(index: int, horizontal: Vector3, settle: bool) -> void:
 	f.duration = 0.19 if settle else step_interval * 1.34
 	f.start = f.contact
 	f.from_heading = f.heading
-	f.lift = (0.11 if settle else lerpf(0.40,0.82,clampf(speed/11.0,0,1))) * rng.randf_range(0.97,1.06)
+	f.lift = (0.11 if settle else lerpf(0.40,0.82,clampf(speed/11.0,0,1))) * grounded_lift_scale * rng.randf_range(0.97,1.06)
 	f.flourish = rng.randf_range(-0.22, 0.22) * playfulness
 	f.toe_out = (1.0 if index == 0 else -1.0) * 0.055 + rng.randf_range(-0.04, 0.04) * playfulness
 	f.goal = _ground(_neutral(index) + horizontal * (f.duration + step_interval * 0.68))["position"]
@@ -383,7 +384,7 @@ func _update_body(dt: float, local_velocity: Vector3, accel: Vector3, grounded: 
 	var weight_shift:=pose_wave*0.045*move_blend
 	var idle:=sin(time*2.15)*0.034*(1.0-move_blend)
 	# Split poses are decisively high; centre/contact poses compress below rest.
-	var vertical_pose:=(vertical_wave*0.30+0.040)*move_blend
+	var vertical_pose:=(vertical_wave*0.30+0.040)*move_blend*grounded_lift_scale
 	var target_pos:=Vector3(weight_shift,idle+vertical_pose-landing_kick,0)
 	target_pos += Vector3(-accel.x,0,-accel.z)*0.0018
 	target_pos += Vector3(_noise(0)*0.031,_noise(2)*0.023,_noise(4)*0.026)*amount

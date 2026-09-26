@@ -24,6 +24,9 @@ var qa_round2_seen_at := -1.0
 var qa_round2_camera_bad := false
 var qa_round2_self_aim := false
 var qa_damage_taken := 0.0
+var qa_bot_shots := 0
+var qa_bot_hits := 0
+var qa_bot_damage_by_weapon: Dictionary = {}
 
 func _ready() -> void:
 	qa_index = int(options.get("qa-duel","0"))
@@ -68,8 +71,14 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 
 func _event(e: Dictionary) -> void:
 	super._event(e)
+	if qa_bot_mode and str(e.get("type","")) in ["shot","shotgun"] and int(e.get("actor",0))!=session.actor_id:
+		qa_bot_shots+=1
 	if str(e.get("type",""))=="damage" and int(e.get("actor",0))==session.actor_id:
 		qa_damage_taken+=float(e.get("amount",0.0))
+		if qa_bot_mode and int(e.get("owner",0))!=session.actor_id:
+			qa_bot_hits+=1
+			var weapon_key:=str(e.get("weapon","unknown"))
+			qa_bot_damage_by_weapon[weapon_key]=int(qa_bot_damage_by_weapon.get(weapon_key,0))+1
 
 func _physics_process(delta: float) -> void:
 	# Same deterministic strafe on both A/B tests so prediction/correction numbers are comparable.
@@ -146,6 +155,9 @@ func _finish_qa() -> void:
 	out["round2_camera_bad"] = qa_round2_camera_bad
 	out["round2_self_aim"] = qa_round2_self_aim
 	out["damage_taken"] = qa_damage_taken
+	out["bot_shots"] = qa_bot_shots
+	out["bot_hits"] = qa_bot_hits
+	out["bot_damage_by_weapon"] = qa_bot_damage_by_weapon.duplicate()
 	var folder := str(options.get("output",""))
 	if not folder.is_empty():
 		DirAccess.make_dir_recursive_absolute(folder)
