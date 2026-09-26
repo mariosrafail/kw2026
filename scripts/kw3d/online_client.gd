@@ -54,6 +54,7 @@ var death_camera_age := 0.0
 var death_camera_anchor := Vector3.ZERO
 var death_camera_position := Vector3.ZERO
 var death_camera_side := 1.0
+var canonical_human_profile: Dictionary = {}
 
 func _menu_script() -> Script:
 	return load("res://scripts/kw3d/online_menu.gd")
@@ -65,6 +66,9 @@ func _open_menu_on_death() -> bool:
 	return true
 
 func _ready() -> void:
+	var level_data: Dictionary = LEVEL.read()
+	var level_profiles: Dictionary = level_data.get("profiles", {}) as Dictionary
+	canonical_human_profile = level_profiles.get("outrage", {}) as Dictionary
 	var requested_warrior := _initial_online_warrior_id()
 	if requested_warrior in ["outrage","erebus","kosas","aevilok","loker"]:
 		player_warrior_id = requested_warrior
@@ -165,6 +169,10 @@ func _welcome(payload: Dictionary) -> void:
 	_pending_clear();correction=Vector3.ZERO;connected_age=0
 	for state in payload.state.actors:
 		if state.id==session.actor_id:
+			_ensure_local_network_warrior(state)
+			if combat!=null and combat.director!=null and combat.director.hud!=null and combat.director.hud.has_method("set_player_name"):
+				combat.director.hud.set_player_name(player_warrior_id)
+			_update_warrior_skill_hud(float(state.get("skill_cd",0.0)),float(state.get("skill_active",0.0)))
 			_set_player_virtual_name(str(state.get("name",options.get("name","KW_ROOKIE"))))
 			player.global_position=state.p;player.velocity=state.v
 			player.set_meta("motor_grounded",bool(state.ground))
@@ -172,6 +180,7 @@ func _welcome(payload: Dictionary) -> void:
 			input_adapter.reset_weapon_recoil()
 			_set_authoritative_weapon_state(state,true)
 			_style_local_human(head_style,state)
+			WARRIOR_RENDER_LOD.sync_batches(head_style)
 			locomotion.reset();break
 	set_menu(false)
 
@@ -246,6 +255,96 @@ func _decorate_prediction(_simulation: Dictionary,_dt: float) -> void:pass
 func _after_prediction_step(_dt: float) -> void:pass
 func _style_local_human(_style: Node3D,_state: Dictionary) -> void:pass
 func _style_remote_human(_style: Node3D,_state: Dictionary) -> void:pass
+
+func _network_warrior_id(state: Dictionary) -> String:
+	var warrior := str(state.get("hero", state.get("skin", "outrage"))).strip_edges().to_lower()
+	return warrior if warrior in ["outrage","erebus","kosas","aevilok","loker"] else "outrage"
+
+func _create_network_warrior_style(warrior: String, local_variant: bool) -> Node3D:
+	var style: Node3D
+	match warrior:
+		"aevilok":
+			style = AEVILOK_FULLBODY.instantiate() as Node3D
+			AEVILOK_STYLE.apply(style)
+		"loker":
+			style = LOKER_FULLBODY.instantiate() as Node3D
+			LOKER_STYLE.apply(style)
+		"kosas":
+			style = KOSAS_FULLBODY.instantiate() as Node3D
+			KOSAS_STYLE.apply(style)
+		"erebus":
+			style = EREBUS_FULLBODY.instantiate() as Node3D
+		_:
+			style = OUTRAGE_FULLBODY.instantiate() as Node3D
+			OUTRAGE_SKINS.apply(style, outrage_skin_id if local_variant else 0)
+	WARRIOR_HAND_STYLE.ensure_hands(style)
+	WARRIOR_RENDER_LOD.apply(style)
+	if warrior == "aevilok":
+		AEVILOK_STYLE.enable_wing_batch(style)
+	if warrior == "erebus" and not local_variant:
+		EREBUS_SKINS.apply(style, 0)
+		WARRIOR_RENDER_LOD.sync_batches(style)
+	var style_head := style.get_node_or_null("HeadRig") as Node3D
+	var style_torso := style.get_node_or_null("TorsoRig") as Node3D
+	if style_head != null:
+		style_head.position += Vector3(0.0, 0.10, -0.20)
+	if style_torso != null:
+		style_torso.position += Vector3(0.0, -0.12, 0.12)
+	return style
+
+func _ensure_local_network_warrior(state: Dictionary) -> void:
+	var warrior := _network_warrior_id(state)
+	if warrior == player_warrior_id:
+		return
+	var old_style := head_style
+	var old_damage := player_damage_visual
+	player_warrior_id = warrior
+	head_style = _create_network_warrior_style(warrior, true)
+	player_visual.add_child(head_style)
+	head_rig = head_style.get_node("HeadRig") as Node3D
+	torso_rig = head_style.get_node("TorsoRig") as Node3D
+	left_leg_rig = head_style.get_node("LeftLegRig") as Node3D
+	right_leg_rig = head_style.get_node("RightLegRig") as Node3D
+	left_hand_rig = head_style.get_node_or_null("LeftHandRig") as Node3D
+	right_hand_rig = head_style.get_node_or_null("RightHandRig") as Node3D
+	head_rest = head_rig.position
+	torso_rest = torso_rig.position
+	left_leg_rest = left_leg_rig.position
+	right_leg_rest = right_leg_rig.position
+	var player_shape := player.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if player_shape != null and player_shape.shape is CapsuleShape3D:
+		(player_shape.shape as CapsuleShape3D).height = float(head_style.get_meta("capsule_height", 3.43))
+	player_damage_visual = VOXEL_DAMAGE_VISUAL.new()
+	player_visual.add_child(player_damage_visual)
+	player_damage_visual.setup(head_style, RIG_NAMES, 137)
+	player_damage_visual.set_pixel_enabled(pixel_enabled)
+	player_damage_visual.set_comic_enabled(comic_enabled)
+	if warrior == "erebus":
+		EREBUS_SKINS.apply(head_style, erebus_skin_id)
+	_style_local_human(head_style, state)
+	head_style.set_enabled(comic_enabled)
+	head_style.set_pixel_enabled(pixel_enabled)
+	WARRIOR_RENDER_LOD.sync_batches(head_style)
+	locomotion = LOCOMOTION.new()
+	locomotion.setup(player, player_visual, head_rig, torso_rig, left_leg_rig, right_leg_rig, 137)
+	locomotion.playfulness = ragdoll_playfulness
+	_pose_weapon_hands()
+	if old_damage != null and is_instance_valid(old_damage):
+		old_damage.queue_free()
+	if old_style != null and is_instance_valid(old_style):
+		old_style.queue_free()
+
+func _canonical_rig_position(title: String) -> Vector3:
+	if not canonical_human_profile.has(title):
+		return Vector3.ZERO
+	var data: Dictionary = canonical_human_profile[title] as Dictionary
+	return LEVEL.vec(data.get("p", [0.0,0.0,0.0]) as Array)
+
+func _canonical_rig_rotation(title: String) -> Quaternion:
+	if not canonical_human_profile.has(title):
+		return Quaternion.IDENTITY
+	var data: Dictionary = canonical_human_profile[title] as Dictionary
+	return Quaternion.from_euler(LEVEL.vec(data.get("r", [0.0,0.0,0.0]) as Array))
 
 func _start_death_camera(killer_id: int,death_point: Vector3) -> void:
 	death_camera_active=true
@@ -520,23 +619,8 @@ func _make_replica(state: Dictionary) -> void:
 	else:
 		node=Node3D.new();add_child(node);node.position=state.p
 		visual=Node3D.new();node.add_child(visual)
-		var remote_warrior := str(state.get("skin","outrage")).strip_edges().to_lower()
-		if remote_warrior == "aevilok":
-			style=AEVILOK_FULLBODY.instantiate()
-			AEVILOK_STYLE.apply(style)
-		elif remote_warrior == "loker":
-			style=LOKER_FULLBODY.instantiate()
-			LOKER_STYLE.apply(style)
-		elif remote_warrior == "kosas":
-			style=KOSAS_FULLBODY.instantiate()
-			KOSAS_STYLE.apply(style)
-		elif remote_warrior == "erebus":
-			style=EREBUS_FULLBODY.instantiate()
-		else:
-			style=OUTRAGE_FULLBODY.instantiate()
-		WARRIOR_HAND_STYLE.ensure_hands(style)
-		WARRIOR_RENDER_LOD.apply(style)
-		if remote_warrior=="aevilok":AEVILOK_STYLE.enable_wing_batch(style)
+		var remote_warrior := _network_warrior_id(state)
+		style = _create_network_warrior_style(remote_warrior, false)
 		visual.add_child(style)
 		_style_remote_human(style,state)
 		for title in RIG_NAMES:rig_nodes[title]=style.get_node(title)
@@ -553,13 +637,28 @@ func _make_replica(state: Dictionary) -> void:
 		tag.visibility_range_end = 42.0
 		tag.visibility_range_end_margin = 5.0
 		node.add_child(tag)
-		gun=Node3D.new();gun.name="RemoteWeapon";visual.add_child(gun);gun.position=Vector3(-1.10,torso_rest.y+0.88,-0.98)
+		gun=Node3D.new();gun.name="RemoteWeapon";visual.add_child(gun);gun.position=Vector3.ZERO
+	var target_rig_positions: Array=[]
+	var target_rig_rotations: Array=[]
+	var target_rig_scales: Array=[]
+	var source_rig_positions: Array=[]
+	var source_rig_rotations: Array=[]
+	if not state.bot:
+		for title in RIG_NAMES:
+			var target_rig:=rig_nodes[title] as Node3D
+			target_rig_positions.append(target_rig.position)
+			target_rig_rotations.append(target_rig.quaternion)
+			target_rig_scales.append(target_rig.scale)
+			source_rig_positions.append(_canonical_rig_position(title))
+			source_rig_rotations.append(_canonical_rig_rotation(title))
 	var record: Dictionary={"node":node,"visual":visual,"style":style,"rigs":rig_nodes,"next":state,"prev_p":state.p,"prev_yaw":float(state.get("yaw",0.0)),"prev_rig_positions":[],"prev_rig_rotations":[],"prev_rig_scales":[],"age":0.05,"bot":state.bot,"steps":state.steps,"grounded":bool(state.get("ground",true)),"dead":false,
 			"gun":gun,"ak_body":ak_body,"shotgun_body":shotgun_body,"kar_body":kar_body,"launcher_body":launcher_body,"damage_visual":damage_visual,
 			"weapon_bodies":[null,null,null,null],
 			"health":float(state.get("hp",100.0)),"weapon":clampi(int(state.get("weapon",0)),0,3),"tag":tag,
 			"lod_phase":int(node.get_instance_id()%12),"is_aevilok":str(state.get("skin","")).strip_edges().to_lower()=="aevilok",
-		"left_hand":style.get_node_or_null("LeftHandRig") if style != null else null,
+			"retarget_pose":not state.bot,"target_rig_positions":target_rig_positions,"target_rig_rotations":target_rig_rotations,"target_rig_scales":target_rig_scales,
+			"source_rig_positions":source_rig_positions,"source_rig_rotations":source_rig_rotations,
+			"left_hand":style.get_node_or_null("LeftHandRig") if style != null else null,
 			"right_hand":style.get_node_or_null("RightHandRig") if style != null else null,
 			"hit_punch":0.0,"hit_sign":1.0,"hit_seed":0.0}
 	if not state.bot:_ensure_remote_weapon_body(record,int(record.weapon))
@@ -610,9 +709,22 @@ func _apply_replica(r: Dictionary,alpha: float) -> void:
 		for index in range(4):
 			var rig: Node3D=r.rigs[RIG_NAMES[index]]
 			var k =index*9
-			rig.position=(prev_positions[index] as Vector3).lerp(Vector3(second[k],second[k+1],second[k+2]),alpha)
-			rig.quaternion=(prev_rotations[index] as Quaternion).slerp(Quaternion.from_euler(Vector3(second[k+3],second[k+4],second[k+5])),alpha)
-			rig.scale=(prev_scales[index] as Vector3).lerp(Vector3(second[k+6],second[k+7],second[k+8]),alpha)
+			var next_position:=Vector3(second[k],second[k+1],second[k+2])
+			var next_rotation:=Quaternion.from_euler(Vector3(second[k+3],second[k+4],second[k+5]))
+			var next_scale:=Vector3(second[k+6],second[k+7],second[k+8])
+			if bool(r.get("retarget_pose",false)):
+				var source_positions:=r.source_rig_positions as Array
+				var source_rotations:=r.source_rig_rotations as Array
+				var target_positions:=r.target_rig_positions as Array
+				var target_rotations:=r.target_rig_rotations as Array
+				var target_scales:=r.target_rig_scales as Array
+				next_position=(target_positions[index] as Vector3)+(next_position-(source_positions[index] as Vector3))
+				var rotation_delta: Quaternion=(source_rotations[index] as Quaternion).inverse()*next_rotation
+				next_rotation=(target_rotations[index] as Quaternion)*rotation_delta
+				next_scale=(target_scales[index] as Vector3)*next_scale
+			rig.position=(prev_positions[index] as Vector3).lerp(next_position,alpha)
+			rig.quaternion=(prev_rotations[index] as Quaternion).slerp(next_rotation,alpha)
+			rig.scale=(prev_scales[index] as Vector3).lerp(next_scale,alpha)
 	var replica_health:=float(b.get("hp",100.0))
 	if r.damage_visual!=null and not is_equal_approx(replica_health,float(r.get("health",replica_health))):
 		r.damage_visual.set_health(replica_health,100.0)
@@ -627,13 +739,34 @@ func _apply_replica(r: Dictionary,alpha: float) -> void:
 			_ensure_remote_weapon_body(r,selected_weapon)
 			r.weapon=selected_weapon
 		var phase_value := float(b.get("phase",0.0))*TAU
-		var remote_roll := sin(phase_value+1.2)*0.085
-		var remote_pitch := sin(phase_value*1.7+0.4)*0.035
-		gun.position=Vector3(-1.10,torso_rest.y+0.88+sin(phase_value)*0.035,-0.98)
-		gun.global_rotation=Vector3(float(b.ap)+remote_pitch,float(b.ay),remote_roll)
+		_update_remote_weapon_pose(r,b,phase_value)
 		if weapon_changed or remote_distance<=REMOTE_FULL_ANIM_DISTANCE or Engine.get_process_frames()%2==0:
 			_pose_remote_weapon_hands(r, selected_weapon)
 	_update_replica_movement_audio(r,b)
+
+
+func _update_remote_weapon_pose(r: Dictionary,state: Dictionary,phase_value: float) -> void:
+	var gun:=r.get("gun") as Node3D
+	var visual:=r.get("visual") as Node3D
+	var torso:=r.rigs.get("TorsoRig") as Node3D
+	if gun==null or visual==null or torso==null:return
+	var target_positions:=r.get("target_rig_positions",[]) as Array
+	var torso_rest_position:=torso.position
+	if target_positions.size()>1:
+		torso_rest_position=target_positions[1] as Vector3
+	var torso_bob:=clampf(torso.position.y-torso_rest_position.y,-0.10,0.10)
+	var chest:=visual.to_global(Vector3(0.0,torso_rest_position.y+WEAPON_HOLD_HEIGHT+torso_bob*0.35,torso_rest_position.z))
+	var aim_basis:=Basis(Vector3.UP,float(state.get("ay",0.0)))*Basis(Vector3.RIGHT,float(state.get("ap",0.0)))
+	var forward:=-aim_basis.z.normalized()
+	var right:=forward.cross(Vector3.UP).normalized()
+	if right.length_squared()<0.01:
+		right=visual.global_basis.x.normalized()
+	var velocity:=state.get("v",Vector3.ZERO) as Vector3
+	var horizontal_speed:=Vector2(velocity.x,velocity.z).length()
+	var move_amount:=clampf(horizontal_speed/maxf(0.001,MOVE_SPEED),0.0,1.0)
+	var hand_bob:=sin(phase_value)*0.030*move_amount
+	gun.global_position=chest+forward*(WEAPON_HOLD_DISTANCE+0.08*move_amount)+right*WEAPON_HOLD_SIDE+Vector3.UP*hand_bob
+	gun.global_basis=Basis.looking_at(forward,Vector3.UP)
 
 
 func _build_remote_weapon_body(gun: Node3D,slot: int) -> Node3D:
@@ -896,6 +1029,21 @@ func _consume_local_tracer_prediction(input_seq: int) -> Dictionary:
 	local_tracer_predictions.erase(chosen)
 	return result
 
+func _visible_muzzle_for_actor(actor_id: int,fallback: Vector3,weapon_override: int=-1) -> Vector3:
+	if actor_id==int(session.actor_id):
+		return weapon_muzzle.global_position if weapon_muzzle!=null else fallback
+	if not replicas.has(actor_id):return fallback
+	var record: Dictionary=replicas[actor_id] as Dictionary
+	if bool(record.get("bot",false)):return fallback
+	var slot:=clampi(weapon_override if weapon_override>=0 else int(record.get("weapon",0)),0,3)
+	_ensure_remote_weapon_body(record,slot)
+	var bodies:=record.get("weapon_bodies",[]) as Array
+	if bodies.size()<=slot:return fallback
+	var body:=bodies[slot] as Node3D
+	if body==null:return fallback
+	var profile: Dictionary=WEAPON_RULES.by_slot(slot)
+	return body.to_global(Vector3(float(profile.get("muzzle_x",1.34)),0.02,0.0))
+
 func _event(e: Dictionary) -> void:
 	qa_events[e.type]=int(qa_events.get(e.type,0))+1
 	match str(e.type):
@@ -908,29 +1056,33 @@ func _event(e: Dictionary) -> void:
 				if not prediction.is_empty():
 					tracer_from=prediction.from
 					tracer_to=prediction.to
+			else:
+				tracer_from=_visible_muzzle_for_actor(int(e.actor),tracer_from,int(e.get("weapon",0)))
 			if not e.blocked:combat._spawn_tracer(tracer_from,tracer_to)
 			if bool(e.get("hit",false)):combat._spawn_impact(e.to,e.get("normal",Vector3.UP))
 			if e.actor!=session.actor_id:
-				combat._spawn_world_muzzle_flash(e.from,(e.to-e.from).normalized())
+				combat._spawn_world_muzzle_flash(tracer_from,(e.to-tracer_from).normalized())
 				var shot_weapon:=int(e.get("weapon",0))
 				var stream: AudioStream=KAR_FIRE_SFX if shot_weapon==2 else AK47_SHOT_SFX
-				arena_audio._play_spatial(stream,e.from,-10.0 if shot_weapon==2 else -14.0,randf_range(0.96,1.04))
+				arena_audio._play_spatial(stream,tracer_from,-10.0 if shot_weapon==2 else -14.0,randf_range(0.96,1.04))
 		"shotgun":
 			var pellets: Array=e.get("pellets",[]) as Array
 			var pellet_count: int=pellets.size()
 			var tracer_stride: int=maxi(1,int(ceil(float(pellet_count)/5.0)))
+			var shotgun_from:=_visible_muzzle_for_actor(int(e.actor),e.from,1)
 			for pellet_index in range(pellet_count):
 				var pellet: Dictionary=pellets[pellet_index] as Dictionary
-				if pellet_index%tracer_stride==0:combat._spawn_tracer(e.from,pellet.to,"shotgun")
+				if pellet_index%tracer_stride==0:combat._spawn_tracer(shotgun_from,pellet.to,"shotgun")
 				if bool(pellet.get("hit",false)):combat._spawn_impact(pellet.to,pellet.get("normal",Vector3.UP))
 			if e.actor!=session.actor_id:
-				var first_to: Vector3=pellets[0].to if not pellets.is_empty() else e.from-Vector3.FORWARD
-				combat._spawn_world_muzzle_flash(e.from,(first_to-e.from).normalized())
-				arena_audio._play_spatial(SHOTGUN_FIRE_SFX,e.from,-11.0,randf_range(0.78,0.86))
+				var first_to: Vector3=pellets[0].to if not pellets.is_empty() else shotgun_from-Vector3.FORWARD
+				combat._spawn_world_muzzle_flash(shotgun_from,(first_to-shotgun_from).normalized())
+				arena_audio._play_spatial(SHOTGUN_FIRE_SFX,shotgun_from,-11.0,randf_range(0.78,0.86))
 		"launcher_shot":
 			if int(e.actor)!=session.actor_id:
-				combat._spawn_world_muzzle_flash(e.from,(e.v as Vector3).normalized())
-				arena_audio._play_spatial(GRENADE_LAUNCHER_FIRE_SFX,e.from,-10.0,randf_range(0.96,1.02))
+				var launcher_from:=_visible_muzzle_for_actor(int(e.actor),e.from,3)
+				combat._spawn_world_muzzle_flash(launcher_from,(e.v as Vector3).normalized())
+				arena_audio._play_spatial(GRENADE_LAUNCHER_FIRE_SFX,launcher_from,-10.0,randf_range(0.96,1.02))
 		"skill":
 			var skill_actor:=int(e.get("actor",0))
 			var skill_hero:=str(e.get("hero","outrage"))

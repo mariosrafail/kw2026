@@ -4,6 +4,8 @@ var stage: Node3D
 var hp_fill: ColorRect
 var hp_trail: ColorRect
 var hp_text: Label
+var death_title: Label
+var player_name := "OUTRAGE"
 var heal_text: Label
 var banner: Label
 var banner_detail: Label
@@ -53,7 +55,7 @@ func setup(owner_stage: Node3D) -> void:
 	panel.offset_bottom = -12
 	_rect(panel,Rect2(0,0,222,47),Color("111827"))
 	_rect(panel,Rect2(0,0,3,47),Color("63e8bf"))
-	hp_text = _label(panel,"OUTRAGE   100 / 100",13,Color.WHITE)
+	hp_text = _label(panel,"%s   100 / 100" % player_name,13,Color.WHITE)
 	hp_text.position = Vector2(11,5)
 	_rect(panel,Rect2(10,29,202,10),Color("3b2434"))
 	hp_trail = _rect(panel,Rect2(10,29,202,10),Color("ffc583"))
@@ -142,11 +144,21 @@ func setup(owner_stage: Node3D) -> void:
 	box.offset_right = 150
 	box.offset_top = -64
 	box.offset_bottom = 64
-	for info in [["OUTRAGE DOWN",26,"ff5369"],["",16,"ffffff"],["ENTER  /  B    TRY AGAIN",13,"9df8d2"]]:
+	for info in [[player_name+" DOWN",26,"ff5369"],["",16,"ffffff"],["ENTER  /  B    TRY AGAIN",13,"9df8d2"]]:
 		var line := _label(box,info[0],info[1],Color(info[2]))
 		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		if str(info[0]).ends_with(" DOWN"): death_title = line
 		if info[0] == "": death_stats = line
 	game_over_panel.hide()
+
+func set_player_name(value: String) -> void:
+	var cleaned:=value.strip_edges().to_upper()
+	if cleaned.is_empty():return
+	player_name=cleaned
+	if hp_text!=null:
+		hp_text.text="%s   %d / %d"%[player_name,int(ceil(health)),int(max_health)]
+	if death_title!=null:
+		death_title.text=player_name+" DOWN"
 
 func _rect(parent: Node, box: Rect2, color: Color) -> ColorRect:
 	var r := ColorRect.new()
@@ -174,7 +186,7 @@ func set_health(value: float, maximum: float, immediate: bool = false) -> void:
 	health = value
 	max_health = maximum
 	if immediate: trail_health = value
-	hp_text.text = "OUTRAGE   %d / %d" % [int(ceil(value)),int(maximum)]
+	hp_text.text = "%s   %d / %d" % [player_name,int(ceil(value)),int(maximum)]
 	hp_fill.size.x = 202.0 * clampf(value / maximum,0,1)
 	hp_fill.color = Color("ff5369") if value <= 30 else Color("63e8bf")
 

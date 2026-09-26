@@ -139,24 +139,14 @@ func _style_remote_human(style: Node3D,state: Dictionary) -> void:
 func _apply_hero_style(root: Node3D,hero: String) -> void:
 	if hero != RULES.EREBUS or bool(root.get_meta("overdrive_erebus",false)):return
 	root.set_meta("overdrive_erebus",true)
-	for node in root.find_children("*","MeshInstance3D",true,false):
-		var mesh := node as MeshInstance3D
-		var material := mesh.material_override
-		if material is ShaderMaterial:
-			var copy := material.duplicate() as ShaderMaterial
-			var base: Variant = copy.get_shader_parameter("base_color")
-			if base is Color:
-				copy.set_shader_parameter("base_color",(base as Color).lerp(Color("6471b6"),0.58))
-			mesh.material_override = copy
-		elif material is StandardMaterial3D:
-			var copy := material.duplicate() as StandardMaterial3D
-			copy.albedo_color = copy.albedo_color.lerp(Color("6471b6"),0.58)
-			mesh.material_override = copy
+	# Keep the authored Erebus palette and silhouette intact.  The previous duel
+	# pass recoloured every material, which made the remote/bot model muddy and
+	# hid the visual identity of the real Erebus asset.
 	var light := OmniLight3D.new()
 	light.name = "ErebusVoidGlow"
-	light.light_color = Color("6f82ff")
-	light.light_energy = 0.7
-	light.omni_range = 3.2
+	light.light_color = Color("8356c7")
+	light.light_energy = 0.34
+	light.omni_range = 2.7
 	light.position = Vector3(0,0.8,0)
 	root.add_child(light)
 

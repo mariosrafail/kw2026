@@ -1,9 +1,9 @@
 {
-    "published_at_utc":  "2026-09-26T16:50:25.1489805Z",
-    "version":  "alpha-0.1.52",
-    "package_url":  "https://cab-smith-walls-spending.trycloudflare.com/kw/kw_update_alpha-0.1.52.zip",
+    "published_at_utc":  "2026-09-26T19:58:15.7464385Z",
+    "version":  "alpha-0.1.53",
+    "package_url":  "https://cab-smith-walls-spending.trycloudflare.com/kw/kw_update_alpha-0.1.53.zip",
     "exe_sha256":  "d7b7945283d3fce191652a10d955722f26c07a73dec50ae663baf5a95f8f249a",
-    "pck_sha256":  "6b8cb610725c40f92c5993ac4ae0a86f0d89cb5792e1962a0f6b7cf585db3247",
+    "pck_sha256":  "0b2f9ae418fa9ab9cc906b6053d1715e28a99b831ac18567e632529e7eee3d08",
     "exe_url":  "https://cab-smith-walls-spending.trycloudflare.com/kw/kw.exe",
     "pck_url":  "https://cab-smith-walls-spending.trycloudflare.com/kw/kw.pck"
 }

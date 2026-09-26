@@ -15,10 +15,14 @@ var qa_move_started := false
 var qa_pending_peak := 0
 var qa_bot_mode := false
 var qa_bot_enabled_sent := false
+var qa_hold_seconds := 9.0
+var qa_static_visual := false
 
 func _ready() -> void:
 	qa_index = int(options.get("qa-duel","0"))
 	qa_bot_mode = str(options.get("qa-bot","false")).to_lower() in ["1","true","yes"]
+	qa_hold_seconds = maxf(9.0, float(options.get("qa-visual-hold","9")))
+	qa_static_visual = str(options.get("qa-static","false")).to_lower() in ["1","true","yes"]
 	super._ready()
 
 func _welcome(payload: Dictionary) -> void:
@@ -50,7 +54,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 func _physics_process(delta: float) -> void:
 	# Same deterministic strafe on both A/B tests so prediction/correction numbers are comparable.
 	var fighting := str(room_state.get("phase","")) == "MATCH" and str(room_state.get("round_phase","")) in ["FIGHT","OVERLOAD"]
-	if fighting and qa_started_at >= 0.0 and qa_age-qa_started_at < 7.0:
+	if fighting and not qa_static_visual and qa_started_at >= 0.0 and qa_age-qa_started_at < 7.0:
 		qa_move_started = true
 		if qa_index == 1:
 			Input.action_press("kw3d_right",0.72)
@@ -69,7 +73,7 @@ func _physics_process(delta: float) -> void:
 		qa_rtt_max = maxf(qa_rtt_max,session.rtt_ms)
 		qa_rtt_sum += session.rtt_ms
 		qa_rtt_samples += 1
-	if qa_started and qa_started_at >= 0.0 and qa_age-qa_started_at > 9.0:
+	if qa_started and qa_started_at >= 0.0 and qa_age-qa_started_at > qa_hold_seconds:
 		_finish_qa()
 	elif qa_age > 40.0:
 		_finish_qa()
@@ -98,10 +102,16 @@ func _finish_qa() -> void:
 		"move_injected": qa_move_started
 	}
 	var bot_seen := false
+	var own_hero := ""
 	for p in room_state.get("players",[]):
 		bot_seen = bot_seen or bool(p.get("bot",false))
+		if int(p.get("id",0)) == int(session.actor_id):
+			own_hero = str(p.get("hero",p.get("skin",""))).strip_edges().to_lower()
 	out["bot_mode"] = qa_bot_mode
 	out["bot_seen"] = bot_seen
+	out["own_hero"] = own_hero
+	out["local_warrior"] = str(player_warrior_id)
+	out["local_body_matches_role"] = own_hero.is_empty() or own_hero == str(player_warrior_id)
 	var folder := str(options.get("output",""))
 	if not folder.is_empty():
 		DirAccess.make_dir_recursive_absolute(folder)
@@ -111,6 +121,7 @@ func _finish_qa() -> void:
 			f.close()
 	print("DUEL_QA_",qa_index," ",JSON.stringify(out))
 	var passed: bool = session.connected and qa_started and qa_player_peak==2
+	passed = passed and bool(out.local_body_matches_role)
 	if qa_bot_mode:
 		passed = passed and bot_seen
 	get_tree().quit(0 if passed else 1)

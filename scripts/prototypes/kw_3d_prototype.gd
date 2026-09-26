@@ -1501,6 +1501,9 @@ func _update_warrior_skill_hud(cooldown_left: float, active_left: float) -> void
 	var color:=cfg.get("color",Color.WHITE) as Color
 	var cooldown_max:=maxf(0.01,float(cfg.get("cooldown",10.0)))
 	var duration_max:=maxf(0.01,float(cfg.get("duration",1.0)))
+	if warrior_skill_bar!=null:
+		var fill_style:=warrior_skill_bar.get_theme_stylebox("fill") as StyleBoxFlat
+		if fill_style!=null:fill_style.bg_color=color
 	if active_left>0.001:
 		warrior_skill_label.text="E / LB  %s  //  ACTIVE %.1fs" % [label,active_left]
 		warrior_skill_label.modulate=color

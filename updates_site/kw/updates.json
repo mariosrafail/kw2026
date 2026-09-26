@@ -1,6 +1,17 @@
 {
   "updates": [
     {
+      "version": "alpha-0.1.53",
+      "date": "2026-09-26",
+      "title": "ONLINE 1V1 // VISUAL & REPLICATION FIX PASS",
+      "items": [
+        "Remote weapons now follow the replicated body and aiming direction instead of a hardcoded world offset.",
+        "Remote tracers, muzzle flashes and weapon audio now originate from the visible weapon muzzle.",
+        "Player 2 now rebuilds as the real Erebus model assigned by the server, with matching HUD and skill presentation.",
+        "Erebus and bot rendering now preserve the authored character look instead of applying the old blanket blue recolour."
+      ]
+    },
+    {
       "version": "alpha-0.1.52",
       "date": "2026-09-26",
       "title": "ONLINE DUEL // FRIEND OR BOT",
