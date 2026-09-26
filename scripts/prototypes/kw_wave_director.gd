@@ -36,7 +36,17 @@ var warning: Dictionary = {}
 var cooldowns: Dictionary = {}
 var rng := RandomNumberGenerator.new()
 var spawn_probe: CapsuleShape3D
+var spawn_ground_query:=PhysicsRayQueryParameters3D.new()
+var spawn_shape_query:=PhysicsShapeQueryParameters3D.new()
 var bullet_material: Material
+var bullet_box: BoxMesh
+var bullet_visual_pool: Array[MeshInstance3D]=[]
+var spawn_pulse_pool: Array[MeshInstance3D]=[]
+var active_spawn_pulses: Array[Dictionary]=[]
+var spawn_pulse_mesh: TorusMesh
+var spawn_pulse_material: Material
+var line_ray_query:=PhysicsRayQueryParameters3D.new()
+var projectile_ray_query:=PhysicsRayQueryParameters3D.new()
 
 func setup(owner_combat: Node3D) -> void:
 	combat = owner_combat
@@ -48,7 +58,15 @@ func setup(owner_combat: Node3D) -> void:
 	spawn_probe = CapsuleShape3D.new()
 	spawn_probe.height=3.40
 	spawn_probe.radius=0.62
+	spawn_ground_query.collision_mask=1
+	spawn_shape_query.shape=spawn_probe
+	spawn_shape_query.collision_mask=11
 	bullet_material=stage._material(Color("ff6949"),true,0.7)
+	bullet_box=BoxMesh.new();bullet_box.size=Vector3(0.12,0.12,0.40)
+	spawn_pulse_mesh=TorusMesh.new();spawn_pulse_mesh.inner_radius=0.63;spawn_pulse_mesh.outer_radius=0.71
+	spawn_pulse_material=stage._material(Color("84edff"),true,0.35)
+	line_ray_query.collision_mask=1;line_ray_query.hit_from_inside=true
+	projectile_ray_query.collision_mask=3;projectile_ray_query.hit_from_inside=true
 	begin_wave(1)
 	bootstrapping=false
 
@@ -69,12 +87,13 @@ func _clear_warning() -> void:
 
 func clear_projectiles() -> void:
 	for bullet in projectiles:
-		if is_instance_valid(bullet.node): bullet.node.queue_free()
+		if is_instance_valid(bullet.node): _release_bullet_visual(bullet.node as MeshInstance3D)
 	projectiles.clear()
 	_clear_warning()
 
 func _clear_targets() -> void:
 	clear_projectiles()
+	_clear_spawn_pulses()
 	if stage.grenade_skill != null: stage.grenade_skill.clear_active(false)
 	for bot in combat.targets:
 		if is_instance_valid(bot):
@@ -127,11 +146,12 @@ func restart_run() -> void:
 	stage.fire_held=false
 	stage.aiming=false
 	stage.shot_cooldown=0.0
-	stage.ammo_by_weapon[0]=int(stage.WEAPON_RULES.AK.magazine);stage.ammo_by_weapon[1]=int(stage.WEAPON_RULES.SHOTGUN.magazine);stage.ammo_by_weapon[2]=int(stage.WEAPON_RULES.KAR.magazine)
-	stage.reload_by_weapon[0]=0.0;stage.reload_by_weapon[1]=0.0;stage.reload_by_weapon[2]=0.0;stage._set_weapon_slot(0,false);stage._refresh_ammo_hud()
+	stage.ammo_by_weapon[0]=int(stage.WEAPON_RULES.AK.magazine);stage.ammo_by_weapon[1]=int(stage.WEAPON_RULES.SHOTGUN.magazine);stage.ammo_by_weapon[2]=int(stage.WEAPON_RULES.KAR.magazine);stage.ammo_by_weapon[3]=int(stage.WEAPON_RULES.GRENADE_LAUNCHER.magazine)
+	stage.reload_by_weapon[0]=0.0;stage.reload_by_weapon[1]=0.0;stage.reload_by_weapon[2]=0.0;stage.reload_by_weapon[3]=0.0;stage._set_weapon_slot(0,false);stage._refresh_ammo_hud()
 	stage.locomotion.reset()
 	hud.reset_run()
 	if stage.grenade_skill != null: stage.grenade_skill.clear_active(true)
+	if stage.warrior_skill != null: stage.warrior_skill.reset()
 	if stage.arena_audio != null:
 		stage.arena_audio.foot_states.clear()
 		stage.arena_audio.initialized = false
@@ -152,8 +172,8 @@ func _spawn_next() -> bool:
 	for i in range(PAD_POINTS.size()):
 		if found: break
 		var point: Vector2=PAD_POINTS[(spawned+i+(wave-1)*3)%PAD_POINTS.size()]
-		var ground:=PhysicsRayQueryParameters3D.create(Vector3(point.x,5,point.y),Vector3(point.x,-1,point.y),1)
-		var hit:=stage.get_world_3d().direct_space_state.intersect_ray(ground)
+		spawn_ground_query.from=Vector3(point.x,5,point.y);spawn_ground_query.to=Vector3(point.x,-1,point.y)
+		var hit:=stage.get_world_3d().direct_space_state.intersect_ray(spawn_ground_query)
 		if hit.is_empty() or (hit.normal as Vector3).y<0.85: continue
 		candidate=hit.position+Vector3(0,1.735,0)
 		if candidate.distance_to(stage.player.global_position)<7.0: continue
@@ -165,11 +185,8 @@ func _spawn_next() -> bool:
 				occupied=true
 				break
 		if occupied: continue
-		var probe:=PhysicsShapeQueryParameters3D.new()
-		probe.shape=spawn_probe
-		probe.transform=Transform3D(Basis.IDENTITY,candidate+Vector3.UP*0.06)
-		probe.collision_mask=11
-		if not stage.get_world_3d().direct_space_state.intersect_shape(probe,1).is_empty(): continue
+		spawn_shape_query.transform=Transform3D(Basis.IDENTITY,candidate+Vector3.UP*0.06)
+		if not stage.get_world_3d().direct_space_state.intersect_shape(spawn_shape_query,1).is_empty(): continue
 		found=true
 		break
 	if not found: return false
@@ -187,20 +204,7 @@ func _spawn_next() -> bool:
 	combat.targets.append(bot)
 	cooldowns[bot.get_instance_id()]=rng.randf_range(1.2,2.8)
 	spawned+=1
-	# Small, collider-free entrance pulse; no black-box invulnerability period.
-	var pulse:=MeshInstance3D.new()
-	pulse.name="SpawnPulse"
-	var ring:=TorusMesh.new()
-	ring.inner_radius=0.63; ring.outer_radius=0.71
-	pulse.mesh=ring
-	pulse.material_override=stage._material(Color("84edff"),true,0.35)
-	pulse.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	combat.add_child(pulse)
-	stage._add_scene_outline(pulse,1.2)
-	pulse.global_position=candidate+Vector3(0,-1.68,0)
-	var tween:=pulse.create_tween()
-	tween.tween_property(pulse,"scale",Vector3(1.5,0.04,1.5),0.65).from(Vector3(0.5,0.04,0.5))
-	tween.tween_callback(pulse.queue_free)
+	_spawn_spawn_pulse(candidate+Vector3(0,-1.68,0))
 	combat._update_counter()
 	return true
 
@@ -216,6 +220,7 @@ func on_kill(_target: Node3D) -> void:
 
 func receive_player_damage(amount: float, source: Vector3) -> bool:
 	if dead or amount<=0 or damage_grace>0: return false
+	if stage.has_method("skill_is_immune") and bool(stage.skill_is_immune()): return false
 	health=maxf(0,health-amount)
 	player_hits+=1
 	damage_grace=0.38
@@ -246,6 +251,7 @@ func receive_player_damage(amount: float, source: Vector3) -> bool:
 func tick(delta: float) -> void:
 	if dead or suspended: return
 	var dt:=clampf(delta,0.0,0.1)
+	_tick_spawn_pulses(dt)
 	elapsed+=dt
 	damage_grace=maxf(0,damage_grace-dt)
 	if advancement_enabled:
@@ -269,6 +275,51 @@ func tick(delta: float) -> void:
 	if dead: return
 	if attacks_enabled and phase=="WAVE": _tick_attacks(dt)
 	elif not warning.is_empty(): _clear_warning()
+
+func _acquire_spawn_pulse() -> MeshInstance3D:
+	for pulse in spawn_pulse_pool:
+		if is_instance_valid(pulse) and not pulse.visible:
+			pulse.visible=true
+			pulse.scale=Vector3(0.5,0.04,0.5)
+			return pulse
+	var pulse:=MeshInstance3D.new()
+	pulse.name="SpawnPulse"
+	pulse.mesh=spawn_pulse_mesh
+	pulse.material_override=spawn_pulse_material
+	pulse.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	combat.add_child(pulse)
+	stage._add_scene_outline(pulse,1.2)
+	spawn_pulse_pool.append(pulse)
+	return pulse
+
+func _spawn_spawn_pulse(point: Vector3) -> void:
+	var pulse:=_acquire_spawn_pulse()
+	pulse.global_position=point
+	pulse.scale=Vector3(0.5,0.04,0.5)
+	active_spawn_pulses.append({"node":pulse,"age":0.0})
+
+func _release_spawn_pulse(pulse: MeshInstance3D) -> void:
+	if pulse==null:return
+	pulse.visible=false
+	pulse.scale=Vector3.ONE
+
+func _clear_spawn_pulses() -> void:
+	for data in active_spawn_pulses:
+		_release_spawn_pulse(data.node as MeshInstance3D)
+	active_spawn_pulses.clear()
+
+func _tick_spawn_pulses(dt: float) -> void:
+	for index in range(active_spawn_pulses.size()-1,-1,-1):
+		var data: Dictionary=active_spawn_pulses[index]
+		var pulse:=data.node as MeshInstance3D
+		if not is_instance_valid(pulse):
+			active_spawn_pulses.remove_at(index);continue
+		data.age=float(data.age)+dt
+		var p:=clampf(float(data.age)/0.65,0.0,1.0)
+		pulse.scale=Vector3(lerpf(0.5,1.5,p),0.04,lerpf(0.5,1.5,p))
+		if p>=1.0:
+			_release_spawn_pulse(pulse)
+			active_spawn_pulses.remove_at(index)
 
 func _update_wave_text() -> void:
 	combat._update_counter()
@@ -315,24 +366,38 @@ func _tick_attacks(dt: float) -> void:
 
 func _line_clear(from: Vector3, to: Vector3) -> bool:
 	if from.distance_squared_to(to)<0.0001: return true
-	var query:=PhysicsRayQueryParameters3D.create(from,to,1)
-	query.hit_from_inside=true
-	return stage.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	line_ray_query.from=from;line_ray_query.to=to
+	return stage.get_world_3d().direct_space_state.intersect_ray(line_ray_query).is_empty()
+
+func _acquire_bullet_visual() -> MeshInstance3D:
+	for shot in bullet_visual_pool:
+		if is_instance_valid(shot) and not shot.visible:
+			shot.visible=true
+			shot.scale=Vector3.ONE
+			shot.rotation=Vector3.ZERO
+			return shot
+	var shot:=MeshInstance3D.new()
+	shot.name="HostileBolt"
+	shot.mesh=bullet_box
+	shot.material_override=bullet_material
+	shot.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	combat.add_child(shot)
+	stage._add_scene_outline(shot,1.0)
+	bullet_visual_pool.append(shot)
+	return shot
+
+func _release_bullet_visual(shot: MeshInstance3D) -> void:
+	if shot==null:return
+	shot.visible=false
+	shot.scale=Vector3.ONE
+	shot.rotation=Vector3.ZERO
 
 func launch_bullet(origin: Vector3, direction: Vector3) -> void:
 	if dead or direction.length_squared()<0.01: return
 	while projectiles.size()>=8:
 		var old: Dictionary=projectiles.pop_front()
-		if is_instance_valid(old.node): old.node.queue_free()
-	var shot:=MeshInstance3D.new()
-	shot.name="HostileBolt"
-	var mesh:=BoxMesh.new()
-	mesh.size=Vector3(0.12,0.12,0.40)
-	shot.mesh=mesh
-	shot.material_override=bullet_material
-	shot.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	combat.add_child(shot)
-	stage._add_scene_outline(shot,1.0)
+		if is_instance_valid(old.node): _release_bullet_visual(old.node as MeshInstance3D)
+	var shot:=_acquire_bullet_visual()
 	shot.global_position=origin
 	shot.look_at(origin+direction,Vector3.RIGHT if absf(direction.y)>0.98 else Vector3.UP)
 	projectiles.append({"node":shot,"position":origin,"velocity":direction.normalized()*BULLET_SPEED,"age":0.0,"source":origin})
@@ -346,14 +411,13 @@ func _tick_projectiles(dt: float) -> void:
 			continue
 		var from: Vector3=shot.position
 		var to: Vector3=from+(shot.velocity as Vector3)*dt
-		var query:=PhysicsRayQueryParameters3D.create(from,to,3) # terrain + player; no cosmetic collider
-		query.hit_from_inside=true
-		var hit:=stage.get_world_3d().direct_space_state.intersect_ray(query)
+		projectile_ray_query.from=from;projectile_ray_query.to=to
+		var hit:=stage.get_world_3d().direct_space_state.intersect_ray(projectile_ray_query)
 		shot.age+=dt
 		if not hit.is_empty() or float(shot.age)>3.2:
 			var hits_player: bool=not hit.is_empty() and hit.collider==stage.player
 			var source: Vector3=shot.source
-			shot.node.queue_free()
+			_release_bullet_visual(shot.node as MeshInstance3D)
 			projectiles.remove_at(i)
 			if hits_player:
 				receive_player_damage(BULLET_DAMAGE,source)

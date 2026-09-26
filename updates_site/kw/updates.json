@@ -1,0 +1,80 @@
+{
+  "updates": [
+    {
+      "version": "KW Client 1.4.0",
+      "date": "2026-09-26",
+      "title": "SHOWROOM CLIENT // YOUR WARRIOR ON THE RIGHT",
+      "items": [
+        "The launcher no longer uses a battle scene behind the UI.",
+        "HOME now mirrors the in-game showroom style with the selected 3D warrior displayed on the right.",
+        "The client reads main_menu_shop_state.json and mounts kw.pck to render the real selected warrior and skin.",
+        "The left side is reserved for PLAY / UPDATE / profile controls while the character remains unobstructed."
+      ]
+    },
+    {
+      "version": "KW Client 1.3.0",
+      "date": "2026-09-26",
+      "title": "LIVE 3D CLIENT // CINEMATIC BATTLE BACKGROUND",
+      "items": [
+        "KW Client is now a Godot-powered 3D application instead of a 2D updater shell.",
+        "HOME renders a live slow-motion battle scene with moving camera, 3D warriors, tracers, neon lights, debris and explosions.",
+        "PLAY / UPDATE / profile / patch feed remain real client controls over the 3D viewport.",
+        "The previous local virtual username is imported when an existing updater config is found."
+      ]
+    },
+    {
+      "version": "KW Client 1.2.1",
+      "date": "2026-09-26",
+      "title": "VISUAL CLIENT // KW BATTLE ART PASS",
+      "items": [
+        "The real KW pixel logo is now used inside the client and website.",
+        "HOME now has an animated slow-motion Warriors Rift battle background.",
+        "Explosion sprite frames, neon energy streaks and drifting debris animate behind PLAY / UPDATE.",
+        "Profile avatar now uses in-game pixel art instead of a generic placeholder graphic."
+      ]
+    },
+    {
+      "version": "alpha-0.1.50",
+      "date": "2026-09-26",
+      "title": "VIRTUAL ID // CLIENT PROFILE PASS",
+      "items": [
+        "Virtual usernames now travel through the online authority and snapshots.",
+        "Local and remote players display their virtual username above the character.",
+        "Duel room player cards now use the virtual username instead of the hero name.",
+        "The new KW Client writes a local kw_profile.json and passes the same ID into the game."
+      ]
+    },
+    {
+      "version": "KW Client 1.2.0",
+      "date": "2026-09-26",
+      "title": "CLIENT SHELL // VIRTUAL PROFILE PREVIEW",
+      "items": [
+        "New KW-styled client layout with HOME and UPDATES navigation.",
+        "Local virtual username and placeholder avatar; no real account system yet.",
+        "Virtual username is passed into KW and displayed above players.",
+        "Updater still hash-verifies the live build before PLAY unlocks."
+      ]
+    },
+    {
+      "version": "alpha-0.1.49",
+      "date": "2026-09-26",
+      "title": "PERFORMANCE // ONLINE PASS",
+      "items": [
+        "Compact online snapshots and lower network overhead.",
+        "MultiMesh batching for combat FX, weapons, arena details and Aevilok wings.",
+        "Projectile, grenade, damage, spawn-effect and hostile-bullet pooling.",
+        "Remote actor LOD, lighter shadows and lower client/server allocation pressure."
+      ]
+    },
+    {
+      "version": "alpha-0.1.48",
+      "date": "2026-09-25",
+      "title": "SPATIAL COMBAT AUDIO",
+      "items": [
+        "Footsteps, jumps and landings originate from the actual actor.",
+        "Weapon shots originate from the muzzle.",
+        "Grenade throw, bounce and explosion audio now use real world positions."
+      ]
+    }
+  ]
+}

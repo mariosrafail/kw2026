@@ -1,0 +1,16 @@
+{
+  "warrior_id": "kosas",
+  "display_name": "Kosas",
+  "warrior_cost": 0,
+  "frame_size": { "x": 380, "y": 550 },
+  "ui_preview": "res://assets/warriors/kosas/skins_preview.png",
+  "skins": [
+    {
+      "id": "default",
+      "index": 0,
+      "name": "Pink Nose",
+      "unlock_type": "free",
+      "cost": 0
+    }
+  ]
+}

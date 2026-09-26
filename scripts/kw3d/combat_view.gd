@@ -13,12 +13,12 @@ func reset_targets() -> void:stage.session.request_respawn()
 func fire(_muzzle: Vector3,_target: Vector3,_chest: Vector3,_profile: Dictionary=WEAPON_RULES.AK,_weapon_id: String="ak") -> Dictionary:return {}
 func _on_target_damaged(_target: Node3D,_lethal: bool) -> void:pass
 func _update_counter() -> void:
-	if counter!=null:counter.text="Esc / Start: network menu and controls. TAB: help. Online world does not pause."
-	if kill_label!=null:kill_label.text="KILLS  %d"%total_kills
-	if alive_label!=null:alive_label.text="CO-OP  %d PLAYERS"%stage.player_count
-	if wave_label!=null and director!=null:wave_label.text="WAVE %02d  //  %d LEFT"%[director.wave,director.remaining]
-func notify_hit(_point: Vector3,_direction: Vector3,_amount: float,lethal: bool) -> void:
-	reticle.notify_hit(lethal)
+	_set_label_text(counter,"Esc / Start: network menu and controls. TAB: help. Online world does not pause.")
+	_set_label_text(kill_label,"KILLS  %d"%total_kills)
+	_set_label_text(alive_label,"CO-OP  %d PLAYERS"%stage.player_count)
+	if director!=null:_set_label_text(wave_label,"WAVE %02d  //  %d LEFT"%[director.wave,director.remaining])
+func notify_hit(_point: Vector3,_direction: Vector3,_amount: float,lethal: bool,headshot: bool=false) -> void:
+	reticle.notify_hit(lethal,headshot)
 	confirm_audio.stream=confirm_kill if lethal else confirm_hit;confirm_audio.play()
 	if lethal:score_pulse=0.65
 func apply_status(snapshot: Dictionary,local: Dictionary) -> void:

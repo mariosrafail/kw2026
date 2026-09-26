@@ -8,6 +8,9 @@
 
 config_version=5
 
+"Ã¯Â»Â¿config_version"=5
+"ÃƒÂ¯Ã‚Â»Ã‚Â¿config_version"=5
+
 [animation]
 
 compatibility/default_parent_skeleton_in_mesh_instance_3d=true
@@ -47,8 +50,11 @@ network_ws_scheme="ws"
 
 [kw3d]
 
-public_portal_url="https://portal-fresh-pleasant-peoples.trycloudflare.com"
-public_ws_url="wss://portal-fresh-pleasant-peoples.trycloudflare.com/game"
+public_portal_url="https://cab-smith-walls-spending.trycloudflare.com"
+public_ws_url="wss://cab-smith-walls-spending.trycloudflare.com/game"
+public_udp_host="79.130.131.173"
+public_udp_port=18886
+public_lan_host="192.168.1.154"
 public_online_enabled=true
 
 [rendering]

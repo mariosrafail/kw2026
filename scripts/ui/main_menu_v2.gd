@@ -6,10 +6,19 @@ extends Control
 const LEGACY_SCENE := preload("res://scenes/ui/main_menu_legacy.tscn")
 const OUTRAGE_SCENE := preload("res://scenes/prototypes/characters/outrage_fullbody.tscn")
 const EREBUS_SCENE := preload("res://scenes/prototypes/characters/erebus_fullbody.tscn")
+const KOSAS_SCENE := preload("res://scenes/prototypes/characters/kosas_fullbody.tscn")
+const AEVILOK_SCENE := preload("res://scenes/prototypes/characters/aevilok_fullbody.tscn")
+const LOKER_SCENE := preload("res://scenes/prototypes/characters/loker_fullbody.tscn")
 const OUTRAGE_SKINS := preload("res://scripts/prototypes/outrage_skin_style.gd")
+const EREBUS_SKINS := preload("res://scripts/prototypes/erebus_skin_style.gd")
+const KOSAS_STYLE := preload("res://scripts/prototypes/kosas_warrior_style.gd")
+const AEVILOK_STYLE := preload("res://scripts/prototypes/aevilok_warrior_style.gd")
+const LOKER_STYLE := preload("res://scripts/prototypes/loker_warrior_style.gd")
 const HERO_MATERIALS := preload("res://scripts/ui/main_menu/menu_hero_materials.gd")
+const OUTRAGE_STATUE := preload("res://scripts/ui/main_menu/outrage_statue_style.gd")
 const CITY_STAGE := preload("res://scripts/ui/main_menu/menu_city_stage.gd")
 const WEAPON_SHOWROOM := preload("res://scripts/ui/main_menu/menu_weapon_showroom.gd")
+const RETICLE_SETTINGS := preload("res://scripts/kw3d/reticle_settings.gd")
 const PIXEL_FONT := preload("res://assets/fonts/pixel_operator/PixelOperator.ttf")
 const PIXEL_FONT_BOLD := preload("res://assets/fonts/pixel_operator/PixelOperator-Bold.ttf")
 
@@ -67,11 +76,17 @@ var selected_ak_skin := 0
 var selected_kar_skin := 0
 var selected_showroom_warrior := "outrage"
 var selected_outrage_skin := 0
+var selected_erebus_skin := 0
 
 var settings_music_slider: HSlider
 var settings_sfx_slider: HSlider
 var settings_particles_button: Button
 var settings_shake_button: Button
+var settings_reticle_option: OptionButton
+var settings_reticle_size_slider: HSlider
+var settings_reticle_png_button: Button
+var settings_reticle_png_label: Label
+var settings_reticle_dialog: FileDialog
 
 var loading_overlay_v2: Control
 var loading_label_v2: Label
@@ -115,6 +130,11 @@ func _finish_setup() -> void:
 		int(ProjectSettings.get_setting("kw3d/selected_outrage_skin", legacy_skin)),
 		0,
 		OUTRAGE_SKINS.skin_count() - 1
+	)
+	selected_erebus_skin = clampi(
+		int(ProjectSettings.get_setting("kw3d/selected_erebus_skin", 0)),
+		0,
+		EREBUS_SKINS.skin_count() - 1
 	)
 	_sync_selected_warrior_from_legacy()
 	selected_ak_skin = clampi(
@@ -713,6 +733,7 @@ func _launch_offline_waves() -> void:
 	selected_showroom_warrior = _current_warrior_id()
 	ProjectSettings.set_setting("kw3d/selected_warrior_id", selected_showroom_warrior)
 	ProjectSettings.set_setting("kw3d/selected_outrage_skin", selected_outrage_skin)
+	ProjectSettings.set_setting("kw3d/selected_erebus_skin", selected_erebus_skin)
 	ProjectSettings.set_setting("kw3d/selected_ak_skin", selected_ak_skin)
 	ProjectSettings.set_setting("kw3d/selected_kar_skin", selected_kar_skin)
 	if status_label != null:
@@ -1360,7 +1381,7 @@ func _populate_guns_submenu() -> void:
 	_clear_submenu_selector()
 	submenu_selector.add_theme_constant_override("separation", 4)
 	submenu_title.text = "GUNS // ARMORY"
-	for weapon_id in ["ak47", "shotgun", "kar"]:
+	for weapon_id in ["ak47", "shotgun", "kar", "grenade_launcher"]:
 		var id := str(weapon_id)
 		var label := WEAPON_SHOWROOM.display_name(id)
 		var button := _make_submenu_button(label, CLR_CYAN, id == selected_showroom_weapon)
@@ -1462,9 +1483,9 @@ func _populate_warriors_submenu() -> void:
 	submenu_selector.add_theme_constant_override("separation", 7)
 	submenu_title.text = "WARRIORS // LIVE ROSTER"
 	selected_showroom_warrior = _current_warrior_id()
-	for warrior_id in ["outrage", "erebus"]:
+	for warrior_id in ["outrage", "erebus", "kosas", "aevilok", "loker"]:
 		var id := str(warrior_id)
-		var accent := CLR_MAGENTA if id == "outrage" else Color("df7126")
+		var accent := CLR_MAGENTA if id == "outrage" else (Color("df7126") if id == "erebus" else (Color("ff43d5") if id == "kosas" else (Color("9a2038") if id == "aevilok" else Color("39d143"))))
 		var active := id == selected_showroom_warrior
 		var label := "%s // SELECTED" % id.to_upper() if active else id.to_upper()
 		var button := _make_submenu_button(label, accent, active)
@@ -1475,6 +1496,8 @@ func _populate_warriors_submenu() -> void:
 		submenu_selector.add_child(button)
 	if selected_showroom_warrior == "outrage":
 		_add_outage_skin_selector()
+	elif selected_showroom_warrior == "erebus":
+		_add_erebus_skin_selector()
 	_show_showroom_warrior(selected_showroom_warrior)
 
 func _add_outage_skin_selector() -> void:
@@ -1528,6 +1551,59 @@ func _select_outage_skin(skin_id: int) -> void:
 	if active_submenu == "warriors" and selected_showroom_warrior == "outrage":
 		call_deferred("_populate_warriors_submenu")
 
+
+func _add_erebus_skin_selector() -> void:
+	var divider := ColorRect.new()
+	divider.custom_minimum_size = Vector2(0, 1)
+	divider.color = Color(EREBUS_SKINS.skin_accent(selected_erebus_skin), 0.52)
+	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	submenu_selector.add_child(divider)
+	var heading := Label.new()
+	heading.text = "EREBUS SKINS // %02d" % EREBUS_SKINS.skin_count()
+	heading.add_theme_font_override("font", PIXEL_FONT_BOLD)
+	heading.add_theme_font_size_override("font_size", 6)
+	heading.add_theme_color_override("font_color", Color(EREBUS_SKINS.skin_accent(selected_erebus_skin), 0.92))
+	submenu_selector.add_child(heading)
+	for skin_id in range(EREBUS_SKINS.skin_count()):
+		var id := skin_id
+		var active := id == selected_erebus_skin
+		var accent: Color = EREBUS_SKINS.skin_accent(id)
+		var button := Button.new()
+		button.name = "ErebusSkin_%02d" % id
+		button.text = ("> " if active else "  ") + EREBUS_SKINS.skin_name(id)
+		button.custom_minimum_size = Vector2(0, 20)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.clip_text = true
+		button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		button.add_theme_font_override("font", PIXEL_FONT_BOLD)
+		button.add_theme_font_size_override("font_size", 7)
+		button.add_theme_color_override("font_color", Color.WHITE if active else Color(CLR_TEXT, 0.84))
+		button.add_theme_stylebox_override("normal", _button_style(Color(accent.r * 0.11, accent.g * 0.11, accent.b * 0.11, 0.94), Color(accent, 0.72 if active else 0.34), 2))
+		button.add_theme_stylebox_override("hover", _button_style(Color(accent.r * 0.18, accent.g * 0.18, accent.b * 0.18, 0.98), accent, 4))
+		button.add_theme_stylebox_override("focus", _button_style(Color(accent.r * 0.18, accent.g * 0.18, accent.b * 0.18, 0.98), accent, 4))
+		button.add_theme_stylebox_override("pressed", _button_style(Color(accent.r * 0.14, accent.g * 0.14, accent.b * 0.14, 1.0), accent, 1))
+		button.pressed.connect(func() -> void:
+			_select_erebus_skin(id)
+		)
+		submenu_selector.add_child(button)
+
+
+func _select_erebus_skin(skin_id: int) -> void:
+	selected_erebus_skin = clampi(skin_id, 0, EREBUS_SKINS.skin_count() - 1)
+	ProjectSettings.set_setting("kw3d/selected_erebus_skin", selected_erebus_skin)
+	if legacy != null and selected_showroom_warrior == "erebus":
+		legacy.set("selected_warrior_skin", selected_erebus_skin)
+		legacy.set("_pending_warrior_skin", selected_erebus_skin)
+		if legacy.has_method("_set_equipped_warrior_skin"):
+			legacy.call("_set_equipped_warrior_skin", "erebus", selected_erebus_skin)
+		if legacy.has_method("_save_state"):
+			legacy.call("_save_state")
+	if hero != null and is_instance_valid(hero) and selected_showroom_warrior == "erebus":
+		_set_main_menu_hero(hero.get_parent() as Node3D, "erebus")
+	_update_selected_warrior_labels()
+	if active_submenu == "warriors" and selected_showroom_warrior == "erebus":
+		call_deferred("_populate_warriors_submenu")
+
 func _populate_settings_submenu() -> void:
 	submenu_title.text = "SETTINGS // SYSTEM CONTROL"
 	submenu_settings_panel.visible = true
@@ -1566,6 +1642,16 @@ func _populate_settings_submenu() -> void:
 	settings_sfx_slider = _make_settings_slider_row(submenu_settings_grid, "SOUNDS")
 	settings_particles_button = _make_settings_toggle_row(submenu_settings_grid, "PARTICLES")
 	settings_shake_button = _make_settings_toggle_row(submenu_settings_grid, "SCREEN SHAKE")
+	settings_reticle_option = _make_settings_option_row(
+		submenu_settings_grid,
+		"RETICLE",
+		["BLOCKS", "DOT", "CLASSIC", "CUSTOM PNG"]
+	)
+	settings_reticle_size_slider = _make_settings_slider_row(submenu_settings_grid, "RETICLE SIZE")
+	settings_reticle_size_slider.min_value = 0.45
+	settings_reticle_size_slider.max_value = 1.60
+	settings_reticle_size_slider.step = 0.05
+	settings_reticle_png_button = _make_settings_png_row(submenu_settings_grid)
 	settings_music_slider.value_changed.connect(func(value: float) -> void:
 		var target := legacy.get_node_or_null("%MusicSlider") as HSlider
 		if target != null:
@@ -1588,7 +1674,11 @@ func _populate_settings_submenu() -> void:
 			legacy.call("_set_screen_shake_enabled", enabled, true)
 		_sync_v2_settings_from_legacy()
 	)
+	settings_reticle_option.item_selected.connect(_on_reticle_preset_selected)
+	settings_reticle_size_slider.value_changed.connect(_on_reticle_size_changed)
+	settings_reticle_png_button.pressed.connect(_open_reticle_png_dialog)
 	_sync_v2_settings_from_legacy()
+	_sync_v2_reticle_settings()
 	_layout_submenu_frame()
 
 func _make_settings_slider_row(parent: Container, label_text: String) -> HSlider:
@@ -1682,6 +1772,69 @@ func _make_settings_toggle_row(parent: Container, label_text: String) -> Button:
 	row.add_child(button)
 	return button
 
+
+func _make_settings_option_row(parent: Container, label_text: String, items: Array[String]) -> OptionButton:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 54)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _glass_panel_style(CLR_CYAN, 0.62))
+	parent.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 5)
+	margin.add_theme_constant_override("margin_bottom", 5)
+	panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	margin.add_child(row)
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size = Vector2(72, 0)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", PIXEL_FONT_BOLD)
+	label.add_theme_font_size_override("font_size", 9)
+	label.add_theme_color_override("font_color", CLR_TEXT)
+	row.add_child(label)
+	var option := OptionButton.new()
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	option.custom_minimum_size = Vector2(118, 28)
+	option.add_theme_font_override("font", PIXEL_FONT_BOLD)
+	option.add_theme_font_size_override("font_size", 8)
+	for title in items:
+		option.add_item(title)
+	row.add_child(option)
+	return option
+
+
+func _make_settings_png_row(parent: Container) -> Button:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 54)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _glass_panel_style(CLR_MAGENTA, 0.58))
+	parent.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 5)
+	margin.add_theme_constant_override("margin_bottom", 5)
+	panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	margin.add_child(row)
+	settings_reticle_png_label = Label.new()
+	settings_reticle_png_label.text = "CUSTOM PNG"
+	settings_reticle_png_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	settings_reticle_png_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	settings_reticle_png_label.add_theme_font_override("font", PIXEL_FONT_BOLD)
+	settings_reticle_png_label.add_theme_font_size_override("font_size", 8)
+	settings_reticle_png_label.add_theme_color_override("font_color", CLR_TEXT)
+	row.add_child(settings_reticle_png_label)
+	var button := _make_submenu_button("LOAD PNG", CLR_MAGENTA, true)
+	button.custom_minimum_size = Vector2(88, 26)
+	row.add_child(button)
+	return button
+
 func _sync_v2_settings_from_legacy() -> void:
 	if legacy == null:
 		return
@@ -1699,6 +1852,77 @@ func _sync_v2_settings_from_legacy() -> void:
 		var enabled: bool = legacy.get("screen_shake_enabled") == true
 		settings_shake_button.text = "ON" if enabled else "OFF"
 		settings_shake_button.modulate = Color.WHITE if enabled else Color(0.58,0.66,0.74,1)
+
+
+func _sync_v2_reticle_settings() -> void:
+	var settings := RETICLE_SETTINGS.load_settings()
+	var preset := str(settings.get("preset", RETICLE_SETTINGS.PRESET_BLOCKS))
+	if settings_reticle_option != null:
+		var index := 0
+		match preset:
+			RETICLE_SETTINGS.PRESET_DOT: index = 1
+			RETICLE_SETTINGS.PRESET_CLASSIC: index = 2
+			RETICLE_SETTINGS.PRESET_CUSTOM: index = 3
+		settings_reticle_option.select(index)
+	if settings_reticle_size_slider != null:
+		settings_reticle_size_slider.set_value_no_signal(float(settings.get("size_scale", 0.72)))
+	if settings_reticle_png_label != null:
+		var path := str(settings.get("custom_png", ""))
+		settings_reticle_png_label.text = "CUSTOM PNG // READY" if not path.is_empty() else "CUSTOM PNG // NONE"
+
+
+func _on_reticle_preset_selected(index: int) -> void:
+	var presets := [
+		RETICLE_SETTINGS.PRESET_BLOCKS,
+		RETICLE_SETTINGS.PRESET_DOT,
+		RETICLE_SETTINGS.PRESET_CLASSIC,
+		RETICLE_SETTINGS.PRESET_CUSTOM,
+	]
+	var current := RETICLE_SETTINGS.load_settings()
+	var chosen := str(presets[clampi(index, 0, presets.size() - 1)])
+	RETICLE_SETTINGS.save_settings(
+		chosen,
+		float(current.get("size_scale", 0.72)),
+		str(current.get("custom_png", ""))
+	)
+	_sync_v2_reticle_settings()
+
+
+func _on_reticle_size_changed(value: float) -> void:
+	var current := RETICLE_SETTINGS.load_settings()
+	RETICLE_SETTINGS.save_settings(
+		str(current.get("preset", RETICLE_SETTINGS.PRESET_BLOCKS)),
+		value,
+		str(current.get("custom_png", ""))
+	)
+
+
+func _open_reticle_png_dialog() -> void:
+	if settings_reticle_dialog == null:
+		settings_reticle_dialog = FileDialog.new()
+		settings_reticle_dialog.name = "ReticlePngDialog"
+		settings_reticle_dialog.title = "CHOOSE RETICLE PNG"
+		settings_reticle_dialog.access = FileDialog.ACCESS_FILESYSTEM
+		settings_reticle_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		settings_reticle_dialog.filters = PackedStringArray(["*.png ; PNG Images"])
+		settings_reticle_dialog.file_selected.connect(_on_reticle_png_selected)
+		add_child(settings_reticle_dialog)
+	settings_reticle_dialog.popup_centered_ratio(0.72)
+
+
+func _on_reticle_png_selected(path: String) -> void:
+	var imported := RETICLE_SETTINGS.import_custom_png(path)
+	if not bool(imported.get("ok", false)):
+		if settings_reticle_png_label != null:
+			settings_reticle_png_label.text = "CUSTOM PNG // LOAD FAILED"
+		return
+	var current := RETICLE_SETTINGS.load_settings()
+	RETICLE_SETTINGS.save_settings(
+		RETICLE_SETTINGS.PRESET_CUSTOM,
+		float(current.get("size_scale", 0.72)),
+		str(imported.get("path", RETICLE_SETTINGS.CUSTOM_COPY_PATH))
+	)
+	_sync_v2_reticle_settings()
 
 func _show_showroom_weapon(weapon_id: String) -> void:
 	_clear_showroom()
@@ -1739,44 +1963,62 @@ func _show_showroom_warrior(warrior_id: String) -> void:
 		OUTRAGE_SKINS.apply(model, selected_outrage_skin, 0.42)
 	model.set_script(null)
 	_apply_menu_warrior_materials(model, id)
+	if id == "erebus":
+		EREBUS_SKINS.apply(model, selected_erebus_skin)
+	elif id == "kosas":
+		KOSAS_STYLE.apply(model)
+	elif id == "aevilok":
+		AEVILOK_STYLE.apply(model)
+	elif id == "loker":
+		LOKER_STYLE.apply(model)
 	# The authored character origin is near the middle of the body.  Place the
 	# feet on the showroom floor instead of pushing the lower body below frame.
 	model.position = Vector3(0, 0.10, 0)
-	model.scale = Vector3.ONE * 0.92
+	model.scale = Vector3.ONE * (0.78 if id == "aevilok" else (0.84 if id == "loker" else 0.92))
 	showroom_root.add_child(model)
 	showroom_root.scale = Vector3.ONE * 0.92
 	showroom_yaw = -0.18
 	showroom_pitch = 0.0
-	showroom_camera.position = Vector3(0.20, 0.10, -5.60)
-	showroom_camera.fov = 34.0
+	showroom_camera.position = Vector3(0.20, 0.10, -7.10) if id in ["aevilok", "loker"] else Vector3(0.20, 0.10, -5.60)
+	showroom_camera.fov = 36.0 if id in ["aevilok", "loker"] else 34.0
 	showroom_camera.look_at(Vector3(0, 0.05, 0), Vector3.UP)
 	var tween := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(showroom_root, "scale", Vector3.ONE, 0.26)
-	if id == "erebus":
+	if id == "aevilok":
+		submenu_info_title.text = "AEVILOK"
+		submenu_info_body.text = "WARRIOR 04\n\nBODY // BLACK VOID FRAME\n\nTRAIT // CRIMSON WINGS / FLOATING HEAD\n\nHITBOX // STANDARD WARRIOR PROFILE\n\nWINGS // VISUAL-ONLY EXTENSIONS\n\nOFFLINE TESTING LOADOUT // AEVILOK."
+	elif id == "loker":
+		submenu_info_title.text = "LOKER"
+		submenu_info_body.text = "WARRIOR 05\n\nBODY // TOXIC GREEN FRAME\n\nTRAIT // LONG LIZARD HEAD\n\nHITBOX // STANDARD WARRIOR PROFILE\n\nSKILL // OVERCLOCK\n\nBOOSTS FIRE RATE AND RELOAD SPEED.\n\nOFFLINE TESTING LOADOUT // LOKER."
+	elif id == "kosas":
+		submenu_info_title.text = "KOSAS"
+		submenu_info_body.text = "WARRIOR 03\n\nBODY // TALL PINK FRAME\n\nTRAIT // HUGE NOSE / SMALL CORE\n\nHITBOX // STANDARD WARRIOR PROFILE\n\nOFFLINE TESTING LOADOUT // KOSAS."
+	elif id == "erebus":
 		submenu_info_title.text = "EREBUS"
-		submenu_info_body.text = "WARRIOR 02\n\nBODY // ORANGE HEAVY FRAME\n\nSKILL // VOID GUARD\n\nSHORT IMMUNITY WINDOW TO SURVIVE BURST DAMAGE.\n\nOFFLINE TESTING LOADOUT // EREBUS."
+		submenu_info_body.text = "WARRIOR 02\n\nSKIN // %s\n\nBODY // ORANGE HEAVY FRAME\n\nSKILL // VOID GUARD\n\nSHORT IMMUNITY WINDOW TO SURVIVE BURST DAMAGE.\n\nOFFLINE TESTING LOADOUT // EREBUS." % EREBUS_SKINS.skin_name(selected_erebus_skin)
 	else:
 		submenu_info_title.text = "OUTRAGE"
 		submenu_info_body.text = "WARRIOR 01\n\nSKIN // %s\n\nBODY // STREET ZERO FRAME\n\nSKILL // BOMB BLAST\n\nTHROWS AN EXPLOSIVE BOMB.\n\nOFFLINE TESTING LOADOUT // OUTRAGE." % OUTRAGE_SKINS.skin_name(selected_outrage_skin)
 
 func _normalize_warrior_id(warrior_id: String) -> String:
 	var id := warrior_id.strip_edges().to_lower()
-	return id if id in ["outrage", "erebus"] else "outrage"
+	return id if id in ["outrage", "erebus", "kosas", "aevilok", "loker"] else "outrage"
 
 func _current_warrior_id() -> String:
 	if legacy != null:
 		var raw_legacy_id := str(legacy.get("selected_warrior_id")).strip_edges().to_lower()
-		if raw_legacy_id in ["outrage", "erebus"]:
+		if raw_legacy_id in ["outrage", "erebus", "kosas", "aevilok", "loker"]:
 			return raw_legacy_id
 	return _normalize_warrior_id(str(ProjectSettings.get_setting("kw3d/selected_warrior_id", "outrage")))
 
 func _warrior_scene(warrior_id: String) -> PackedScene:
-	return EREBUS_SCENE if _normalize_warrior_id(warrior_id) == "erebus" else OUTRAGE_SCENE
+	var id := _normalize_warrior_id(warrior_id)
+	return LOKER_SCENE if id == "loker" else (AEVILOK_SCENE if id == "aevilok" else (KOSAS_SCENE if id == "kosas" else (EREBUS_SCENE if id == "erebus" else OUTRAGE_SCENE)))
 
 func _apply_menu_warrior_materials(model: Node3D, warrior_id: String) -> void:
-	if _normalize_warrior_id(warrior_id) == "erebus":
+	if _normalize_warrior_id(warrior_id) in ["erebus", "kosas", "aevilok", "loker"]:
 		HERO_MATERIALS.apply_flat_to(model)
-	elif _normalize_warrior_id(warrior_id) == "outrage" and selected_outrage_skin == 2:
+	elif _normalize_warrior_id(warrior_id) == "outrage" and selected_outrage_skin in [2, 4]:
 		HERO_MATERIALS.apply_flat_to(model)
 	else:
 		HERO_MATERIALS.apply_to(model)
@@ -1793,10 +2035,21 @@ func _set_main_menu_hero(parent: Node3D, warrior_id: String) -> void:
 		OUTRAGE_SKINS.apply(hero, selected_outrage_skin, 0.38)
 	# Detach the presentation instance's gameplay style before _ready can apply it.
 	hero.set_script(null)
-	_apply_menu_warrior_materials(hero, id)
-	hero.position = Vector3(-1.05, -0.34, 0.15)
+	if id == "outrage":
+		OUTRAGE_STATUE.apply_to(hero)
+	else:
+		_apply_menu_warrior_materials(hero, id)
+	if id == "erebus":
+		EREBUS_SKINS.apply(hero, selected_erebus_skin)
+	elif id == "kosas":
+		KOSAS_STYLE.apply(hero)
+	elif id == "aevilok":
+		AEVILOK_STYLE.apply(hero)
+	elif id == "loker":
+		LOKER_STYLE.apply(hero)
+	hero.position = Vector3(-0.72, -0.34, 0.15) if id == "aevilok" else (Vector3(-0.95, -0.34, 0.15) if id == "loker" else Vector3(-1.05, -0.34, 0.15))
 	hero.rotation_degrees.y = -11.0
-	hero.scale = Vector3.ONE * 1.16
+	hero.scale = Vector3.ONE * (0.76 if id == "aevilok" else (0.98 if id == "loker" else 1.16))
 	parent.add_child(hero)
 	hero_head = hero.get_node_or_null("HeadRig") as Node3D
 	hero_torso = hero.get_node_or_null("TorsoRig") as Node3D
@@ -1814,6 +2067,8 @@ func _update_selected_warrior_labels() -> void:
 	var display := id.to_upper()
 	if id == "outrage":
 		display += " // " + OUTRAGE_SKINS.skin_name(selected_outrage_skin)
+	elif id == "erebus":
+		display += " // " + EREBUS_SKINS.skin_name(selected_erebus_skin)
 	if hero_tag != null:
 		hero_tag.text = "%s // SELECTED" % display
 	if hero_strap != null:
@@ -1838,7 +2093,7 @@ func _select_v2_warrior(warrior_id: String) -> void:
 			owned.append(id)
 			legacy.set("owned_warriors", owned)
 		legacy.set("selected_warrior_id", id)
-		var warrior_skin := selected_outrage_skin if id == "outrage" else 0
+		var warrior_skin := selected_outrage_skin if id == "outrage" else (selected_erebus_skin if id == "erebus" else 0)
 		legacy.set("selected_warrior_skin", warrior_skin)
 		legacy.set("_pending_warrior_id", id)
 		legacy.set("_pending_warrior_skin", warrior_skin)

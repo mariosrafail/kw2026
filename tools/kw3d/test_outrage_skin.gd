@@ -32,10 +32,31 @@ func _initialize() -> void:
 
 
 func run() -> void:
-	check(OUTRAGE_SKINS.skin_count() == 4, "four_outage_skins")
+	check(OUTRAGE_SKINS.skin_count() == 5, "five_outage_skins")
 	# Material-level proof on the authored Outrage scene.
 	var direct := OUTRAGE_SCENE.instantiate() as Node3D
 	OUTRAGE_SKINS.apply(direct, 1)
+	check(direct.get_node_or_null("LeftHandRig") is Node3D, "left_hand_rig")
+	check(direct.get_node_or_null("RightHandRig") is Node3D, "right_hand_rig")
+	for side in ["Left", "Right"]:
+		var hand := direct.get_node("%sHandRig" % side) as Node3D
+		check(hand.get_node_or_null("Arm_%s_Upper" % side) == null, "%s_no_upper_arm" % side.to_lower())
+		check(hand.get_node_or_null("Arm_%s_Forearm" % side) == null, "%s_no_forearm" % side.to_lower())
+		check(hand.get_node_or_null("Hand_%s_Palm" % side) == null, "%s_no_old_palm" % side.to_lower())
+		for finger in range(1, 4):
+			check(hand.get_node_or_null("Hand_%s_Finger_%d" % [side, finger]) == null, "%s_no_old_finger_%d" % [side.to_lower(), finger])
+			var bridge := hand.get_node_or_null("Claw_%s_Bridge" % side) as MeshInstance3D
+			var top_pixel := hand.get_node_or_null("Claw_%s_TopPixel" % side) as MeshInstance3D
+			var left_prong := hand.get_node_or_null("Claw_%s_LeftProng" % side) as MeshInstance3D
+			var right_prong := hand.get_node_or_null("Claw_%s_RightProng" % side) as MeshInstance3D
+			check(bridge != null and top_pixel != null and left_prong != null and right_prong != null, "%s_four_piece_claw" % side.to_lower())
+			if bridge != null and top_pixel != null and left_prong != null and right_prong != null:
+				check(bridge.mesh.get_aabb().size.x <= 0.31, "%s_claw_foot_scale_width" % side.to_lower())
+				check(left_prong.position.x < -0.05 and right_prong.position.x > 0.05, "%s_claw_open_gap" % side.to_lower())
+				check(left_prong.mesh.get_aabb().size.y > bridge.mesh.get_aabb().size.y * 2.0, "%s_claw_tall_prongs" % side.to_lower())
+				check(bridge.position.y > 0.08, "%s_claw_bridge_on_top" % side.to_lower())
+				check(left_prong.position.y < 0.0 and right_prong.position.y < 0.0, "%s_claw_prongs_point_down" % side.to_lower())
+				check(absf(top_pixel.position.x) < 0.001 and top_pixel.position.y > bridge.position.y, "%s_claw_center_top_pixel" % side.to_lower())
 	check(str(direct.get_meta("warrior_skin_name", "")) == "VOID", "skin_metadata")
 	check(color_matches(mesh_plain_color(direct, "HeadRig/Head_Solid"), OUTRAGE_SKINS.VOID_BODY), "head_dark_gray")
 	check(color_matches(mesh_plain_color(direct, "TorsoRig/Torso_Upper"), OUTRAGE_SKINS.VOID_BODY), "torso_dark_gray")
@@ -77,8 +98,31 @@ func run() -> void:
 	check(neon.get_node_or_null("NeonHornGlow") is OmniLight3D, "neon_horn_light")
 	var direct_body_light := neon.get_node("NeonBodyGlow") as OmniLight3D
 	check(direct_body_light.light_energy >= 2.2 and direct_body_light.omni_range >= 4.0, "gameplay_strength_neon_light")
-	var direct_body_light_energy := direct_body_light.light_energy
 	neon.free()
+
+	var volt := OUTRAGE_SCENE.instantiate() as Node3D
+	OUTRAGE_SKINS.apply(volt, 4)
+	check(str(volt.get_meta("warrior_skin_name", "")) == "VOLT", "volt_skin_metadata")
+	check(color_matches(mesh_plain_color(volt, "HeadRig/Head_Solid"), OUTRAGE_SKINS.VOLT_BODY), "volt_head_electric_blue")
+	check(color_matches(mesh_plain_color(volt, "HeadRig/Front_Panel"), OUTRAGE_SKINS.VOLT_CORE), "volt_front_panel_cyan")
+	check(color_matches(mesh_plain_color(volt, "TorsoRig/Torso_Upper"), OUTRAGE_SKINS.VOLT_BODY), "volt_torso_electric_blue")
+	check(color_matches(mesh_plain_color(volt, "HeadRig/Horn_Left_Root"), OUTRAGE_SKINS.VOLT_HORN), "volt_left_horn_yellow")
+	check(color_matches(mesh_plain_color(volt, "HeadRig/Horn_Right_Tip"), OUTRAGE_SKINS.VOLT_HORN), "volt_right_horn_yellow")
+	check(color_matches(mesh_plain_color(volt, "HeadRig/Eye_Left"), OUTRAGE_SKINS.VOLT_EYE), "volt_left_eye_black")
+	var volt_left_root := volt.get_node("HeadRig/Horn_Left_Root") as MeshInstance3D
+	var volt_left_tip := volt.get_node("HeadRig/Horn_Left_Tip") as MeshInstance3D
+	var volt_right_root := volt.get_node("HeadRig/Horn_Right_Root") as MeshInstance3D
+	var volt_right_tip := volt.get_node("HeadRig/Horn_Right_Tip") as MeshInstance3D
+	check(absf(volt_left_root.position.x - volt_left_tip.position.x) < 0.001, "volt_left_horn_straight")
+	check(absf(volt_right_root.position.x - volt_right_tip.position.x) < 0.001, "volt_right_horn_straight")
+	var volt_body_material := (volt.get_node("TorsoRig/Torso_Upper") as MeshInstance3D).get_meta("plain_material") as StandardMaterial3D
+	check(volt_body_material != null and volt_body_material.emission_enabled and volt_body_material.emission_energy_multiplier >= 2.3, "volt_body_emissive")
+	check(volt.get_node_or_null("VoltHeadGlow") is OmniLight3D, "volt_head_light")
+	check(volt.get_node_or_null("VoltBodyGlow") is OmniLight3D, "volt_body_light")
+	check(volt.get_node_or_null("VoltLowerGlow") is OmniLight3D, "volt_lower_light")
+	check(volt.get_node_or_null("VoltHornGlow") is OmniLight3D, "volt_horn_light")
+	var direct_volt_body_light_energy := (volt.get_node("VoltBodyGlow") as OmniLight3D).light_energy
+	volt.free()
 
 	var heart := OUTRAGE_SCENE.instantiate() as Node3D
 	OUTRAGE_SKINS.apply(heart, 3)
@@ -118,16 +162,18 @@ func run() -> void:
 	menu._open_v2_submenu("warriors")
 	for i in range(8):
 		await process_frame
-	menu._select_outage_skin(2)
+	menu._select_outage_skin(4)
 	for i in range(10):
 		await process_frame
 
-	check(menu.selected_outrage_skin == 2, "menu_neon_selected")
-	check(int(ProjectSettings.get_setting("kw3d/selected_outrage_skin", -1)) == 2, "runtime_setting")
+	check(menu.selected_outrage_skin == 4, "menu_volt_selected")
+	check(int(ProjectSettings.get_setting("kw3d/selected_outrage_skin", -1)) == 4, "runtime_setting")
 	var neon_button := menu.submenu_selector.get_node_or_null("OutrageSkin_02") as Button
 	check(neon_button != null and neon_button.text.contains("NEON"), "neon_skin_button")
 	var heart_button := menu.submenu_selector.get_node_or_null("OutrageSkin_03") as Button
 	check(heart_button != null and heart_button.text.contains("HEART"), "heart_skin_button")
+	var volt_button := menu.submenu_selector.get_node_or_null("OutrageSkin_04") as Button
+	check(volt_button != null and volt_button.text.contains("VOLT"), "volt_skin_button")
 	check(menu.hero != null and menu.hero.name == "OutrageMenuHero", "main_menu_outage_model")
 
 	var showroom_model := menu.showroom_root.find_child("OutrageFullBody", true, false) as Node3D
@@ -139,15 +185,15 @@ func run() -> void:
 		var horn_mat := showroom_horn.material_override as StandardMaterial3D
 		var eye_mat := showroom_eye.material_override as StandardMaterial3D
 		var body_mat := showroom_body.material_override as StandardMaterial3D
-		check(horn_mat != null and color_matches(horn_mat.albedo_color, OUTRAGE_SKINS.NEON_HORN), "showroom_yellow_horn")
-		check(eye_mat != null and color_matches(eye_mat.albedo_color, OUTRAGE_SKINS.NEON_EYE), "showroom_black_eye")
-		check(body_mat != null and color_matches(body_mat.albedo_color, OUTRAGE_SKINS.NEON_BODY), "showroom_neon_green_body")
+		check(horn_mat != null and color_matches(horn_mat.albedo_color, OUTRAGE_SKINS.VOLT_HORN), "showroom_volt_yellow_horn")
+		check(eye_mat != null and color_matches(eye_mat.albedo_color, OUTRAGE_SKINS.VOLT_EYE), "showroom_volt_black_eye")
+		check(body_mat != null and color_matches(body_mat.albedo_color, OUTRAGE_SKINS.VOLT_BODY), "showroom_volt_blue_body")
 		check(body_mat != null and body_mat.emission_enabled, "showroom_body_emission")
-		check(showroom_model.get_node_or_null("NeonHeadGlow") is OmniLight3D, "showroom_head_light")
-		check(showroom_model.get_node_or_null("NeonBodyGlow") is OmniLight3D, "showroom_neon_light")
-		check(showroom_model.get_node_or_null("NeonLowerGlow") is OmniLight3D, "showroom_lower_light")
-		var showroom_light := showroom_model.get_node("NeonBodyGlow") as OmniLight3D
-		check(showroom_light.light_energy < direct_body_light_energy, "showroom_glow_stays_softer")
+		check(showroom_model.get_node_or_null("VoltHeadGlow") is OmniLight3D, "showroom_volt_head_light")
+		check(showroom_model.get_node_or_null("VoltBodyGlow") is OmniLight3D, "showroom_volt_body_light")
+		check(showroom_model.get_node_or_null("VoltLowerGlow") is OmniLight3D, "showroom_volt_lower_light")
+		var showroom_light := showroom_model.get_node("VoltBodyGlow") as OmniLight3D
+		check(showroom_light.light_energy < direct_volt_body_light_energy, "showroom_volt_glow_stays_softer")
 
 	menu._launch_offline_waves()
 	var stage: Variant = null
@@ -161,17 +207,30 @@ func run() -> void:
 		for i in range(90):
 			await physics_frame
 		check(stage.player_warrior_id == "outrage", "offline_outage_selected")
-		check(stage.outrage_skin_id == 2, "offline_neon_skin_id")
-		check(str(stage.head_style.get_meta("warrior_skin_name", "")) == "NEON", "offline_neon_metadata")
-		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Horn_Left_Root"), OUTRAGE_SKINS.NEON_HORN), "offline_yellow_horn")
-		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Eye_Left"), OUTRAGE_SKINS.NEON_EYE), "offline_black_eye")
-		check(color_matches(mesh_plain_color(stage.head_style, "TorsoRig/Torso_Upper"), OUTRAGE_SKINS.NEON_BODY), "offline_neon_body")
-		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Front_Panel"), OUTRAGE_SKINS.NEON_BODY), "offline_neon_head_panel")
-		check(stage.head_style.get_node_or_null("NeonHeadGlow") is OmniLight3D, "offline_neon_head_light")
-		check(stage.head_style.get_node_or_null("NeonBodyGlow") is OmniLight3D, "offline_neon_body_light")
-		check(stage.head_style.get_node_or_null("NeonLowerGlow") is OmniLight3D, "offline_neon_lower_light")
-		var offline_body_light := stage.head_style.get_node("NeonBodyGlow") as OmniLight3D
-		check(offline_body_light.light_energy >= 2.2 and offline_body_light.omni_range >= 4.0, "offline_real_neon_light")
+		check(stage.left_hand_rig is Node3D and stage.right_hand_rig is Node3D, "offline_outage_has_two_hands")
+		check(stage.weapon_aim_pivot.get_node_or_null("RightHand") == null, "offline_outage_replaces_old_floating_hand")
+		for slot in range(4):
+			stage._set_weapon_slot(slot, false)
+			stage._pose_outage_weapon_hands()
+			var right_local: Vector3 = stage.weapon_visual_wobble.to_local(stage.right_hand_rig.global_position)
+			var left_local: Vector3 = stage.weapon_visual_wobble.to_local(stage.left_hand_rig.global_position)
+			check(left_local.x > right_local.x + 0.35, "weapon_%d_two_hand_grip_spacing" % slot)
+			check(right_local.y < 0.0 and left_local.y < 0.05, "weapon_%d_hands_below_receiver" % slot)
+		stage._set_weapon_slot(0, false)
+		check(stage.outrage_skin_id == 4, "offline_volt_skin_id")
+		check(str(stage.head_style.get_meta("warrior_skin_name", "")) == "VOLT", "offline_volt_metadata")
+		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Horn_Left_Root"), OUTRAGE_SKINS.VOLT_HORN), "offline_volt_yellow_horn")
+		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Eye_Left"), OUTRAGE_SKINS.VOLT_EYE), "offline_volt_black_eye")
+		check(color_matches(mesh_plain_color(stage.head_style, "TorsoRig/Torso_Upper"), OUTRAGE_SKINS.VOLT_BODY), "offline_volt_blue_body")
+		check(color_matches(mesh_plain_color(stage.head_style, "HeadRig/Front_Panel"), OUTRAGE_SKINS.VOLT_CORE), "offline_volt_head_core")
+		var offline_volt_root := stage.head_style.get_node("HeadRig/Horn_Left_Root") as MeshInstance3D
+		var offline_volt_tip := stage.head_style.get_node("HeadRig/Horn_Left_Tip") as MeshInstance3D
+		check(absf(offline_volt_root.position.x - offline_volt_tip.position.x) < 0.001, "offline_volt_horn_straight")
+		check(stage.head_style.get_node_or_null("VoltHeadGlow") is OmniLight3D, "offline_volt_head_light")
+		check(stage.head_style.get_node_or_null("VoltBodyGlow") is OmniLight3D, "offline_volt_body_light")
+		check(stage.head_style.get_node_or_null("VoltLowerGlow") is OmniLight3D, "offline_volt_lower_light")
+		var offline_body_light := stage.head_style.get_node("VoltBodyGlow") as OmniLight3D
+		check(offline_body_light.light_energy >= 2.6 and offline_body_light.omni_range >= 4.3, "offline_real_volt_light")
 
 	if stage != null and is_instance_valid(stage):
 		stage.queue_free()

@@ -24,24 +24,23 @@ func set_pixel_enabled(value: bool) -> void:
 	pixel_enabled = value
 
 func _apply_style() -> void:
-	for rig in get_children():
-		for child in rig.get_children():
-			var mesh := child as MeshInstance3D
-			if mesh == null:
+	for child in find_children("*","MeshInstance3D",true,false):
+		var mesh := child as MeshInstance3D
+		if mesh == null:
+			continue
+		if mesh.name == "ShaderInkOutline":
+			mesh.visible = enabled
+		elif mesh.has_meta("plain_material"):
+			if mesh.has_meta("force_plain_emissive"):
+				mesh.material_override = mesh.get_meta("plain_material")
 				continue
-			if mesh.name == "ShaderInkOutline":
-				mesh.visible = enabled
-			elif mesh.has_meta("plain_material"):
-				if mesh.has_meta("force_plain_emissive"):
-					mesh.material_override = mesh.get_meta("plain_material")
-					continue
-				var toon: ShaderMaterial = mesh.get_meta("toon_material")
-				toon.set_shader_parameter("pixel_enabled", pixel_enabled)
-				if enabled:
-					mesh.material_override = toon
-				elif pixel_enabled:
-					if not mesh.has_meta("pixel_material"):
-						mesh.set_meta("pixel_material", PIXEL_MATERIALS.from_standard(mesh.get_meta("plain_material")))
-					mesh.material_override = mesh.get_meta("pixel_material")
-				else:
-					mesh.material_override = mesh.get_meta("plain_material")
+			var toon: ShaderMaterial = mesh.get_meta("toon_material")
+			toon.set_shader_parameter("pixel_enabled", pixel_enabled)
+			if enabled:
+				mesh.material_override = toon
+			elif pixel_enabled:
+				if not mesh.has_meta("pixel_material"):
+					mesh.set_meta("pixel_material", PIXEL_MATERIALS.from_standard(mesh.get_meta("plain_material")))
+				mesh.material_override = mesh.get_meta("pixel_material")
+			else:
+				mesh.material_override = mesh.get_meta("plain_material")

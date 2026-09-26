@@ -14,8 +14,8 @@ func run() -> void:
 	check(stage.arena_audio != null and stage.arena_audio.music.stream is AudioStreamWAV,"project_soundtrack_loaded")
 	check(stage.arena_audio.music.stream.loop_mode==AudioStreamWAV.LOOP_FORWARD,"soundtrack_loop")
 	check(stage.arena_audio.qa_muted,"tests_are_quiet")
-	check(stage.arena_audio.spatial_pool.size()==12,"bounded_sfx_pool")
-	check(stage.WEAPON_HOLD_HEIGHT>=0.75,"shoulder_height_rifle")
+	check(stage.arena_audio.spatial_pool.size()==24,"bounded_sfx_pool")
+	check(stage.WEAPON_HOLD_HEIGHT>=0.70,"shoulder_height_rifle")
 	check(director.ATTACK_WARNING<0.45 and director.BULLET_SPEED>18,"faster_enemy_pressure")
 	var reticle: Control=stage.get_node("HUD/Crosshair")
 	reticle.set_feedback({"occluded":true,"end":Vector3.ZERO},stage.camera,false)
@@ -24,7 +24,7 @@ func run() -> void:
 	for child in stage.get_node("Floor").get_children():
 		if child is MeshInstance3D: floor_mesh=child
 	check(floor_mesh.has_node("WorldInkOutline"),"terrain_has_ink")
-	check(stage.weapon_root.has_node("WorldInkOutline"),"single_union_ak_outline")
+	check(stage.ak_visual_root.find_child("WeaponInkBatch_AK",true,false) is MultiMeshInstance3D,"batched_ak_outline")
 	check(floor_mesh.material_override.get_shader_parameter("comic_enabled"),"terrain_has_toon")
 	stage._toggle_instructions()
 	check(stage.get_node("HUD/GrenadeCooldown").is_visible_in_tree(),"tab_keeps_grenade_cooldown")

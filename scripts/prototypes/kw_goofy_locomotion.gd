@@ -62,10 +62,15 @@ var rng := RandomNumberGenerator.new()
 var noise_phase := 0.0
 var last_visual_yaw := 0.0
 var turn_rate := 0.0
+var ground_query:=PhysicsRayQueryParameters3D.new()
+var ground_exclude: Array[RID]=[]
 
 func setup(p: CharacterBody3D, v: Node3D, h: Node3D, t: Node3D, left: Node3D, right: Node3D, seed_value: int = 137) -> void:
 	actor = p
 	visual = v
+	ground_exclude.clear();ground_exclude.append(actor.get_rid())
+	ground_query.exclude=ground_exclude
+	ground_query.collision_mask=1
 	head = h
 	torso = t
 	torso_rest = t.position
@@ -213,10 +218,9 @@ func _neutral(index: int) -> Vector3:
 	return actor.global_position + Basis(Vector3.UP, travel_yaw) * rest_center
 
 func _ground(point: Vector3) -> Dictionary:
-	var query := PhysicsRayQueryParameters3D.create(point + Vector3.UP * 0.65, point + Vector3.DOWN * 1.15)
-	query.exclude = [actor.get_rid()]
-	query.collision_mask = 1 # ground only; target hitboxes must not become foot supports
-	var hit := actor.get_world_3d().direct_space_state.intersect_ray(query)
+	ground_query.from=point+Vector3.UP*0.65
+	ground_query.to=point+Vector3.DOWN*1.15
+	var hit := actor.get_world_3d().direct_space_state.intersect_ray(ground_query)
 	if not hit.is_empty() and (hit["normal"] as Vector3).y > 0.45:
 		return hit
 	# Unsupported edge: keep the foot near the body, never snap into a pit.

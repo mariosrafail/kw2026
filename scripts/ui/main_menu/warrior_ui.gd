@@ -5,6 +5,7 @@ class_name WarriorUi
 const WARRIOR_MANIFEST_PATHS := {
 	"outrage": "res://assets/warriors/outrage/skin_manifest.json",
 	"erebus": "res://assets/warriors/erebus/skin_manifest.json",
+	"kosas": "res://assets/warriors/kosas/skin_manifest.json",
 	"tasko": "res://assets/warriors/tasko/skin_manifest.json",
 	"juice": "res://assets/warriors/juice/skin_manifest.json",
 	"madam": "res://assets/warriors/madam/skin_manifest.json",

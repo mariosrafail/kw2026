@@ -26,29 +26,49 @@ func _build_environment() -> void:
 	world_env.name = "Cyber1v1Environment"
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("070b15")
+	env.background_color = Color("0d1424")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("374665")
-	env.ambient_light_energy = 1.08
+	env.ambient_light_color = Color("53698f")
+	env.ambient_light_energy = 1.72
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.fog_enabled = true
-	env.fog_light_color = Color("19223a")
-	env.fog_light_energy = 0.35
-	env.fog_density = 0.012
+	env.fog_light_color = Color("263653")
+	env.fog_light_energy = 0.48
+	env.fog_density = 0.007
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
 	sun.name = "CyberMoonKey"
 	sun.rotation_degrees = Vector3(-58.0, -24.0, 0.0)
-	sun.light_color = Color("94a9ff")
-	sun.light_energy = 1.10
+	sun.light_color = Color("b8c8ff")
+	sun.light_energy = 1.62
 	sun.shadow_enabled = true
 	add_child(sun)
 
-	_add_neon_light(Vector3(-8.5, 4.2, -8.0), CYAN, 10.0)
-	_add_neon_light(Vector3(8.5, 3.2, -7.0), HOT_PINK, 10.0)
-	_add_neon_light(Vector3(0.0, 5.8, -12.5), ORANGE, 8.0)
+	# Broad, shadowless arena fills keep the playable space readable while the
+	# cyan/pink/orange lights retain the cyber color separation.
+	_add_cyber_fill_light("CyberCenterFill", Vector3(0.0, 5.8, -3.5), Color("d8e4ff"), 4.8, 15.0)
+	_add_cyber_fill_light("CyberFrontFill", Vector3(0.0, 4.2, 3.5), Color("a8c7ff"), 3.6, 13.0)
+	_add_cyber_fill_light("CyberRearFill", Vector3(0.0, 5.0, -10.5), Color("ffd1be"), 3.8, 13.5)
+	_add_cyber_fill_light("CyberLeftFill", Vector3(-8.0, 4.0, -4.5), CYAN, 4.6, 11.5)
+	_add_cyber_fill_light("CyberRightFill", Vector3(8.0, 4.0, -4.5), HOT_PINK, 4.6, 11.5)
+
+	_add_neon_light(Vector3(-8.5, 4.2, -8.0), CYAN, 11.5)
+	_add_neon_light(Vector3(8.5, 3.8, -7.0), HOT_PINK, 11.5)
+	_add_neon_light(Vector3(0.0, 5.8, -12.5), ORANGE, 10.0)
+
+
+func _add_cyber_fill_light(node_name: String, pos: Vector3, color: Color, energy: float, radius: float) -> void:
+	var light := OmniLight3D.new()
+	light.name = node_name
+	light.position = pos
+	light.light_color = color
+	light.light_energy = energy
+	light.omni_range = radius
+	light.omni_attenuation = 1.25
+	light.shadow_enabled = false
+	add_child(light)
 
 
 func _build_arena() -> void:

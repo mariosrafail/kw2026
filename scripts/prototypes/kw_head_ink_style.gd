@@ -30,6 +30,8 @@ func setup(model: Node3D) -> void:
 	outline.material_override = ink
 	outline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	outline.extra_cull_margin = 0.15
+	outline.visibility_range_end = 48.0
+	outline.visibility_range_end_margin = 6.0
 	model.add_child(outline)
 	set_enabled(enabled)
 

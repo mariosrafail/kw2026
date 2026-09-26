@@ -15,7 +15,7 @@ func run()->void:
 	var pd=stage.player_damage_visual
 	check(pd!=null,"player_damage_visual_exists")
 	check(pd.cell_count()>120 and pd.cell_count()<1600,"player_cell_count_bounded")
-	check(pd.source_mesh_count()>8,"player_original_mesh_records")
+	check(pd.source_mesh_count()>=4,"player_original_mesh_records")
 	var mm_count: int=stage.head_style.find_children("DamageCells_*","MultiMeshInstance3D",true,false).size()
 	check(mm_count==0,"player_has_no_visible_damage_grid")
 	var visible_originals:=0
@@ -56,10 +56,7 @@ func run()->void:
 	for info in pd.rig_outlines.values():check(int((info.material as ShaderMaterial).get_shader_parameter("damage_cell_count"))==0,"outline_restored_after_heal")
 	var target: Node3D=stage.combat.targets[0]
 	target.set_physics_process(false)
-	var td=target.damage_visual
-	check(td!=null and td.cell_count()>60,"enemy_damage_visual_exists")
-	var enemy_mm: int=target.visuals.find_children("DamageCells_*","MultiMeshInstance3D",true,false).size()
-	check(enemy_mm==0,"enemy_has_no_visible_damage_grid")
+	check(target.damage_visual==null,"enemy_damage_visual_lazy_before_hit")
 	var enemy_visible:=0
 	for rig_name in ["HeadRig","TorsoRig","LeftLegRig","RightLegRig"]:
 		var rig: Node3D=target.visuals.get_node(rig_name)
@@ -68,9 +65,12 @@ func run()->void:
 	check(enemy_visible>4,"enemy_original_model_stays_visible")
 	var enemy_color_before: Color=(target.visuals.get_node("TorsoRig").get_child(0).get_meta("plain_material") as StandardMaterial3D).albedo_color
 	var head_point: Vector3=target.visuals.get_node("HeadRig").global_position
-	var before: int=td.damaged_cell_count()
 	check(target.receive_hit(5.0,Vector3.FORWARD,991,head_point),"enemy_hit_applied")
-	check(td.damaged_cell_count()>before,"enemy_hit_cuts_blocks")
+	var td=target.damage_visual
+	check(td!=null and td.cell_count()>60,"enemy_damage_visual_created_on_hit")
+	var enemy_mm: int=target.visuals.find_children("DamageCells_*","MultiMeshInstance3D",true,false).size()
+	check(enemy_mm==0,"enemy_has_no_visible_damage_grid")
+	check(td.damaged_cell_count()>0,"enemy_hit_cuts_blocks")
 	var enemy_nearest:=INF
 	for cell in td.cells:
 		if bool(cell.hidden):

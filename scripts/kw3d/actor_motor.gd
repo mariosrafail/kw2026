@@ -7,8 +7,8 @@ const SNIPER_AIM_SPEED := 0.6
 
 static func speed_for(command: Dictionary) -> float:
 	var sniper_scoped:=bool(command.get("aim",false)) and int(command.get("weapon",0))==2
-	if sniper_scoped:return SNIPER_AIM_SPEED
-	return SPRINT_SPEED if bool(command.get("sprint",false)) else WALK_SPEED
+	var base:=SNIPER_AIM_SPEED if sniper_scoped else SPRINT_SPEED if bool(command.get("sprint",false)) else WALK_SPEED
+	return base*clampf(float(command.get("speed_multiplier",1.0)),0.55,1.45)
 
 static func step(body: CharacterBody3D, command: Dictionary, dt: float=DT) -> void:
 	var move: Vector2=command.get("move",Vector2.ZERO)

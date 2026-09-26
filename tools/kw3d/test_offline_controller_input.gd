@@ -68,9 +68,11 @@ func run()->void:
 	check(stage.weapon_slot==1,"dpad_next_selects_shotgun")
 	adapter._input(next)
 	check(stage.weapon_slot==2,"dpad_next_selects_kar")
+	adapter._input(next)
+	check(stage.weapon_slot==3,"dpad_next_selects_launcher")
 	var prev:=InputEventJoypadButton.new();prev.device=device;prev.button_index=JOY_BUTTON_DPAD_LEFT;prev.pressed=true
 	adapter._input(prev)
-	check(stage.weapon_slot==1,"dpad_prev_selects_shotgun")
+	check(stage.weapon_slot==2,"dpad_prev_selects_kar")
 
 	var inspect:=InputEventJoypadButton.new();inspect.device=device;inspect.button_index=JOY_BUTTON_Y;inspect.pressed=true
 	adapter._input(inspect)

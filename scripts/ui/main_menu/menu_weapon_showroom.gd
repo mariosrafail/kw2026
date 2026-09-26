@@ -11,6 +11,8 @@ static func build_weapon(parent: Node3D, weapon_id: String, skin_id: int = 0) ->
 			_build_shotgun(parent)
 		"kar":
 			KAR_BUILDER.build(parent, skin_id)
+		"grenade_launcher":
+			_build_grenade_launcher(parent)
 		_:
 			AK47_BUILDER.build(parent, skin_id)
 	_apply_showroom_finish(parent)
@@ -20,6 +22,7 @@ static func display_name(weapon_id: String) -> String:
 	match weapon_id:
 		"shotgun": return "SHOTGUN"
 		"kar": return "KAR"
+		"grenade_launcher": return "GRENADE LAUNCHER"
 		_: return "AK-47"
 
 
@@ -27,6 +30,7 @@ static func descriptor(weapon_id: String) -> String:
 	match weapon_id:
 		"shotgun": return "CLOSE RANGE // HEAVY IMPACT"
 		"kar": return "MARKSMAN // SCOPED PRECISION"
+		"grenade_launcher": return "BALLISTIC // GRAVITY ARC // AIM HIGH FOR RANGE"
 		_: return "ASSAULT RIFLE // FULL AUTO"
 
 
@@ -59,6 +63,8 @@ static func main_color(weapon_id: String, skin_id: int = 0) -> Color:
 		return AK47_BUILDER.main_color(skin_id)
 	if weapon_id == "shotgun":
 		return Color("6d4030")
+	if weapon_id == "grenade_launcher":
+		return Color("d7b04c")
 	return Color("6CCFFF")
 
 
@@ -69,6 +75,16 @@ static func _build_shotgun(parent: Node3D) -> void:
 	_add_part(parent,"SG_Pump",Vector3(0.62,-0.09,0),Vector3(0.42,0.18,0.25),Color("8a5238"))
 	_add_part(parent,"SG_Grip",Vector3(0.02,-0.22,0),Vector3(0.20,0.36,0.22),Color("20232a"))
 	_add_part(parent,"SG_Sight",Vector3(0.30,0.18,0),Vector3(0.10,0.08,0.10),Color("ffcf70"))
+
+
+static func _build_grenade_launcher(parent: Node3D) -> void:
+	_add_part(parent,"GL_Stock",Vector3(-0.38,-0.02,0),Vector3(0.62,0.24,0.28),Color("4e3b2c"))
+	_add_part(parent,"GL_Receiver",Vector3(0.12,0.02,0),Vector3(0.48,0.34,0.34),Color("30353a"))
+	_add_part(parent,"GL_Chamber",Vector3(0.48,0.02,0),Vector3(0.34,0.38,0.38),Color("657078"))
+	_add_part(parent,"GL_Barrel",Vector3(0.92,0.03,0),Vector3(0.62,0.27,0.27),Color("252a2e"))
+	_add_part(parent,"GL_Muzzle",Vector3(1.27,0.03,0),Vector3(0.16,0.36,0.36),Color("14181b"))
+	_add_part(parent,"GL_Grip",Vector3(0.02,-0.25,0),Vector3(0.20,0.38,0.22),Color("24201c"))
+	_add_part(parent,"GL_Sight",Vector3(0.38,0.25,0),Vector3(0.13,0.08,0.10),Color("d7b04c"))
 
 
 static func _add_part(parent: Node3D, title: String, pos: Vector3, size: Vector3, color: Color) -> void:

@@ -29,6 +29,10 @@ var maximum_health := 100.0
 var restore_clock := 0.0
 var flash_strength := 0.0
 var flash_records: Dictionary={}
+var debris_pool: Array[MeshInstance3D]=[]
+var nearest_indices_scratch: Array[int]=[]
+var nearest_scores_scratch: Array[float]=[]
+var dirty_records_scratch: Dictionary={}
 var comic_enabled := true
 var pixel_enabled := false
 var rng := RandomNumberGenerator.new()
@@ -45,6 +49,8 @@ func setup(root_visual: Node3D, rig_names: Array = ["HeadRig","TorsoRig","LeftLe
 	for rig_name in rig_names:
 		var rig:=root_visual.get_node_or_null(rig_name) as Node3D
 		if rig!=null:_register_rig(rig)
+	for info in rig_outlines.values():
+		_sync_rig_outline(info.rig as Node3D)
 	max_hidden=mini(MAX_HIDDEN_ABS,maxi(12,int(round(float(cells.size())*MAX_HIDDEN_RATIO))))
 	current_health=maximum_health
 	desired_hidden=0
@@ -60,6 +66,10 @@ func _register_rig(rig: Node3D) -> void:
 		if not child is MeshInstance3D:continue
 		var mesh:=child as MeshInstance3D
 		if mesh.name in ["ShaderInkOutline","WorldInkOutline"]:continue
+		# Warrior style scripts intentionally hide/rebuild authored parts. Hidden source
+		# geometry must stay hidden and should not allocate damage cells/materials.
+		if not mesh.visible:continue
+		if bool(mesh.get_meta("kw_damage_skip",false)):continue
 		if mesh.mesh==null:continue
 		_register_mesh(mesh)
 
@@ -193,6 +203,14 @@ func _sync_record(record_index: int) -> void:
 	_sync_rig_outline(mesh.get_parent() as Node3D)
 	records[record_index]=record
 
+func _sync_flash_only(record_index: int) -> void:
+	if record_index<0 or record_index>=records.size():return
+	var record: Dictionary=records[record_index]
+	var toon:=record.toon as ShaderMaterial
+	var pixel:=record.pixel as ShaderMaterial
+	if toon!=null:toon.set_shader_parameter("damage_flash",flash_strength)
+	if pixel!=null:pixel.set_shader_parameter("damage_flash",flash_strength)
+
 func _sync_material(mat: ShaderMaterial,record: Dictionary) -> void:
 	if mat==null:return
 	var hidden: Array[int]=record.hidden_indices
@@ -261,20 +279,20 @@ func damage_at(world_point: Vector3,health_after: float,maximum: float=100.0,amo
 	if needed<=0:return 0
 	var nearest: Array[int]=_nearest_visible_indices(world_point,needed)
 	var removed:=0
-	var dirty: Dictionary={}
+	dirty_records_scratch.clear()
 	for index in nearest:
 		var record_index:=int(cells[index].record)
 		var world_transform:=_cell_world_transform(index)
 		_hide_cell(index)
-		dirty[record_index]=true
+		dirty_records_scratch[record_index]=true
 		if removed<DEBRIS_PER_HIT:_spawn_debris(index,world_transform,direction)
 		removed+=1
-	flash_hit(0.85,dirty)
+	flash_hit(0.85,dirty_records_scratch)
 	return removed
 
 func _nearest_visible_indices(world_point: Vector3,limit: int) -> Array[int]:
-	var best_indices: Array[int]=[]
-	var best_scores: Array[float]=[]
+	nearest_indices_scratch.clear()
+	nearest_scores_scratch.clear()
 	for i in range(cells.size()):
 		var cell: Dictionary=cells[i]
 		if bool(cell.hidden):continue
@@ -283,15 +301,15 @@ func _nearest_visible_indices(world_point: Vector3,limit: int) -> Array[int]:
 		var mesh:=cell.mesh as MeshInstance3D
 		var p: Vector3=mesh.global_transform*Vector3(cell.local)
 		var score: float=p.distance_squared_to(world_point)*rng.randf_range(0.88,1.12)
-		var insert_at:=best_scores.size()
-		for j in range(best_scores.size()):
-			if score<best_scores[j]:insert_at=j;break
+		var insert_at:=nearest_scores_scratch.size()
+		for j in range(nearest_scores_scratch.size()):
+			if score<nearest_scores_scratch[j]:insert_at=j;break
 		if insert_at>=limit:continue
-		best_scores.insert(insert_at,score)
-		best_indices.insert(insert_at,i)
-		if best_scores.size()>limit:
-			best_scores.pop_back();best_indices.pop_back()
-	return best_indices
+		nearest_scores_scratch.insert(insert_at,score)
+		nearest_indices_scratch.insert(insert_at,i)
+		if nearest_scores_scratch.size()>limit:
+			nearest_scores_scratch.pop_back();nearest_indices_scratch.pop_back()
+	return nearest_indices_scratch
 
 func _hidden_for_health(health: float) -> int:
 	var deficit:=1.0-clampf(health/maxf(1.0,maximum_health),0.0,1.0)
@@ -347,19 +365,37 @@ func _spawn_debris(index: int,world_transform: Transform3D,direction: Vector3) -
 	if parent==null:return
 	while debris.size()>=MAX_DEBRIS_ACTIVE:
 		var oldest: Dictionary=debris.pop_front()
-		if is_instance_valid(oldest.node):oldest.node.queue_free()
+		_release_debris(oldest.node as MeshInstance3D)
 	var cell: Dictionary=cells[index]
-	var node:=MeshInstance3D.new()
-	node.name="DamageVoxelDebris"
-	node.mesh=shared_box
+	var node:=_acquire_debris(parent)
 	node.material_override=_debris_material(cell.color)
-	node.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(node)
 	node.global_transform=world_transform
+	node.visible=true
 	var outward:=direction.normalized() if direction.length_squared()>0.001 else Vector3(rng.randf_range(-1,1),0.2,rng.randf_range(-1,1)).normalized()
 	var velocity:=outward*rng.randf_range(1.0,2.6)+Vector3(rng.randf_range(-1.4,1.4),rng.randf_range(1.2,2.8),rng.randf_range(-1.4,1.4))
 	debris.append({"node":node,"velocity":velocity,"angular":Vector3(rng.randf_range(-9,9),rng.randf_range(-9,9),rng.randf_range(-9,9)),"age":0.0,"duration":rng.randf_range(0.55,0.85),"scale":node.scale})
 	set_process(true)
+
+func _acquire_debris(parent: Node) -> MeshInstance3D:
+	for node in debris_pool:
+		if is_instance_valid(node) and not node.visible:
+			node.scale=Vector3.ONE
+			node.rotation=Vector3.ZERO
+			return node
+	var node:=MeshInstance3D.new()
+	node.name="DamageVoxelDebris"
+	node.mesh=shared_box
+	node.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.visible=false
+	parent.add_child(node)
+	debris_pool.append(node)
+	return node
+
+func _release_debris(node: MeshInstance3D) -> void:
+	if node==null:return
+	node.visible=false
+	node.scale=Vector3.ONE
+	node.rotation=Vector3.ZERO
 
 func _debris_material(color: Color) -> StandardMaterial3D:
 	var key:=color.to_html(false)
@@ -374,7 +410,7 @@ func _process(delta: float) -> void:
 	var active:=false
 	if flash_strength>0.0:
 		flash_strength=maxf(0.0,flash_strength-delta*9.5)
-		for record_index in flash_records.keys():_sync_record(int(record_index))
+		for record_index in flash_records:_sync_flash_only(int(record_index))
 		if flash_strength<=0.0:flash_records.clear()
 		active=active or flash_strength>0.0
 	if hidden_count>desired_hidden:
@@ -400,7 +436,7 @@ func _process(delta: float) -> void:
 		node.scale=(d.scale as Vector3)*maxf(0.05,life)
 		debris[i]=d
 		if float(d.age)>=float(d.duration):
-			node.queue_free();debris.remove_at(i)
+			_release_debris(node as MeshInstance3D);debris.remove_at(i)
 		else:active=true
 	if not active:set_process(false)
 

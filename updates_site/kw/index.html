@@ -3,68 +3,209 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KW // Online</title>
+<title>KW // Client</title>
 <style>
-:root{--base:#faf7f1;--accent:#47429d;--hot:#20acf3;--hi:#e27393;--mint:#85c799;--ink:#0f0d14;--panel:#202943}
-*{box-sizing:border-box} body{margin:0;min-height:100vh;background:#86bbc5;color:var(--base);font-family:Consolas,"Segoe UI",sans-serif;display:grid;place-items:center;overflow-x:hidden}
-body:before{content:"";position:fixed;inset:0;opacity:.13;background-image:linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px);background-size:22px 22px;pointer-events:none}
-.shell{width:min(940px,calc(100% - 28px));position:relative;background:rgba(32,41,67,.97);border:4px solid #edf7bd;box-shadow:0 13px 0 rgba(71,66,157,.34);padding:24px;margin:24px}
-.logo{font-weight:900;letter-spacing:4px;font-size:clamp(38px,7vw,78px);text-align:center;text-shadow:5px 5px 0 #47429d}
-.tag{text-align:center;color:#85c799;font-weight:800;letter-spacing:2px;margin-top:5px}
-.status{margin:22px auto 16px;max-width:720px;background:#111827;border:3px solid #85c799;padding:14px;text-align:center}
-.version{font-size:24px;font-weight:900;color:#edf7bd}.sub{font-size:13px;color:#b8c3d4;margin-top:6px}.online{color:#85c799;font-weight:900}
-.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card{background:#182036;border:3px solid #85c799;padding:18px;min-height:230px;display:flex;flex-direction:column}
-.card h2{margin:0 0 10px;text-align:center;color:#faf7f1;font-size:21px}.card p{color:#cbd5e1;line-height:1.45;font-size:14px}
-.btn{display:block;margin-top:auto;text-align:center;text-decoration:none;border:3px solid #85c799;border-bottom-width:6px;background:#4e8d9c;color:#faf7f1;font-weight:900;font-size:18px;padding:14px 12px;transition:transform .12s ease,background .12s ease,border-color .12s ease;cursor:pointer}
-.btn:hover{background:#85c799;color:#0f0d14;border-color:#edf7bd;transform:scale(1.035)}.btn:active{transform:scale(.96);background:#47429d;color:#faf7f1}.alt{background:#47429d;border-color:#e27393}.alt:hover{background:#e27393}
-.steps{margin-top:14px;padding:14px 18px;border:3px solid #47429d;background:rgba(15,13,20,.36);font-size:13px;line-height:1.7}.steps b{color:#edf7bd}.server{color:#20acf3;font-weight:800}
-.footer{text-align:center;color:#aab6ca;font-size:11px;margin-top:14px}@media(max-width:700px){.cards{grid-template-columns:1fr}.shell{padding:16px}.card{min-height:190px}}
+:root{
+  --ink:#090d17;--nav:#10182a;--panel:#18243b;--panel2:#202d49;--line:#334563;
+  --cream:#f7f4df;--muted:#9aabc2;--cyan:#20acf3;--mint:#85c799;--purple:#47429d;
+  --pink:#e27393;--warn:#ffb461;--sky:#86bbc5;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;min-height:100vh;color:var(--cream);font-family:Inter,Segoe UI,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 80% 10%,rgba(32,172,243,.18),transparent 32rem),
+    radial-gradient(circle at 20% 95%,rgba(226,115,147,.14),transparent 28rem),
+    var(--ink);
+}
+body:before{
+  content:"";position:fixed;inset:0;pointer-events:none;opacity:.08;
+  background-image:linear-gradient(90deg,#fff 1px,transparent 1px),linear-gradient(#fff 1px,transparent 1px);
+  background-size:24px 24px;
+}
+.client{width:min(1240px,calc(100% - 30px));min-height:720px;margin:24px auto;display:grid;grid-template-columns:210px 1fr;background:rgba(9,13,23,.88);border:2px solid var(--line);box-shadow:0 24px 80px rgba(0,0,0,.34);position:relative}
+.sidebar{background:rgba(16,24,42,.97);border-right:2px solid var(--line);padding:24px 16px;display:flex;flex-direction:column}
+.logo{display:flex;align-items:center;gap:8px;font-size:38px;font-weight:1000;letter-spacing:-3px;text-shadow:4px 4px 0 var(--purple)}
+.logo img{width:72px;height:64px;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 0 12px rgba(226,115,147,.35))}
+.logo-sub{font:800 11px/1 Consolas,monospace;letter-spacing:2px;color:var(--mint);margin:2px 0 30px}
+.nav button{width:100%;border:0;background:transparent;color:var(--muted);text-align:left;padding:13px 14px;margin:3px 0;font-weight:900;letter-spacing:.8px;cursor:pointer;border-left:4px solid transparent}
+.nav button:hover,.nav button.active{background:var(--panel2);color:var(--cream);border-left-color:var(--cyan)}
+.sidebar-meta{margin-top:auto;border-top:1px solid var(--line);padding:18px 8px 0;font:700 11px/1.7 Consolas,monospace;color:var(--muted)}
+.sidebar-meta b{color:var(--mint)}
+.main{padding:22px 28px 30px;min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px}
+.client-title{font-size:25px;font-weight:1000;letter-spacing:.5px}
+.network{font:800 11px Consolas,monospace;color:var(--cyan);margin-top:5px}
+.profile{display:flex;align-items:center;gap:12px;background:var(--panel);border:2px solid var(--mint);padding:9px 14px 9px 9px;min-width:275px}
+.avatar{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font-weight:1000;background:linear-gradient(135deg,var(--purple),#212d60 55%,var(--pink));border:3px solid var(--mint);box-shadow:inset -8px -8px 0 rgba(0,0,0,.14);overflow:hidden}.avatar img{width:100%;height:100%;image-rendering:pixelated;object-fit:cover}
+.profile-name{font-weight:1000;font-size:14px}.profile-sub{font:700 9px Consolas,monospace;color:var(--mint);margin-top:4px}
+.view{display:none}.view.active{display:block}
+.hero{display:grid;grid-template-columns:1fr 300px;background:linear-gradient(90deg,rgba(5,8,18,.92) 0%,rgba(7,11,22,.58) 46%,rgba(8,12,24,.18) 72%),url('/kw/assets/hero_static.png') center/cover no-repeat;border:2px solid var(--cyan);min-height:330px;overflow:hidden;position:relative;animation:heroDrift 8s ease-in-out infinite alternate;box-shadow:0 0 40px rgba(32,172,243,.12),inset 0 0 60px rgba(0,0,0,.38)}
+.hero:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,transparent 45%,rgba(5,8,18,.68) 100%)}
+@keyframes heroDrift{from{background-position:center center;background-size:100% auto}to{background-position:54% 48%;background-size:104% auto}}
+.hero-copy{padding:34px;z-index:1}.eyebrow{font:900 11px Consolas,monospace;color:var(--pink);letter-spacing:2px}
+h1{font-size:44px;line-height:.95;margin:12px 0 15px;max-width:600px}.hero p{color:#bdc8d8;line-height:1.55;max-width:620px}
+.hero-side{background:rgba(10,15,27,.55);border-left:1px solid var(--line);padding:26px;z-index:1;display:flex;flex-direction:column;justify-content:center}
+.live-pill{font:900 11px Consolas,monospace;color:var(--mint);margin-bottom:7px}.version{font-size:27px;font-weight:1000}.published{font:700 10px Consolas,monospace;color:var(--muted);margin:6px 0 20px}
+.btn{display:block;text-decoration:none;text-align:center;border:0;border-bottom:5px solid rgba(0,0,0,.23);background:var(--cyan);color:var(--ink);font-weight:1000;padding:15px 16px;cursor:pointer;transition:.12s transform,.12s filter}
+.btn:hover{transform:translateY(-2px);filter:brightness(1.08)}.btn.secondary{background:var(--purple);color:var(--cream);margin-top:9px}
+.grid{display:grid;grid-template-columns:1.3fr .7fr;gap:14px;margin-top:14px}
+.card{background:var(--panel);border:1px solid var(--line);padding:20px;min-height:180px}
+.card h2{font-size:14px;margin:0 0 14px;letter-spacing:1px}.card p,.card li{color:#b3c0d1;font-size:13px;line-height:1.55}
+.fake-profile{display:flex;gap:14px;align-items:center}.fake-avatar{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;font-size:21px;font-weight:1000;background:var(--purple);border:4px solid var(--pink)}
+.label{font:800 9px Consolas,monospace;color:var(--mint);letter-spacing:1px}.fake-name{font-size:18px;font-weight:1000;margin:4px 0}.notice{font-size:11px;color:var(--muted)}
+.update-feed{display:grid;gap:12px}.patch{background:var(--panel);border-left:5px solid var(--purple);padding:20px 22px}.patch.latest{border-left-color:var(--mint)}
+.patch-head{display:flex;justify-content:space-between;gap:16px;margin-bottom:7px}.patch-ver{font:900 11px Consolas,monospace;color:var(--mint)}.patch-date{font:700 10px Consolas,monospace;color:var(--muted)}
+.patch h3{margin:4px 0 12px;font-size:20px}.patch ul{margin:0;padding-left:18px;color:#b9c5d5;line-height:1.6;font-size:13px}
+.download-panel{background:linear-gradient(100deg,var(--purple),#25335d);border:2px solid var(--pink);padding:28px;display:grid;grid-template-columns:1fr 260px;align-items:center;gap:20px}
+.download-panel h2{margin:0 0 8px;font-size:26px}.download-panel p{margin:0;color:#d2d7e4;line-height:1.5;font-size:13px}
+.footer{text-align:center;color:#667790;font:700 10px Consolas,monospace;margin-top:22px}
+@media(max-width:850px){.client{grid-template-columns:1fr}.sidebar{display:none}.topbar{align-items:flex-start}.profile{min-width:0}.hero{grid-template-columns:1fr}.hero-side{border-left:0;border-top:1px solid var(--line)}.grid,.download-panel{grid-template-columns:1fr}h1{font-size:36px}}
 </style>
 </head>
 <body>
-<main class="shell">
-<div class="logo">KW</div>
-<div class="tag">3D ONLINE DUEL // DEVELOPMENT BUILD</div>
-<section class="status">
-<div class="version" id="version">CHECKING BUILD...</div>
-<div class="sub"><span class="online" id="server">CHECKING ONLINE SERVER...</span><br><span id="published">Reading manifest</span></div>
-</section>
-<section class="cards">
-<article class="card"><h2>FIRST TIME</h2>
-<p>Download the portable KW updater once. No .NET install and no Python install. Pick a folder and it downloads the current build with verified SHA-256 hashes.</p>
-<a class="btn" href="/kw/KWUpdater.exe" download>DOWNLOAD KW UPDATER</a></article>
-<article class="card"><h2>ALREADY HAVE KW</h2>
-<p>Run the same updater again. It checks each game file and downloads only what changed, usually just <b>kw.pck</b> after gameplay or menu updates.</p>
-<a class="btn alt" href="/kw/KWUpdater.exe" download>GET LATEST UPDATER</a></article>
-</section>
-<div class="steps">
-<b>ONLINE 1V1:</b> Open KW, press <b>FIGHT!</b>, then choose <b>CREATE ROOM</b>. Your friend opens the same build and chooses <b>JOIN ROOM</b>.<br>
-Both players press <b>READY</b>. Host presses <b>START MATCH</b>. First to 10 kills wins.<br>
-<b>Public transport:</b> encrypted WebSocket through Cloudflare Tunnel. <b>No router port forwarding.</b><br>
-<b>LAN fallback:</b> Direct LAN is still available inside the room browser if Internet access is unavailable.<br>
-<b>Controller:</b> Left stick move, right stick aim, RT/R2 fire, LT/L2 aim, A/Cross jump, RB/R1 grenade.
+<div class="client">
+  <aside class="sidebar">
+    <div class="logo"><img src="/kw/assets/kw_logo.png" alt="KW logo"><span>KW</span></div>
+    <div class="logo-sub">ONLINE CLIENT</div>
+    <nav class="nav">
+      <button class="active" data-view="home">HOME</button>
+      <button data-view="updates">UPDATES</button>
+      <button data-view="download">DOWNLOAD</button>
+    </nav>
+    <div class="sidebar-meta">
+      <div>BUILD <b id="sideVersion">--</b></div>
+      <div>SERVER <b id="sideServer">CHECKING</b></div>
+      <div style="margin-top:12px">PROFILE SYSTEM<br>VIRTUAL ONLY FOR NOW.</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="client-title">KW // CLIENT</div>
+        <div class="network" id="network">NETWORK // CHECKING LIVE SERVICES</div>
+      </div>
+      <div class="profile">
+        <div class="avatar"><img src="/kw/assets/avatar.png" alt="Virtual profile"></div>
+        <div>
+          <div class="profile-name">NEON_RIFT_417</div>
+          <div class="profile-sub">VIRTUAL PROFILE // PREVIEW</div>
+        </div>
+      </div>
+    </div>
+
+    <section class="view active" id="home">
+      <div class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">KW 3D ONLINE // SHOWROOM CLIENT</div>
+          <h1>BATTLE.<br>BUILD.<br>BELONG.</h1>
+          <p>KW's own client — the Windows launcher now uses a clean live 3D showroom, with your selected warrior displayed on the right just like the in-game menu.</p>
+        </div>
+        <div class="hero-side">
+          <div class="live-pill" id="server">CHECKING SERVER...</div>
+          <div class="version" id="version">LATEST --</div>
+          <div class="published" id="published">Reading live manifest</div>
+          <a class="btn" href="/kw/KWUpdater.exe" download>GET KW CLIENT</a>
+          <button class="btn secondary" onclick="showView('updates')">VIEW UPDATES</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <h2>ONLINE STATUS</h2>
+          <p><b>Gameplay:</b> direct ENet/UDP connection to the KW authority server.</p>
+          <p><b>Updater & configuration:</b> served through the stable KW web endpoint.</p>
+          <p><b>Integrity:</b> updater verifies SHA-256 hashes before PLAY unlocks.</p>
+        </article>
+        <article class="card">
+          <h2>VIRTUAL PROFILE</h2>
+          <div class="fake-profile">
+            <div class="fake-avatar">KW</div>
+            <div>
+              <div class="label">LOCAL ID</div>
+              <div class="fake-name">NEON_RIFT_417</div>
+              <div class="notice">Placeholder avatar + local username only. Real accounts/profiles come later.</div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="view" id="updates">
+      <div class="download-panel" style="margin-bottom:14px">
+        <div>
+          <h2>UPDATES</h2>
+          <p>Patch notes and major client/game changes appear here. The feed is read by both the site and the KW Client.</p>
+        </div>
+        <button class="btn secondary" onclick="showView('home')">BACK HOME</button>
+      </div>
+      <div class="update-feed" id="updateFeed"><div class="patch">Loading updates...</div></div>
+    </section>
+
+    <section class="view" id="download">
+      <div class="download-panel">
+        <div>
+          <h2>DOWNLOAD KW CLIENT</h2>
+          <p>Portable Windows client. No .NET install and no Python install. It verifies the live build, downloads only changed game files, stores a local virtual username, and passes that ID into KW when you press PLAY.</p>
+        </div>
+        <a class="btn" href="/kw/KWUpdater.exe" download>DOWNLOAD</a>
+      </div>
+      <div class="grid">
+        <article class="card"><h2>FIRST INSTALL</h2><p>Open KWUpdater.exe, choose the game folder, press UPDATE, then PLAY.</p></article>
+        <article class="card"><h2>EXISTING INSTALL</h2><p>Use the same client. Only files whose hashes changed are downloaded.</p></article>
+      </div>
+    </section>
+
+    <div class="footer">KW DEVELOPMENT CLIENT // VIRTUAL PROFILE PREVIEW // NO REAL ACCOUNT AUTH YET</div>
+  </main>
 </div>
-<div class="footer">Temporary Cloudflare development endpoint. If the host tunnel restarts, a new temporary link may be required.</div>
-</main>
+
 <script>
+function showView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  const target=document.getElementById(name); if(target) target.classList.add('active');
+}
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+
+function renderUpdates(rows){
+  const feed=document.getElementById('updateFeed');
+  feed.innerHTML='';
+  rows.forEach((row,i)=>{
+    const el=document.createElement('article');
+    el.className='patch'+(i===0?' latest':'');
+    const items=(row.items||[]).map(x=>'<li>'+String(x).replaceAll('<','&lt;')+'</li>').join('');
+    el.innerHTML='<div class="patch-head"><span class="patch-ver">'+row.version+'</span><span class="patch-date">'+row.date+'</span></div><h3>'+row.title+'</h3><ul>'+items+'</ul>';
+    feed.appendChild(el);
+  });
+}
 async function boot(){
   try{
-    const [mr,cr]=await Promise.all([
+    const [mr,cr,ur]=await Promise.all([
       fetch('/kw/update_manifest.json?ts='+Date.now(),{cache:'no-store'}),
-      fetch('/kw/online_config.json?ts='+Date.now(),{cache:'no-store'})
+      fetch('/kw/online_config.json?ts='+Date.now(),{cache:'no-store'}),
+      fetch('/kw/updates.json?ts='+Date.now(),{cache:'no-store'})
     ]);
     if(!mr.ok) throw new Error('manifest HTTP '+mr.status);
     const m=await mr.json();
-    document.getElementById('version').textContent='LATEST  '+m.version;
-    const date=m.published_at_utc?new Date(m.published_at_utc).toLocaleString():'';
-    document.getElementById('published').textContent=date?'Published '+date:'Update server online';
-    document.getElementById('server').textContent=cr.ok?'PUBLIC SERVER ONLINE':'PUBLIC SERVER CONFIG UNAVAILABLE';
+    const c=cr.ok?await cr.json():{};
+    const u=ur.ok?await ur.json():{updates:[]};
+    document.getElementById('version').textContent='LATEST '+m.version;
+    document.getElementById('sideVersion').textContent=m.version;
+    document.getElementById('published').textContent=m.published_at_utc?'Published '+new Date(m.published_at_utc).toLocaleString():'Live build';
+    document.getElementById('server').textContent=cr.ok?'PUBLIC SERVER ONLINE':'CONFIG UNAVAILABLE';
+    document.getElementById('sideServer').textContent=cr.ok?'ONLINE':'CHECK';
+    document.getElementById('network').textContent='NETWORK // '+(c.game_transport||'ENET_UDP').toUpperCase()+' // '+(c.game_udp_host||'LIVE');
+    if((u.updates||[]).length) renderUpdates(u.updates);
   }catch(e){
     document.getElementById('version').textContent='UPDATE SERVER OFFLINE';
-    document.getElementById('server').textContent='CHECK HOST PC / TUNNEL';
-    document.getElementById('published').textContent=String(e);
+    document.getElementById('server').textContent='CHECK HOST / ENDPOINT';
+    document.getElementById('network').textContent='NETWORK // UNAVAILABLE';
   }
 }
 boot();
 </script>
-</body></html>
+</body>
+</html>

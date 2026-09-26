@@ -1,5 +1,8 @@
 param(
-    [string]$PublicBaseUrl = "https://portal-fresh-pleasant-peoples.trycloudflare.com"
+    [string]$PublicBaseUrl = "https://justifier-exclusive-riches.ngrok-free.dev",
+    [string]$PublicUdpHost = "85.74.190.165",
+    [int]$PublicUdpPort = 18886,
+    [string]$LanUdpHost = "192.168.1.154"
 )
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -20,12 +23,19 @@ $wss = "wss://$($uri.Host)/game"
 $project = Get-Content "project.godot" -Raw
 $project = [regex]::Replace($project, 'public_portal_url="[^"]*"', 'public_portal_url="' + $PublicBaseUrl + '"')
 $project = [regex]::Replace($project, 'public_ws_url="[^"]*"', 'public_ws_url="' + $wss + '"')
-Set-Content "project.godot" $project -Encoding UTF8
+$project = [regex]::Replace($project, 'public_udp_host="[^"]*"', 'public_udp_host="' + $PublicUdpHost + '"')
+$project = [regex]::Replace($project, 'public_udp_port=[0-9]+', 'public_udp_port=' + $PublicUdpPort)
+$project = [regex]::Replace($project, 'public_lan_host="[^"]*"', 'public_lan_host="' + $LanUdpHost + '"')
+Set-Content "project.godot" $project -Encoding UTF8 -NoNewline
 
 @{
     portal_url = $PublicBaseUrl
     game_ws_url = $wss
-    mode = "temporary_quick_tunnel"
+    game_transport = "enet_udp"
+    game_udp_host = $PublicUdpHost
+    game_udp_port = $PublicUdpPort
+    game_lan_host = $LanUdpHost
+    mode = "direct_udp_gameplay"
     version = $version
     updated = (Get-Date).ToString("o")
 } | ConvertTo-Json | Set-Content "updates_site/kw/online_config.json" -Encoding UTF8

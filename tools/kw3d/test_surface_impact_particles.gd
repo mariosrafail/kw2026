@@ -64,7 +64,7 @@ func run() -> void:
 	check(is_instance_valid(particle) and particle.scale.x < 0.70, "particle_shrinks_before_disappear")
 	stage.combat._update_feedback_effects(duration * 0.35)
 	await process_frame
-	check(not is_instance_valid(particle) or particle.is_queued_for_deletion(), "particle_disappears")
+	check(not is_instance_valid(particle) or not bool(particle.get_meta("kw_effect_active",false)), "particle_released")
 
 	var wall := stage.get_node("BackWall") as StaticBody3D
 	var wall_color := wall.get_meta("surface_color") as Color
@@ -80,7 +80,7 @@ func run() -> void:
 		await create_timer(1.20).timeout
 		check(is_instance_valid(hole) and hole.transparency > 0.10, "bullet_hole_fades")
 		await create_timer(0.70).timeout
-		check(not is_instance_valid(hole) or hole.is_queued_for_deletion(), "bullet_hole_disappears")
+		check(not is_instance_valid(hole) or not hole.visible, "bullet_hole_released")
 
 	print("SURFACE_IMPACT_PARTICLES_QA_", "PASS" if failures.is_empty() else "FAIL", failures)
 	quit(0 if failures.is_empty() else 1)

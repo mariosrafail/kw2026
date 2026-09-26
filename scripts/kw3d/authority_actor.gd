@@ -4,10 +4,12 @@ const MOTOR:=preload("res://scripts/kw3d/actor_motor.gd")
 const WALK:=preload("res://scripts/kw3d/authority_locomotion.gd")
 const BRAIN:=preload("res://scripts/prototypes/kw_roaming_brain.gd")
 const WEAPON_RULES:=preload("res://scripts/kw3d/weapon_rules.gd")
+const WARRIOR_SKILL_RULES:=preload("res://scripts/kw3d/warrior_skill_rules.gd")
 const RIGS: Array[String]=["HeadRig","TorsoRig","LeftLegRig","RightLegRig"]
 var actor_id =0
 var is_bot =false
 var skin ="outrage"
+var display_name ="KW_ROOKIE"
 var health =100.0
 var damage_grace=0.0
 var kills =0
@@ -16,8 +18,8 @@ var ack =0
 var last_input_tick =0
 var fire_clock =0.0
 var weapon_slot =0
-var ammo_by_weapon: Array[int]=[25,2,1]
-var reload_by_weapon: Array[float]=[0.0,0.0,0.0]
+var ammo_by_weapon: Array[int]=[25,2,1,1]
+var reload_by_weapon: Array[float]=[0.0,0.0,0.0,0.0]
 var ammo: int:
 	get:return ammo_by_weapon[weapon_slot]
 	set(value):ammo_by_weapon[weapon_slot]=value
@@ -25,6 +27,10 @@ var reload_clock: float:
 	get:return reload_by_weapon[weapon_slot]
 	set(value):reload_by_weapon[weapon_slot]=value
 var grenade_clock =0.0
+var warrior_skill_cooldown =0.0
+var warrior_skill_active =0.0
+var warrior_skill_pulse =0.0
+var warrior_skill_uses =0
 var death_clock =0.0
 var body_yaw =0.0
 var smoothed_weapon_side=1.0
@@ -62,9 +68,14 @@ var base_head =Vector3.ZERO
 var base_torso =Vector3.ZERO
 var probe =SphereShape3D.new()
 var was_alive =true
+var camera_shape_query:=PhysicsShapeQueryParameters3D.new()
+var aim_ray_query:=PhysicsRayQueryParameters3D.new()
+var camera_query_exclude: Array[RID]=[]
+var aim_query_exclude: Array[RID]=[]
 
 func configure(id: int,bot: bool,profile: Dictionary,appearance: String) -> void:
 	actor_id=id;is_bot=bot;skin=appearance
+	display_name=("BOT_%02d"%id) if bot else ("KW_%04d"%id)
 	name="Actor%d"%id
 	collision_layer=8 if bot else 2
 	collision_mask=11 if bot else 9
@@ -88,6 +99,15 @@ func configure(id: int,bot: bool,profile: Dictionary,appearance: String) -> void
 	body_bridge.shape=bridge_shape;body_bridge.set_meta("hit_region","body");hit_body.add_child(body_bridge)
 	base_head=rigs.HeadRig.position;base_torso=rigs.TorsoRig.position
 	probe.radius=0.18
+	camera_query_exclude.clear();camera_query_exclude.append(get_rid())
+	aim_query_exclude.clear();aim_query_exclude.append(get_rid());aim_query_exclude.append(hit_body.get_rid())
+	camera_shape_query.shape=probe
+	camera_shape_query.collision_mask=1
+	camera_shape_query.exclude=camera_query_exclude
+	camera_shape_query.margin=0.025
+	aim_ray_query.collision_mask=5
+	aim_ray_query.exclude=aim_query_exclude
+	aim_ray_query.hit_from_inside=true
 	command=MOTOR.empty()
 	locomotion=WALK.new();locomotion.setup(self,visual,rigs.HeadRig,rigs.TorsoRig,rigs.LeftLegRig,rigs.RightLegRig,id*913+137)
 	locomotion.playfulness=1.35 if bot else 1.2
@@ -98,7 +118,10 @@ func configure(id: int,bot: bool,profile: Dictionary,appearance: String) -> void
 func tick(dt: float) -> void:
 	damage_grace=maxf(0,damage_grace-dt)
 	fire_clock=maxf(0,fire_clock-dt);grenade_clock=maxf(0,grenade_clock-dt)
-	for slot in range(3):
+	warrior_skill_cooldown=maxf(0.0,warrior_skill_cooldown-dt)
+	warrior_skill_active=maxf(0.0,warrior_skill_active-dt)
+	warrior_skill_pulse=maxf(0.0,warrior_skill_pulse-dt)
+	for slot in range(4):
 		if reload_by_weapon[slot]<=0.0:continue
 		var before_reload: float=reload_by_weapon[slot]
 		reload_by_weapon[slot]=maxf(0.0,reload_by_weapon[slot]-dt)
@@ -111,7 +134,7 @@ func tick(dt: float) -> void:
 		brain.update(dt);impact=brain.impact_velocity
 		body_yaw=visual.rotation.y;aim_yaw=body_yaw
 	else:
-		weapon_slot=clampi(int(command.get("weapon",weapon_slot)),0,2)
+		weapon_slot=clampi(int(command.get("weapon",weapon_slot)),0,3)
 		aim_yaw=command.get("yaw",aim_yaw);aim_pitch=command.get("pitch",aim_pitch)
 		MOTOR.step(self,command,dt)
 		var movement: Vector2=command.get("move",Vector2.ZERO)
@@ -143,12 +166,45 @@ func tick(dt: float) -> void:
 func start_reload() -> bool:
 	var profile: Dictionary=WEAPON_RULES.by_slot(weapon_slot)
 	if is_bot or health<=0 or reload_clock>0.0 or ammo>=int(profile.magazine):return false
-	reload_clock=float(profile.reload)
+	reload_clock=float(profile.reload)*skill_reload_duration_multiplier()
 	return true
 
+
+func start_warrior_skill() -> bool:
+	if is_bot or health<=0.0 or warrior_skill_cooldown>0.0001:return false
+	if not WARRIOR_SKILL_RULES.valid(skin):return false
+	var cfg:=WARRIOR_SKILL_RULES.config_ref(skin)
+	warrior_skill_cooldown=float(cfg.cooldown)
+	warrior_skill_active=float(cfg.duration)
+	warrior_skill_pulse=0.0
+	warrior_skill_uses+=1
+	return true
+
+
+func reset_warrior_skill() -> void:
+	warrior_skill_cooldown=0.0
+	warrior_skill_active=0.0
+	warrior_skill_pulse=0.0
+
+
+func skill_damage_multiplier() -> float:
+	return 2.0 if skin=="outrage" and warrior_skill_active>0.0001 else 1.0
+
+
+func skill_fire_interval_multiplier() -> float:
+	return 0.64 if skin=="loker" and warrior_skill_active>0.0001 else 1.0
+
+
+func skill_reload_duration_multiplier() -> float:
+	return 0.58 if skin=="loker" and warrior_skill_active>0.0001 else 1.0
+
+
+func skill_is_immune() -> bool:
+	return skin=="erebus" and warrior_skill_active>0.0001
+
 func reset_magazine() -> void:
-	ammo_by_weapon=[int(WEAPON_RULES.AK.magazine),int(WEAPON_RULES.SHOTGUN.magazine),int(WEAPON_RULES.KAR.magazine)]
-	reload_by_weapon=[0.0,0.0,0.0]
+	ammo_by_weapon=[int(WEAPON_RULES.AK.magazine),int(WEAPON_RULES.SHOTGUN.magazine),int(WEAPON_RULES.KAR.magazine),int(WEAPON_RULES.GRENADE_LAUNCHER.magazine)]
+	reload_by_weapon=[0.0,0.0,0.0,0.0]
 	weapon_slot=0
 
 func update_shapes() -> void:
@@ -176,17 +232,16 @@ func build_aim(space: PhysicsDirectSpaceState3D,dt: float) -> void:
 	camera_direction=-view.z
 	var anchor =global_position+Vector3(0,1.05,0)
 	var desired =anchor+view*Vector3(1.2,1.35,camera_boom)
-	var query =PhysicsShapeQueryParameters3D.new();query.shape=probe;query.transform=Transform3D(Basis.IDENTITY,anchor)
-	query.motion=desired-anchor;query.collision_mask=1;query.exclude=[get_rid()];query.margin=0.025
-	var safe =space.cast_motion(query)
+	camera_shape_query.transform=Transform3D(Basis.IDENTITY,anchor)
+	camera_shape_query.motion=desired-anchor
+	var safe =space.cast_motion(camera_shape_query)
 	var fraction: float=safe[0] if safe.size()>0 else 1.0
-	if fraction<0.999: fraction=maxf(0,fraction-0.035/maxf(0.1,query.motion.length()))
+	if fraction<0.999: fraction=maxf(0,fraction-0.035/maxf(0.1,camera_shape_query.motion.length()))
 	camera_fraction=fraction if fraction<camera_fraction else lerpf(camera_fraction,fraction,1-exp(-16*dt))
 	camera_origin=anchor.lerp(desired,camera_fraction)
 	var end =camera_origin+camera_direction*120
-	var ray =PhysicsRayQueryParameters3D.create(camera_origin,end,5,[get_rid(),hit_body.get_rid()])
-	ray.hit_from_inside=true
-	var hit =space.intersect_ray(ray);aim_target=hit.get("position",end)
+	aim_ray_query.from=camera_origin;aim_ray_query.to=end
+	var hit =space.intersect_ray(aim_ray_query);aim_target=hit.get("position",end)
 	var chest =weapon_anchor()
 	var front: Vector3=(aim_target-chest).normalized()
 	var right =front.cross(Vector3.UP).normalized()
@@ -195,7 +250,7 @@ func build_aim(space: PhysicsDirectSpaceState3D,dt: float) -> void:
 	var clearance: float=0.0
 	var pivot =chest+front*(0.64+clearance)+right*smoothed_weapon_side
 	var distance =pivot.distance_to(aim_target)
-	var muzzle_length:=1.58 if weapon_slot==0 else 1.78 if weapon_slot==1 else 2.08
+	var muzzle_length:=1.58 if weapon_slot==0 else 1.78 if weapon_slot==1 else 2.08 if weapon_slot==2 else 1.88
 	var m =Vector3(0.10,0.02,-muzzle_length+maxf(0,1.92-distance))
 	var local_target =Vector3(m.x,m.y,-sqrt(maxf(0.00001,distance*distance-m.x*m.x-m.y*m.y))).normalized()
 	var gun_basis =Basis.looking_at(aim_target-pivot,Vector3.UP)*Basis(Quaternion(local_target,Vector3.FORWARD))
@@ -218,7 +273,23 @@ func packet() -> Dictionary:
 	for title in RIGS:
 		var rig: Node3D=rigs[title]
 		for v in [rig.position,rig.rotation,rig.scale]: pose.append_array([v.x,v.y,v.z])
-	return {"id":actor_id,"bot":is_bot,"skin":skin,"p":global_position,"v":velocity,"yaw":body_yaw,
+	return {"id":actor_id,"bot":is_bot,"skin":skin,"name":display_name,"p":global_position,"v":velocity,"yaw":body_yaw,
 		"ay":aim_yaw,"ap":aim_pitch,"hp":health,"kills":kills,"gcd":grenade_clock,"fcd":fire_clock,"weapon":weapon_slot,
-		"ammo":ammo,"reload":reload_clock,"ak_ammo":ammo_by_weapon[0],"sg_ammo":ammo_by_weapon[1],"kar_ammo":ammo_by_weapon[2],"ak_reload":reload_by_weapon[0],"sg_reload":reload_by_weapon[1],"kar_reload":reload_by_weapon[2],
+		"ammo":ammo,"reload":reload_clock,"ak_ammo":ammo_by_weapon[0],"sg_ammo":ammo_by_weapon[1],"kar_ammo":ammo_by_weapon[2],"gl_ammo":ammo_by_weapon[3],"ak_reload":reload_by_weapon[0],"sg_reload":reload_by_weapon[1],"kar_reload":reload_by_weapon[2],"gl_reload":reload_by_weapon[3],
+		"skill_cd":warrior_skill_cooldown,"skill_active":warrior_skill_active,"skill_id":WARRIOR_SKILL_RULES.skill_id(skin) if WARRIOR_SKILL_RULES.valid(skin) else "",
 		"ack":ack,"js":last_jump_serial,"gs":last_grenade_serial,"connected":connected,"respawn_left":maxf(0,3.0-death_clock) if health<=0 else 0.0,"pose":pose,"steps":step_count,"ground":is_on_floor(),"phase":phase}
+
+func network_record(owner: bool) -> Array:
+	var pose:=PackedFloat32Array()
+	if not owner:
+		for title in RIGS:
+			var rig: Node3D=rigs[title]
+			for value in [rig.position,rig.rotation,rig.scale]:pose.append_array([value.x,value.y,value.z])
+	var owner_data: Array=[]
+	if owner:
+		owner_data=[
+			ack,last_jump_serial,last_grenade_serial,maxf(0,3.0-death_clock) if health<=0 else 0.0,warrior_skill_cooldown,
+			PackedInt32Array([ammo_by_weapon[0],ammo_by_weapon[1],ammo_by_weapon[2],ammo_by_weapon[3]]),
+			PackedFloat32Array([reload_by_weapon[0],reload_by_weapon[1],reload_by_weapon[2],reload_by_weapon[3]])
+		]
+	return [actor_id,is_bot,skin,global_position,velocity,body_yaw,aim_yaw,aim_pitch,health,kills,grenade_clock,fire_clock,weapon_slot,ammo,reload_clock,warrior_skill_active,connected,pose,step_count,is_on_floor(),phase,owner_data,[],display_name]

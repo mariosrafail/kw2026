@@ -181,9 +181,9 @@ func setup(view: Node3D) -> void:
 	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	top.add_child(title_box)
-	title = _heading("KW // ONLINE ROOMS", 22)
+	title = _heading("KW // OVERDRIVE DUEL", 22)
 	title_box.add_child(title)
-	var mode := _body_label("FIGHT!  /  PUBLIC 1V1  /  FIRST TO 10", 9)
+	var mode := _body_label("OUTRAGE VS EREBUS  /  FIRST TO 5  /  BUILD AS YOU FIGHT", 9)
 	mode.add_theme_color_override("font_color", Color(0.5216,0.7804,0.6039))
 	title_box.add_child(mode)
 
@@ -221,7 +221,7 @@ func _build_connection_screen() -> Control:
 	row.add_child(browser_card)
 	var browser_box := _make_card_body(browser_card)
 	browser_box.add_child(_heading("ONLINE ROOMS", 17))
-	var online_status := _body_label("PUBLIC SERVER  /  CLOUDFLARE  /  ONLINE", 9)
+	var online_status := _body_label("PUBLIC SERVER  /  STABLE WSS  /  ONLINE", 9)
 	online_status.add_theme_color_override("font_color", MENU_PALETTE.highlight(1.0))
 	browser_box.add_child(online_status)
 
@@ -239,7 +239,7 @@ func _build_connection_screen() -> Control:
 	list_box.add_theme_constant_override("separation", 5)
 	list_margin.add_child(list_box)
 
-	public_room_button = _make_button("KW PUBLIC DUEL\n3D ARENA 01   /   1V1   /   FIRST TO 10", func() -> void:
+	public_room_button = _make_button("OVERDRIVE DUEL\nFLAT TEST ARENA   /   1V1   /   FIRST TO 5", func() -> void:
 		message.text = "PUBLIC ROOM SELECTED  /  CREATE TO CLAIM HOST OR JOIN TO ENTER"
 	, true)
 	public_room_button.custom_minimum_size.y = 56
@@ -277,7 +277,7 @@ func _build_connection_screen() -> Control:
 	row.add_child(detail_card)
 	var detail_box := _make_card_body(detail_card)
 	detail_box.add_child(_heading("ROOM DETAILS", 17))
-	var details := _body_label("OUTRAGE 1V1\nFIRST TO 10 KILLS\n3D ARENA 01\nCONTROLLER + KB/M", 10)
+	var details := _body_label("OUTRAGE VS EREBUS\nFIRST TO 5 ROUNDS\nAUGMENT DRAFT BETWEEN ROUNDS\nFLAT TEST ARENA  /  CONTROLLER + KB/M", 10)
 	details.add_theme_color_override("font_color", MENU_PALETTE.text_primary(0.96))
 	detail_box.add_child(details)
 
@@ -426,8 +426,10 @@ func _player_text(index: int, room: Dictionary) -> String:
 	var p: Dictionary = players[index]
 	var status := "READY" if p.get("ready",false) else "NOT READY"
 	var host := "  HOST" if int(p.get("id",0)) == int(room.get("host",0)) else ""
-	return "PLAYER %d  /  OUTRAGE%s
-%s" % [index + 1, host, status]
+	var name := str(p.get("name","PLAYER %d"%(index+1))).to_upper()
+	var hero := str(p.get("hero","WARRIOR")).to_upper()
+	var rounds:=int(p.get("rounds",0))
+	return "%s%s\n%s  //  %d ROUND%s  //  %s" % [name,host,hero,rounds,"" if rounds==1 else "S",status]
 
 func _apply_slot_visual(label: Label, ready: bool) -> void:
 	if label == null or label.get_parent() == null or label.get_parent().get_parent() == null:
@@ -459,15 +461,28 @@ func refresh() -> void:
 		slot_two.text = _player_text(1,room)
 		_apply_slot_visual(slot_one, players.size() > 0 and bool(players[0].get("ready",false)))
 		_apply_slot_visual(slot_two, players.size() > 1 and bool(players[1].get("ready",false)))
-		ready_button.visible = room_phase != "MATCH"
-		start_button.visible = room_phase != "MATCH" and is_host
-		ready_button.text = "UNREADY" if me_ready else "READY"
-		start_button.disabled = not both_ready
+			ready_button.visible = room_phase != "MATCH"
+			start_button.visible = room_phase != "MATCH" and is_host and players.size() == 2
+			ready_button.text = "UNREADY" if me_ready else "READY"
+			start_button.text = "START REMATCH" if room_phase=="RESULT" else "START MATCH"
+			start_button.disabled = not both_ready
 		var host_text := "YOU ARE HOST" if is_host else "CONNECTED TO HOST"
-		var endpoint_text := "CLOUDFLARE WSS" if str(stage.session.server_host).begins_with("wss://") else ("%s:%d" % [stage.lan_address() if is_host else stage.session.server_host, int(port.value)])
+		var endpoint_text := "ENET / UDP  %s:%d" % [str(stage.session.server_host),int(stage.session.server_port)]
 		room_label.text = "%s  /  %s" % [host_text,endpoint_text]
-		if room_phase == "RESULT":
-			message.text = "MATCH OVER  -  OUTRAGE %d WINS. READY UP FOR REMATCH." % int(room.get("winner",0))
+			if room_phase == "RESULT":
+				var winner_name := "PLAYER %d" % int(room.get("winner",0))
+				var winner_score:=0
+				var loser_score:=0
+				for p in players:
+					if int(p.get("id",0)) == int(room.get("winner",0)):
+						winner_name = str(p.get("name",p.get("hero",winner_name))).to_upper()
+						winner_score=int(p.get("rounds",0))
+					else:
+						loser_score=int(p.get("rounds",0))
+				if both_ready:
+					message.text="%s WINS  %d-%d  //  REMATCH READY  //  HOST CAN START"%[winner_name,winner_score,loser_score]
+				else:
+					message.text="%s WINS  %d-%d  //  READY UP FOR REMATCH"%[winner_name,winner_score,loser_score]
 		elif players.size() < 2:
 			message.text = "ROOM OPEN  /  WAITING FOR PLAYER 2"
 		elif not both_ready:

@@ -21,6 +21,7 @@ var qa_muted := false
 var spatial_pool: Array[AudioStreamPlayer3D] = []
 var ui_pool: Array[AudioStreamPlayer] = []
 var foot_states: Dictionary = {}
+var track_combat_targets := true
 var was_grounded := false
 var initialized := false
 var duck := 0.0
@@ -45,7 +46,10 @@ func setup(owner_stage: Node3D) -> void:
 	music.volume_db = -80.0 if qa_muted else -20.0
 	add_child(music)
 	if not qa_muted: music.play()
-	for i in range(12):
+	# Multiplayer can have footsteps, gunfire and explosions overlapping. Keep a bounded
+	# 3D pool large enough that a nearby actor's sound is not dropped just because the
+	# local player fired at the same instant.
+	for i in range(24):
 		var player := AudioStreamPlayer3D.new()
 		player.name = "SpatialSFX%02d" % i
 		player.max_polyphony = 1
@@ -143,7 +147,7 @@ func _physics_process(delta: float) -> void:
 	was_grounded = grounded
 	_feet(0, stage.locomotion, -13.0)
 	var live_keys: Dictionary = {0:true}
-	if stage.combat != null:
+	if track_combat_targets and stage.combat != null:
 		for bot in stage.combat.targets:
 			if not is_instance_valid(bot) or bot.dead: continue
 			var key: int = bot.get_instance_id()

@@ -2,6 +2,8 @@ extends RefCounted
 ## Cached silhouette shells. The visible low-poly mesh is never smoothed or changed.
 const INK := preload("res://scripts/prototypes/kw_comic_ink.gdshader")
 static var cache: Dictionary = {}
+const OUTLINE_RANGE:=48.0
+const OUTLINE_MARGIN:=6.0
 
 static func add_to(mesh: MeshInstance3D, enabled: bool, width: float = 2.5) -> MeshInstance3D:
 	if mesh.mesh == null: return null
@@ -22,6 +24,8 @@ static func add_to(mesh: MeshInstance3D, enabled: bool, width: float = 2.5) -> M
 	shell.material_override = material
 	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	shell.extra_cull_margin = 0.2
+	shell.visibility_range_end = OUTLINE_RANGE
+	shell.visibility_range_end_margin = OUTLINE_MARGIN
 	shell.visible = enabled
 	mesh.add_child(shell)
 	shell.add_to_group("kw_world_ink")

@@ -35,23 +35,18 @@ float linear_depth_at(vec2 uv, mat4 inv_projection) {
 }
 
 void fragment() {
-	vec2 pixel = (1.0 / VIEWPORT_SIZE) * thickness_px;
 	vec2 uv = SCREEN_UV;
 	vec3 center_color = textureLod(screen_texture, uv, 0.0).rgb;
-float left_color = grayscale(textureLod(screen_texture, uv - vec2(pixel.x, 0.0), 0.0).rgb);
-	float right_color = grayscale(textureLod(screen_texture, uv + vec2(pixel.x, 0.0), 0.0).rgb);
-	float up_color = grayscale(textureLod(screen_texture, uv - vec2(0.0, pixel.y), 0.0).rgb);
-	float down_color = grayscale(textureLod(screen_texture, uv + vec2(0.0, pixel.y), 0.0).rgb);
-	float color_gradient = max(abs(right_color - left_color), abs(down_color - up_color));
+	float center_gray = grayscale(center_color);
+	// Screen-space derivatives give the same local edge signal without sampling
+	// four extra color neighbours.  The 2x factor approximates the old symmetric
+	// left/right (and up/down) two-pixel span; thickness keeps the authored look.
+	float color_gradient = 2.0 * thickness_px * max(abs(dFdx(center_gray)), abs(dFdy(center_gray)));
 	float color_edge = smoothstep(color_threshold, color_threshold + color_blend, color_gradient);
 
 	float center_depth = linear_depth_at(uv, INV_PROJECTION_MATRIX);
-	float left_depth = linear_depth_at(uv - vec2(pixel.x, 0.0), INV_PROJECTION_MATRIX);
-	float right_depth = linear_depth_at(uv + vec2(pixel.x, 0.0), INV_PROJECTION_MATRIX);
-	float up_depth = linear_depth_at(uv - vec2(0.0, pixel.y), INV_PROJECTION_MATRIX);
-	float down_depth = linear_depth_at(uv + vec2(0.0, pixel.y), INV_PROJECTION_MATRIX);
-float depth_scale = max(center_depth, 0.5);
-	float depth_gradient = max(abs(right_depth - left_depth), abs(down_depth - up_depth)) / depth_scale;
+	float depth_scale = max(center_depth, 0.5);
+	float depth_gradient = (2.0 * thickness_px * max(abs(dFdx(center_depth)), abs(dFdy(center_depth)))) / depth_scale;
 	float depth_edge = smoothstep(depth_threshold, depth_threshold + depth_blend, depth_gradient);
 
 	float distance_fade = 1.0 - smoothstep(distance_fade_start, distance_fade_end, center_depth);

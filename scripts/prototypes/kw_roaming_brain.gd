@@ -19,10 +19,15 @@ var distance_travelled := 0.0
 var direction_changes := 0
 var last_direction := Vector3.FORWARD
 var elapsed := 0.0
+var ground_query:=PhysicsRayQueryParameters3D.new()
+var ground_exclude: Array[RID]=[]
 
 func setup(actor: CharacterBody3D, rig: Node3D, area: Rect2, seed_value: int) -> void:
 	body = actor
 	visual = rig
+	ground_exclude.clear();ground_exclude.append(body.get_rid())
+	ground_query.exclude=ground_exclude
+	ground_query.collision_mask=1
 	bounds = area
 	spawn = body.global_position
 	rng.seed = seed_value
@@ -52,9 +57,9 @@ func _safe_direction(direction: Vector3) -> bool:
 	if not bounds.grow(0.4).has_point(Vector2(ahead.x, ahead.z)): return false
 	if body.test_move(body.global_transform, direction * 0.95): return false
 	var foot := ahead + Vector3.DOWN * 1.715
-	var query := PhysicsRayQueryParameters3D.create(foot + Vector3.UP * 0.55, foot + Vector3.DOWN * 0.55, 1)
-	query.exclude = [body.get_rid()]
-	var hit := body.get_world_3d().direct_space_state.intersect_ray(query)
+	ground_query.from=foot+Vector3.UP*0.55
+	ground_query.to=foot+Vector3.DOWN*0.55
+	var hit := body.get_world_3d().direct_space_state.intersect_ray(ground_query)
 	return not hit.is_empty() and (hit["normal"] as Vector3).y > 0.65
 
 func impulse(direction: Vector3, strength: float) -> void:
@@ -87,8 +92,8 @@ func update(delta: float) -> void:
 				if _safe_direction(test_direction):
 					var weight := test_direction.dot(direction) + test_direction.dot(last_direction) * 0.3
 					if weight > score:
-						score = weight
-						best = test_direction
+							score = weight
+							best = test_direction
 			direction = best
 			if direction == Vector3.ZERO: stalled += dt
 	var old_position := body.global_position

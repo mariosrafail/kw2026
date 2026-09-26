@@ -1,7 +1,11 @@
 {
-  "portal_url": "https://portal-fresh-pleasant-peoples.trycloudflare.com",
-  "game_ws_url": "wss://portal-fresh-pleasant-peoples.trycloudflare.com/game",
-  "mode": "temporary_quick_tunnel",
-  "version": "alpha-0.1.40",
-  "updated": "2026-09-19T23:03:00+03:00"
+    "portal_url":  "https://cab-smith-walls-spending.trycloudflare.com",
+    "game_ws_url":  "wss://cab-smith-walls-spending.trycloudflare.com/game",
+    "game_transport":  "enet_udp",
+    "game_udp_host":  "79.130.131.173",
+    "game_udp_port":  18886,
+    "game_lan_host":  "192.168.1.154",
+    "mode":  "direct_udp_gameplay",
+    "version":  "alpha-0.1.50",
+    "updated":  "2026-09-26T15:54:40.4036834+03:00"
 }

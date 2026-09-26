@@ -5,6 +5,7 @@ const SCENE_INK := preload("res://scripts/prototypes/kw_scene_ink.gd")
 const VOXEL_DAMAGE_VISUAL := preload("res://scripts/kw3d/voxel_damage_visual.gd")
 const ROAMING := preload("res://scripts/prototypes/kw_roaming_brain.gd")
 const LOCOMOTION := preload("res://scripts/prototypes/kw_goofy_locomotion.gd")
+const WARRIOR_RENDER_LOD := preload("res://scripts/prototypes/kw_warrior_render_lod.gd")
 @export var roaming_enabled := true
 var roam_bounds := Rect2(-21, -27, 42, 42)
 var roam_seed := 137
@@ -32,6 +33,7 @@ var visuals: Node3D
 var health_bar: Sprite3D
 var name_label: Label3D
 var bar_texture: ImageTexture
+var bar_image: Image
 var records: Array[Dictionary] = []
 var rigs: Array[Dictionary] = []
 var hit_shapes: Array[Dictionary] = []
@@ -54,6 +56,7 @@ var bar_last_trail := 100
 var gun_flash := 0.0
 var gun_glow: MeshInstance3D
 var attack_audio: AudioStreamPlayer3D
+var network_replica_mode := false
 
 func _ready() -> void:
 	# Update visual wobble and matching hit shapes BEFORE the player traces this tick.
@@ -67,14 +70,36 @@ func _ready() -> void:
 	flash_material.albedo_color = Color.WHITE
 	flash_material.render_priority = 2
 	_build_visuals()
-	damage_visual=VOXEL_DAMAGE_VISUAL.new();add_child(damage_visual)
-	damage_visual.setup(visuals,["HeadRig","TorsoRig","LeftLegRig","RightLegRig"],int(get_instance_id()%2147483647))
-	damage_visual.set_pixel_enabled(pixel_enabled)
+	WARRIOR_RENDER_LOD.apply(visuals)
 	_build_body_bridge()
 	_build_healthbar()
 	_build_enemy_weapon()
 	_setup_roaming()
 	_update_shapes()
+
+func set_network_replica_mode(value: bool) -> void:
+	network_replica_mode=value
+	if not value:return
+	# Online replicas are presentation-only. Authority owns hit detection, so keep
+	# the visual/audio rig but remove duplicate local PhysicsServer hurtboxes.
+	collision_layer=0
+	collision_mask=0
+	if movement_body!=null:
+		movement_body.collision_layer=0
+		movement_body.collision_mask=0
+		movement_body.velocity=Vector3.ZERO
+	for data in hit_shapes:
+		var shape:=data.get("shape") as CollisionShape3D
+		if shape!=null:shape.disabled=true
+	if body_bridge!=null:body_bridge.disabled=true
+
+func _ensure_damage_visual() -> Node:
+	if damage_visual!=null:return damage_visual
+	damage_visual=VOXEL_DAMAGE_VISUAL.new();add_child(damage_visual)
+	damage_visual.setup(visuals,["HeadRig","TorsoRig","LeftLegRig","RightLegRig"],int(get_instance_id()%2147483647))
+	damage_visual.set_pixel_enabled(pixel_enabled)
+	damage_visual.set_comic_enabled(comic_enabled)
+	return damage_visual
 
 func _color_material(color: Color) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
@@ -98,11 +123,12 @@ func _record_mesh(mesh: MeshInstance3D, color: Color, hurtbox: bool = true) -> v
 	if not hurtbox: return
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = mesh.mesh.get_aabb().size
+	var base_size := mesh.mesh.get_aabb().size
+	box.size = base_size
 	shape.shape = box
 	shape.set_meta("hit_region","head" if mesh.get_parent()!=null and str(mesh.get_parent().name)=="HeadRig" else "body")
 	add_child(shape)
-	hit_shapes.append({"shape": shape, "mesh": mesh})
+	hit_shapes.append({"shape": shape, "mesh": mesh, "box":box, "base_size":base_size})
 
 func _build_body_bridge() -> void:
 	body_bridge=CollisionShape3D.new()
@@ -135,6 +161,8 @@ func _box(parent: Node3D, title: String, pos: Vector3, size: Vector3, color: Col
 	box.size = size
 	mesh.mesh = box
 	mesh.position = pos
+	if not hurtbox:
+		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mesh)
 	_record_mesh(mesh, color, hurtbox)
 	if title != "Head": SCENE_INK.add_to(mesh,comic_enabled,1.4)
@@ -250,6 +278,8 @@ func _build_healthbar() -> void:
 	health_bar.position = Vector3(0,2.13,0)
 	health_bar.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	health_bar.render_priority=127
+	health_bar.visibility_range_end=38.0
+	health_bar.visibility_range_end_margin=4.0
 	add_child(health_bar)
 	name_label = Label3D.new()
 	name_label.name = "TargetName"
@@ -260,30 +290,34 @@ func _build_healthbar() -> void:
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_label.position = Vector3(0,2.48,0)
 	name_label.render_priority=126
+	name_label.visibility_range_end=34.0
+	name_label.visibility_range_end_margin=4.0
 	add_child(name_label)
+	bar_image=Image.create(128,18,false,Image.FORMAT_RGBA8)
 	_refresh_bar()
 
 func _refresh_bar() -> void:
-	var image := Image.create(128,18,false,Image.FORMAT_RGBA8)
-	image.fill(Color("111726"))
-	image.fill_rect(Rect2i(2,2,124,14),Color("351621"))
+	if bar_image==null:bar_image=Image.create(128,18,false,Image.FORMAT_RGBA8)
+	bar_image.fill(Color("111726"))
+	bar_image.fill_rect(Rect2i(2,2,124,14),Color("351621"))
 	var trailing := int(round(120.0*trail_health/max_health))
-	if trailing > 0: image.fill_rect(Rect2i(4,4,trailing,10),Color("ffc187"))
+	if trailing > 0: bar_image.fill_rect(Rect2i(4,4,trailing,10),Color("ffc187"))
 	var width := int(round(120.0*health/max_health))
 	if width > 0:
-		image.fill_rect(Rect2i(4,4,width,10),Color("ff586e"))
-		image.fill_rect(Rect2i(4,4,width,2),Color("ff9aac"))
-	for i in range(1,5): image.fill_rect(Rect2i(4+i*24,4,1,10),Color("562333"))
+		bar_image.fill_rect(Rect2i(4,4,width,10),Color("ff586e"))
+		bar_image.fill_rect(Rect2i(4,4,width,2),Color("ff9aac"))
+	for i in range(1,5): bar_image.fill_rect(Rect2i(4+i*24,4,1,10),Color("562333"))
 	if bar_texture == null:
-		bar_texture=ImageTexture.create_from_image(image)
+		bar_texture=ImageTexture.create_from_image(bar_image)
 		health_bar.texture=bar_texture
-	else: bar_texture.update(image)
+	else: bar_texture.update(bar_image)
 
 func receive_hit(amount: float, direction: Vector3, shot_id: int, impact_point: Vector3 = Vector3.INF) -> bool:
 	if dead or amount <= 0.0 or seen_shots.has(shot_id): return false
 	seen_shots[shot_id] = true
 	trail_delay = 0.22
 	health = maxf(0.0,health-amount)
+	_ensure_damage_visual()
 	if damage_visual!=null:
 		var point:=impact_point if impact_point.is_finite() else visuals.global_position+Vector3(0,0.45,0)
 		damage_visual.damage_at(point,health,max_health,amount,direction)
@@ -357,12 +391,14 @@ func _physics_process(delta: float) -> void:
 	_update_shapes()
 
 func _update_shapes() -> void:
+	if network_replica_mode:return
+	var inverse:=global_transform.affine_inverse()
 	for data in hit_shapes:
 		var mesh: MeshInstance3D = data.mesh
 		var shape: CollisionShape3D = data.shape
-		var relative := global_transform.affine_inverse()*mesh.global_transform
-		var wanted_size := mesh.mesh.get_aabb().size * relative.basis.get_scale().abs()
-		var box := shape.shape as BoxShape3D
+		var relative := inverse*mesh.global_transform
+		var wanted_size := (data.base_size as Vector3) * relative.basis.get_scale().abs()
+		var box := data.box as BoxShape3D
 		if not box.size.is_equal_approx(wanted_size): box.size = wanted_size
 		shape.transform = Transform3D(relative.basis.orthonormalized(), relative.origin)
 	_update_body_bridge()
@@ -479,6 +515,8 @@ func _build_enemy_weapon() -> void:
 	attack_label.modulate=Color("ffb75e")
 	attack_label.position=Vector3(0,2.87,0)
 	attack_label.billboard=BaseMaterial3D.BILLBOARD_ENABLED
+	attack_label.visibility_range_end=32.0
+	attack_label.visibility_range_end_margin=4.0
 	add_child(attack_label)
 	attack_label.hide()
 	attack_audio=AudioStreamPlayer3D.new()
@@ -488,7 +526,8 @@ func _build_enemy_weapon() -> void:
 	attack_audio.pitch_scale=1.22
 	attack_audio.unit_size=4.0
 	attack_audio.max_distance=42.0
-	weapon_mount.add_child(attack_audio)
+	# The shot must originate at the barrel, not at the actor/world root.
+	weapon_muzzle.add_child(attack_audio)
 
 func set_attack_warning(value: bool) -> void:
 	attack_warning=value and not dead

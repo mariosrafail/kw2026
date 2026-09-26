@@ -15,9 +15,19 @@ func run() -> void:
 	var weapon_frame: Dictionary=frame.duplicate();weapon_frame.weapon=2
 	var weapon_decoded: Array=codec.decode(codec.encode([weapon_frame]))
 	check(weapon_decoded.size()==1 and weapon_decoded[0].weapon==2,"weapon_slot_kar_round_trip")
-	var bad_weapon: Dictionary=frame.duplicate();bad_weapon.weapon=3
-	check(not session_script.valid_frame(bad_weapon),"reject_weapon_slot_3")
-	check(session_script.PROTOCOL==4,"protocol_kar_v4")
+	var launcher_frame: Dictionary=frame.duplicate();launcher_frame.weapon=3
+	var launcher_decoded: Array=codec.decode(codec.encode([launcher_frame]))
+	check(launcher_decoded.size()==1 and launcher_decoded[0].weapon==3,"weapon_slot_launcher_round_trip")
+	check(session_script.valid_frame(launcher_frame),"accept_weapon_slot_3")
+	var bad_weapon: Dictionary=frame.duplicate();bad_weapon.weapon=4
+	check(not session_script.valid_frame(bad_weapon),"reject_weapon_slot_4")
+	check(session_script.PROTOCOL==6,"protocol_compact_snapshots_v6")
+	var session_probe: Node = session_script.new()
+	check(session_probe._sanitize_display_name(" Neon Hero! ")=="Neon_Hero","virtual_username_sanitized")
+	check(session_probe.appearance=="outrage","default_online_appearance")
+	session_probe.appearance="kosas"
+	check(session_probe.appearance=="kosas","online_kosas_appearance_state")
+	session_probe.free()
 	var reload_frame: Dictionary=frame.duplicate();reload_frame.reload=true
 	var reload_decoded: Array=codec.decode(codec.encode([reload_frame]))
 	check(reload_decoded.size()==1 and reload_decoded[0].reload,"reload_flag_round_trip")
@@ -49,6 +59,8 @@ func run() -> void:
 	var wheel:=InputEventMouseButton.new();wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN;wheel.pressed=true
 	input._input(wheel);input._input(wheel)
 	check(input.weapon_slot==2,"mouse_wheel_reaches_kar")
+	input._input(wheel)
+	check(input.weapon_slot==3,"mouse_wheel_reaches_launcher")
 	var inspect_bound:=false
 	for event in InputMap.action_get_events("kw3d_inspect"):
 		if event is InputEventKey and event.physical_keycode==KEY_H:inspect_bound=true

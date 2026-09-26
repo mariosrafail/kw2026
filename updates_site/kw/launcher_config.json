@@ -1,6 +1,6 @@
 {
-  "update_manifest_url": "https://portal-fresh-pleasant-peoples.trycloudflare.com/kw/update_manifest.json",
-  "auth_api_base_url": "http://192.168.1.154:8090",
-  "default_host": "192.168.1.154",
-  "default_port": 18886
+    "default_host":  "192.168.1.154",
+    "update_manifest_url":  "https://cab-smith-walls-spending.trycloudflare.com/kw/update_manifest.json",
+    "default_port":  18886,
+    "auth_api_base_url":  "http://192.168.1.154:8090"
 }

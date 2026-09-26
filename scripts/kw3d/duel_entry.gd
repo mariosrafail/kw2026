@@ -1,7 +1,8 @@
 extends Node3D
 const SESSION = preload("res://scripts/kw3d/online_session.gd")
 const DUEL_WORLD = preload("res://scripts/kw3d/duel_authority_world.gd")
-const DUEL_CLIENT = preload("res://scripts/kw3d/duel_client.gd")
+const DUEL_CLIENT = preload("res://scripts/kw3d/overdrive_duel_client.gd")
+const VIRTUAL_PROFILE = preload("res://scripts/kw3d/virtual_profile.gd")
 var session: Node
 var world: Node3D
 var client: Node3D
@@ -15,6 +16,8 @@ func _ready() -> void:
 		if argument.begins_with("--kw-"):
 			var parts = argument.trim_prefix("--kw-").split("=",true,1)
 			options[parts[0]] = parts[1] if parts.size() > 1 else "true"
+	if not options.has("name"):
+		options["name"] = VIRTUAL_PROFILE.local_username()
 	session = SESSION.new()
 	session.name = "Session"
 	add_child(session)
