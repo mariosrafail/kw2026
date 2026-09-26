@@ -22,6 +22,7 @@ var slot_one: Label
 var slot_two: Label
 var ready_button: Button
 var start_button: Button
+var bot_checkbox: CheckBox
 var create_button: Button
 var join_button: Button
 var leave_button: Button
@@ -373,6 +374,13 @@ func _build_room_screen() -> Control:
 
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 8)
+	bot_checkbox = CheckBox.new()
+	bot_checkbox.text = "ADD BOT IF PLAYER 2 DOESN'T JOIN"
+	bot_checkbox.custom_minimum_size.y = 34
+	bot_checkbox.add_theme_font_size_override("font_size", 11)
+	bot_checkbox.add_theme_color_override("font_color", MENU_PALETTE.text_primary(1.0))
+	bot_checkbox.toggled.connect(func(value: bool) -> void: stage.set_bot_fallback(value))
+	box.add_child(bot_checkbox)
 	box.add_child(action_row)
 	ready_button = _make_button("READY", func(): stage.toggle_ready())
 	ready_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -425,6 +433,8 @@ func _player_text(index: int, room: Dictionary) -> String:
 		return "PLAYER %d\nEMPTY" % (index + 1)
 	var p: Dictionary = players[index]
 	var status := "READY" if p.get("ready",false) else "NOT READY"
+	if bool(p.get("bot",false)):
+		status = "BOT"
 	var host := "  HOST" if int(p.get("id",0)) == int(room.get("host",0)) else ""
 	var name := str(p.get("name","PLAYER %d"%(index+1))).to_upper()
 	var hero := str(p.get("hero","WARRIOR")).to_upper()
@@ -449,46 +459,59 @@ func refresh() -> void:
 	var players: Array = room.get("players",[])
 	var me_ready: bool = _my_ready(room)
 	var is_host: bool = connected and int(room.get("host",0)) == int(stage.session.actor_id)
+	var bot_fallback := bool(room.get("bot_fallback",false))
+	var can_play := bool(room.get("can_start",false))
+	var human_count := 0
 	var both_ready: bool = players.size() == 2
 	for player in players:
-		both_ready = both_ready and bool(player.get("ready",false))
+		if not bool(player.get("bot",false)):
+			human_count += 1
+		both_ready = both_ready and (bool(player.get("ready",false)) or bool(player.get("bot",false)))
 
 	connection_screen.visible = not connected
 	room_screen.visible = connected
 	if connected:
 		loading_overlay.hide()
 		slot_one.text = _player_text(0,room)
-		slot_two.text = _player_text(1,room)
+		slot_two.text = "PLAYER 2\nBOT FALLBACK ARMED" if players.size() < 2 and bot_fallback else _player_text(1,room)
 		_apply_slot_visual(slot_one, players.size() > 0 and bool(players[0].get("ready",false)))
-		_apply_slot_visual(slot_two, players.size() > 1 and bool(players[1].get("ready",false)))
-			ready_button.visible = room_phase != "MATCH"
-			start_button.visible = room_phase != "MATCH" and is_host and players.size() == 2
-			ready_button.text = "UNREADY" if me_ready else "READY"
-			start_button.text = "START REMATCH" if room_phase=="RESULT" else "START MATCH"
-			start_button.disabled = not both_ready
+		_apply_slot_visual(slot_two, (players.size() > 1 and (bool(players[1].get("ready",false)) or bool(players[1].get("bot",false)))) or (players.size() < 2 and bot_fallback))
+		bot_checkbox.visible = room_phase != "MATCH"
+		bot_checkbox.disabled = not is_host
+		bot_checkbox.set_pressed_no_signal(bot_fallback)
+		var solo_bot_ready := is_host and human_count == 1 and bot_fallback
+		ready_button.visible = room_phase != "MATCH" and not solo_bot_ready
+		start_button.visible = room_phase != "MATCH" and is_host
+		ready_button.text = "UNREADY" if me_ready else "READY"
+		start_button.text = ("PLAY REMATCH VS BOT" if room_phase=="RESULT" else "PLAY VS BOT") if solo_bot_ready else ("START REMATCH" if room_phase=="RESULT" else "PLAY 1V1")
+		start_button.disabled = not can_play
 		var host_text := "YOU ARE HOST" if is_host else "CONNECTED TO HOST"
 		var endpoint_text := "ENET / UDP  %s:%d" % [str(stage.session.server_host),int(stage.session.server_port)]
 		room_label.text = "%s  /  %s" % [host_text,endpoint_text]
-			if room_phase == "RESULT":
-				var winner_name := "PLAYER %d" % int(room.get("winner",0))
-				var winner_score:=0
-				var loser_score:=0
-				for p in players:
-					if int(p.get("id",0)) == int(room.get("winner",0)):
-						winner_name = str(p.get("name",p.get("hero",winner_name))).to_upper()
-						winner_score=int(p.get("rounds",0))
-					else:
-						loser_score=int(p.get("rounds",0))
-				if both_ready:
-					message.text="%s WINS  %d-%d  //  REMATCH READY  //  HOST CAN START"%[winner_name,winner_score,loser_score]
+		if room_phase == "RESULT":
+			var winner_name := "PLAYER %d" % int(room.get("winner",0))
+			var winner_score:=0
+			var loser_score:=0
+			for p in players:
+				if int(p.get("id",0)) == int(room.get("winner",0)):
+					winner_name = str(p.get("name",p.get("hero",winner_name))).to_upper()
+					winner_score=int(p.get("rounds",0))
 				else:
-					message.text="%s WINS  %d-%d  //  READY UP FOR REMATCH"%[winner_name,winner_score,loser_score]
-		elif players.size() < 2:
-			message.text = "ROOM OPEN  /  WAITING FOR PLAYER 2"
+					loser_score=int(p.get("rounds",0))
+			if solo_bot_ready:
+				message.text="%s WINS  %d-%d  //  BOT REMATCH READY"%[winner_name,winner_score,loser_score]
+			elif both_ready:
+				message.text="%s WINS  %d-%d  //  REMATCH READY  //  HOST CAN START"%[winner_name,winner_score,loser_score]
+			else:
+				message.text="%s WINS  %d-%d  //  READY UP FOR REMATCH"%[winner_name,winner_score,loser_score]
+		elif human_count < 2 and bot_fallback:
+			message.text = "BOT FALLBACK ARMED  /  PRESS PLAY NOW OR WAIT FOR A FRIEND"
+		elif human_count < 2:
+			message.text = "ROOM OPEN  /  WAITING FOR PLAYER 2  /  OR ENABLE BOT FALLBACK"
 		elif not both_ready:
 			message.text = "BOTH PLAYERS MUST READY"
 		else:
-			message.text = "BOTH READY  /  HOST CAN START"
+			message.text = "BOTH READY  /  HOST CAN PLAY"
 	else:
 		message.text = "Choose a public room, or use direct LAN as fallback."
 

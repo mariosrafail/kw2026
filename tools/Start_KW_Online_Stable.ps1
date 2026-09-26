@@ -93,7 +93,7 @@ if ($publicBaseUrl.TrimEnd("/") -ne $expectedBaseUrl) {
 $wss = "wss://$stableDomain/game"
 Write-Host "[KW] Stable public endpoint: $publicBaseUrl"
 $projectPath = Join-Path $root "project.godot"
-$project = Get-Content $projectPath -Raw
+$project = [System.IO.File]::ReadAllText($projectPath,[System.Text.Encoding]::UTF8)
 $project = [regex]::Replace($project,'public_portal_url="[^"]*"','public_portal_url="' + $publicBaseUrl + '"')
 $project = [regex]::Replace($project,'public_ws_url="[^"]*"','public_ws_url="' + $wss + '"')
 $project = [regex]::Replace($project,'public_udp_host="[^"]*"','public_udp_host="' + $publicIp + '"')

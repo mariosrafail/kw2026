@@ -13,14 +13,20 @@ var qa_rtt_samples := 0
 var qa_snapshot_start := 0
 var qa_move_started := false
 var qa_pending_peak := 0
+var qa_bot_mode := false
+var qa_bot_enabled_sent := false
 
 func _ready() -> void:
 	qa_index = int(options.get("qa-duel","0"))
+	qa_bot_mode = str(options.get("qa-bot","false")).to_lower() in ["1","true","yes"]
 	super._ready()
 
 func _welcome(payload: Dictionary) -> void:
 	super._welcome(payload)
-	if not qa_ready_sent:
+	if qa_bot_mode and not qa_bot_enabled_sent:
+		qa_bot_enabled_sent = true
+		session.set_duel_bot_fallback(true)
+	elif not qa_ready_sent:
 		qa_ready_sent = true
 		session.set_ready(true)
 
@@ -30,8 +36,9 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	qa_player_peak = maxi(qa_player_peak,players.size())
 	var all_ready := players.size() == 2
 	for p in players:
-		all_ready = all_ready and bool(p.get("ready",false))
-	if str(room_state.get("phase","")) == "LOBBY" and all_ready and int(room_state.get("host",0)) == session.actor_id and not qa_start_requested:
+		all_ready = all_ready and (bool(p.get("ready",false)) or bool(p.get("bot",false)))
+	var can_start := bool(room_state.get("can_start",false)) if qa_bot_mode else all_ready
+	if str(room_state.get("phase","")) == "LOBBY" and can_start and int(room_state.get("host",0)) == session.actor_id and not qa_start_requested:
 		qa_start_requested = true
 		session.request_match_start()
 	if str(room_state.get("phase","")) == "MATCH" and str(room_state.get("round_phase","")) in ["COUNTDOWN","FIGHT","OVERLOAD"]:
@@ -90,6 +97,11 @@ func _finish_qa() -> void:
 		"large_corrections": corrections_over_half_meter,
 		"move_injected": qa_move_started
 	}
+	var bot_seen := false
+	for p in room_state.get("players",[]):
+		bot_seen = bot_seen or bool(p.get("bot",false))
+	out["bot_mode"] = qa_bot_mode
+	out["bot_seen"] = bot_seen
 	var folder := str(options.get("output",""))
 	if not folder.is_empty():
 		DirAccess.make_dir_recursive_absolute(folder)
@@ -98,5 +110,8 @@ func _finish_qa() -> void:
 			f.store_string(JSON.stringify(out,"\t"))
 			f.close()
 	print("DUEL_QA_",qa_index," ",JSON.stringify(out))
-	get_tree().quit(0 if session.connected and qa_started and qa_player_peak==2 else 1)
+	var passed: bool = session.connected and qa_started and qa_player_peak==2
+	if qa_bot_mode:
+		passed = passed and bot_seen
+	get_tree().quit(0 if passed else 1)
 	set_physics_process(false)

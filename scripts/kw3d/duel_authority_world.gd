@@ -5,6 +5,7 @@ const DUEL_ACTOR := preload("res://scripts/kw3d/duel_actor.gd")
 const RULES := preload("res://scripts/kw3d/duel_rules.gd")
 const ARENA := preload("res://scripts/kw3d/duel_arena.gd")
 const DUEL_MOTOR := preload("res://scripts/kw3d/actor_motor.gd")
+const DUEL_BOT_ID := 900001
 
 var ready_state: Dictionary = {}
 var host_id := 0
@@ -26,6 +27,8 @@ var draft_cursor := 0
 var echoes: Array[Dictionary] = []
 var grenade_context_owner := 0
 var grenade_scale := 1.0
+var bot_fallback_enabled := false
+var duel_bot_id := 0
 
 func max_players() -> int:
 	return 2
@@ -47,16 +50,75 @@ func _connected_human_ids() -> Array[int]:
 	var ids: Array[int] = []
 	for key in actors.keys():
 		var a: Node3D = actors[key]
-		if not a.is_bot and a.connected:
+		if not a.is_bot and a.connected and not bool(a.get("duel_ai")):
 			ids.append(int(key))
 	ids.sort()
 	return ids
+
+func _participant_ids() -> Array[int]:
+	var ids := _connected_human_ids()
+	if duel_bot_id > 0 and actors.has(duel_bot_id):
+		ids.append(duel_bot_id)
+	ids.sort()
+	return ids
+
+func human_player_count() -> int:
+	return _connected_human_ids().size()
+
+func can_accept_new_player() -> bool:
+	return phase != "MATCH" and _connected_human_ids().size() < 2
+
+func _remove_duel_bot() -> void:
+	if duel_bot_id <= 0:
+		return
+	if actors.has(duel_bot_id):
+		var bot: Node3D = actors[duel_bot_id]
+		actors.erase(duel_bot_id)
+		ready_state.erase(duel_bot_id)
+		round_scores.erase(duel_bot_id)
+		actor_ids_dirty = true
+		bot.queue_free()
+	duel_bot_id = 0
+
+func _spawn_duel_bot() -> bool:
+	if duel_bot_id > 0 and actors.has(duel_bot_id):
+		return true
+	var humans := _connected_human_ids()
+	if humans.size() != 1:
+		return false
+	var human: Node3D = actors[humans[0]]
+	var hero := RULES.EREBUS if human.hero_id == RULES.OUTRAGE else RULES.OUTRAGE
+	var bot := DUEL_ACTOR.new()
+	add_child(bot)
+	bot.configure(DUEL_BOT_ID,false,data.profiles.outrage,hero)
+	bot.setup_duel(hero)
+	bot.duel_ai = true
+	bot.display_name = "KW BOT"
+	bot.connected = true
+	bot.global_position = ARENA.spawn_for_index(1)
+	bot.hit_body.collision_layer = 4
+	actors[DUEL_BOT_ID] = bot
+	ready_state[DUEL_BOT_ID] = true
+	round_scores[DUEL_BOT_ID] = 0
+	duel_bot_id = DUEL_BOT_ID
+	actor_ids_dirty = true
+	emit("join",{"actor":DUEL_BOT_ID,"hero":hero,"bot":true})
+	return true
+
+func set_bot_fallback(id: int,value: bool) -> bool:
+	if id != host_id or phase not in ["LOBBY","RESULT"]:
+		return false
+	bot_fallback_enabled = value
+	if not value and duel_bot_id > 0:
+		_remove_duel_bot()
+	emit("room",{"room":room_packet()})
+	return true
 
 func _hero_for_new_player() -> String:
 	return RULES.OUTRAGE if _connected_human_ids().is_empty() else RULES.EREBUS
 
 func _spawn_for(id: int) -> Vector3:
-	var ids := _connected_human_ids()
+	var ids := _participant_ids()
 	var index := ids.find(id)
 	if index < 0:index = 0 if id % 2 == 1 else 1
 	return ARENA.spawn_for_index(clampi(index,0,1))
@@ -66,6 +128,8 @@ func _facing_for(id: int) -> float:
 	return 0.0 if _spawn_for(id).z > 0.0 else PI
 
 func add_player(id: int) -> void:
+	if phase != "MATCH" and duel_bot_id > 0:
+		_remove_duel_bot()
 	if actors.has(id):
 		var existing: Node3D = actors[id]
 		existing.connected = true
@@ -99,6 +163,8 @@ func remove_player(id: int) -> void:
 		host_id = 0
 		var ids := _connected_human_ids()
 		if not ids.is_empty():host_id = ids[0]
+	if _connected_human_ids().is_empty() and duel_bot_id > 0:
+		_remove_duel_bot()
 	if phase != "MATCH":
 		phase = "LOBBY"
 		round_phase = "LOBBY"
@@ -114,6 +180,8 @@ func set_ready(id: int,value: bool) -> bool:
 
 func can_start() -> bool:
 	var ids := _connected_human_ids()
+	if ids.size() == 1:
+		return bot_fallback_enabled
 	if ids.size() != 2:return false
 	for id in ids:
 		if not bool(ready_state.get(id,false)):return false
@@ -122,10 +190,14 @@ func can_start() -> bool:
 func start_match(requester: int) -> bool:
 	if phase not in ["LOBBY","RESULT"]:return false
 	if requester != host_id or not can_start():return false
+	if _connected_human_ids().size() == 1:
+		if not bot_fallback_enabled or not _spawn_duel_bot():return false
+	elif duel_bot_id > 0:
+		_remove_duel_bot()
 	winner_id = 0
 	phase = "MATCH"
 	round_number = 1
-	for id in _connected_human_ids():
+	for id in _participant_ids():
 		ready_state[id] = false
 		round_scores[id] = 0
 		var a: Node3D = actors[id]
@@ -150,7 +222,7 @@ func _begin_round() -> void:
 	draft_pool.clear()
 	draft_order.clear()
 	draft_cursor = 0
-	var ids := _connected_human_ids()
+	var ids := _participant_ids()
 	for index in range(ids.size()):
 		var a: Node3D = actors[ids[index]]
 		a.reset_for_round(ARENA.spawn_for_index(index),_facing_for(ids[index]))
@@ -159,10 +231,11 @@ func _begin_round() -> void:
 func _player_packet(id: int) -> Dictionary:
 	var a: Node3D = actors[id]
 	return {
-		"id":id,
-		"name":str(a.display_name),
-		"hero":a.hero_id,
-		"ready":bool(ready_state.get(id,false)),
+			"id":id,
+			"name":str(a.display_name),
+			"hero":a.hero_id,
+			"bot":bool(a.get("duel_ai")),
+			"ready":bool(ready_state.get(id,false)),
 		"rounds":int(round_scores.get(id,0)),
 		"kills":a.kills,
 		"hp":a.health,
@@ -175,13 +248,15 @@ func _player_packet(id: int) -> Dictionary:
 
 func room_packet() -> Dictionary:
 	var players: Array = []
-	for id in _connected_human_ids():players.append(_player_packet(id))
+	for id in _participant_ids():players.append(_player_packet(id))
 	var chooser := draft_order[draft_cursor] if draft_cursor < draft_order.size() else 0
 	return {
 		"phase":phase,
 		"round_phase":round_phase,
-		"host":host_id,
-		"players":players,
+			"host":host_id,
+			"players":players,
+			"bot_fallback":bot_fallback_enabled,
+			"can_start":can_start(),
 		"round":round_number,
 		"round_target":RULES.ROUND_TARGET,
 		"winner":winner_id,
@@ -234,13 +309,16 @@ func step() -> void:
 		return
 	if round_phase == "DRAFT":
 		_freeze_step()
+		_maybe_bot_pick_augment()
 		return
+	_update_duel_bot_ai()
 	super.step()
 	if round_phase in ["FIGHT","OVERLOAD"]:
-		for id in _connected_human_ids():
+		for id in _participant_ids():
 			if actors[id].health <= 0.0:
 				_finish_round(_other_player(id),id)
 				return
+		_tick_duel_bot_skill()
 		_tick_round_runtime()
 		_tick_echoes()
 
@@ -254,7 +332,7 @@ func _tick_round_runtime() -> void:
 		emit("overload",{"round":round_number})
 	if core_available:
 		core_live_left -= DT
-		for id in _connected_human_ids():
+		for id in _participant_ids():
 			var a: Node3D = actors[id]
 			if a.health > 0.0 and a.global_position.distance_to(ARENA.CORE_POSITION) <= RULES.CORE_RADIUS:
 				a.refill_skill()
@@ -281,7 +359,7 @@ func _tick_round_runtime() -> void:
 			emit("reveal",{})
 		if overload_clock <= 0.0:
 			overload_clock = 1.0
-			for id in _connected_human_ids():
+			for id in _participant_ids():
 				var a: Node3D = actors[id]
 				if a.health > 0.0 and Vector2(a.global_position.x,a.global_position.z).length() > 11.5:
 					_environment_damage(id,6.0)
@@ -298,9 +376,54 @@ func _environment_damage(victim: int,amount: float) -> void:
 		_finish_round(other,victim)
 
 func _other_player(id: int) -> int:
-	for other in _connected_human_ids():
+	for other in _participant_ids():
 		if other != id:return other
 	return 0
+
+func _update_duel_bot_ai() -> void:
+	if duel_bot_id <= 0 or not actors.has(duel_bot_id):return
+	var humans := _connected_human_ids()
+	if humans.is_empty():return
+	var bot: Node3D = actors[duel_bot_id]
+	var target: Node3D = actors[humans[0]]
+	if bot.health <= 0.0 or target.health <= 0.0:
+		bot.command = DUEL_MOTOR.empty(bot.aim_yaw,bot.aim_pitch)
+		return
+	var delta := target.global_position-bot.global_position
+	var flat := Vector3(delta.x,0.0,delta.z)
+	var distance := flat.length()
+	var desired_yaw: float = float(bot.aim_yaw)
+	if distance > 0.001:desired_yaw = atan2(-flat.x,-flat.z)
+	var move := Vector2.ZERO
+	if distance > 12.0:
+		move.y = 1.0
+	elif distance < 5.0:
+		move.y = -0.72
+	else:
+		move.x = sin(float(tick_id)*0.026)*0.78
+		move.y = 0.18
+	var eye := bot.global_position+Vector3(0,1.15,0)
+	var target_point := target.global_position+Vector3(0,1.05,0)
+	var clear_line := ray(eye,target_point,1,[bot.get_rid(),bot.hit_body.get_rid()]).is_empty()
+	bot.command = DUEL_MOTOR.empty(desired_yaw+sin(float(tick_id)*0.041)*0.018,-0.03+sin(float(tick_id)*0.029+1.7)*0.012)
+	bot.command["move"] = move
+	bot.command["aim"] = clear_line
+	bot.command["fire"] = clear_line and distance < 34.0 and fight_time > 0.45
+	bot.command["sprint"] = distance > 15.0
+	bot.command["weapon"] = 0
+	bot.command["ct"] = tick_id
+	if clear_line and distance > 7.0 and distance < 18.0 and tick_id % 540 == 0:
+		bot.command["grenade"] = true
+
+func _tick_duel_bot_skill() -> void:
+	if duel_bot_id <= 0 or not actors.has(duel_bot_id):return
+	var humans := _connected_human_ids()
+	if humans.is_empty():return
+	var bot: Node3D = actors[duel_bot_id]
+	var target: Node3D = actors[humans[0]]
+	if bot.health <= 0.0 or target.health <= 0.0 or bot.skill_charges <= 0:return
+	if (bot.global_position.distance_to(target.global_position) < 5.8 or bot.health <= bot.max_health*0.55) and tick_id % 120 == 0:
+		use_skill(duel_bot_id)
 
 func _shoot(a: Node3D) -> void:
 	super._shoot(a)
@@ -363,7 +486,7 @@ func _finish_round(winner: int,loser: int) -> void:
 		winner_id = winner
 		phase = "RESULT"
 		round_phase = "RESULT"
-		for id in _connected_human_ids():
+		for id in _participant_ids():
 			actors[id].command = DUEL_MOTOR.empty(actors[id].aim_yaw,actors[id].aim_pitch)
 			actors[id].velocity = Vector3.ZERO
 		emit("match_over",{"winner":winner_id,"room":room_packet()})
@@ -373,6 +496,12 @@ func _finish_round(winner: int,loser: int) -> void:
 	draft_order = [loser,winner]
 	draft_cursor = 0
 	emit("draft_start",{"pool":draft_pool.duplicate(),"order":draft_order.duplicate(),"room":room_packet()})
+	_maybe_bot_pick_augment()
+
+func _maybe_bot_pick_augment() -> void:
+	if phase != "MATCH" or round_phase != "DRAFT" or duel_bot_id <= 0:return
+	while draft_cursor < draft_order.size() and draft_order[draft_cursor] == duel_bot_id and not draft_pool.is_empty():
+		choose_augment(duel_bot_id,draft_pool[0])
 
 func choose_augment(id: int,card_id: String) -> bool:
 	if phase != "MATCH" or round_phase != "DRAFT" or draft_cursor >= draft_order.size():return false
@@ -386,6 +515,8 @@ func choose_augment(id: int,card_id: String) -> bool:
 	if draft_cursor >= draft_order.size():
 		round_number += 1
 		_begin_round()
+	else:
+		_maybe_bot_pick_augment()
 	return true
 func damage(victim: int,amount: float,direction: Vector3,owner: int,point: Vector3,headshot: bool=false,weapon: String="") -> bool:
 	if phase != "MATCH" or round_phase not in ["FIGHT","OVERLOAD"] or not actors.has(victim) or amount <= 0.0:return false
@@ -451,7 +582,7 @@ func _explode_duel(point: Vector3,owner: int,gid: int,allow_echo: bool,power: fl
 	grenade_scale = power
 	var origin := point+Vector3.UP*0.12
 	emit("explosion",{"p":origin,"id":gid,"owner":owner,"echo":not allow_echo})
-	for id in _connected_human_ids():
+	for id in _participant_ids():
 		if id == owner:continue
 		var target: Node3D = actors[id]
 		if target.health <= 0.0:continue
@@ -471,7 +602,7 @@ func _explode_duel(point: Vector3,owner: int,gid: int,allow_echo: bool,power: fl
 func _apply_grenade_push(point: Vector3,owner: int,power: float) -> void:
 	var attacker: Node3D = actors.get(owner)
 	var boost := 2.6 if attacker != null and attacker.has_augment("rubber_grenade") else 1.0
-	for id in _connected_human_ids():
+	for id in _participant_ids():
 		if id == owner:continue
 		var target: Node3D = actors[id]
 		if target.health <= 0.0:continue

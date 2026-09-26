@@ -27,5 +27,6 @@ func run() -> void:
 	Input.parse_input_event(input)
 	await process_frame
 	var focus_ok: bool = stage.client.menu.create_button.focus_mode!=Control.FOCUS_NONE
-	print("DUEL_CONTROLLER_UI ",{"ui_accept_a":has_a,"ui_cancel_b":has_b,"button_pressed":pressed,"room_focusable":focus_ok})
-	quit(0 if has_a and has_b and pressed and focus_ok else 1)
+	var bot_checkbox_ok: bool = stage.client.menu.bot_checkbox != null and stage.client.menu.bot_checkbox.focus_mode!=Control.FOCUS_NONE
+	print("DUEL_CONTROLLER_UI ",{"ui_accept_a":has_a,"ui_cancel_b":has_b,"button_pressed":pressed,"room_focusable":focus_ok,"bot_checkbox":bot_checkbox_ok})
+	quit(0 if has_a and has_b and pressed and focus_ok and bot_checkbox_ok else 1)

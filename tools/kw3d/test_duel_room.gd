@@ -143,5 +143,33 @@ func run() -> void:
 	check(world.phase=="MATCH" and world.round_number==1,"rematch_round_reset")
 	check(int(world.round_scores[1])==0 and int(world.round_scores[2])==0,"rematch_score_reset")
 	check(p1.augments.is_empty() and p2.augments.is_empty(),"rematch_augments_reset")
+
+	var bot_events: Array[Dictionary] = []
+	var bot_world = load("res://scripts/kw3d/duel_authority_world.gd").new()
+	root.add_child(bot_world)
+	bot_world.event_created.connect(func(data: Dictionary):bot_events.append(data.duplicate(true)))
+	await process_frame
+	bot_world.add_player(11)
+	check(not bot_world.can_start(),"solo_without_bot_cannot_start")
+	check(bot_world.set_bot_fallback(11,true),"host_enables_bot_fallback")
+	check(bot_world.can_start(),"solo_with_bot_can_start")
+	check(bot_world.start_match(11),"host_starts_vs_bot")
+	var bot_room: Dictionary = bot_world.room_packet()
+	check(bot_room.players.size()==2,"bot_fills_second_slot")
+	check(bool((bot_room.players[1] as Dictionary).get("bot",false)),"second_slot_marked_bot")
+	check(str((bot_room.players[1] as Dictionary).get("hero",""))=="erebus","bot_is_erebus")
+	for i in range(260):bot_world.step()
+	check(bot_world.round_phase=="FIGHT","bot_match_reaches_fight")
+	var bot_shot := false
+	for event in bot_events:
+		if str(event.get("type","")) in ["shot","shotgun"] and int(event.get("actor",0))==bot_world.duel_bot_id:
+			bot_shot = true
+			break
+	check(bot_shot,"authority_bot_fires")
+	bot_world.round_phase="FIGHT"
+	bot_world._finish_round(11,bot_world.duel_bot_id)
+	check(bot_world.round_phase=="DRAFT","bot_round_enters_draft")
+	check(bot_world.draft_cursor==1,"bot_auto_picks_when_loser")
+	check(int(bot_world.room_packet().draft_chooser)==11,"human_gets_second_draft_pick")
 	print("OVERDRIVE_DUEL_QA_","PASS" if failures.is_empty() else "FAIL",failures)
 	quit(0 if failures.is_empty() else 1)

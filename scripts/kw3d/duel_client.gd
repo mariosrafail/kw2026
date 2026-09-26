@@ -241,11 +241,13 @@ func request_match_start() -> void:
 	if not session.connected:return
 	if str(room_state.get("phase","LOBBY")) not in ["LOBBY","RESULT"]:return
 	if int(room_state.get("host",0)) != int(session.actor_id):return
-	var players: Array = room_state.get("players",[])
-	if players.size() != 2:return
-	for player in players:
-		if not bool(player.get("ready",false)):return
+	if not bool(room_state.get("can_start",false)):return
 	session.request_match_start()
+
+func set_bot_fallback(value: bool) -> void:
+	if not session.connected:return
+	if int(room_state.get("host",0)) != int(session.actor_id):return
+	session.set_duel_bot_fallback(value)
 
 func leave_room() -> void:
 	if session != null:

@@ -21,13 +21,14 @@ $uri = [Uri]$PublicBaseUrl
 $wss = "wss://$($uri.Host)/game"
 
 # Keep the exported client and web metadata aligned with the active public tunnel.
-$project = Get-Content "project.godot" -Raw
+$projectPath = Join-Path $root "project.godot"
+$project = [System.IO.File]::ReadAllText($projectPath,[System.Text.Encoding]::UTF8)
 $project = [regex]::Replace($project, 'public_portal_url="[^"]*"', 'public_portal_url="' + $PublicBaseUrl + '"')
 $project = [regex]::Replace($project, 'public_ws_url="[^"]*"', 'public_ws_url="' + $wss + '"')
 $project = [regex]::Replace($project, 'public_udp_host="[^"]*"', 'public_udp_host="' + $PublicUdpHost + '"')
 $project = [regex]::Replace($project, 'public_udp_port=[0-9]+', 'public_udp_port=' + $PublicUdpPort)
 $project = [regex]::Replace($project, 'public_lan_host="[^"]*"', 'public_lan_host="' + $LanUdpHost + '"')
-[System.IO.File]::WriteAllText((Join-Path $root "project.godot"), $project, $utf8NoBom)
+[System.IO.File]::WriteAllText($projectPath, $project, $utf8NoBom)
 
 $onlineJson = @{
     portal_url = $PublicBaseUrl

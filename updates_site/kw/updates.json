@@ -1,6 +1,17 @@
 {
   "updates": [
     {
+      "version": "alpha-0.1.52",
+      "date": "2026-09-26",
+      "title": "ONLINE DUEL // FRIEND OR BOT",
+      "items": [
+        "1v1 rooms now include a host-only checkbox to fill Player 2 with a bot if a friend has not joined.",
+        "With bot fallback enabled, the host can press PLAY immediately without readying a second player.",
+        "The fallback bot is server-authoritative, fights, uses skills and participates in round drafts like a real duel opponent.",
+        "Normal two-player online 1v1 remains unchanged: when a second human joins, both players ready up and the host starts the match."
+      ]
+    },
+    {
       "version": "alpha-0.1.51",
       "date": "2026-09-26",
       "title": "MENU HERO // OUTRAGE STATUE PASS",

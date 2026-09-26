@@ -175,9 +175,12 @@ func _hello(protocol: int,build: String,manifest: String,resume: String,display_
 		if elapsed<=float(entry.expiry) and world.actors.has(entry.slot):slot=entry.slot
 		sessions.erase(resume)
 	if slot==0:
-		var occupied=0
-		for a in world.actors.values():
-			if not a.is_bot:occupied+=1
+		if world != null and world.has_method("can_accept_new_player") and not bool(world.can_accept_new_player()):
+			_reject.rpc_id(peer,"Room is already in a duel. Wait for the next lobby.");return
+		var occupied:=int(world.human_player_count()) if world != null and world.has_method("human_player_count") else 0
+		if not (world != null and world.has_method("human_player_count")):
+			for a in world.actors.values():
+				if not a.is_bot:occupied+=1
 		var room_max := int(world.max_players()) if world != null and world.has_method("max_players") else MAX_PLAYERS
 		if occupied>=room_max:_reject.rpc_id(peer,"Room full. Reconnect slots are reserved briefly.");return
 		slot=next_slot;next_slot+=1
@@ -282,6 +285,15 @@ func _start_match() -> void:
 	if not server or world==null or not world.has_method("start_match"):return
 	var peer:=multiplayer.get_remote_sender_id()
 	if peer_slots.has(peer):world.start_match(int(peer_slots[peer]))
+
+func set_duel_bot_fallback(value: bool) -> void:
+	if connected and not server:_set_duel_bot_fallback.rpc_id(1,value)
+
+@rpc("any_peer","call_remote","reliable",0)
+func _set_duel_bot_fallback(value: bool) -> void:
+	if not server or world==null or not world.has_method("set_bot_fallback"):return
+	var peer:=multiplayer.get_remote_sender_id()
+	if peer_slots.has(peer):world.set_bot_fallback(int(peer_slots[peer]),value)
 
 func request_duel_skill() -> void:
 	if connected and not server and _can_send(1):_duel_skill.rpc_id(1)

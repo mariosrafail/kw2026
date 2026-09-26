@@ -11,6 +11,7 @@ var skill_recharge := 0.0
 var guard_time := 0.0
 var haste_time := 0.0
 var vamp_lock := 0.0
+var duel_ai := false
 
 func setup_duel(hero: String) -> void:
 	hero_id = hero
@@ -56,6 +57,11 @@ func reset_for_round(spawn: Vector3, facing: float) -> void:
 	skill_charges = skill_max_charges
 	skill_recharge = 0.0
 	locomotion.reset()
+	collision_layer = 2
+	collision_mask = 9
+	if hit_body != null:
+		hit_body.collision_layer = 4
+		hit_body.collision_mask = 0
 	update_shapes()
 
 func skill_cooldown() -> float:
